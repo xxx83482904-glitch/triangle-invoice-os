@@ -1,0 +1,279 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  ACCOUNTING
+  CHIEF_DESIGNER
+  PROJECT_MANAGER
+  DESIGNER
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  WAITING
+  COMPLETED
+  ARCHIVED
+}
+
+enum IssuedInvoiceStatus {
+  DRAFT
+  ISSUED
+  SENT
+  WAITING_PAYMENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELED
+  REISSUED
+}
+
+enum ReceivedInvoiceStatus {
+  RECEIVED
+  OCR_PENDING
+  REVIEWING
+  APPROVAL_PENDING
+  SCHEDULED
+  PAID
+  ON_HOLD
+  REJECTED
+  ARCHIVED
+}
+
+enum PaymentType {
+  INCOME
+  EXPENSE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String?
+  authProviderId String?
+  role         UserRole
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  managedProjects Project[] @relation("ProjectManager")
+  createdIssuedInvoices IssuedInvoice[] @relation("IssuedInvoiceCreator")
+  uploadedReceivedInvoices ReceivedInvoice[] @relation("ReceivedInvoiceUploader")
+  approvedReceivedInvoices ReceivedInvoice[] @relation("ReceivedInvoiceApprover")
+  payments Payment[] @relation("PaymentCreator")
+  attachments Attachment[] @relation("AttachmentUploader")
+  auditLogs AuditLog[]
+}
+
+model Client {
+  id                        String   @id @default(cuid())
+  companyName               String
+  contactName               String?
+  email                     String?
+  phone                     String?
+  address                   String?
+  invoiceRegistrationNumber String?
+  memo                      String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  deletedAt                 DateTime?
+
+  projects       Project[]
+  issuedInvoices IssuedInvoice[]
+}
+
+model Vendor {
+  id                        String   @id @default(cuid())
+  companyName               String
+  contactName               String?
+  email                     String?
+  phone                     String?
+  address                   String?
+  invoiceRegistrationNumber String?
+  bankName                  String?
+  branchName                String?
+  accountType               String?
+  accountNumber             String?
+  accountHolder             String?
+  memo                      String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  deletedAt                 DateTime?
+
+  receivedInvoices ReceivedInvoice[]
+  bankAccounts BankAccount[]
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  name           String
+  clientId       String
+  managerId      String
+  status         ProjectStatus @default(IN_PROGRESS)
+  contractAmount Decimal       @db.Decimal(14, 2)
+  startDate      DateTime?
+  endDate        DateTime?
+  memo           String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  client Client @relation(fields: [clientId], references: [id])
+  manager User @relation("ProjectManager", fields: [managerId], references: [id])
+  issuedInvoices IssuedInvoice[]
+  receivedInvoices ReceivedInvoice[]
+}
+
+model IssuedInvoice {
+  id              String              @id @default(cuid())
+  invoiceNumber   String              @unique
+  projectId       String
+  clientId        String
+  issueDate       DateTime
+  dueDate         DateTime
+  transactionDate DateTime
+  subtotal        Decimal             @db.Decimal(14, 2)
+  taxTotal        Decimal             @db.Decimal(14, 2)
+  total           Decimal             @db.Decimal(14, 2)
+  status          IssuedInvoiceStatus @default(DRAFT)
+  pdfUrl          String?
+  notes           String?
+  internalMemo    String?
+  createdById     String
+  paidAt          DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  deletedAt       DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+  client Client @relation(fields: [clientId], references: [id])
+  createdBy User @relation("IssuedInvoiceCreator", fields: [createdById], references: [id])
+  items IssuedInvoiceItem[]
+  payments Payment[]
+}
+
+model IssuedInvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Decimal  @db.Decimal(12, 2)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  taxRate     Decimal  @db.Decimal(5, 2)
+  amount      Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoice IssuedInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model ReceivedInvoice {
+  id               String                @id @default(cuid())
+  vendorId         String
+  projectId        String
+  receivedDate     DateTime              @default(now())
+  issueDate        DateTime
+  dueDate          DateTime
+  subtotal         Decimal               @db.Decimal(14, 2)
+  taxTotal         Decimal               @db.Decimal(14, 2)
+  total            Decimal               @db.Decimal(14, 2)
+  status           ReceivedInvoiceStatus @default(RECEIVED)
+  fileUrl          String?
+  originalFileName String?
+  mimeType         String?
+  ocrText          String?
+  approvedById     String?
+  paidAt           DateTime?
+  paymentMethod    String?
+  memo             String?
+  uploadedById     String
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  deletedAt        DateTime?
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+  uploadedBy User @relation("ReceivedInvoiceUploader", fields: [uploadedById], references: [id])
+  approvedBy User? @relation("ReceivedInvoiceApprover", fields: [approvedById], references: [id])
+  payments Payment[]
+
+  @@index([vendorId, total, issueDate])
+}
+
+model Payment {
+  id                String      @id @default(cuid())
+  type              PaymentType
+  issuedInvoiceId   String?
+  receivedInvoiceId String?
+  amount            Decimal     @db.Decimal(14, 2)
+  paymentDate       DateTime
+  method            String?
+  memo              String?
+  createdById       String
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  deletedAt         DateTime?
+
+  issuedInvoice IssuedInvoice? @relation(fields: [issuedInvoiceId], references: [id])
+  receivedInvoice ReceivedInvoice? @relation(fields: [receivedInvoiceId], references: [id])
+  createdBy User @relation("PaymentCreator", fields: [createdById], references: [id])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  relatedType  String
+  relatedId    String
+  fileUrl      String
+  fileName     String
+  mimeType     String
+  uploadedById String
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+
+  uploadedBy User @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  targetType String
+  targetId   String
+  beforeJson Json?
+  afterJson  Json?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model BankAccount {
+  id            String   @id @default(cuid())
+  vendorId      String?
+  bankName      String
+  branchName    String
+  accountType   String
+  accountNumber String
+  accountHolder String
+  memo          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+}
+
+model InvoiceNumberSetting {
+  id        String   @id @default(cuid())
+  prefix    String   @default("TRI")
+  nextNumber Int     @default(1)
+  fiscalYear Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([prefix, fiscalYear])
+}

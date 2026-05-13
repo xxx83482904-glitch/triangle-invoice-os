@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: triangle-invoice-os-db
+    environment:
+      POSTGRES_USER: triangle
+      POSTGRES_PASSWORD: triangle
+      POSTGRES_DB: triangle_invoice_os
+    ports:
+      - "5432:5432"
+    volumes:
+      - triangle_invoice_os_pg:/var/lib/postgresql/data
+
+volumes:
+  triangle_invoice_os_pg:

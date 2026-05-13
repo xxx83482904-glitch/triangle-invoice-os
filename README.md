@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TRIANGLE Invoice OS
 
-## Getting Started
+社内向けの請求書・受領請求書・入金・支払い管理アプリです。請求書を単なるPDFではなく、案件ごとの売上、入金、受領請求、支払い、粗利を追うためのInvoice OSとして構成しています。
 
-First, run the development server:
+## 実装済みMVP
+
+- ログイン、ロール管理、権限チェック
+- ダッシュボード
+- クライアント管理、支払先管理
+- 案件一覧、案件詳細、案件別の契約額・請求・入金・支払い・粗利
+- 発行請求書作成、税率別計算、PDF出力
+- 入金登録、一部入金、複数回入金
+- 受領請求書PDF/JPEG/PNGアップロード、案件・支払先紐づけ、簡易重複検知
+- 受領請求書ステータス変更、支払い登録
+- 月別・案件別・取引先別レポート
+- CSVエクスポート
+- AuditLog記録
+- PostgreSQL向けPrisma schema
+
+## ローカル起動
 
 ```bash
+npm install
+copy .env.example .env
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで `http://localhost:3000` を開きます。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+デモユーザー:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `admin@triangle.local` / `password123`
+- `accounting@triangle.local` / `password123`
+- `pm@triangle.local` / `password123`
+- `designer@triangle.local` / `password123`
 
-## Learn More
+## PostgreSQL / Prisma
 
-To learn more about Next.js, take a look at the following resources:
+MVPの画面はすぐ触れるように `data/app-data.json` へ保存するローカルデータ層で動きます。Prisma schemaは本番DB移行用の契約として用意しています。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+PostgreSQLを起動する場合:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+docker compose up -d
+npm run prisma:generate
+npm run prisma:migrate
+```
 
-## Deploy on Vercel
+将来的に `src/lib/store.ts` のリポジトリ実装をPrismaへ差し替える想定です。DBスキーマは `prisma/schema.prisma` にあります。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## ファイル保存
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+受領請求書はローカル開発では `public/uploads/received-invoices` に保存します。保存処理は `src/app/api/uploads/received-invoices/route.ts` に集約しているため、本番ではS3互換ストレージのアダプターへ差し替えやすい構成です。
+
+## セキュリティ
+
+- ログイン必須
+- ロールベースアクセス制御
+- アップロードはPDF/JPEG/PNGのみ許可
+- 10MBファイルサイズ制限
+- 請求書番号の重複禁止
+- `vendorId + total + issueDate` の受領請求書重複検知
+- 主要な作成、更新、支払い、アップロードはAuditLogへ記録
+- 削除はsoft delete前提のデータモデル
+
+## 今後の拡張TODO
+
+- Prismaリポジトリへの完全移行
+- OCR読み取りキューと `ocrText` の自動更新
+- 外部業者専用アップロードURL
+- Gmail/メール取り込み
+- freee、マネーフォワード連携
+- 銀行口座API連携
+- 自動リマインドメール
+- AIによる請求書チェック
+- 電子帳簿保存法を意識した保管ポリシー強化
