@@ -199,6 +199,7 @@ function EditRow({
       <TableCell colSpan={9} className="p-3">
         <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_180px_120px_130px_150px_100px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
+          <input type="hidden" name="returnPath" value="/projects" />
           <div>
             <div className="mb-1 text-xs text-muted-foreground">案件名</div>
             <Input name="name" defaultValue={row.name} required />

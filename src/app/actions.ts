@@ -194,6 +194,8 @@ export async function updateProjectInline(formData: FormData) {
   assertCan(user, "manage:projects");
 
   const id = value(formData, "projectId");
+  const submittedCompany = companyFromParam(value(formData, "company"));
+  const returnPath = value(formData, "returnPath") === "/dashboard" ? "/dashboard" : "/projects";
   const data = readData();
   const before = data.projects.find((item) => item.id === id);
   if (!before || before.deletedAt) throw new Error("案件が見つかりません");
@@ -222,6 +224,7 @@ export async function updateProjectInline(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/projects");
   revalidatePath(`/projects/${id}`);
+  redirect(`${returnPath}?company=${submittedCompany}`);
 }
 
 export async function createSelectOption(formData: FormData) {
