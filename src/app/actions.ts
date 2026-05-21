@@ -125,6 +125,32 @@ export async function createProject(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function updateProjectInline(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "manage:projects");
+
+  const id = value(formData, "projectId");
+  const data = readData();
+  const before = data.projects.find((item) => item.id === id);
+  if (!before || before.deletedAt) throw new Error("案件が見つかりません");
+
+  mutateData(user.id, "UPDATE_PROJECT_INLINE", "Project", id, (draft) => {
+    const project = draft.projects.find((item) => item.id === id);
+    if (!project) throw new Error("案件が見つかりません");
+
+    project.name = value(formData, "name");
+    project.clientId = value(formData, "clientId");
+    project.status = value(formData, "status") as Project["status"];
+    project.updatedAt = now();
+
+    return project;
+  }, before);
+
+  revalidatePath("/dashboard");
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${id}`);
+}
+
 export async function createIssuedInvoice(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "manage:issuedInvoices");
