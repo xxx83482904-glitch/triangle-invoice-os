@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Pencil, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, FileText, Pencil, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { updateProjectInline } from "@/app/actions";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, yen } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { ProjectStatus } from "@/lib/types";
 
 type Company = "CHINA" | "JAPAN";
@@ -20,6 +21,11 @@ type ProjectListRow = {
   billingTotal: number;
   clientName: string;
   company: Company;
+  contractExtractedAmount?: number;
+  contractExtractedBillingCount?: number;
+  contractFileUrl?: string;
+  contractOriginalFileName?: string;
+  contractUploadedAt?: string;
   grossProfit: number;
   id: string;
   invoicedAmount: number;
@@ -73,10 +79,11 @@ export function ProjectsTable({ canEdit, rows }: { canEdit: boolean; rows: Proje
       <TableHeader>
         <TableRow>
           <SortableHead className="w-[26%]" label="案件名" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[14%]" label="会社/状態" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[15%] text-right" label="請求設定" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[18%]" label="入金状況" sortKey="unpaidIncomeAmount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[15%]" label="支払い・粗利" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className="w-[12%]" label="会社/状態" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className="w-[13%] text-right" label="請求設定" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className="w-[16%]" label="入金状況" sortKey="unpaidIncomeAmount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className="w-[13%]" label="支払い・粗利" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <TableHead className="w-[12%]">契約書</TableHead>
           <SortableHead className="w-[8%]" label="更新" sortKey="updatedAt" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <TableHead className="w-12 text-right">編集</TableHead>
         </TableRow>
@@ -117,6 +124,9 @@ export function ProjectsTable({ canEdit, rows }: { canEdit: boolean; rows: Proje
                 <div className="text-sm">支払済 {yen.format(row.paidExpenseAmount)}</div>
                 <div className="text-sm font-medium">粗利 {yen.format(row.grossProfit)}</div>
               </TableCell>
+              <TableCell>
+                <ContractUpload canEdit={canEdit} row={row} />
+              </TableCell>
               <TableCell className="text-xs text-muted-foreground">{formatDate(row.updatedAt)}</TableCell>
               <TableCell className="text-right">
                 {canEdit ? (
@@ -143,7 +153,7 @@ export function ProjectsTable({ canEdit, rows }: { canEdit: boolean; rows: Proje
 function EditRow({ onCancel, row }: { onCancel: () => void; row: ProjectListRow }) {
   return (
     <TableRow className="bg-muted/40">
-      <TableCell colSpan={7} className="p-3">
+      <TableCell colSpan={8} className="p-3">
         <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_120px_130px_150px_100px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <div>
@@ -199,6 +209,42 @@ function EditRow({ onCancel, row }: { onCancel: () => void; row: ProjectListRow 
         </form>
       </TableCell>
     </TableRow>
+  );
+}
+
+function ContractUpload({ canEdit, row }: { canEdit: boolean; row: ProjectListRow }) {
+  return (
+    <div className="space-y-1">
+      {row.contractFileUrl ? (
+        <a className="inline-flex items-center gap-1 text-xs font-medium underline" href={row.contractFileUrl} target="_blank">
+          <FileText className="h-3.5 w-3.5" />
+          契約書
+        </a>
+      ) : (
+        <div className="text-xs text-muted-foreground">未登録</div>
+      )}
+      {row.contractExtractedAmount || row.contractExtractedBillingCount ? (
+        <div className="text-[11px] leading-tight text-muted-foreground">
+          {row.contractExtractedAmount ? yen.format(row.contractExtractedAmount) : "-"} / {row.contractExtractedBillingCount ?? row.billingCount}回
+        </div>
+      ) : null}
+      {canEdit ? (
+        <form action="/api/uploads/contracts" method="post" encType="multipart/form-data">
+          <input type="hidden" name="projectId" value={row.id} />
+          <label className={cn(buttonVariants({ variant: "outline", size: "xs" }), "mt-1 cursor-pointer")}>
+            <Upload className="h-3 w-3" />
+            {row.contractFileUrl ? "差替" : "登録"}
+            <input
+              className="sr-only"
+              type="file"
+              name="file"
+              accept="application/pdf,image/jpeg,image/png"
+              onChange={(event) => event.currentTarget.form?.requestSubmit()}
+            />
+          </label>
+        </form>
+      ) : null}
+    </div>
   );
 }
 

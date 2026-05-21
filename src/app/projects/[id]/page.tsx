@@ -76,6 +76,27 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between gap-4"><span className="text-muted-foreground">クライアント</span><span>{client?.companyName}</span></div>
               <div className="flex justify-between gap-4"><span className="text-muted-foreground">請求回数</span><span>{project.billingCount ?? 1}回</span></div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">契約書</span>
+                <span>
+                  {project.contractFileUrl ? (
+                    <a className="underline" href={project.contractFileUrl} target="_blank">
+                      表示
+                    </a>
+                  ) : (
+                    "-"
+                  )}
+                </span>
+              </div>
+              {project.contractExtractedAmount || project.contractExtractedBillingCount ? (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">契約書読取</span>
+                  <span>
+                    {project.contractExtractedAmount ? yen.format(project.contractExtractedAmount) : "-"} /{" "}
+                    {project.contractExtractedBillingCount ?? project.billingCount ?? 1}回
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-4"><span className="text-muted-foreground">期間</span><span>{formatDate(project.startDate)} - {formatDate(project.endDate)}</span></div>
               <Separator />
               <p className="whitespace-pre-wrap text-muted-foreground">{project.memo || "メモはありません。"}</p>

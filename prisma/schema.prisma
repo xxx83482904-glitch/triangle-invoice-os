@@ -120,6 +120,13 @@ model Project {
   stage          String?
   contractAmount Decimal       @db.Decimal(14, 2)
   billingCount   Int?
+  contractFileUrl String?
+  contractOriginalFileName String?
+  contractMimeType String?
+  contractOcrText String?
+  contractExtractedAmount Decimal? @db.Decimal(14, 2)
+  contractExtractedBillingCount Int?
+  contractUploadedAt DateTime?
   startDate      DateTime?
   endDate        DateTime?
   memo           String?

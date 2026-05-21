@@ -93,6 +93,13 @@ export type Project = {
   stage?: string;
   contractAmount: number;
   billingCount?: number;
+  contractFileUrl?: string;
+  contractOriginalFileName?: string;
+  contractMimeType?: string;
+  contractOcrText?: string;
+  contractExtractedAmount?: number;
+  contractExtractedBillingCount?: number;
+  contractUploadedAt?: string;
   startDate?: string;
   endDate?: string;
   memo?: string;

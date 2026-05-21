@@ -27,6 +27,14 @@ export function receivedInvoiceFileUrl(fileName: string) {
   return process.env.VERCEL === "1" ? `/api/files/${fileName}` : `/uploads/received-invoices/${fileName}`;
 }
 
+export async function saveContractFile(fileName: string, buffer: Buffer) {
+  await saveReceivedInvoiceFile(fileName, buffer);
+}
+
+export function contractFileUrl(fileName: string) {
+  return receivedInvoiceFileUrl(fileName);
+}
+
 export async function readReceivedInvoiceFile(fileName: string) {
   const safeName = path.basename(fileName);
   const filePath = path.join(uploadRoot, safeName);

@@ -2,7 +2,7 @@ import "server-only";
 
 import type { AppData } from "@/lib/types";
 
-type ExtractedText = {
+export type ExtractedText = {
   confidence?: number;
   engine: string;
   text: string;
@@ -24,6 +24,14 @@ type InferredInvoice = {
   warnings: string[];
 };
 
+export type InferredContractBilling = {
+  billingCount: number;
+  confidence: number;
+  memo: string;
+  total: number;
+  warnings: string[];
+};
+
 function normalize(value: string) {
   return value.toLowerCase().replace(/[\s　株式会社有限会社.,・_\-()（）]/g, "");
 }
@@ -31,6 +39,28 @@ function normalize(value: string) {
 function parseAmount(value: string) {
   const amount = Number(value.replace(/[^\d]/g, ""));
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function parseJapaneseNumber(value: string) {
+  const numeric = Number(value.replace(/[^\d]/g, ""));
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+
+  const digits: Record<string, number> = {
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  if (value === "十") return 10;
+  const tenMatch = value.match(/^([一二三四五六七八九])?十([一二三四五六七八九])?$/);
+  if (tenMatch) return (digits[tenMatch[1]] || 1) * 10 + (digits[tenMatch[2]] || 0);
+  return digits[value] || 0;
 }
 
 function toIsoDate(year: string, month: string, day: string) {
@@ -75,6 +105,46 @@ function extractAmounts(text: string) {
     return { subtotal: total - inferredTax, taxTotal: inferredTax, total };
   }
   return { subtotal: 0, taxTotal: 0, total: 0 };
+}
+
+function extractContractAmount(text: string) {
+  return (
+    amountNear(text, [
+      "契約金額",
+      "契約総額",
+      "業務委託料",
+      "委託料",
+      "請負金額",
+      "報酬額",
+      "報酬",
+      "制作費",
+      "総額",
+      "税込合計",
+      "合計金額",
+      "合計",
+    ]) || extractAmounts(text).total
+  );
+}
+
+function extractBillingCount(text: string) {
+  const normalizedText = text.replace(/\s+/g, " ");
+  const explicit = normalizedText.match(
+    /(?:請求回数|支払回数|支払い回数|分割回数|分割|全)[^0-9一二三四五六七八九十]{0,12}([0-9]{1,2}|[一二三四五六七八九十]{1,3})\s*回/,
+  );
+  if (explicit) return parseJapaneseNumber(explicit[1]);
+
+  const rounds = Array.from(
+    normalizedText.matchAll(/第\s*([0-9]{1,2}|[一二三四五六七八九十]{1,3})\s*回/g),
+    (match) => parseJapaneseNumber(match[1]),
+  ).filter((round) => round > 0);
+  if (rounds.length) return Math.max(...rounds);
+
+  const milestoneCount = ["着手金", "中間金", "完了金", "最終金", "納品時", "検収後"].filter((label) =>
+    normalizedText.includes(label),
+  ).length;
+  if (milestoneCount >= 2) return milestoneCount;
+
+  return 1;
 }
 
 function bestMatch<T extends { id: string }>(
@@ -184,6 +254,25 @@ export function inferReceivedInvoice(data: AppData, extracted: ExtractedText): I
     total: amounts.total,
     vendorId: vendor?.id ?? "",
     vendorName: vendor?.companyName ?? "未設定",
+    warnings,
+  };
+}
+
+export function inferContractBilling(extracted: ExtractedText): InferredContractBilling {
+  const total = extractContractAmount(extracted.text);
+  const billingCount = Math.max(1, Math.min(12, extractBillingCount(extracted.text) || 1));
+  const warnings = [...extracted.warnings];
+
+  if (!total) warnings.push("契約金額を読み取れませんでした。案件一覧で確認してください。");
+  if (billingCount === 1) warnings.push("請求回数を明確に読み取れなかったため、1回請求として仮設定しました。");
+
+  const confidence = Math.min(100, Math.round((total ? 50 : 0) + (billingCount > 1 ? 30 : 10) + (extracted.confidence ? 10 : 0)));
+
+  return {
+    billingCount,
+    confidence,
+    memo: `契約書読取: ${extracted.engine}${extracted.confidence ? ` / OCR信頼度 ${Math.round(extracted.confidence)}%` : ""}`,
+    total,
     warnings,
   };
 }
