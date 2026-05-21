@@ -1,16 +1,13 @@
-import Link from "next/link";
 import { createProject } from "@/app/actions";
+import { ProjectsTable } from "@/app/projects/projects-table";
 import { AppShell, PageHeader } from "@/components/app/shell";
-import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDate, yen } from "@/lib/format";
 import { can } from "@/lib/rbac";
 import { projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
 
@@ -30,6 +27,26 @@ export default async function ProjectsPage({
     if (params.unpaidIncome === "1" && money.unpaidIncomeAmount <= 0) return false;
     if (params.unpaidExpense === "1" && money.unpaidExpenseAmount <= 0) return false;
     return true;
+  });
+  const canEdit = Boolean(user && can(user, "manage:projects"));
+  const rows = filtered.map((project) => {
+    const money = projectMoney(data, project.id);
+    return {
+      id: project.id,
+      name: project.name,
+      company: project.company ?? "CHINA",
+      clientName: data.clients.find((client) => client.id === project.clientId)?.companyName ?? "",
+      stage: project.stage ?? "制作资料",
+      status: project.status,
+      billingTotal: money.contractAmount,
+      billingCount: project.billingCount ?? 1,
+      invoicedAmount: money.invoicedAmount,
+      paidIncomeAmount: money.paidIncomeAmount,
+      unpaidIncomeAmount: money.unpaidIncomeAmount,
+      paidExpenseAmount: money.paidExpenseAmount,
+      grossProfit: money.grossProfit,
+      updatedAt: project.updatedAt,
+    };
   });
 
   return (
@@ -79,52 +96,11 @@ export default async function ProjectsPage({
         <Card>
           <CardHeader><CardTitle>案件</CardTitle></CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>案件名</TableHead>
-                  <TableHead>クライアント</TableHead>
-                  <TableHead>請求設定</TableHead>
-                  <TableHead>入金状況</TableHead>
-                  <TableHead>支払い・粗利</TableHead>
-                  <TableHead>更新日</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((project) => {
-                  const money = projectMoney(data, project.id);
-                  return (
-                    <TableRow key={project.id}>
-                      <TableCell>
-                        <Link href={`/projects/${project.id}`} className="font-medium hover:underline">{project.name}</Link>
-                        <div className="mt-1"><StatusBadge status={project.status} /></div>
-                      </TableCell>
-                      <TableCell>{data.clients.find((client) => client.id === project.clientId)?.companyName}</TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm">{yen.format(money.contractAmount)}</div>
-                        <div className="text-xs text-muted-foreground">{project.billingCount ?? 1}回請求</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">請求 {yen.format(money.invoicedAmount)}</div>
-                        <div className="text-sm">入金 {yen.format(money.paidIncomeAmount)}</div>
-                        <div className={money.unpaidIncomeAmount > 0 ? "text-sm font-medium text-amber-700" : "text-sm text-muted-foreground"}>
-                          未入金 {yen.format(money.unpaidIncomeAmount)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">支払済 {yen.format(money.paidExpenseAmount)}</div>
-                        <div className="text-sm font-medium">粗利 {yen.format(money.grossProfit)}</div>
-                      </TableCell>
-                      <TableCell>{formatDate(project.updatedAt)}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <ProjectsTable canEdit={canEdit} rows={rows} />
           </CardContent>
         </Card>
 
-        {user && can(user, "manage:projects") ? (
+        {canEdit ? (
           <Card>
             <CardHeader><CardTitle>案件を追加</CardTitle></CardHeader>
             <CardContent>
