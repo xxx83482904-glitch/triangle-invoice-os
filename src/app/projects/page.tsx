@@ -1,5 +1,6 @@
 import { createProject } from "@/app/actions";
 import { ProjectsTable } from "@/app/projects/projects-table";
+import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,26 +129,33 @@ export default async function ProjectsPage({
                 <div className="space-y-2"><Label>案件名</Label><Input name="name" required /></div>
                 <div className="space-y-2">
                   <Label>クライアント</Label>
-                  <Select name="clientId" required>
-                    <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
-                    <SelectContent>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <CreatableSelect
+                    name="clientId"
+                    options={clients.map((client) => ({ label: client.companyName, value: client.id }))}
+                    placeholder="選択"
+                    create={{ kind: "client", company }}
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>ステータス</Label>
-                  <Select name="status" defaultValue={projectStatusOptions.find((option) => option.value === "IN_PROGRESS")?.value ?? projectStatusOptions[0]?.value ?? "IN_PROGRESS"}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {projectStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <CreatableSelect
+                    name="status"
+                    defaultValue={projectStatusOptions.find((option) => option.value === "IN_PROGRESS")?.value ?? projectStatusOptions[0]?.value ?? "IN_PROGRESS"}
+                    options={projectStatusOptions.map((option) => ({ label: option.label, value: option.value }))}
+                    create={{ kind: "select-option", company, group: "PROJECT_STATUS" }}
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>段階</Label>
-                  <Select name="stage" defaultValue={stageOptions[0]?.value ?? "制作资料"}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{stageOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <CreatableSelect
+                    name="stage"
+                    defaultValue={stageOptions[0]?.value ?? "制作资料"}
+                    options={stageOptions.map((option) => ({ label: option.label, value: option.value }))}
+                    create={{ kind: "select-option", company, group: "PROJECT_STAGE" }}
+                    required
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2"><Label>請求総額</Label><Input name="contractAmount" type="number" min="0" step="1" required /></div>

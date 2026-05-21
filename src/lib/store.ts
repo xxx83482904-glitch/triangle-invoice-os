@@ -251,6 +251,14 @@ export function readData(): AppData {
     data.selectOptions = defaultSelectOptions(now());
     changed = true;
   }
+  const optionIds = new Set<string>();
+  for (const [index, option] of data.selectOptions.entries()) {
+    if (!option.id || optionIds.has(option.id)) {
+      option.id = `opt-${option.group.toLowerCase()}-${index + 1}`;
+      changed = true;
+    }
+    optionIds.add(option.id);
+  }
   for (const client of data.clients) {
     if (!client.company && client.id === "cli-japan") {
       client.company = "JAPAN";

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { updateReceivedInvoiceStatus } from "@/app/actions";
+import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -99,12 +100,14 @@ export default async function ReceivedInvoicesPage({
                           {mayApprove ? (
                             <form action={updateReceivedInvoiceStatus} className="flex gap-2">
                               <input type="hidden" name="receivedInvoiceId" value={invoice.id} />
-                              <Select name="status" defaultValue={invoice.status}>
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>{receivedStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-                              </Select>
+                              <CreatableSelect
+                                name="status"
+                                defaultValue={invoice.status}
+                                options={receivedStatusOptions.map((option) => ({ label: option.label, value: option.value }))}
+                                create={{ kind: "select-option", company, group: "RECEIVED_INVOICE_STATUS" }}
+                                className="w-36"
+                                required
+                              />
                               <Button size="sm" variant="outline">
                                 保存
                               </Button>
@@ -150,18 +153,13 @@ export default async function ReceivedInvoicesPage({
                 </div>
                 <div className="space-y-2">
                   <Label>支払先</Label>
-                  <Select name="vendorId" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="支払先を選択" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vendors.map((vendor) => (
-                        <SelectItem key={vendor.id} value={vendor.id}>
-                          {vendor.companyName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CreatableSelect
+                    name="vendorId"
+                    options={vendors.map((vendor) => ({ label: vendor.companyName, value: vendor.id }))}
+                    placeholder="支払先を選択"
+                    create={{ kind: "vendor", company }}
+                    required
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">

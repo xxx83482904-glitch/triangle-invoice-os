@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createIssuedInvoice } from "@/app/actions";
+import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,13 @@ export default async function IssuedInvoicesPage({
                   <div className="space-y-2"><Label>請求書番号</Label><Input name="invoiceNumber" defaultValue={defaultNumber} required /></div>
                   <div className="space-y-2">
                     <Label>ステータス</Label>
-                    <Select name="status" defaultValue={issuedStatusOptions.find((option) => option.value === "ISSUED")?.value ?? issuedStatusOptions[0]?.value ?? "ISSUED"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{issuedStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>
+                    <CreatableSelect
+                      name="status"
+                      defaultValue={issuedStatusOptions.find((option) => option.value === "ISSUED")?.value ?? issuedStatusOptions[0]?.value ?? "ISSUED"}
+                      options={issuedStatusOptions.map((option) => ({ label: option.label, value: option.value }))}
+                      create={{ kind: "select-option", company, group: "ISSUED_INVOICE_STATUS" }}
+                      required
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -98,7 +105,13 @@ export default async function IssuedInvoicesPage({
                 </div>
                 <div className="space-y-2">
                   <Label>請求先会社名</Label>
-                  <Select name="clientId" required><SelectTrigger><SelectValue placeholder="請求先を選択" /></SelectTrigger><SelectContent>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>)}</SelectContent></Select>
+                  <CreatableSelect
+                    name="clientId"
+                    options={clients.map((client) => ({ label: client.companyName, value: client.id }))}
+                    placeholder="請求先を選択"
+                    create={{ kind: "client", company }}
+                    required
+                  />
                 </div>
                 <div className="rounded-md border p-3">
                   <div className="mb-3 text-sm font-medium">明細行</div>
@@ -107,7 +120,13 @@ export default async function IssuedInvoicesPage({
                       <Input name="itemDescription" placeholder="内容" required={index === 0} />
                       <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
                       <Input name="itemUnitPrice" type="number" placeholder="単価" />
-                      <Select name="itemTaxRate" defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{taxRateOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>
+                      <CreatableSelect
+                        name="itemTaxRate"
+                        defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}
+                        options={taxRateOptions.map((option) => ({ label: option.label, value: option.value }))}
+                        create={{ kind: "select-option", company, group: "TAX_RATE" }}
+                        required={index === 0}
+                      />
                     </div>
                   ))}
                 </div>

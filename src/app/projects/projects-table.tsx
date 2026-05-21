@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronsUpDown, FileText, Pencil, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { updateProjectInline } from "@/app/actions";
+import { CreatableSelect } from "@/components/app/creatable-select";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -204,18 +205,13 @@ function EditRow({
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">クライアント</div>
-            <Select name="clientId" defaultValue={row.clientId}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.companyName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CreatableSelect
+              name="clientId"
+              defaultValue={row.clientId}
+              options={clients.map((client) => ({ label: client.companyName, value: client.id }))}
+              create={{ kind: "client", company: row.company }}
+              required
+            />
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">会社</div>
@@ -234,18 +230,13 @@ function EditRow({
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">状態</div>
-            <Select name="stage" defaultValue={row.stage}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {stageOptions.map((stage) => (
-                  <SelectItem key={stage.value} value={stage.value}>
-                    {stage.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CreatableSelect
+              name="stage"
+              defaultValue={row.stage}
+              options={stageOptions}
+              create={{ kind: "select-option", company: row.company, group: "PROJECT_STAGE" }}
+              required
+            />
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">請求総額</div>

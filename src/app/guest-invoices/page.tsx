@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { FileText, LogOut } from "lucide-react";
 import { createGuestIssuedInvoice, logoutAction } from "@/app/actions";
 import { CompanySwitch } from "@/components/app/company-switch";
+import { CreatableSelect } from "@/components/app/creatable-select";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,12 +166,12 @@ export default async function GuestInvoicesPage({
                     <Input name="itemDescription" placeholder="内容" required={index === 0} />
                     <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
                     <Input name="itemUnitPrice" type="number" min="0" step="1" placeholder="単価" required={index === 0} />
-                    <Select name="itemTaxRate" defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {taxRateOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <CreatableSelect
+                      name="itemTaxRate"
+                      defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}
+                      options={taxRateOptions.map((option) => ({ label: option.label, value: option.value }))}
+                      required={index === 0}
+                    />
                   </div>
                 ))}
               </div>
