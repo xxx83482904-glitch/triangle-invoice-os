@@ -1,18 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
 import type { ReceivedInvoice } from "@/lib/types";
-
-const allowed = new Map([
-  ["application/pdf", ".pdf"],
-  ["image/jpeg", ".jpg"],
-  ["image/png", ".png"],
-]);
-
-const maxSize = 10 * 1024 * 1024;
 
 function field(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -34,11 +25,11 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "ファイルを選択してください" }, { status: 400 });
   }
-  const extension = allowed.get(file.type);
+  const extension = allowedUploadTypes.get(file.type);
   if (!extension) {
     return NextResponse.json({ error: "PDF、JPEG、PNGのみアップロードできます" }, { status: 400 });
   }
-  if (file.size > maxSize) {
+  if (file.size > maxUploadSize) {
     return NextResponse.json({ error: "ファイルサイズは10MB以内にしてください" }, { status: 400 });
   }
 
@@ -59,9 +50,7 @@ export async function POST(request: Request) {
 
   const id = newId();
   const safeName = `${id}${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "received-invoices");
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, safeName), Buffer.from(await file.arrayBuffer()));
+  await saveReceivedInvoiceFile(safeName, Buffer.from(await file.arrayBuffer()));
 
   const timestamp = new Date().toISOString();
   const subtotal = numeric(formData, "subtotal");
@@ -77,7 +66,7 @@ export async function POST(request: Request) {
     taxTotal,
     total: numeric(formData, "total") || subtotal + taxTotal,
     status: "RECEIVED",
-    fileUrl: `/uploads/received-invoices/${safeName}`,
+    fileUrl: receivedInvoiceFileUrl(safeName),
     originalFileName: file.name,
     mimeType: file.type,
     ocrText: "",
