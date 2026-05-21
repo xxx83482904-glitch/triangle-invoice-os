@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { can } from "@/lib/rbac";
+import { selectOptionsFor } from "@/lib/select-options";
 import { readData, scopedProjectsForUser } from "@/lib/store";
 import { DashboardTable } from "./dashboard-table";
 
@@ -17,7 +18,10 @@ export default async function DashboardPage({
   const user = await getCurrentUser();
   const data = readData();
   const projects = user ? scopedProjectsForUser(data, user) : [];
-  const clients = data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company));
+  const clients = data.clients
+    .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
+  const stageOptions = selectOptionsFor(data, "PROJECT_STAGE", company);
   const rows = projects
     .filter((project) => matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
@@ -56,6 +60,7 @@ export default async function DashboardPage({
       <DashboardTable
         canEdit={Boolean(user && can(user, "manage:projects"))}
         clients={clients.map((client) => ({ id: client.id, companyName: client.companyName }))}
+        stageOptions={stageOptions.map((option) => ({ label: option.label, value: option.value }))}
         rows={rows}
       />
     </AppShell>

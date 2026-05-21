@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { can } from "@/lib/rbac";
+import { selectOptionsFor } from "@/lib/select-options";
 import { paidForReceived, readData } from "@/lib/store";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
 
@@ -25,10 +26,15 @@ export default async function ReceivedInvoicesPage({
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   const data = readData();
-  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projects = data.projects
+    .filter((project) => !project.deletedAt && matchesCompany(project, company))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
   const projectIds = new Set(projects.map((project) => project.id));
-  const vendors = data.vendors.filter((vendor) => !vendor.deletedAt && partnerMatchesCompany(vendor, company));
+  const vendors = data.vendors
+    .filter((vendor) => !vendor.deletedAt && partnerMatchesCompany(vendor, company))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
   const receivedInvoices = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
+  const receivedStatusOptions = selectOptionsFor(data, "RECEIVED_INVOICE_STATUS", company);
   const mayUpload = user && (can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices"));
   const mayApprove = user && (can(user, "manage:receivedInvoices") || can(user, "approve:receivedInvoices"));
 
@@ -97,15 +103,7 @@ export default async function ReceivedInvoicesPage({
                                 <SelectTrigger className="w-32">
                                   <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="RECEIVED">受領済み</SelectItem>
-                                  <SelectItem value="REVIEWING">確認中</SelectItem>
-                                  <SelectItem value="APPROVAL_PENDING">承認待ち</SelectItem>
-                                  <SelectItem value="SCHEDULED">支払予定</SelectItem>
-                                  <SelectItem value="ON_HOLD">保留</SelectItem>
-                                  <SelectItem value="REJECTED">差し戻し</SelectItem>
-                                  <SelectItem value="PAID">支払済み</SelectItem>
-                                </SelectContent>
+                                <SelectContent>{receivedStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                               </Select>
                               <Button size="sm" variant="outline">
                                 保存

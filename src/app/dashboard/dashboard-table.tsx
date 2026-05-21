@@ -32,6 +32,11 @@ type ProjectClient = {
   id: string;
 };
 
+type Choice = {
+  label: string;
+  value: string;
+};
+
 type SortKey = "index" | "name" | "clientName" | "company" | "stage" | "billingTotal" | "billingCount";
 type SortDirection = "asc" | "desc";
 
@@ -40,9 +45,17 @@ const companyOptions: { label: string; value: Company }[] = [
   { label: "日本", value: "JAPAN" },
 ];
 
-const stageOptions = ["制作资料", "施工中", "待拍摄"];
-
-export function DashboardTable({ canEdit, clients, rows }: { canEdit: boolean; clients: ProjectClient[]; rows: DashboardRow[] }) {
+export function DashboardTable({
+  canEdit,
+  clients,
+  rows,
+  stageOptions,
+}: {
+  canEdit: boolean;
+  clients: ProjectClient[];
+  rows: DashboardRow[];
+  stageOptions: Choice[];
+}) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("index");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -87,7 +100,7 @@ export function DashboardTable({ canEdit, clients, rows }: { canEdit: boolean; c
           <TableBody>
             {sortedRows.map((row) =>
               editingId === row.id ? (
-                <EditRow key={row.id} clients={clients} row={row} onCancel={() => setEditingId(null)} />
+                <EditRow key={row.id} clients={clients} row={row} stageOptions={stageOptions} onCancel={() => setEditingId(null)} />
               ) : (
                 <TableRow key={row.id}>
                   <TableCell>
@@ -131,7 +144,17 @@ export function DashboardTable({ canEdit, clients, rows }: { canEdit: boolean; c
   );
 }
 
-function EditRow({ clients, onCancel, row }: { clients: ProjectClient[]; onCancel: () => void; row: DashboardRow }) {
+function EditRow({
+  clients,
+  onCancel,
+  row,
+  stageOptions,
+}: {
+  clients: ProjectClient[];
+  onCancel: () => void;
+  row: DashboardRow;
+  stageOptions: Choice[];
+}) {
   return (
     <TableRow className="bg-muted/40">
       <TableCell colSpan={8} className="p-3">
@@ -179,8 +202,8 @@ function EditRow({ clients, onCancel, row }: { clients: ProjectClient[]; onCance
               </SelectTrigger>
               <SelectContent>
                 {stageOptions.map((stage) => (
-                  <SelectItem key={stage} value={stage}>
-                    {stage}
+                  <SelectItem key={stage.value} value={stage.value}>
+                    {stage.label}
                   </SelectItem>
                 ))}
               </SelectContent>

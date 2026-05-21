@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { can } from "@/lib/rbac";
+import { selectOptionsFor } from "@/lib/select-options";
 import { projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
 
 export default async function ProjectsPage({
@@ -22,7 +23,11 @@ export default async function ProjectsPage({
   const user = await getCurrentUser();
   const data = readData();
   const projects = user ? scopedProjectsForUser(data, user) : [];
-  const clients = data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company));
+  const clients = data.clients
+    .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
+  const projectStatusOptions = selectOptionsFor(data, "PROJECT_STATUS", company);
+  const stageOptions = selectOptionsFor(data, "PROJECT_STAGE", company);
   const filtered = projects.filter((project) => {
     if (!matchesCompany(project, company)) return false;
     if (params.status && params.status !== "all" && project.status !== params.status) return false;
@@ -79,10 +84,7 @@ export default async function ProjectsPage({
               <SelectTrigger><SelectValue placeholder="ステータス" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全ステータス</SelectItem>
-                <SelectItem value="PLANNING">計画中</SelectItem>
-                <SelectItem value="IN_PROGRESS">進行中</SelectItem>
-                <SelectItem value="WAITING">保留/待機</SelectItem>
-                <SelectItem value="COMPLETED">完了</SelectItem>
+                {projectStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select name="unpaidIncome" defaultValue={params.unpaidIncome ?? "0"}>
@@ -108,7 +110,12 @@ export default async function ProjectsPage({
         <Card>
           <CardHeader><CardTitle>案件</CardTitle></CardHeader>
           <CardContent>
-            <ProjectsTable canEdit={canEdit} clients={clients.map((client) => ({ id: client.id, companyName: client.companyName }))} rows={rows} />
+            <ProjectsTable
+              canEdit={canEdit}
+              clients={clients.map((client) => ({ id: client.id, companyName: client.companyName }))}
+              stageOptions={stageOptions.map((option) => ({ label: option.label, value: option.value }))}
+              rows={rows}
+            />
           </CardContent>
         </Card>
 
@@ -128,17 +135,20 @@ export default async function ProjectsPage({
                 </div>
                 <div className="space-y-2">
                   <Label>ステータス</Label>
-                  <Select name="status" defaultValue="IN_PROGRESS">
+                  <Select name="status" defaultValue={projectStatusOptions.find((option) => option.value === "IN_PROGRESS")?.value ?? projectStatusOptions[0]?.value ?? "IN_PROGRESS"}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="PLANNING">計画中</SelectItem>
-                      <SelectItem value="IN_PROGRESS">進行中</SelectItem>
-                      <SelectItem value="WAITING">保留/待機</SelectItem>
-                      <SelectItem value="COMPLETED">完了</SelectItem>
+                      {projectStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                <input type="hidden" name="stage" value="制作资料" />
+                <div className="space-y-2">
+                  <Label>段階</Label>
+                  <Select name="stage" defaultValue={stageOptions[0]?.value ?? "制作资料"}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{stageOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2"><Label>請求総額</Label><Input name="contractAmount" type="number" min="0" step="1" required /></div>
                   <div className="space-y-2"><Label>請求回数</Label><Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={1} required /></div>

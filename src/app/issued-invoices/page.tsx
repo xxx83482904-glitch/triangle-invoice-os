@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { can } from "@/lib/rbac";
+import { selectOptionsFor } from "@/lib/select-options";
 import { paidForIssued, readData } from "@/lib/store";
 
 export default async function IssuedInvoicesPage({
@@ -26,10 +27,16 @@ export default async function IssuedInvoicesPage({
   const data = readData();
   const setting = data.invoiceNumberSettings[0];
   const defaultNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
-  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projects = data.projects
+    .filter((project) => !project.deletedAt && matchesCompany(project, company))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
   const projectIds = new Set(projects.map((project) => project.id));
-  const clients = data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company));
+  const clients = data.clients
+    .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
   const invoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
+  const issuedStatusOptions = selectOptionsFor(data, "ISSUED_INVOICE_STATUS", company);
+  const taxRateOptions = selectOptionsFor(data, "TAX_RATE", company);
 
   return (
     <AppShell>
@@ -77,7 +84,7 @@ export default async function IssuedInvoicesPage({
                   <div className="space-y-2"><Label>請求書番号</Label><Input name="invoiceNumber" defaultValue={defaultNumber} required /></div>
                   <div className="space-y-2">
                     <Label>ステータス</Label>
-                    <Select name="status" defaultValue="ISSUED"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DRAFT">下書き</SelectItem><SelectItem value="ISSUED">発行済み</SelectItem><SelectItem value="SENT">送付済み</SelectItem><SelectItem value="WAITING_PAYMENT">入金待ち</SelectItem></SelectContent></Select>
+                    <Select name="status" defaultValue={issuedStatusOptions.find((option) => option.value === "ISSUED")?.value ?? issuedStatusOptions[0]?.value ?? "ISSUED"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{issuedStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -100,7 +107,7 @@ export default async function IssuedInvoicesPage({
                       <Input name="itemDescription" placeholder="内容" required={index === 0} />
                       <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
                       <Input name="itemUnitPrice" type="number" placeholder="単価" />
-                      <Select name="itemTaxRate" defaultValue="10"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="10">10%</SelectItem><SelectItem value="8">8%</SelectItem><SelectItem value="0">非課税</SelectItem><SelectItem value="-1">対象外</SelectItem></SelectContent></Select>
+                      <Select name="itemTaxRate" defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{taxRateOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>
                     </div>
                   ))}
                 </div>

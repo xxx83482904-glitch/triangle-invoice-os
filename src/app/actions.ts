@@ -13,6 +13,7 @@ import type {
   Payment,
   Project,
   ReceivedInvoice,
+  SelectOptionGroup,
   Vendor,
 } from "@/lib/types";
 
@@ -31,6 +32,34 @@ function money(formData: FormData, key: string) {
 }
 
 const now = () => new Date().toISOString();
+
+function nextSortOrder<T extends { company?: string | null; deletedAt?: string | null; sortOrder?: number }>(
+  rows: T[],
+  company: CompanyScope,
+) {
+  return (
+    Math.max(
+      0,
+      ...rows
+        .filter((row) => !row.deletedAt && companyFromParam(row.company) === company)
+        .map((row) => row.sortOrder ?? 0),
+    ) + 1
+  );
+}
+
+function slugOptionValue(label: string) {
+  return label
+    .trim()
+    .replaceAll(/\s+/g, "_")
+    .replaceAll(/[^\p{Letter}\p{Number}_%-]+/gu, "_")
+    .toUpperCase();
+}
+
+function defaultOptionValue(label: string, group: SelectOptionGroup) {
+  if (group === "PROJECT_STAGE") return label;
+  if (group === "TAX_RATE") return label.replaceAll(/[^0-9.-]+/g, "") || label;
+  return slugOptionValue(label);
+}
 
 function addDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00`);
@@ -82,6 +111,7 @@ export async function createClient(formData: FormData) {
     address: optional(formData, "address"),
     invoiceRegistrationNumber: optional(formData, "invoiceRegistrationNumber"),
     memo: optional(formData, "memo"),
+    sortOrder: nextSortOrder(readData().clients, company),
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -113,6 +143,7 @@ export async function createVendor(formData: FormData) {
     accountNumber: optional(formData, "accountNumber"),
     accountHolder: optional(formData, "accountHolder"),
     memo: optional(formData, "memo"),
+    sortOrder: nextSortOrder(readData().vendors, company),
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -145,6 +176,7 @@ export async function createProject(formData: FormData) {
     startDate: optional(formData, "startDate"),
     endDate: optional(formData, "endDate"),
     memo: optional(formData, "memo"),
+    sortOrder: nextSortOrder(readData().projects, company),
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -190,6 +222,123 @@ export async function updateProjectInline(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/projects");
   revalidatePath(`/projects/${id}`);
+}
+
+export async function createSelectOption(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "manage:clients");
+  const timestamp = now();
+  const company = companyFromParam(value(formData, "company"));
+  const group = value(formData, "group") as SelectOptionGroup;
+  const label = value(formData, "label");
+  if (!label) throw new Error("選択肢名を入力してください");
+
+  mutateData(user.id, "CREATE_SELECT_OPTION", "SelectOption", group, (data) => {
+    const scoped = data.selectOptions.filter(
+      (option) => !option.deletedAt && option.group === group && (!option.company || companyFromParam(option.company) === company),
+    );
+    const option = {
+      id: newId(),
+      company,
+      group,
+      value: optional(formData, "value") || defaultOptionValue(label, group),
+      label,
+      sortOrder: Math.max(0, ...scoped.map((item) => item.sortOrder ?? 0)) + 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    data.selectOptions.push(option);
+    return option;
+  });
+  revalidatePath("/partners");
+  revalidatePath("/projects");
+  revalidatePath("/dashboard");
+  revalidatePath("/issued-invoices");
+  revalidatePath("/received-invoices");
+}
+
+export async function moveClientOption(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "manage:clients");
+  const id = value(formData, "id");
+  const direction = value(formData, "direction") === "down" ? 1 : -1;
+  mutateData(user.id, "MOVE_CLIENT_OPTION", "Client", id, (data) => {
+    const current = data.clients.find((client) => client.id === id && !client.deletedAt);
+    if (!current) throw new Error("クライアントが見つかりません");
+    const list = data.clients
+      .filter((client) => !client.deletedAt && companyFromParam(client.company) === companyFromParam(current.company))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
+    const index = list.findIndex((client) => client.id === id);
+    const target = list[index + direction];
+    if (!target) return current;
+    const currentOrder = current.sortOrder ?? index + 1;
+    current.sortOrder = target.sortOrder ?? index + direction + 1;
+    target.sortOrder = currentOrder;
+    current.updatedAt = now();
+    target.updatedAt = current.updatedAt;
+    return { current, target };
+  });
+  revalidatePath("/partners");
+  revalidatePath("/projects");
+  revalidatePath("/dashboard");
+}
+
+export async function moveVendorOption(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "manage:vendors");
+  const id = value(formData, "id");
+  const direction = value(formData, "direction") === "down" ? 1 : -1;
+  mutateData(user.id, "MOVE_VENDOR_OPTION", "Vendor", id, (data) => {
+    const current = data.vendors.find((vendor) => vendor.id === id && !vendor.deletedAt);
+    if (!current) throw new Error("支払先が見つかりません");
+    const list = data.vendors
+      .filter((vendor) => !vendor.deletedAt && companyFromParam(vendor.company) === companyFromParam(current.company))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
+    const index = list.findIndex((vendor) => vendor.id === id);
+    const target = list[index + direction];
+    if (!target) return current;
+    const currentOrder = current.sortOrder ?? index + 1;
+    current.sortOrder = target.sortOrder ?? index + direction + 1;
+    target.sortOrder = currentOrder;
+    current.updatedAt = now();
+    target.updatedAt = current.updatedAt;
+    return { current, target };
+  });
+  revalidatePath("/partners");
+  revalidatePath("/received-invoices");
+}
+
+export async function moveSelectOption(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "manage:clients");
+  const id = value(formData, "id");
+  const direction = value(formData, "direction") === "down" ? 1 : -1;
+  mutateData(user.id, "MOVE_SELECT_OPTION", "SelectOption", id, (data) => {
+    const current = data.selectOptions.find((option) => option.id === id && !option.deletedAt);
+    if (!current) throw new Error("選択肢が見つかりません");
+    const list = data.selectOptions
+      .filter(
+        (option) =>
+          !option.deletedAt &&
+          option.group === current.group &&
+          companyFromParam(option.company) === companyFromParam(current.company),
+      )
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "ja"));
+    const index = list.findIndex((option) => option.id === id);
+    const target = list[index + direction];
+    if (!target) return current;
+    const currentOrder = current.sortOrder;
+    current.sortOrder = target.sortOrder;
+    target.sortOrder = currentOrder;
+    current.updatedAt = now();
+    target.updatedAt = current.updatedAt;
+    return { current, target };
+  });
+  revalidatePath("/partners");
+  revalidatePath("/projects");
+  revalidatePath("/dashboard");
+  revalidatePath("/issued-invoices");
+  revalidatePath("/received-invoices");
 }
 
 export async function createInstallmentInvoice(formData: FormData) {

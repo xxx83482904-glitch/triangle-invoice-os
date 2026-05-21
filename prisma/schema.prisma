@@ -82,6 +82,7 @@ model Client {
   address                   String?
   invoiceRegistrationNumber String?
   memo                      String?
+  sortOrder                 Int?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   deletedAt                 DateTime?
@@ -105,12 +106,27 @@ model Vendor {
   accountNumber             String?
   accountHolder             String?
   memo                      String?
+  sortOrder                 Int?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   deletedAt                 DateTime?
 
   receivedInvoices ReceivedInvoice[]
   bankAccounts BankAccount[]
+}
+
+model SelectOption {
+  id        String   @id @default(cuid())
+  company   String?
+  group     String
+  value     String
+  label     String
+  sortOrder Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@index([group, company, sortOrder])
 }
 
 model Project {

@@ -39,6 +39,13 @@ export type PaymentType = "INCOME" | "EXPENSE";
 
 export type TaxRate = 10 | 8 | 0 | -1;
 
+export type SelectOptionGroup =
+  | "PROJECT_STAGE"
+  | "PROJECT_STATUS"
+  | "ISSUED_INVOICE_STATUS"
+  | "RECEIVED_INVOICE_STATUS"
+  | "TAX_RATE";
+
 export type User = {
   id: string;
   name: string;
@@ -60,6 +67,7 @@ export type Client = {
   address?: string;
   invoiceRegistrationNumber?: string;
   memo?: string;
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -80,6 +88,19 @@ export type Vendor = {
   accountNumber?: string;
   accountHolder?: string;
   memo?: string;
+  sortOrder?: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+};
+
+export type SelectOption = {
+  id: string;
+  company?: "CHINA" | "JAPAN";
+  group: SelectOptionGroup;
+  value: string;
+  label: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -223,6 +244,7 @@ export type AppData = {
   users: User[];
   clients: Client[];
   vendors: Vendor[];
+  selectOptions: SelectOption[];
   projects: Project[];
   issuedInvoices: IssuedInvoice[];
   issuedInvoiceItems: IssuedInvoiceItem[];

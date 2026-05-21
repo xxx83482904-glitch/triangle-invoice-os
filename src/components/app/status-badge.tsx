@@ -23,12 +23,12 @@ const labels = {
   SCHEDULED: "支払予定",
   ON_HOLD: "保留",
   REJECTED: "差し戻し",
-} satisfies Record<ProjectStatus | IssuedInvoiceStatus | ReceivedInvoiceStatus, string>;
+} satisfies Partial<Record<ProjectStatus | IssuedInvoiceStatus | ReceivedInvoiceStatus, string>>;
 
 export function StatusBadge({
   status,
 }: {
-  status: ProjectStatus | IssuedInvoiceStatus | ReceivedInvoiceStatus;
+  status: ProjectStatus | IssuedInvoiceStatus | ReceivedInvoiceStatus | string;
 }) {
   const tone =
     status === "OVERDUE" || status === "REJECTED"
@@ -41,7 +41,7 @@ export function StatusBadge({
 
   return (
     <Badge variant="outline" className={tone}>
-      {labels[status]}
+      {labels[status as keyof typeof labels] ?? status}
     </Badge>
   );
 }

@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
+import { selectOptionsFor } from "@/lib/select-options";
 import { readData } from "@/lib/store";
 
 function addDays(date: string, days: number) {
@@ -33,9 +34,12 @@ export default async function GuestInvoicesPage({
 
   const data = readData();
   const company = companyFromParam(params.company);
-  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projects = data.projects
+    .filter((project) => !project.deletedAt && matchesCompany(project, company))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
   const projectIds = new Set(projects.map((project) => project.id));
   const invoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && invoice.createdById === user.id && projectIds.has(invoice.projectId));
+  const taxRateOptions = selectOptionsFor(data, "TAX_RATE", company);
   const today = todayIso();
 
   return (
@@ -161,13 +165,10 @@ export default async function GuestInvoicesPage({
                     <Input name="itemDescription" placeholder="内容" required={index === 0} />
                     <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
                     <Input name="itemUnitPrice" type="number" min="0" step="1" placeholder="単価" required={index === 0} />
-                    <Select name="itemTaxRate" defaultValue="10">
+                    <Select name="itemTaxRate" defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="10">10%</SelectItem>
-                        <SelectItem value="8">8%</SelectItem>
-                        <SelectItem value="0">非課税</SelectItem>
-                        <SelectItem value="-1">対象外</SelectItem>
+                        {taxRateOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>

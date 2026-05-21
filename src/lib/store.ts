@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hashSync } from "bcryptjs";
+import { defaultSelectOptions } from "@/lib/select-options";
 import type {
   AppData,
   AuditLog,
@@ -116,6 +117,7 @@ function seedData(): AppData {
       companyName: "TRIANGLE China",
       contactName: "中国チーム",
       memo: "中国案件用の会社",
+      sortOrder: 1,
       createdAt,
       updatedAt: createdAt,
     },
@@ -125,6 +127,7 @@ function seedData(): AppData {
       companyName: "TRIANGLE Japan",
       contactName: "日本チーム",
       memo: "日本案件用の会社",
+      sortOrder: 1,
       createdAt,
       updatedAt: createdAt,
     },
@@ -136,6 +139,7 @@ function seedData(): AppData {
       company: "CHINA",
       companyName: "制作協力会社",
       memo: "制作・施工・撮影費の仮支払先",
+      sortOrder: 1,
       createdAt,
       updatedAt: createdAt,
     },
@@ -195,6 +199,7 @@ function seedData(): AppData {
     users,
     clients,
     vendors,
+    selectOptions: defaultSelectOptions(createdAt),
     projects,
     issuedInvoices: [],
     issuedInvoiceItems: [],
@@ -242,6 +247,10 @@ export function readData(): AppData {
     writeData(data);
   }
   let changed = false;
+  if (!Array.isArray(data.selectOptions)) {
+    data.selectOptions = defaultSelectOptions(now());
+    changed = true;
+  }
   for (const client of data.clients) {
     if (!client.company && client.id === "cli-japan") {
       client.company = "JAPAN";
@@ -250,10 +259,18 @@ export function readData(): AppData {
       client.company = "CHINA";
       changed = true;
     }
+    if (!client.sortOrder) {
+      client.sortOrder = data.clients.filter((item) => item.company === client.company).indexOf(client) + 1;
+      changed = true;
+    }
   }
   for (const vendor of data.vendors) {
     if (!vendor.company) {
       vendor.company = "CHINA";
+      changed = true;
+    }
+    if (!vendor.sortOrder) {
+      vendor.sortOrder = data.vendors.filter((item) => item.company === vendor.company).indexOf(vendor) + 1;
       changed = true;
     }
   }
