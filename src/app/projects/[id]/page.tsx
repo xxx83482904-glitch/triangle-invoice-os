@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { companyFromParam } from "@/lib/company";
 import { formatDate, percent, yen } from "@/lib/format";
 import { paidForIssued, paidForReceived, projectMoney, readData } from "@/lib/store";
 
@@ -14,6 +15,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const data = readData();
   const project = data.projects.find((item) => item.id === id && !item.deletedAt);
   if (!project) notFound();
+  const company = companyFromParam(project.company);
   const client = data.clients.find((item) => item.id === project.clientId);
   const money = projectMoney(data, project.id);
   const issued = data.issuedInvoices.filter((item) => item.projectId === project.id && !item.deletedAt);
@@ -24,7 +26,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     <AppShell>
       <PageHeader title={project.name} description={client?.companyName ?? ""}>
         <StatusBadge status={project.status} />
-        <Button asChild variant="outline"><Link href="/projects">一覧へ</Link></Button>
+        <Button asChild variant="outline"><Link href={`/projects?company=${company}`}>一覧へ</Link></Button>
       </PageHeader>
 
       <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">

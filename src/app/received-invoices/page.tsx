@@ -10,14 +10,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
+import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { can } from "@/lib/rbac";
 import { paidForReceived, readData } from "@/lib/store";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
 
-export default async function ReceivedInvoicesPage() {
+export default async function ReceivedInvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   const data = readData();
+  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projectIds = new Set(projects.map((project) => project.id));
+  const vendors = data.vendors.filter((vendor) => !vendor.deletedAt && partnerMatchesCompany(vendor, company));
+  const receivedInvoices = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
   const mayUpload = user && (can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices"));
   const mayApprove = user && (can(user, "manage:receivedInvoices") || can(user, "approve:receivedInvoices"));
 
@@ -25,13 +36,13 @@ export default async function ReceivedInvoicesPage() {
     <AppShell>
       <PageHeader title="受領請求書" description="請求書ファイルを直接ドロップすると、OCRで支払先・案件・日付・金額を仮仕分けします。">
         <Button asChild variant="outline">
-          <Link href="/api/export/received-invoices">CSVエクスポート</Link>
+          <Link href={`/api/export/received-invoices?company=${company}`}>CSVエクスポート</Link>
         </Button>
       </PageHeader>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
-          {mayUpload ? <ReceivedInvoiceDropzone /> : null}
+          {mayUpload ? <ReceivedInvoiceDropzone company={company} /> : null}
 
           <Card>
             <CardHeader>
@@ -53,13 +64,12 @@ export default async function ReceivedInvoicesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.receivedInvoices
-                    .filter((invoice) => !invoice.deletedAt)
+                  {receivedInvoices
                     .map((invoice) => (
                       <TableRow key={invoice.id}>
                         <TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell>
                         <TableCell>
-                          <Link href={`/projects/${invoice.projectId}`} className="hover:underline">
+                          <Link href={`/projects/${invoice.projectId}?company=${company}`} className="hover:underline">
                             {data.projects.find((project) => project.id === invoice.projectId)?.name}
                           </Link>
                         </TableCell>
@@ -120,6 +130,7 @@ export default async function ReceivedInvoicesPage() {
             </CardHeader>
             <CardContent>
               <form action="/api/uploads/received-invoices" method="post" encType="multipart/form-data" className="space-y-4">
+                <input type="hidden" name="company" value={company} />
                 <div className="space-y-2">
                   <Label>ファイル</Label>
                   <Input name="file" type="file" accept="application/pdf,image/jpeg,image/png" required />
@@ -131,7 +142,7 @@ export default async function ReceivedInvoicesPage() {
                       <SelectValue placeholder="案件を選択" />
                     </SelectTrigger>
                     <SelectContent>
-                      {data.projects.map((project) => (
+                      {projects.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
                           {project.name}
                         </SelectItem>
@@ -146,7 +157,7 @@ export default async function ReceivedInvoicesPage() {
                       <SelectValue placeholder="支払先を選択" />
                     </SelectTrigger>
                     <SelectContent>
-                      {data.vendors.map((vendor) => (
+                      {vendors.map((vendor) => (
                         <SelectItem key={vendor.id} value={vendor.id}>
                           {vendor.companyName}
                         </SelectItem>

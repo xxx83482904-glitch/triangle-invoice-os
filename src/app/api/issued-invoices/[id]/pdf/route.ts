@@ -107,11 +107,14 @@ function createPdfBuffer(
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   const data = readData();
   const invoice = data.issuedInvoices.find((item) => item.id === id && !item.deletedAt);
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (user.role === "GUEST" && invoice.createdById !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const buffer = await createPdfBuffer(invoice, data);
   return new NextResponse(new Uint8Array(buffer), {

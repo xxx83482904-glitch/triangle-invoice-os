@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { extractDocumentText, inferReceivedInvoice } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
+  const company = companyFromParam(String(formData.get("company") ?? ""));
   const files = formData.getAll("files").filter((file): file is File => file instanceof File);
   if (!files.length) return NextResponse.json({ error: "ファイルをドロップしてください" }, { status: 400 });
 
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const extracted = await extractDocumentText(file.name, file.type, buffer);
     const data = readData();
-    const inferred = inferReceivedInvoice(data, extracted);
+    const inferred = inferReceivedInvoice(data, extracted, company);
 
     if (!inferred.vendorId || !inferred.projectId) {
       results.push({

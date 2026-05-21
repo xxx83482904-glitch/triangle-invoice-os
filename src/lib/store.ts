@@ -112,6 +112,7 @@ function seedData(): AppData {
   const clients: Client[] = [
     {
       id: "cli-china",
+      company: "CHINA",
       companyName: "TRIANGLE China",
       contactName: "中国チーム",
       memo: "中国案件用の会社",
@@ -120,6 +121,7 @@ function seedData(): AppData {
     },
     {
       id: "cli-japan",
+      company: "JAPAN",
       companyName: "TRIANGLE Japan",
       contactName: "日本チーム",
       memo: "日本案件用の会社",
@@ -131,6 +133,7 @@ function seedData(): AppData {
   const vendors: Vendor[] = [
     {
       id: "ven-production",
+      company: "CHINA",
       companyName: "制作協力会社",
       memo: "制作・施工・撮影費の仮支払先",
       createdAt,
@@ -238,6 +241,23 @@ export function readData(): AppData {
     });
     writeData(data);
   }
+  let changed = false;
+  for (const client of data.clients) {
+    if (!client.company && client.id === "cli-japan") {
+      client.company = "JAPAN";
+      changed = true;
+    } else if (!client.company) {
+      client.company = "CHINA";
+      changed = true;
+    }
+  }
+  for (const vendor of data.vendors) {
+    if (!vendor.company) {
+      vendor.company = "CHINA";
+      changed = true;
+    }
+  }
+  if (changed) writeData(data);
   return data;
 }
 

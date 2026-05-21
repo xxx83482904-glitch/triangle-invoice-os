@@ -52,6 +52,7 @@ export type User = {
 
 export type Client = {
   id: string;
+  company?: "CHINA" | "JAPAN";
   companyName: string;
   contactName?: string;
   email?: string;
@@ -66,6 +67,7 @@ export type Client = {
 
 export type Vendor = {
   id: string;
+  company?: "CHINA" | "JAPAN";
   companyName: string;
   contactName?: string;
   email?: string;

@@ -6,6 +6,7 @@ import { useRef, useState, useTransition } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import type { CompanyScope } from "@/lib/company";
 import { yen } from "@/lib/format";
 
 type DropResult = {
@@ -23,7 +24,7 @@ type DropResult = {
   warnings?: string[];
 };
 
-export function ReceivedInvoiceDropzone() {
+export function ReceivedInvoiceDropzone({ company }: { company: CompanyScope }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [dragging, setDragging] = useState(false);
@@ -38,6 +39,7 @@ export function ReceivedInvoiceDropzone() {
 
     startTransition(async () => {
       const formData = new FormData();
+      formData.append("company", company);
       for (const file of selected) formData.append("files", file);
 
       const response = await fetch("/api/uploads/received-invoices/ocr-drop", {

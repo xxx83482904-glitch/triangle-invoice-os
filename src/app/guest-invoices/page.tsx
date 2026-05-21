@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { FileText, LogOut } from "lucide-react";
 import { createGuestIssuedInvoice, logoutAction } from "@/app/actions";
+import { CompanySwitch } from "@/components/app/company-switch";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
+import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { readData } from "@/lib/store";
 
@@ -30,8 +32,10 @@ export default async function GuestInvoicesPage({
   if (user.role !== "GUEST") redirect("/issued-invoices");
 
   const data = readData();
-  const projects = data.projects.filter((project) => !project.deletedAt);
-  const invoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && invoice.createdById === user.id);
+  const company = companyFromParam(params.company);
+  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projectIds = new Set(projects.map((project) => project.id));
+  const invoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && invoice.createdById === user.id && projectIds.has(invoice.projectId));
   const today = todayIso();
 
   return (
@@ -42,17 +46,25 @@ export default async function GuestInvoicesPage({
             <div className="text-sm font-semibold">TRIANGLE Invoice OS</div>
             <div className="text-xs text-muted-foreground">ゲスト請求書発行</div>
           </div>
-          <form action={logoutAction}>
-            <Button variant="outline" size="sm" className="gap-2">
-              <LogOut className="h-4 w-4" />
-              ログアウト
-            </Button>
-          </form>
+          <div className="flex items-center gap-2">
+            <div className="hidden w-56 sm:block">
+              <CompanySwitch />
+            </div>
+            <form action={logoutAction}>
+              <Button variant="outline" size="sm" className="gap-2">
+                <LogOut className="h-4 w-4" />
+                ログアウト
+              </Button>
+            </form>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 xl:grid-cols-[1fr_430px]">
         <section className="space-y-5">
+          <div className="sm:hidden">
+            <CompanySwitch />
+          </div>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">請求書だけを発行</h1>
             <p className="mt-1 text-sm text-muted-foreground">案件を選んで明細を入力すると、発行済み請求書とPDFが作成されます。</p>

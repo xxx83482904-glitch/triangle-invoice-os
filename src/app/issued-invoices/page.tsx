@@ -10,20 +10,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
+import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { can } from "@/lib/rbac";
 import { paidForIssued, readData } from "@/lib/store";
 
-export default async function IssuedInvoicesPage() {
+export default async function IssuedInvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   const data = readData();
   const setting = data.invoiceNumberSettings[0];
   const defaultNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
+  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projectIds = new Set(projects.map((project) => project.id));
+  const clients = data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company));
+  const invoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
 
   return (
     <AppShell>
       <PageHeader title="発行請求書" description="自社が発行する請求書の作成、PDF出力、入金状況を管理します。">
-        <Button asChild variant="outline"><Link href="/api/export/issued-invoices">CSVエクスポート</Link></Button>
+        <Button asChild variant="outline"><Link href={`/api/export/issued-invoices?company=${company}`}>CSVエクスポート</Link></Button>
       </PageHeader>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_440px]">
@@ -37,13 +48,13 @@ export default async function IssuedInvoicesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.issuedInvoices.filter((invoice) => !invoice.deletedAt).map((invoice) => (
+                {invoices.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-mono text-xs">{invoice.invoiceNumber}</TableCell>
                     <TableCell>{formatDate(invoice.issueDate)}</TableCell>
                     <TableCell>{formatDate(invoice.dueDate)}</TableCell>
                     <TableCell>{data.clients.find((client) => client.id === invoice.clientId)?.companyName}</TableCell>
-                    <TableCell><Link href={`/projects/${invoice.projectId}`} className="hover:underline">{data.projects.find((project) => project.id === invoice.projectId)?.name}</Link></TableCell>
+                    <TableCell><Link href={`/projects/${invoice.projectId}?company=${company}`} className="hover:underline">{data.projects.find((project) => project.id === invoice.projectId)?.name}</Link></TableCell>
                     <TableCell>{yen.format(invoice.subtotal)}</TableCell>
                     <TableCell>{yen.format(invoice.taxTotal)}</TableCell>
                     <TableCell>{yen.format(invoice.total)}</TableCell>
@@ -76,11 +87,11 @@ export default async function IssuedInvoicesPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>案件名</Label>
-                  <Select name="projectId" required><SelectTrigger><SelectValue placeholder="案件を選択" /></SelectTrigger><SelectContent>{data.projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent></Select>
+                  <Select name="projectId" required><SelectTrigger><SelectValue placeholder="案件を選択" /></SelectTrigger><SelectContent>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent></Select>
                 </div>
                 <div className="space-y-2">
                   <Label>請求先会社名</Label>
-                  <Select name="clientId" required><SelectTrigger><SelectValue placeholder="請求先を選択" /></SelectTrigger><SelectContent>{data.clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>)}</SelectContent></Select>
+                  <Select name="clientId" required><SelectTrigger><SelectValue placeholder="請求先を選択" /></SelectTrigger><SelectContent>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>)}</SelectContent></Select>
                 </div>
                 <div className="rounded-md border p-3">
                   <div className="mb-3 text-sm font-medium">明細行</div>

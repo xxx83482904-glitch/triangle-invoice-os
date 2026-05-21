@@ -231,6 +231,7 @@ function ContractUpload({ canEdit, row }: { canEdit: boolean; row: ProjectListRo
       {canEdit ? (
         <form action="/api/uploads/contracts" method="post" encType="multipart/form-data">
           <input type="hidden" name="projectId" value={row.id} />
+          <input type="hidden" name="company" value={row.company} />
           <label className={cn(buttonVariants({ variant: "outline", size: "xs" }), "mt-1 cursor-pointer")}>
             <Upload className="h-3 w-3" />
             {row.contractFileUrl ? "差替" : "登録"}

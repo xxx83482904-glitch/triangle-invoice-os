@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
+  const company = companyFromParam(field(formData, "company"));
   const file = formData.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "ファイルを選択してください" }, { status: 400 });
@@ -91,5 +93,5 @@ export async function POST(request: Request) {
     return invoice;
   });
 
-  return NextResponse.redirect(new URL("/received-invoices?uploaded=1", request.url), { status: 303 });
+  return NextResponse.redirect(new URL(`/received-invoices?company=${company}&uploaded=1`, request.url), { status: 303 });
 }

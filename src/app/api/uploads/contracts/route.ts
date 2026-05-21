@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
+import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, contractFileUrl, maxUploadSize, saveContractFile } from "@/lib/files";
 import { extractDocumentText, inferContractBilling } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const projectId = field(formData, "projectId");
+  const company = companyFromParam(field(formData, "company"));
   const file = formData.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "契約書ファイルを選択してください" }, { status: 400 });
@@ -82,5 +84,5 @@ export async function POST(request: Request) {
   revalidatePath("/dashboard");
   revalidatePath(`/projects/${projectId}`);
 
-  return NextResponse.redirect(new URL(`/projects?contractUploaded=${projectId}`, request.url), { status: 303 });
+  return NextResponse.redirect(new URL(`/projects?company=${company}&contractUploaded=${projectId}`, request.url), { status: 303 });
 }

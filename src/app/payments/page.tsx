@@ -9,15 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
+import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { can } from "@/lib/rbac";
 import { paidForIssued, paidForReceived, readData } from "@/lib/store";
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   const data = readData();
-  const unpaidIssued = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && paidForIssued(data, invoice.id) < invoice.total);
-  const unpaidReceived = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && paidForReceived(data, invoice.id) < invoice.total);
+  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projectIds = new Set(projects.map((project) => project.id));
+  const unpaidIssued = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId) && paidForIssued(data, invoice.id) < invoice.total);
+  const unpaidReceived = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId) && paidForReceived(data, invoice.id) < invoice.total);
   const mayIncome = user && can(user, "manage:incomePayments");
   const mayExpense = user && can(user, "manage:expensePayments");
 

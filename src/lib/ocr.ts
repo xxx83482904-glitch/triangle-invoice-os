@@ -1,5 +1,6 @@
 import "server-only";
 
+import { companyFromParam, matchesCompany, type CompanyScope } from "@/lib/company";
 import type { AppData } from "@/lib/types";
 
 export type ExtractedText = {
@@ -209,9 +210,10 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
   return { confidence, engine, text: parts.join("\n").slice(0, 12000), warnings };
 }
 
-export function inferReceivedInvoice(data: AppData, extracted: ExtractedText): InferredInvoice {
-  const activeVendors = data.vendors.filter((vendor) => !vendor.deletedAt);
-  const activeProjects = data.projects.filter((project) => !project.deletedAt);
+export function inferReceivedInvoice(data: AppData, extracted: ExtractedText, company?: CompanyScope): InferredInvoice {
+  const scope = companyFromParam(company);
+  const activeVendors = data.vendors.filter((vendor) => !vendor.deletedAt && companyFromParam(vendor.company) === scope);
+  const activeProjects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, scope));
   const activeClients = data.clients.filter((client) => !client.deletedAt);
 
   const vendorMatch = bestMatch(extracted.text, activeVendors, (vendor) => [

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { signIn, signOut, requireUser } from "@/lib/auth";
+import { companyClientId, companyFromParam, type CompanyScope } from "@/lib/company";
 import { assertCan, can } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
 import type {
@@ -70,8 +71,10 @@ export async function createClient(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "manage:clients");
   const timestamp = now();
+  const company = companyFromParam(value(formData, "company"));
   const client: Client = {
     id: newId(),
+    company,
     companyName: value(formData, "companyName"),
     contactName: optional(formData, "contactName"),
     email: optional(formData, "email"),
@@ -94,8 +97,10 @@ export async function createVendor(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "manage:vendors");
   const timestamp = now();
+  const company = companyFromParam(value(formData, "company"));
   const vendor: Vendor = {
     id: newId(),
+    company,
     companyName: value(formData, "companyName"),
     contactName: optional(formData, "contactName"),
     email: optional(formData, "email"),
@@ -125,13 +130,16 @@ export async function createProject(formData: FormData) {
   const timestamp = now();
   const members = formData.getAll("memberIds").map(String);
   const managerId = value(formData, "managerId") || user.id;
+  const company = companyFromParam(value(formData, "company"));
   const project: Project = {
     id: newId(),
     name: value(formData, "name"),
-    clientId: value(formData, "clientId"),
+    clientId: value(formData, "clientId") || companyClientId(company),
+    company,
     managerId,
     memberIds: Array.from(new Set([managerId, ...members].filter(Boolean))),
     status: value(formData, "status") as Project["status"],
+    stage: value(formData, "stage") || "制作资料",
     contractAmount: money(formData, "contractAmount"),
     billingCount: Math.max(1, Math.min(12, Number(value(formData, "billingCount")) || 1)),
     startDate: optional(formData, "startDate"),
@@ -163,8 +171,8 @@ export async function updateProjectInline(formData: FormData) {
     if (!project) throw new Error("案件が見つかりません");
 
     project.name = value(formData, "name");
-    project.company = value(formData, "company") as Project["company"];
-    project.clientId = project.company === "CHINA" ? "cli-china" : "cli-japan";
+    project.company = companyFromParam(value(formData, "company")) as CompanyScope;
+    project.clientId = companyClientId(project.company);
     project.stage = value(formData, "stage");
     project.status =
       project.stage === "施工中" ? "IN_PROGRESS" : project.stage === "待拍摄" ? "WAITING" : "PLANNING";
@@ -258,6 +266,7 @@ export async function createGuestIssuedInvoice(formData: FormData) {
   const data = readData();
   const project = data.projects.find((item) => item.id === projectId && !item.deletedAt);
   if (!project) throw new Error("案件が見つかりません");
+  const company = companyFromParam(project.company);
 
   const descriptions = formData.getAll("itemDescription").map(String);
   const quantities = formData.getAll("itemQuantity").map(Number);
@@ -315,7 +324,7 @@ export async function createGuestIssuedInvoice(formData: FormData) {
   });
 
   revalidatePath("/guest-invoices");
-  redirect(`/guest-invoices?created=${invoice.id}`);
+  redirect(`/guest-invoices?company=${company}&created=${invoice.id}`);
 }
 
 export async function createIssuedInvoice(formData: FormData) {
@@ -387,7 +396,8 @@ export async function createIssuedInvoice(formData: FormData) {
   });
   revalidatePath("/issued-invoices");
   revalidatePath(`/projects/${invoice.projectId}`);
-  redirect(`/issued-invoices?created=${invoice.id}`);
+  const project = readData().projects.find((item) => item.id === invoice.projectId);
+  redirect(`/issued-invoices?company=${companyFromParam(project?.company)}&created=${invoice.id}`);
 }
 
 export async function recordIncomePayment(formData: FormData) {
