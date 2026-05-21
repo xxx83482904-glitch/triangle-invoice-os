@@ -27,6 +27,12 @@ export default async function DashboardPage({
       name: project.name,
       company: project.company ?? "CHINA",
       stage: project.stage ?? "制作资料",
+      billingTotal: project.contractAmount ?? 0,
+      billingCount: project.billingCount ?? 1,
+      createdRounds: data.issuedInvoices
+        .filter((invoice) => !invoice.deletedAt && invoice.projectId === project.id && invoice.internalMemo?.startsWith("INSTALLMENT:"))
+        .map((invoice) => Number(invoice.internalMemo?.replace("INSTALLMENT:", "")))
+        .filter((round) => Number.isFinite(round)),
     }));
 
   const counts = {
@@ -36,7 +42,7 @@ export default async function DashboardPage({
 
   return (
     <AppShell>
-      <PageHeader title="案件一覧" description="中国と日本は別会社として切り替えて管理します。">
+      <PageHeader title="案件一覧" description="請求総額と請求回数を設定し、各回の請求書を作成できます。">
         <Button asChild size="sm" variant={company === "CHINA" ? "default" : "outline"}>
           <Link href="/dashboard?company=CHINA">中国 {counts.CHINA}</Link>
         </Button>

@@ -1,27 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Pencil, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, FilePlus2, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { updateProjectInline } from "@/app/actions";
+import { createInstallmentInvoice, updateProjectInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { yen } from "@/lib/format";
 
 type Company = "CHINA" | "JAPAN";
 
 type DashboardRow = {
+  billingCount: number;
+  billingTotal: number;
   company: Company;
+  createdRounds: number[];
   id: string;
   index: number;
   name: string;
   stage: string;
 };
 
-type SortKey = "index" | "name" | "company" | "stage";
+type SortKey = "index" | "name" | "company" | "stage" | "billingTotal" | "billingCount";
 type SortDirection = "asc" | "desc";
 
 const companyOptions: { label: string; value: Company }[] = [
@@ -63,11 +67,14 @@ export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: Dash
         <Table className="w-full table-fixed">
           <TableHeader>
             <TableRow>
-              <SortableHead className="w-16" label="#" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[58%]" label="案件名" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[14%]" label="会社" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[16%]" label="状態" sortKey="stage" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <TableHead className="w-20 text-right">編集</TableHead>
+              <SortableHead className="w-11" label="#" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[30%]" label="案件名" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[9%]" label="会社" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[10%]" label="状態" sortKey="stage" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[14%] text-right" label="請求総額" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[7%] text-right" label="回数" sortKey="billingCount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <TableHead className="w-[18%]">請求書作成</TableHead>
+              <TableHead className="w-12 text-right">編集</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -87,6 +94,11 @@ export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: Dash
                   </TableCell>
                   <TableCell>
                     <StageBadge stage={row.stage} />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">{yen.format(row.billingTotal)}</TableCell>
+                  <TableCell className="text-right">{row.billingCount}回</TableCell>
+                  <TableCell>
+                    <InstallmentButtons canEdit={canEdit} row={row} />
                   </TableCell>
                   <TableCell className="text-right">
                     {canEdit ? (
@@ -115,8 +127,8 @@ export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: Dash
 function EditRow({ onCancel, row }: { onCancel: () => void; row: DashboardRow }) {
   return (
     <TableRow className="bg-muted/40">
-      <TableCell colSpan={5} className="p-3">
-        <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_130px_140px_auto]">
+      <TableCell colSpan={8} className="p-3">
+        <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_120px_130px_150px_100px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <div>
             <div className="mb-1 text-xs text-muted-foreground">案件名</div>
@@ -152,6 +164,14 @@ function EditRow({ onCancel, row }: { onCancel: () => void; row: DashboardRow })
               </SelectContent>
             </Select>
           </div>
+          <div>
+            <div className="mb-1 text-xs text-muted-foreground">請求総額</div>
+            <Input name="contractAmount" type="number" min="0" step="1" defaultValue={row.billingTotal} required />
+          </div>
+          <div>
+            <div className="mb-1 text-xs text-muted-foreground">請求回数</div>
+            <Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={row.billingCount} required />
+          </div>
           <div className="flex gap-2">
             <Button type="submit" size="sm">
               保存
@@ -163,6 +183,30 @@ function EditRow({ onCancel, row }: { onCancel: () => void; row: DashboardRow })
         </form>
       </TableCell>
     </TableRow>
+  );
+}
+
+function InstallmentButtons({ canEdit, row }: { canEdit: boolean; row: DashboardRow }) {
+  if (!canEdit) return <span className="text-sm text-muted-foreground">-</span>;
+  if (row.billingTotal <= 0) return <span className="text-xs text-muted-foreground">総額を入力</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {Array.from({ length: row.billingCount }, (_, index) => {
+        const round = index + 1;
+        const created = row.createdRounds.includes(round);
+        return (
+          <form key={round} action={createInstallmentInvoice}>
+            <input type="hidden" name="projectId" value={row.id} />
+            <input type="hidden" name="round" value={round} />
+            <Button type="submit" size="sm" variant={created ? "secondary" : "outline"} disabled={created} className="h-7 px-2 text-xs">
+              <FilePlus2 className="mr-1 h-3.5 w-3.5" />
+              {round}回目
+            </Button>
+          </form>
+        );
+      })}
+    </div>
   );
 }
 

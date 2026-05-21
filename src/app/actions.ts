@@ -31,6 +31,21 @@ function money(formData: FormData, key: string) {
 
 const now = () => new Date().toISOString();
 
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00`);
+  value.setDate(value.getDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function nextInvoiceNumber(data: ReturnType<typeof readData>, timestamp: string) {
+  const setting = data.invoiceNumberSettings[0];
+  if (!setting) return `TRI-${new Date().getFullYear()}-${String(data.issuedInvoices.length + 1).padStart(4, "0")}`;
+  const invoiceNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
+  setting.nextNumber += 1;
+  setting.updatedAt = timestamp;
+  return invoiceNumber;
+}
+
 export type LoginState = { error: string };
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
@@ -102,14 +117,16 @@ export async function createProject(formData: FormData) {
   assertCan(user, "manage:projects");
   const timestamp = now();
   const members = formData.getAll("memberIds").map(String);
+  const managerId = value(formData, "managerId") || user.id;
   const project: Project = {
     id: newId(),
     name: value(formData, "name"),
     clientId: value(formData, "clientId"),
-    managerId: value(formData, "managerId"),
-    memberIds: Array.from(new Set([value(formData, "managerId"), ...members].filter(Boolean))),
+    managerId,
+    memberIds: Array.from(new Set([managerId, ...members].filter(Boolean))),
     status: value(formData, "status") as Project["status"],
     contractAmount: money(formData, "contractAmount"),
+    billingCount: Math.max(1, Math.min(12, Number(value(formData, "billingCount")) || 1)),
     startDate: optional(formData, "startDate"),
     endDate: optional(formData, "endDate"),
     memo: optional(formData, "memo"),
@@ -144,6 +161,8 @@ export async function updateProjectInline(formData: FormData) {
     project.stage = value(formData, "stage");
     project.status =
       project.stage === "施工中" ? "IN_PROGRESS" : project.stage === "待拍摄" ? "WAITING" : "PLANNING";
+    project.contractAmount = money(formData, "contractAmount");
+    project.billingCount = Math.max(1, Math.min(12, Number(value(formData, "billingCount")) || 1));
     project.updatedAt = now();
 
     return project;
@@ -152,6 +171,75 @@ export async function updateProjectInline(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/projects");
   revalidatePath(`/projects/${id}`);
+}
+
+export async function createInstallmentInvoice(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "manage:issuedInvoices");
+
+  const projectId = value(formData, "projectId");
+  const round = Math.max(1, Number(value(formData, "round")) || 1);
+  const timestamp = now();
+  const today = timestamp.slice(0, 10);
+
+  mutateData(user.id, "CREATE_INSTALLMENT_INVOICE", "IssuedInvoice", projectId, (data) => {
+    const project = data.projects.find((item) => item.id === projectId && !item.deletedAt);
+    if (!project) throw new Error("案件が見つかりません");
+
+    const billingCount = Math.max(1, project.billingCount ?? 1);
+    if (round > billingCount) throw new Error("請求回数の範囲外です");
+
+    const alreadyCreated = data.issuedInvoices.some(
+      (invoice) => !invoice.deletedAt && invoice.projectId === projectId && invoice.internalMemo === `INSTALLMENT:${round}`,
+    );
+    if (alreadyCreated) throw new Error(`${round}回目の請求書は既に作成済みです`);
+
+    const totalBilling = Math.max(0, project.contractAmount ?? 0);
+    const baseTotal = Math.floor(totalBilling / billingCount);
+    const total = round === billingCount ? totalBilling - baseTotal * (billingCount - 1) : baseTotal;
+    const subtotal = Math.round(total / 1.1);
+    const taxTotal = total - subtotal;
+    const invoiceId = newId();
+
+    const invoice: IssuedInvoice = {
+      id: invoiceId,
+      invoiceNumber: nextInvoiceNumber(data, timestamp),
+      projectId,
+      clientId: project.clientId,
+      issueDate: today,
+      dueDate: addDays(today, 30),
+      transactionDate: today,
+      subtotal,
+      taxTotal,
+      total,
+      status: "ISSUED",
+      notes: `${project.name} ${round}/${billingCount}回目 請求`,
+      internalMemo: `INSTALLMENT:${round}`,
+      createdById: user.id,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    const item: IssuedInvoiceItem = {
+      id: newId(),
+      invoiceId,
+      description: `${project.name} ${round}/${billingCount}回目`,
+      quantity: 1,
+      unitPrice: subtotal,
+      taxRate: 10,
+      amount: subtotal,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    data.issuedInvoices.unshift(invoice);
+    data.issuedInvoiceItems.push(item);
+    return { invoice, item };
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/issued-invoices");
+  revalidatePath(`/projects/${projectId}`);
 }
 
 export async function createIssuedInvoice(formData: FormData) {

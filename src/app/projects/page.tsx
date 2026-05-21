@@ -34,7 +34,7 @@ export default async function ProjectsPage({
 
   return (
     <AppShell>
-      <PageHeader title="案件一覧" description="契約額、請求、入金、支払い、粗利を案件単位で見ます。" />
+      <PageHeader title="案件一覧" description="請求総額、請求回数、入金、支払い、粗利を案件単位で見ます。" />
 
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -84,13 +84,9 @@ export default async function ProjectsPage({
                 <TableRow>
                   <TableHead>案件名</TableHead>
                   <TableHead>クライアント</TableHead>
-                  <TableHead>担当者</TableHead>
-                  <TableHead>契約</TableHead>
-                  <TableHead>請求済み</TableHead>
-                  <TableHead>入金済み</TableHead>
-                  <TableHead>未入金</TableHead>
-                  <TableHead>支払い済み</TableHead>
-                  <TableHead>粗利</TableHead>
+                  <TableHead>請求設定</TableHead>
+                  <TableHead>入金状況</TableHead>
+                  <TableHead>支払い・粗利</TableHead>
                   <TableHead>更新日</TableHead>
                 </TableRow>
               </TableHeader>
@@ -104,13 +100,21 @@ export default async function ProjectsPage({
                         <div className="mt-1"><StatusBadge status={project.status} /></div>
                       </TableCell>
                       <TableCell>{data.clients.find((client) => client.id === project.clientId)?.companyName}</TableCell>
-                      <TableCell>{data.users.find((item) => item.id === project.managerId)?.name}</TableCell>
-                      <TableCell>{yen.format(money.contractAmount)}</TableCell>
-                      <TableCell>{yen.format(money.invoicedAmount)}</TableCell>
-                      <TableCell>{yen.format(money.paidIncomeAmount)}</TableCell>
-                      <TableCell className={money.unpaidIncomeAmount > 0 ? "font-medium text-amber-700" : ""}>{yen.format(money.unpaidIncomeAmount)}</TableCell>
-                      <TableCell>{yen.format(money.paidExpenseAmount)}</TableCell>
-                      <TableCell>{yen.format(money.grossProfit)}</TableCell>
+                      <TableCell>
+                        <div className="font-mono text-sm">{yen.format(money.contractAmount)}</div>
+                        <div className="text-xs text-muted-foreground">{project.billingCount ?? 1}回請求</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">請求 {yen.format(money.invoicedAmount)}</div>
+                        <div className="text-sm">入金 {yen.format(money.paidIncomeAmount)}</div>
+                        <div className={money.unpaidIncomeAmount > 0 ? "text-sm font-medium text-amber-700" : "text-sm text-muted-foreground"}>
+                          未入金 {yen.format(money.unpaidIncomeAmount)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">支払済 {yen.format(money.paidExpenseAmount)}</div>
+                        <div className="text-sm font-medium">粗利 {yen.format(money.grossProfit)}</div>
+                      </TableCell>
                       <TableCell>{formatDate(project.updatedAt)}</TableCell>
                     </TableRow>
                   );
@@ -134,13 +138,6 @@ export default async function ProjectsPage({
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>担当者</Label>
-                  <Select name="managerId" required>
-                    <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
-                    <SelectContent>{data.users.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <Label>ステータス</Label>
                   <Select name="status" defaultValue="IN_PROGRESS">
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -152,7 +149,10 @@ export default async function ProjectsPage({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>契約金額</Label><Input name="contractAmount" type="number" required /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2"><Label>請求総額</Label><Input name="contractAmount" type="number" min="0" step="1" required /></div>
+                  <div className="space-y-2"><Label>請求回数</Label><Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={1} required /></div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2"><Label>開始日</Label><Input name="startDate" type="date" /></div>
                   <div className="space-y-2"><Label>終了日</Label><Input name="endDate" type="date" /></div>

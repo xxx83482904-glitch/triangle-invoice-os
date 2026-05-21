@@ -15,7 +15,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const project = data.projects.find((item) => item.id === id && !item.deletedAt);
   if (!project) notFound();
   const client = data.clients.find((item) => item.id === project.clientId);
-  const manager = data.users.find((item) => item.id === project.managerId);
   const money = projectMoney(data, project.id);
   const issued = data.issuedInvoices.filter((item) => item.projectId === project.id && !item.deletedAt);
   const received = data.receivedInvoices.filter((item) => item.projectId === project.id && !item.deletedAt);
@@ -23,14 +22,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   return (
     <AppShell>
-      <PageHeader title={project.name} description={`${client?.companyName ?? ""} / 担当 ${manager?.name ?? "-"}`}>
+      <PageHeader title={project.name} description={client?.companyName ?? ""}>
         <StatusBadge status={project.status} />
         <Button asChild variant="outline"><Link href="/projects">一覧へ</Link></Button>
       </PageHeader>
 
       <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
         {[
-          ["契約金額", money.contractAmount],
+          ["請求総額", money.contractAmount],
           ["請求済み", money.invoicedAmount],
           ["入金済み", money.paidIncomeAmount],
           ["未入金", money.unpaidIncomeAmount],
@@ -76,7 +75,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardHeader><CardTitle>案件基本情報</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between gap-4"><span className="text-muted-foreground">クライアント</span><span>{client?.companyName}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-muted-foreground">担当者</span><span>{manager?.name}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-muted-foreground">請求回数</span><span>{project.billingCount ?? 1}回</span></div>
               <div className="flex justify-between gap-4"><span className="text-muted-foreground">期間</span><span>{formatDate(project.startDate)} - {formatDate(project.endDate)}</span></div>
               <Separator />
               <p className="whitespace-pre-wrap text-muted-foreground">{project.memo || "メモはありません。"}</p>

@@ -119,6 +119,7 @@ model Project {
   status         ProjectStatus @default(IN_PROGRESS)
   stage          String?
   contractAmount Decimal       @db.Decimal(14, 2)
+  billingCount   Int?
   startDate      DateTime?
   endDate        DateTime?
   memo           String?

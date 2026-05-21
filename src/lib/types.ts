@@ -92,6 +92,7 @@ export type Project = {
   status: ProjectStatus;
   stage?: string;
   contractAmount: number;
+  billingCount?: number;
   startDate?: string;
   endDate?: string;
   memo?: string;

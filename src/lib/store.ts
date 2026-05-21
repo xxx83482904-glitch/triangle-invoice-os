@@ -14,7 +14,7 @@ import type {
   Vendor,
 } from "@/lib/types";
 
-const DATA_VERSION = 2;
+const DATA_VERSION = 3;
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
 const RUNTIME_DATA_FILE =
@@ -34,6 +34,8 @@ function project(
   stage: string,
   status: Project["status"],
   index: number,
+  billingTotal = 0,
+  billingCount = 1,
 ): Project {
   const timestamp = now();
   return {
@@ -45,7 +47,8 @@ function project(
     memberIds: ["usr-admin"],
     status,
     stage,
-    contractAmount: 0,
+    contractAmount: billingTotal,
+    billingCount,
     startDate: "2026-05-01",
     memo: `${company === "CHINA" ? "中国" : "日本"} / ${stage}`,
     sortOrder: index,
@@ -157,6 +160,8 @@ function seedData(): AppData {
         index < 9 ? "制作资料" : "施工中",
         index < 9 ? "PLANNING" : "IN_PROGRESS",
         index + 1,
+        0,
+        1,
       ),
     ),
     ...japanNames.map((name, index) =>
@@ -167,6 +172,8 @@ function seedData(): AppData {
         index < 3 ? "制作资料" : index === 3 ? "施工中" : "待拍摄",
         index < 3 ? "PLANNING" : index === 3 ? "IN_PROGRESS" : "WAITING",
         index + 1,
+        0,
+        1,
       ),
     ),
   ];
