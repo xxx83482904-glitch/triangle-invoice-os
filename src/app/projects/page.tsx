@@ -33,10 +33,11 @@ export default async function ProjectsPage({
     return true;
   });
   const canEdit = Boolean(user && can(user, "manage:projects"));
-  const rows = filtered.map((project) => {
+  const rows = filtered.map((project, index) => {
     const money = projectMoney(data, project.id);
     return {
       id: project.id,
+      index: project.sortOrder ?? index + 1,
       name: project.name,
       company: companyFromParam(project.company),
       clientId: project.clientId,

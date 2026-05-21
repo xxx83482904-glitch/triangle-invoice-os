@@ -29,6 +29,7 @@ type ProjectListRow = {
   contractUploadedAt?: string;
   grossProfit: number;
   id: string;
+  index: number;
   invoicedAmount: number;
   name: string;
   paidExpenseAmount: number;
@@ -44,7 +45,7 @@ type ProjectClient = {
   id: string;
 };
 
-type SortKey = "name" | "clientName" | "company" | "billingTotal" | "unpaidIncomeAmount" | "grossProfit" | "updatedAt";
+type SortKey = "index" | "name" | "clientName" | "company" | "billingTotal" | "unpaidIncomeAmount" | "grossProfit" | "updatedAt";
 type SortDirection = "asc" | "desc";
 
 const companyOptions: { label: string; value: Company }[] = [
@@ -77,14 +78,14 @@ export function ProjectsTable({ canEdit, clients, rows }: { canEdit: boolean; cl
       return;
     }
     setSortKey(key);
-    setSortDirection(key === "name" || key === "clientName" || key === "company" ? "asc" : "desc");
+    setSortDirection(key === "index" || key === "name" || key === "clientName" || key === "company" ? "asc" : "desc");
   };
 
   return (
     <Table className="w-full table-fixed">
       <TableHeader>
         <TableRow>
-          <SortableHead className="w-[20%]" label="案件名" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className="w-[20%]" label="案件" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <SortableHead className="w-[13%]" label="クライアント" sortKey="clientName" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <SortableHead className="w-[10%]" label="会社/状態" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <SortableHead className="w-[12%] text-right" label="請求設定" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
@@ -102,9 +103,7 @@ export function ProjectsTable({ canEdit, clients, rows }: { canEdit: boolean; cl
           ) : (
             <TableRow key={row.id}>
               <TableCell>
-                <Link href={`/projects/${row.id}`} className="font-medium hover:underline">
-                  {row.name}
-                </Link>
+                <ProjectIdentity row={row} />
               </TableCell>
               <TableCell>
                 <div className="truncate text-sm">{row.clientName || "-"}</div>
@@ -156,6 +155,17 @@ export function ProjectsTable({ canEdit, clients, rows }: { canEdit: boolean; cl
         )}
       </TableBody>
     </Table>
+  );
+}
+
+function ProjectIdentity({ row }: { row: ProjectListRow }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-xs font-medium text-muted-foreground">No. {row.index}</div>
+      <Link href={`/projects/${row.id}`} className="block truncate font-medium hover:underline">
+        {row.name}
+      </Link>
+    </div>
   );
 }
 

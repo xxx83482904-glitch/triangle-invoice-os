@@ -74,8 +74,7 @@ export function DashboardTable({ canEdit, clients, rows }: { canEdit: boolean; c
         <Table className="w-full table-fixed">
           <TableHeader>
             <TableRow>
-              <SortableHead className="w-11" label="#" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[23%]" label="案件名" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[27%]" label="案件" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
               <SortableHead className="w-[15%]" label="クライアント" sortKey="clientName" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
               <SortableHead className="w-[8%]" label="会社" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
               <SortableHead className="w-[9%]" label="状態" sortKey="stage" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
@@ -91,11 +90,8 @@ export function DashboardTable({ canEdit, clients, rows }: { canEdit: boolean; c
                 <EditRow key={row.id} clients={clients} row={row} onCancel={() => setEditingId(null)} />
               ) : (
                 <TableRow key={row.id}>
-                  <TableCell className="text-muted-foreground">{row.index}</TableCell>
                   <TableCell>
-                    <Link href={`/projects/${row.id}`} className="font-medium hover:underline">
-                      {row.name}
-                    </Link>
+                    <ProjectIdentity row={row} />
                   </TableCell>
                   <TableCell>
                     <div className="truncate text-sm">{row.clientName || "-"}</div>
@@ -138,7 +134,7 @@ export function DashboardTable({ canEdit, clients, rows }: { canEdit: boolean; c
 function EditRow({ clients, onCancel, row }: { clients: ProjectClient[]; onCancel: () => void; row: DashboardRow }) {
   return (
     <TableRow className="bg-muted/40">
-      <TableCell colSpan={9} className="p-3">
+      <TableCell colSpan={8} className="p-3">
         <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_180px_120px_130px_150px_100px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <div>
@@ -209,6 +205,17 @@ function EditRow({ clients, onCancel, row }: { clients: ProjectClient[]; onCance
         </form>
       </TableCell>
     </TableRow>
+  );
+}
+
+function ProjectIdentity({ row }: { row: DashboardRow }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-xs font-medium text-muted-foreground">No. {row.index}</div>
+      <Link href={`/projects/${row.id}`} className="block truncate font-medium hover:underline">
+        {row.name}
+      </Link>
+    </div>
   );
 }
 
