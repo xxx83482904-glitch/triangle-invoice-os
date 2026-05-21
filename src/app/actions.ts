@@ -172,7 +172,11 @@ export async function updateProjectInline(formData: FormData) {
 
     project.name = value(formData, "name");
     project.company = companyFromParam(value(formData, "company")) as CompanyScope;
-    project.clientId = companyClientId(project.company);
+    const selectedClientId = value(formData, "clientId");
+    const selectedClient = draft.clients.find(
+      (client) => client.id === selectedClientId && !client.deletedAt && companyFromParam(client.company) === project.company,
+    );
+    project.clientId = selectedClient?.id ?? companyClientId(project.company);
     project.stage = value(formData, "stage");
     project.status =
       project.stage === "施工中" ? "IN_PROGRESS" : project.stage === "待拍摄" ? "WAITING" : "PLANNING";

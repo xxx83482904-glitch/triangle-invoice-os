@@ -17,6 +17,8 @@ type Company = "CHINA" | "JAPAN";
 type DashboardRow = {
   billingCount: number;
   billingTotal: number;
+  clientId: string;
+  clientName: string;
   company: Company;
   createdRounds: number[];
   id: string;
@@ -25,7 +27,12 @@ type DashboardRow = {
   stage: string;
 };
 
-type SortKey = "index" | "name" | "company" | "stage" | "billingTotal" | "billingCount";
+type ProjectClient = {
+  companyName: string;
+  id: string;
+};
+
+type SortKey = "index" | "name" | "clientName" | "company" | "stage" | "billingTotal" | "billingCount";
 type SortDirection = "asc" | "desc";
 
 const companyOptions: { label: string; value: Company }[] = [
@@ -35,7 +42,7 @@ const companyOptions: { label: string; value: Company }[] = [
 
 const stageOptions = ["制作资料", "施工中", "待拍摄"];
 
-export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: DashboardRow[] }) {
+export function DashboardTable({ canEdit, clients, rows }: { canEdit: boolean; clients: ProjectClient[]; rows: DashboardRow[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("index");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -58,7 +65,7 @@ export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: Dash
       return;
     }
     setSortKey(key);
-    setSortDirection(key === "index" ? "asc" : "desc");
+    setSortDirection(key === "index" || key === "name" || key === "clientName" ? "asc" : "desc");
   };
 
   return (
@@ -68,19 +75,20 @@ export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: Dash
           <TableHeader>
             <TableRow>
               <SortableHead className="w-11" label="#" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[30%]" label="案件名" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[9%]" label="会社" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[10%]" label="状態" sortKey="stage" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[14%] text-right" label="請求総額" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <SortableHead className="w-[7%] text-right" label="回数" sortKey="billingCount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-              <TableHead className="w-[18%]">請求書作成</TableHead>
+              <SortableHead className="w-[23%]" label="案件名" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[15%]" label="クライアント" sortKey="clientName" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[8%]" label="会社" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[9%]" label="状態" sortKey="stage" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[13%] text-right" label="請求総額" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <SortableHead className="w-[6%] text-right" label="回数" sortKey="billingCount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+              <TableHead className="w-[14%]">請求書作成</TableHead>
               <TableHead className="w-12 text-right">編集</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sortedRows.map((row) =>
               editingId === row.id ? (
-                <EditRow key={row.id} row={row} onCancel={() => setEditingId(null)} />
+                <EditRow key={row.id} clients={clients} row={row} onCancel={() => setEditingId(null)} />
               ) : (
                 <TableRow key={row.id}>
                   <TableCell className="text-muted-foreground">{row.index}</TableCell>
@@ -88,6 +96,9 @@ export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: Dash
                     <Link href={`/projects/${row.id}`} className="font-medium hover:underline">
                       {row.name}
                     </Link>
+                  </TableCell>
+                  <TableCell>
+                    <div className="truncate text-sm">{row.clientName || "-"}</div>
                   </TableCell>
                   <TableCell>
                     <CompanyBadge company={row.company} />
@@ -124,15 +135,30 @@ export function DashboardTable({ canEdit, rows }: { canEdit: boolean; rows: Dash
   );
 }
 
-function EditRow({ onCancel, row }: { onCancel: () => void; row: DashboardRow }) {
+function EditRow({ clients, onCancel, row }: { clients: ProjectClient[]; onCancel: () => void; row: DashboardRow }) {
   return (
     <TableRow className="bg-muted/40">
-      <TableCell colSpan={8} className="p-3">
-        <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_120px_130px_150px_100px_auto]">
+      <TableCell colSpan={9} className="p-3">
+        <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_180px_120px_130px_150px_100px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <div>
             <div className="mb-1 text-xs text-muted-foreground">案件名</div>
             <Input name="name" defaultValue={row.name} required />
+          </div>
+          <div>
+            <div className="mb-1 text-xs text-muted-foreground">クライアント</div>
+            <Select name="clientId" defaultValue={row.clientId}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.companyName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">会社</div>

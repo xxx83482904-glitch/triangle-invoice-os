@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
-import { companyFromParam, matchesCompany, type CompanyScope } from "@/lib/company";
+import { companyFromParam, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { can } from "@/lib/rbac";
 import { readData, scopedProjectsForUser } from "@/lib/store";
 import { DashboardTable } from "./dashboard-table";
@@ -17,6 +17,7 @@ export default async function DashboardPage({
   const user = await getCurrentUser();
   const data = readData();
   const projects = user ? scopedProjectsForUser(data, user) : [];
+  const clients = data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company));
   const rows = projects
     .filter((project) => matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
@@ -24,6 +25,8 @@ export default async function DashboardPage({
       id: project.id,
       index: project.sortOrder ?? index + 1,
       name: project.name,
+      clientId: project.clientId,
+      clientName: data.clients.find((client) => client.id === project.clientId)?.companyName ?? "",
       company: companyFromParam(project.company),
       stage: project.stage ?? "制作资料",
       billingTotal: project.contractAmount ?? 0,
@@ -50,7 +53,11 @@ export default async function DashboardPage({
         </Button>
       </PageHeader>
 
-      <DashboardTable canEdit={Boolean(user && can(user, "manage:projects"))} rows={rows} />
+      <DashboardTable
+        canEdit={Boolean(user && can(user, "manage:projects"))}
+        clients={clients.map((client) => ({ id: client.id, companyName: client.companyName }))}
+        rows={rows}
+      />
     </AppShell>
   );
 }

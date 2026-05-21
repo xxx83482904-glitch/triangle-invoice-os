@@ -39,6 +39,7 @@ export default async function ProjectsPage({
       id: project.id,
       name: project.name,
       company: companyFromParam(project.company),
+      clientId: project.clientId,
       clientName: data.clients.find((client) => client.id === project.clientId)?.companyName ?? "",
       stage: project.stage ?? "制作资料",
       status: project.status,
@@ -106,7 +107,7 @@ export default async function ProjectsPage({
         <Card>
           <CardHeader><CardTitle>案件</CardTitle></CardHeader>
           <CardContent>
-            <ProjectsTable canEdit={canEdit} rows={rows} />
+            <ProjectsTable canEdit={canEdit} clients={clients.map((client) => ({ id: client.id, companyName: client.companyName }))} rows={rows} />
           </CardContent>
         </Card>
 
