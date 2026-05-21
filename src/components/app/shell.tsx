@@ -21,6 +21,7 @@ const nav = [
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.role === "GUEST") redirect("/guest-invoices");
 
   return (
     <div className="min-h-screen bg-muted/20">

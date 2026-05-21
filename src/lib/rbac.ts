@@ -38,6 +38,7 @@ const permissions = {
     "comment:project",
   ],
   DESIGNER: ["view:assigned", "upload:receivedInvoices", "comment:project"],
+  GUEST: ["guest:createIssuedInvoices"],
 } satisfies Record<UserRole, string[]>;
 
 export function can(user: Pick<User, "role"> | null, permission: string) {
@@ -52,6 +53,7 @@ export function roleLabel(role: UserRole) {
     CHIEF_DESIGNER: "Chief Designer",
     PROJECT_MANAGER: "Project Manager",
     DESIGNER: "Designer",
+    GUEST: "Guest",
   }[role];
 }
 

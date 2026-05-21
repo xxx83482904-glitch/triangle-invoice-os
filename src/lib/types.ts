@@ -3,7 +3,8 @@ export type UserRole =
   | "ACCOUNTING"
   | "CHIEF_DESIGNER"
   | "PROJECT_MANAGER"
-  | "DESIGNER";
+  | "DESIGNER"
+  | "GUEST";
 
 export type ProjectStatus =
   | "PLANNING"

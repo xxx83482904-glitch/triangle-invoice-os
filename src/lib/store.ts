@@ -98,6 +98,15 @@ function seedData(): AppData {
       createdAt,
       updatedAt: createdAt,
     },
+    {
+      id: "usr-guest",
+      name: "Guest Invoice",
+      email: "guest@triangle.local",
+      passwordHash,
+      role: "GUEST",
+      createdAt,
+      updatedAt: createdAt,
+    },
   ];
 
   const clients: Client[] = [
@@ -216,6 +225,19 @@ export function readData(): AppData {
     writeFileSync(RUNTIME_DATA_FILE, JSON.stringify(nextData, null, 2));
     return nextData;
   }
+  if (!data.users.some((user) => user.id === "usr-guest" || user.email === "guest@triangle.local")) {
+    const timestamp = now();
+    data.users.push({
+      id: "usr-guest",
+      name: "Guest Invoice",
+      email: "guest@triangle.local",
+      passwordHash: hashSync("password123", 10),
+      role: "GUEST",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    writeData(data);
+  }
   return data;
 }
 
@@ -304,6 +326,7 @@ export function projectMoney(data: AppData, projectId: string): ProjectMoney {
 
 export function scopedProjectsForUser(data: AppData, user: Pick<User, "id" | "role">) {
   if (user.role === "ADMIN" || user.role === "ACCOUNTING") return active(data.projects);
+  if (user.role === "GUEST") return [];
   return active(data.projects).filter(
     (projectItem) => projectItem.managerId === user.id || projectItem.memberIds.includes(user.id),
   );

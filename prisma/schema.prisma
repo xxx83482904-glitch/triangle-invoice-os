@@ -12,6 +12,7 @@ enum UserRole {
   CHIEF_DESIGNER
   PROJECT_MANAGER
   DESIGNER
+  GUEST
 }
 
 enum ProjectStatus {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { loginAction } from "@/app/actions";
+import { guestLoginAction, loginAction } from "@/app/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,10 +37,15 @@ export function LoginForm() {
           </Button>
         </form>
         <div className="mt-5 rounded-md border bg-muted/50 p-3 text-xs text-muted-foreground">
-          デモ: admin@triangle.local / accounting@triangle.local / pm@triangle.local / designer@triangle.local
+          デモ: admin@triangle.local / accounting@triangle.local / pm@triangle.local / designer@triangle.local / guest@triangle.local
           <br />
           共通パスワード: password123
         </div>
+        <form action={guestLoginAction} className="mt-3">
+          <Button type="submit" variant="outline" className="w-full" disabled={pending}>
+            ゲストで請求書を発行
+          </Button>
+        </form>
       </CardContent>
     </Card>
   );

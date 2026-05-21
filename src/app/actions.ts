@@ -51,7 +51,14 @@ export type LoginState = { error: string };
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const user = await signIn(value(formData, "email"), value(formData, "password"));
   if (!user) return { error: "メールアドレスまたはパスワードが違います。" };
+  if (user.role === "GUEST") redirect("/guest-invoices");
   redirect("/dashboard");
+}
+
+export async function guestLoginAction() {
+  const user = await signIn("guest@triangle.local", "password123");
+  if (!user) redirect("/login");
+  redirect("/guest-invoices");
 }
 
 export async function logoutAction() {
@@ -240,6 +247,75 @@ export async function createInstallmentInvoice(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/issued-invoices");
   revalidatePath(`/projects/${projectId}`);
+}
+
+export async function createGuestIssuedInvoice(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "guest:createIssuedInvoices");
+
+  const projectId = value(formData, "projectId");
+  const timestamp = now();
+  const data = readData();
+  const project = data.projects.find((item) => item.id === projectId && !item.deletedAt);
+  if (!project) throw new Error("案件が見つかりません");
+
+  const descriptions = formData.getAll("itemDescription").map(String);
+  const quantities = formData.getAll("itemQuantity").map(Number);
+  const unitPrices = formData.getAll("itemUnitPrice").map(Number);
+  const taxRates = formData.getAll("itemTaxRate").map(Number);
+  const invoiceId = newId();
+
+  const items: IssuedInvoiceItem[] = descriptions
+    .map((description, index) => ({
+      id: newId(),
+      invoiceId,
+      description: description.trim(),
+      quantity: Number.isFinite(quantities[index]) ? quantities[index] : 0,
+      unitPrice: Number.isFinite(unitPrices[index]) ? unitPrices[index] : 0,
+      taxRate: taxRates[index] as IssuedInvoiceItem["taxRate"],
+      amount: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))
+    .filter((item) => item.description && item.quantity > 0);
+
+  if (!items.length) throw new Error("明細を1行以上入力してください");
+
+  for (const item of items) item.amount = Math.round(item.quantity * item.unitPrice);
+  const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
+  const taxTotal = items.reduce((sum, item) => {
+    if (item.taxRate === 10 || item.taxRate === 8) return sum + Math.round(item.amount * (item.taxRate / 100));
+    return sum;
+  }, 0);
+
+  const invoice: IssuedInvoice = {
+    id: invoiceId,
+    invoiceNumber: "",
+    projectId,
+    clientId: project.clientId,
+    issueDate: value(formData, "issueDate"),
+    dueDate: value(formData, "dueDate"),
+    transactionDate: value(formData, "transactionDate") || value(formData, "issueDate"),
+    subtotal,
+    taxTotal,
+    total: subtotal + taxTotal,
+    status: "ISSUED",
+    notes: optional(formData, "notes"),
+    internalMemo: "GUEST_ISSUED",
+    createdById: user.id,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  mutateData(user.id, "CREATE_GUEST_ISSUED_INVOICE", "IssuedInvoice", invoice.id, (draft) => {
+    invoice.invoiceNumber = nextInvoiceNumber(draft, timestamp);
+    draft.issuedInvoices.unshift(invoice);
+    draft.issuedInvoiceItems.push(...items);
+    return { invoice, items };
+  });
+
+  revalidatePath("/guest-invoices");
+  redirect(`/guest-invoices?created=${invoice.id}`);
 }
 
 export async function createIssuedInvoice(formData: FormData) {
