@@ -18,7 +18,7 @@ function secretKey() {
 export type SessionUser = Pick<User, "id" | "name" | "email" | "role">;
 
 export async function signIn(email: string, password: string) {
-  const data = readData();
+  const data = await readData();
   const user = data.users.find((item) => item.email.toLowerCase() === email.toLowerCase() && !item.deletedAt);
   if (!user) return null;
   const ok = await compare(password, user.passwordHash);
@@ -60,7 +60,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   try {
     const verified = await jwtVerify(token, secretKey());
     const payload = verified.payload as SessionUser;
-    const user = readData().users.find((item) => item.id === payload.id && !item.deletedAt);
+    const user = (await readData()).users.find((item) => item.id === payload.id && !item.deletedAt);
     if (!user) return null;
     return {
       id: user.id,

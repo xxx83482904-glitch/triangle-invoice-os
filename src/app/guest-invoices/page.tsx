@@ -33,7 +33,7 @@ export default async function GuestInvoicesPage({
   if (!user) redirect("/login");
   if (user.role !== "GUEST") redirect("/issued-invoices");
 
-  const data = readData();
+  const data = await readData();
   const company = companyFromParam(params.company);
   const projects = data.projects
     .filter((project) => !project.deletedAt && matchesCompany(project, company))

@@ -22,7 +22,7 @@ export default async function PartnersPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
-  const data = readData();
+  const data = await readData();
   const mayEdit = Boolean(user && can(user, "manage:clients"));
   const clients = data.clients
     .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))

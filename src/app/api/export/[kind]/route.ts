@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   }
   const { kind } = await params;
-  const data = readData();
+  const data = await readData();
   const company = companyFromParam(new URL(request.url).searchParams.get("company"));
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));

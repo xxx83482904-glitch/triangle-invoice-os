@@ -14,7 +14,7 @@ export default async function ReportsPage({
 }) {
   const params = await searchParams;
   const company = companyFromParam(params.company);
-  const data = readData();
+  const data = await readData();
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));
   const issuedInvoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));

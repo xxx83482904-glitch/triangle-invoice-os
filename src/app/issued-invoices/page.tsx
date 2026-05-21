@@ -25,7 +25,7 @@ export default async function IssuedInvoicesPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
-  const data = readData();
+  const data = await readData();
   const setting = data.invoiceNumberSettings[0];
   const defaultNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
   const projects = data.projects

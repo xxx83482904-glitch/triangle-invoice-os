@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "ファイルサイズは10MB以内にしてください" }, { status: 400 });
   }
 
-  const data = readData();
+  const data = await readData();
   const before = data.projects.find((project) => project.id === projectId && !project.deletedAt);
   if (!before) return NextResponse.json({ error: "案件が見つかりません" }, { status: 404 });
 
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
   await saveContractFile(safeName, buffer);
 
-  mutateData(user.id, "UPLOAD_PROJECT_CONTRACT", "Project", projectId, (draft) => {
+  await mutateData(user.id, "UPLOAD_PROJECT_CONTRACT", "Project", projectId, (draft) => {
     const project = draft.projects.find((item) => item.id === projectId);
     if (!project) throw new Error("案件が見つかりません");
 

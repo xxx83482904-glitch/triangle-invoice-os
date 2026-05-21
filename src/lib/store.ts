@@ -1,9 +1,9 @@
 import "server-only";
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { hashSync } from "bcryptjs";
+import { Pool } from "pg";
 import { defaultSelectOptions } from "@/lib/select-options";
 import type {
   AppData,
@@ -16,10 +16,9 @@ import type {
 } from "@/lib/types";
 
 const DATA_VERSION = 3;
+const DB_STATE_KEY = "app-data";
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
-const RUNTIME_DATA_FILE =
-  process.env.VERCEL === "1" ? path.join(os.tmpdir(), "triangle-invoice-os", "app-data.json") : DATA_FILE;
 
 const now = () => new Date().toISOString();
 export const newId = () => crypto.randomUUID();
@@ -220,19 +219,104 @@ function seedData(): AppData {
   };
 }
 
-export function readData(): AppData {
-  const runtimeDir = path.dirname(RUNTIME_DATA_FILE);
-  if (!existsSync(runtimeDir)) mkdirSync(runtimeDir, { recursive: true });
-  if (!existsSync(RUNTIME_DATA_FILE)) {
-    writeFileSync(RUNTIME_DATA_FILE, JSON.stringify(seedData(), null, 2));
+type AppDataRow = { value: AppData };
+
+let databasePool: Pool | null = null;
+
+function isLocalDatabaseUrl(url: string) {
+  return url.includes("localhost") || url.includes("127.0.0.1") || url.includes("@db:");
+}
+
+function shouldUseDatabaseStore() {
+  const url = process.env.DATABASE_URL;
+  return Boolean(url && !isLocalDatabaseUrl(url));
+}
+
+async function ensureDatabaseStore() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required for durable production storage.");
   }
 
-  const data = JSON.parse(readFileSync(RUNTIME_DATA_FILE, "utf8")) as AppData;
-  if (data.seedVersion !== DATA_VERSION) {
-    const nextData = seedData();
-    writeFileSync(RUNTIME_DATA_FILE, JSON.stringify(nextData, null, 2));
-    return nextData;
+  if (!databasePool) {
+    databasePool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes("sslmode=require")
+        ? { rejectUnauthorized: false }
+        : undefined,
+    });
   }
+
+  await databasePool.query(`
+    CREATE TABLE IF NOT EXISTS "AppDataState" (
+      "key" TEXT NOT NULL,
+      "value" JSONB NOT NULL,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "AppDataState_pkey" PRIMARY KEY ("key")
+    )
+  `);
+  return databasePool;
+}
+
+async function readRawData() {
+  if (shouldUseDatabaseStore()) {
+    const pool = await ensureDatabaseStore();
+    const { rows } = await pool.query<AppDataRow>(
+      `SELECT "value" FROM "AppDataState" WHERE "key" = $1 LIMIT 1`,
+      [DB_STATE_KEY],
+    );
+    if (rows[0]?.value) return rows[0].value;
+    const initial = seedData();
+    await writeRawData(initial);
+    return initial;
+  }
+
+  if (process.env.VERCEL === "1") {
+    throw new Error("Persistent database storage is not configured. Set DATABASE_URL before using production.");
+  }
+
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  if (!existsSync(DATA_FILE)) {
+    writeFileSync(DATA_FILE, JSON.stringify(seedData(), null, 2));
+  }
+  return JSON.parse(readFileSync(DATA_FILE, "utf8")) as AppData;
+}
+
+async function writeRawData(data: AppData) {
+  const nextData = { ...data, seedVersion: DATA_VERSION };
+  if (shouldUseDatabaseStore()) {
+    const pool = await ensureDatabaseStore();
+    await pool.query(
+      `INSERT INTO "AppDataState" ("key", "value", "updatedAt")
+       VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
+       ON CONFLICT ("key")
+       DO UPDATE SET "value" = EXCLUDED."value", "updatedAt" = CURRENT_TIMESTAMP`,
+      [DB_STATE_KEY, JSON.stringify(nextData)],
+    );
+    return;
+  }
+
+  if (process.env.VERCEL === "1") {
+    throw new Error("Persistent database storage is not configured. Set DATABASE_URL before using production.");
+  }
+
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(DATA_FILE, JSON.stringify(nextData, null, 2));
+}
+
+async function normalizeData(data: AppData) {
+  let changed = data.seedVersion !== DATA_VERSION;
+  data.seedVersion = DATA_VERSION;
+  if (!Array.isArray(data.users)) { data.users = seedData().users; changed = true; }
+  if (!Array.isArray(data.clients)) { data.clients = seedData().clients; changed = true; }
+  if (!Array.isArray(data.vendors)) { data.vendors = seedData().vendors; changed = true; }
+  if (!Array.isArray(data.projects)) { data.projects = seedData().projects; changed = true; }
+  if (!Array.isArray(data.issuedInvoices)) { data.issuedInvoices = []; changed = true; }
+  if (!Array.isArray(data.issuedInvoiceItems)) { data.issuedInvoiceItems = []; changed = true; }
+  if (!Array.isArray(data.receivedInvoices)) { data.receivedInvoices = []; changed = true; }
+  if (!Array.isArray(data.payments)) { data.payments = []; changed = true; }
+  if (!Array.isArray(data.attachments)) { data.attachments = []; changed = true; }
+  if (!Array.isArray(data.auditLogs)) { data.auditLogs = []; changed = true; }
+  if (!Array.isArray(data.invoiceNumberSettings)) { data.invoiceNumberSettings = seedData().invoiceNumberSettings; changed = true; }
   if (!data.users.some((user) => user.id === "usr-guest" || user.email === "guest@triangle.local")) {
     const timestamp = now();
     data.users.push({
@@ -244,9 +328,8 @@ export function readData(): AppData {
       createdAt: timestamp,
       updatedAt: timestamp,
     });
-    writeData(data);
+    changed = true;
   }
-  let changed = false;
   if (!Array.isArray(data.selectOptions)) {
     data.selectOptions = defaultSelectOptions(now());
     changed = true;
@@ -282,17 +365,20 @@ export function readData(): AppData {
       changed = true;
     }
   }
-  if (changed) writeData(data);
+  if (changed) await writeData(data);
   return data;
 }
 
-export function writeData(data: AppData) {
-  const runtimeDir = path.dirname(RUNTIME_DATA_FILE);
-  if (!existsSync(runtimeDir)) mkdirSync(runtimeDir, { recursive: true });
-  writeFileSync(RUNTIME_DATA_FILE, JSON.stringify({ ...data, seedVersion: DATA_VERSION }, null, 2));
+export async function readData(): Promise<AppData> {
+  const data = await readRawData();
+  return normalizeData(data);
 }
 
-export function mutateData<T>(
+export async function writeData(data: AppData) {
+  await writeRawData(data);
+}
+
+export async function mutateData<T>(
   userId: string,
   action: string,
   targetType: string,
@@ -300,7 +386,7 @@ export function mutateData<T>(
   mutator: (data: AppData) => T,
   beforeJson?: unknown,
 ) {
-  const data = readData();
+  const data = await readData();
   const result = mutator(data);
   const audit: AuditLog = {
     id: newId(),
@@ -313,12 +399,12 @@ export function mutateData<T>(
     createdAt: now(),
   };
   data.auditLogs.unshift(audit);
-  writeData(data);
+  await writeData(data);
   return result;
 }
 
-export function getActiveData() {
-  const data = readData();
+export async function getActiveData() {
+  const data = await readData();
   return {
     ...data,
     users: active(data.users),

@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const extracted = await extractDocumentText(file.name, file.type, buffer);
-    const data = readData();
+    const data = await readData();
     const inferred = inferReceivedInvoice(data, extracted, company);
 
     if (!inferred.vendorId || !inferred.projectId) {
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       updatedAt: timestamp,
     };
 
-    mutateData(user.id, "OCR_DROP_RECEIVED_INVOICE", "ReceivedInvoice", id, (draft) => {
+    await mutateData(user.id, "OCR_DROP_RECEIVED_INVOICE", "ReceivedInvoice", id, (draft) => {
       draft.receivedInvoices.unshift(invoice);
       draft.attachments.unshift({
         id: newId(),

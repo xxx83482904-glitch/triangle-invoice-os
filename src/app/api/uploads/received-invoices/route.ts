@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "ファイルサイズは10MB以内にしてください" }, { status: 400 });
   }
 
-  const data = readData();
+  const data = await readData();
   const duplicate = data.receivedInvoices.find(
     (invoice) =>
       !invoice.deletedAt &&
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "UPLOAD_RECEIVED_INVOICE", "ReceivedInvoice", id, (draft) => {
+  await mutateData(user.id, "UPLOAD_RECEIVED_INVOICE", "ReceivedInvoice", id, (draft) => {
     draft.receivedInvoices.unshift(invoice);
     draft.attachments.unshift({
       id: newId(),

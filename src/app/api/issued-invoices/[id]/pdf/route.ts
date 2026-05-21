@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { formatDate, yen } from "@/lib/format";
 import { readData, taxLabel } from "@/lib/store";
+import type { AppData } from "@/lib/types";
 
 function findJapaneseFont() {
   const candidates = [
@@ -17,8 +18,8 @@ function findJapaneseFont() {
 }
 
 function createPdfBuffer(
-  invoice: ReturnType<typeof readData>["issuedInvoices"][number],
-  data: ReturnType<typeof readData>,
+  invoice: AppData["issuedInvoices"][number],
+  data: AppData,
 ) {
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 48, bufferPages: true });
@@ -109,7 +110,7 @@ function createPdfBuffer(
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const data = readData();
+  const data = await readData();
   const invoice = data.issuedInvoices.find((item) => item.id === id && !item.deletedAt);
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (user.role === "GUEST" && invoice.createdById !== user.id) {

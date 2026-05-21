@@ -7,6 +7,7 @@ import { companyClientId, companyFromParam, type CompanyScope } from "@/lib/comp
 import { assertCan, can } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
 import type {
+  AppData,
   Client,
   IssuedInvoice,
   IssuedInvoiceItem,
@@ -67,7 +68,7 @@ function addDays(date: string, days: number) {
   return value.toISOString().slice(0, 10);
 }
 
-function nextInvoiceNumber(data: ReturnType<typeof readData>, timestamp: string) {
+function nextInvoiceNumber(data: AppData, timestamp: string) {
   const setting = data.invoiceNumberSettings[0];
   if (!setting) return `TRI-${new Date().getFullYear()}-${String(data.issuedInvoices.length + 1).padStart(4, "0")}`;
   const invoiceNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
@@ -111,12 +112,12 @@ export async function createClient(formData: FormData) {
     address: optional(formData, "address"),
     invoiceRegistrationNumber: optional(formData, "invoiceRegistrationNumber"),
     memo: optional(formData, "memo"),
-    sortOrder: nextSortOrder(readData().clients, company),
+    sortOrder: nextSortOrder((await readData()).clients, company),
     createdAt: timestamp,
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "CREATE_CLIENT", "Client", client.id, (data) => {
+  await mutateData(user.id, "CREATE_CLIENT", "Client", client.id, (data) => {
     data.clients.unshift(client);
     return client;
   });
@@ -143,12 +144,12 @@ export async function createVendor(formData: FormData) {
     accountNumber: optional(formData, "accountNumber"),
     accountHolder: optional(formData, "accountHolder"),
     memo: optional(formData, "memo"),
-    sortOrder: nextSortOrder(readData().vendors, company),
+    sortOrder: nextSortOrder((await readData()).vendors, company),
     createdAt: timestamp,
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "CREATE_VENDOR", "Vendor", vendor.id, (data) => {
+  await mutateData(user.id, "CREATE_VENDOR", "Vendor", vendor.id, (data) => {
     data.vendors.unshift(vendor);
     return vendor;
   });
@@ -176,12 +177,12 @@ export async function createProject(formData: FormData) {
     startDate: optional(formData, "startDate"),
     endDate: optional(formData, "endDate"),
     memo: optional(formData, "memo"),
-    sortOrder: nextSortOrder(readData().projects, company),
+    sortOrder: nextSortOrder((await readData()).projects, company),
     createdAt: timestamp,
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "CREATE_PROJECT", "Project", project.id, (data) => {
+  await mutateData(user.id, "CREATE_PROJECT", "Project", project.id, (data) => {
     data.projects.unshift(project);
     return project;
   });
@@ -196,11 +197,11 @@ export async function updateProjectInline(formData: FormData) {
   const id = value(formData, "projectId");
   const submittedCompany = companyFromParam(value(formData, "company"));
   const returnPath = value(formData, "returnPath") === "/dashboard" ? "/dashboard" : "/projects";
-  const data = readData();
+  const data = await readData();
   const before = data.projects.find((item) => item.id === id);
   if (!before || before.deletedAt) throw new Error("案件が見つかりません");
 
-  mutateData(user.id, "UPDATE_PROJECT_INLINE", "Project", id, (draft) => {
+  await mutateData(user.id, "UPDATE_PROJECT_INLINE", "Project", id, (draft) => {
     const project = draft.projects.find((item) => item.id === id);
     if (!project) throw new Error("案件が見つかりません");
 
@@ -236,7 +237,7 @@ export async function createSelectOption(formData: FormData) {
   const label = value(formData, "label");
   if (!label) throw new Error("選択肢名を入力してください");
 
-  mutateData(user.id, "CREATE_SELECT_OPTION", "SelectOption", group, (data) => {
+  await mutateData(user.id, "CREATE_SELECT_OPTION", "SelectOption", group, (data) => {
     const scoped = data.selectOptions.filter(
       (option) => !option.deletedAt && option.group === group && (!option.company || companyFromParam(option.company) === company),
     );
@@ -265,7 +266,7 @@ export async function moveClientOption(formData: FormData) {
   assertCan(user, "manage:clients");
   const id = value(formData, "id");
   const direction = value(formData, "direction") === "down" ? 1 : -1;
-  mutateData(user.id, "MOVE_CLIENT_OPTION", "Client", id, (data) => {
+  await mutateData(user.id, "MOVE_CLIENT_OPTION", "Client", id, (data) => {
     const current = data.clients.find((client) => client.id === id && !client.deletedAt);
     if (!current) throw new Error("クライアントが見つかりません");
     const list = data.clients
@@ -291,7 +292,7 @@ export async function moveVendorOption(formData: FormData) {
   assertCan(user, "manage:vendors");
   const id = value(formData, "id");
   const direction = value(formData, "direction") === "down" ? 1 : -1;
-  mutateData(user.id, "MOVE_VENDOR_OPTION", "Vendor", id, (data) => {
+  await mutateData(user.id, "MOVE_VENDOR_OPTION", "Vendor", id, (data) => {
     const current = data.vendors.find((vendor) => vendor.id === id && !vendor.deletedAt);
     if (!current) throw new Error("支払先が見つかりません");
     const list = data.vendors
@@ -316,7 +317,7 @@ export async function moveSelectOption(formData: FormData) {
   assertCan(user, "manage:clients");
   const id = value(formData, "id");
   const direction = value(formData, "direction") === "down" ? 1 : -1;
-  mutateData(user.id, "MOVE_SELECT_OPTION", "SelectOption", id, (data) => {
+  await mutateData(user.id, "MOVE_SELECT_OPTION", "SelectOption", id, (data) => {
     const current = data.selectOptions.find((option) => option.id === id && !option.deletedAt);
     if (!current) throw new Error("選択肢が見つかりません");
     const list = data.selectOptions
@@ -353,7 +354,7 @@ export async function createInstallmentInvoice(formData: FormData) {
   const timestamp = now();
   const today = timestamp.slice(0, 10);
 
-  mutateData(user.id, "CREATE_INSTALLMENT_INVOICE", "IssuedInvoice", projectId, (data) => {
+  await mutateData(user.id, "CREATE_INSTALLMENT_INVOICE", "IssuedInvoice", projectId, (data) => {
     const project = data.projects.find((item) => item.id === projectId && !item.deletedAt);
     if (!project) throw new Error("案件が見つかりません");
 
@@ -419,7 +420,7 @@ export async function createGuestIssuedInvoice(formData: FormData) {
 
   const projectId = value(formData, "projectId");
   const timestamp = now();
-  const data = readData();
+  const data = await readData();
   const project = data.projects.find((item) => item.id === projectId && !item.deletedAt);
   if (!project) throw new Error("案件が見つかりません");
   const company = companyFromParam(project.company);
@@ -472,7 +473,7 @@ export async function createGuestIssuedInvoice(formData: FormData) {
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "CREATE_GUEST_ISSUED_INVOICE", "IssuedInvoice", invoice.id, (draft) => {
+  await mutateData(user.id, "CREATE_GUEST_ISSUED_INVOICE", "IssuedInvoice", invoice.id, (draft) => {
     invoice.invoiceNumber = nextInvoiceNumber(draft, timestamp);
     draft.issuedInvoices.unshift(invoice);
     draft.issuedInvoiceItems.push(...items);
@@ -487,7 +488,7 @@ export async function createIssuedInvoice(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "manage:issuedInvoices");
 
-  const data = readData();
+  const data = await readData();
   const invoiceNumber = value(formData, "invoiceNumber");
   if (data.issuedInvoices.some((invoice) => invoice.invoiceNumber === invoiceNumber && !invoice.deletedAt)) {
     throw new Error("請求書番号が重複しています");
@@ -540,7 +541,7 @@ export async function createIssuedInvoice(formData: FormData) {
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "CREATE_ISSUED_INVOICE", "IssuedInvoice", invoice.id, (draft) => {
+  await mutateData(user.id, "CREATE_ISSUED_INVOICE", "IssuedInvoice", invoice.id, (draft) => {
     draft.issuedInvoices.unshift(invoice);
     draft.issuedInvoiceItems.push(...items);
     const setting = draft.invoiceNumberSettings[0];
@@ -552,7 +553,7 @@ export async function createIssuedInvoice(formData: FormData) {
   });
   revalidatePath("/issued-invoices");
   revalidatePath(`/projects/${invoice.projectId}`);
-  const project = readData().projects.find((item) => item.id === invoice.projectId);
+  const project = (await readData()).projects.find((item) => item.id === invoice.projectId);
   redirect(`/issued-invoices?company=${companyFromParam(project?.company)}&created=${invoice.id}`);
 }
 
@@ -574,7 +575,7 @@ export async function recordIncomePayment(formData: FormData) {
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "RECORD_INCOME_PAYMENT", "Payment", payment.id, (data) => {
+  await mutateData(user.id, "RECORD_INCOME_PAYMENT", "Payment", payment.id, (data) => {
     data.payments.unshift(payment);
     const invoice = data.issuedInvoices.find((item) => item.id === invoiceId);
     if (invoice) {
@@ -597,10 +598,10 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
   }
   const id = value(formData, "receivedInvoiceId");
   const status = value(formData, "status") as ReceivedInvoice["status"];
-  const data = readData();
+  const data = await readData();
   const before = data.receivedInvoices.find((item) => item.id === id);
 
-  mutateData(user.id, "UPDATE_RECEIVED_INVOICE_STATUS", "ReceivedInvoice", id, (draft) => {
+  await mutateData(user.id, "UPDATE_RECEIVED_INVOICE_STATUS", "ReceivedInvoice", id, (draft) => {
     const invoice = draft.receivedInvoices.find((item) => item.id === id);
     if (!invoice) throw new Error("受領請求書が見つかりません");
     invoice.status = status;
@@ -630,7 +631,7 @@ export async function recordExpensePayment(formData: FormData) {
     updatedAt: timestamp,
   };
 
-  mutateData(user.id, "RECORD_EXPENSE_PAYMENT", "Payment", payment.id, (data) => {
+  await mutateData(user.id, "RECORD_EXPENSE_PAYMENT", "Payment", payment.id, (data) => {
     data.payments.unshift(payment);
     const invoice = data.receivedInvoices.find((item) => item.id === invoiceId);
     if (invoice) {
@@ -657,10 +658,10 @@ export async function softDelete(formData: FormData) {
     | "issuedInvoices"
     | "receivedInvoices";
   const id = value(formData, "id");
-  const data = readData();
+  const data = await readData();
   const before = (data[collection] as Array<{ id: string }>).find((item) => item.id === id);
 
-  mutateData(user.id, `SOFT_DELETE_${collection.toUpperCase()}`, collection, id, (draft) => {
+  await mutateData(user.id, `SOFT_DELETE_${collection.toUpperCase()}`, collection, id, (draft) => {
     const row = (draft[collection] as Array<{ id: string; deletedAt?: string; updatedAt?: string }>).find(
       (item) => item.id === id,
     );
@@ -674,7 +675,7 @@ export async function softDelete(formData: FormData) {
 }
 
 export async function saveReceivedInvoiceMetadata(invoice: ReceivedInvoice) {
-  const data = readData();
+  const data = await readData();
   data.receivedInvoices.unshift(invoice);
   data.auditLogs.unshift({
     id: newId(),
@@ -685,5 +686,5 @@ export async function saveReceivedInvoiceMetadata(invoice: ReceivedInvoice) {
     afterJson: invoice,
     createdAt: now(),
   });
-  writeData(data);
+  await writeData(data);
 }

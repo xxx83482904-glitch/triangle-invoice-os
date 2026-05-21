@@ -22,7 +22,7 @@ export default async function ProjectsPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
-  const data = readData();
+  const data = await readData();
   const projects = user ? scopedProjectsForUser(data, user) : [];
   const clients = data.clients
     .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))

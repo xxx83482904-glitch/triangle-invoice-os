@@ -12,7 +12,7 @@ import { paidForIssued, paidForReceived, projectMoney, readData } from "@/lib/st
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const data = readData();
+  const data = await readData();
   const project = data.projects.find((item) => item.id === id && !item.deletedAt);
   if (!project) notFound();
   const company = companyFromParam(project.company);

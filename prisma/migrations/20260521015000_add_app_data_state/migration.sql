@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS "AppDataState" (
+  "key" TEXT NOT NULL,
+  "value" JSONB NOT NULL,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AppDataState_pkey" PRIMARY KEY ("key")
+);

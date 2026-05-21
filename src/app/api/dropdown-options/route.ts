@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   if (body.kind === "client") {
     assertCan(user, "manage:clients");
-    const client = mutateData(user.id, "QUICK_CREATE_CLIENT", "Client", label, (data) => {
+    const client = await mutateData(user.id, "QUICK_CREATE_CLIENT", "Client", label, (data) => {
       const item = {
         id: newId(),
         company,
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
   if (body.kind === "vendor") {
     assertCan(user, "manage:vendors");
-    const vendor = mutateData(user.id, "QUICK_CREATE_VENDOR", "Vendor", label, (data) => {
+    const vendor = await mutateData(user.id, "QUICK_CREATE_VENDOR", "Vendor", label, (data) => {
       const item = {
         id: newId(),
         company,
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
 
   if (body.kind === "select-option" && body.group) {
     assertCan(user, "manage:clients");
-    const option = mutateData(user.id, "QUICK_CREATE_SELECT_OPTION", "SelectOption", body.group, (data) => {
+    const option = await mutateData(user.id, "QUICK_CREATE_SELECT_OPTION", "SelectOption", body.group, (data) => {
       const item = {
         id: newId(),
         company,

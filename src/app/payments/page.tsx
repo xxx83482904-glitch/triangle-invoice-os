@@ -22,7 +22,7 @@ export default async function PaymentsPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
-  const data = readData();
+  const data = await readData();
   const projects = data.projects
     .filter((project) => !project.deletedAt && matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
