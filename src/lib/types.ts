@@ -86,13 +86,16 @@ export type Project = {
   id: string;
   name: string;
   clientId: string;
+  company?: "CHINA" | "JAPAN";
   managerId: string;
   memberIds: string[];
   status: ProjectStatus;
+  stage?: string;
   contractAmount: number;
   startDate?: string;
   endDate?: string;
   memo?: string;
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -205,6 +208,7 @@ export type InvoiceNumberSetting = {
 };
 
 export type AppData = {
+  seedVersion?: number;
   users: User[];
   clients: Client[];
   vendors: Vendor[];

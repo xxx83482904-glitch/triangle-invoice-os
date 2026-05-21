@@ -1,0 +1,3 @@
+ALTER TABLE "Project" ADD COLUMN "company" TEXT;
+ALTER TABLE "Project" ADD COLUMN "stage" TEXT;
+ALTER TABLE "Project" ADD COLUMN "sortOrder" INTEGER;

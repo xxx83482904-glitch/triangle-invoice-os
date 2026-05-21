@@ -4,7 +4,7 @@ import type { IssuedInvoiceStatus, ProjectStatus, ReceivedInvoiceStatus } from "
 const labels = {
   PLANNING: "計画中",
   IN_PROGRESS: "進行中",
-  WAITING: "保留/待機",
+  WAITING: "待機",
   COMPLETED: "完了",
   ARCHIVED: "アーカイブ",
   DRAFT: "下書き",
@@ -18,7 +18,7 @@ const labels = {
   REISSUED: "再発行済み",
   RECEIVED: "受領済み",
   OCR_PENDING: "読み取り待ち",
-  REVIEWING: "内容確認中",
+  REVIEWING: "確認中",
   APPROVAL_PENDING: "承認待ち",
   SCHEDULED: "支払予定",
   ON_HOLD: "保留",

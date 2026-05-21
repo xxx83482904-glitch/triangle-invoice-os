@@ -114,12 +114,15 @@ model Project {
   id             String        @id @default(cuid())
   name           String
   clientId       String
+  company        String?
   managerId      String
   status         ProjectStatus @default(IN_PROGRESS)
+  stage          String?
   contractAmount Decimal       @db.Decimal(14, 2)
   startDate      DateTime?
   endDate        DateTime?
   memo           String?
+  sortOrder      Int?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?

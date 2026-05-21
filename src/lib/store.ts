@@ -8,16 +8,13 @@ import type {
   AppData,
   AuditLog,
   Client,
-  IssuedInvoice,
-  IssuedInvoiceItem,
-  Payment,
   Project,
   ProjectMoney,
-  ReceivedInvoice,
   User,
   Vendor,
 } from "@/lib/types";
 
+const DATA_VERSION = 2;
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
 const RUNTIME_DATA_FILE =
@@ -28,6 +25,33 @@ export const newId = () => crypto.randomUUID();
 
 function active<T extends { deletedAt?: string | null }>(rows: T[]) {
   return rows.filter((row) => !row.deletedAt);
+}
+
+function project(
+  id: string,
+  name: string,
+  company: "CHINA" | "JAPAN",
+  stage: string,
+  status: Project["status"],
+  index: number,
+): Project {
+  const timestamp = now();
+  return {
+    id,
+    name,
+    clientId: company === "CHINA" ? "cli-china" : "cli-japan",
+    company,
+    managerId: "usr-admin",
+    memberIds: ["usr-admin"],
+    status,
+    stage,
+    contractAmount: 0,
+    startDate: "2026-05-01",
+    memo: `${company === "CHINA" ? "中国" : "日本"} / ${stage}`,
+    sortOrder: index,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
 }
 
 function seedData(): AppData {
@@ -55,7 +79,7 @@ function seedData(): AppData {
     },
     {
       id: "usr-pm",
-      name: "佐藤 PM",
+      name: "Project Manager",
       email: "pm@triangle.local",
       passwordHash,
       role: "PROJECT_MANAGER",
@@ -64,7 +88,7 @@ function seedData(): AppData {
     },
     {
       id: "usr-designer",
-      name: "山田 Designer",
+      name: "Designer",
       email: "designer@triangle.local",
       passwordHash,
       role: "DESIGNER",
@@ -75,26 +99,18 @@ function seedData(): AppData {
 
   const clients: Client[] = [
     {
-      id: "cli-aurora",
-      companyName: "株式会社オーロラ食品",
-      contactName: "田中 美咲",
-      email: "tanaka@example.jp",
-      phone: "03-0000-1111",
-      address: "東京都渋谷区神宮前1-1-1",
-      invoiceRegistrationNumber: "T1010000000001",
-      memo: "ブランド刷新プロジェクトの主要クライアント",
+      id: "cli-china",
+      companyName: "TRIANGLE China",
+      contactName: "中国チーム",
+      memo: "中国案件用の会社",
       createdAt,
       updatedAt: createdAt,
     },
     {
-      id: "cli-north",
-      companyName: "North Shore Hotels",
-      contactName: "Robert Aoki",
-      email: "aoki@example.jp",
-      phone: "03-0000-2222",
-      address: "東京都港区南青山2-2-2",
-      invoiceRegistrationNumber: "T2010000000002",
-      memo: "ホテルサイン計画",
+      id: "cli-japan",
+      companyName: "TRIANGLE Japan",
+      contactName: "日本チーム",
+      memo: "日本案件用の会社",
       createdAt,
       updatedAt: createdAt,
     },
@@ -102,233 +118,76 @@ function seedData(): AppData {
 
   const vendors: Vendor[] = [
     {
-      id: "ven-print",
-      companyName: "青山プリント株式会社",
-      contactName: "中村 翔",
-      email: "nakamura@print.example.jp",
-      phone: "03-0000-3333",
-      address: "東京都港区北青山3-3-3",
-      invoiceRegistrationNumber: "T3010000000003",
-      bankName: "三角銀行",
-      branchName: "青山支店",
-      accountType: "普通",
-      accountNumber: "1234567",
-      accountHolder: "アオヤマプリント（カ",
-      memo: "印刷・色校正",
+      id: "ven-production",
+      companyName: "制作協力会社",
+      memo: "制作・施工・撮影費の仮支払先",
       createdAt,
       updatedAt: createdAt,
     },
-    {
-      id: "ven-build",
-      companyName: "代々木施工社",
-      contactName: "鈴木 一郎",
-      email: "suzuki@build.example.jp",
-      phone: "03-0000-4444",
-      address: "東京都渋谷区代々木4-4-4",
-      invoiceRegistrationNumber: "T4010000000004",
-      bankName: "都市信用金庫",
-      branchName: "代々木支店",
-      accountType: "普通",
-      accountNumber: "7654321",
-      accountHolder: "ヨヨギセコウシャ",
-      memo: "内装施工・現場調整",
-      createdAt,
-      updatedAt: createdAt,
-    },
+  ];
+
+  const chinaNames = [
+    "CN087_萱子_7.0标准店",
+    "JP063_LUMINE",
+    "CN086_55°N_杂货店(多店)",
+    "CN088_志邦_南京展厅",
+    "CN0089_绿园_建筑室内",
+    "CN090_WEGO",
+    "CN091_森里空间6号楼",
+    "CN093_哥哥的深夜食堂",
+    "CN092_水云间_南宁万象城",
+    "CN070_BOLONI 展厅",
+    "CN081_UNDEFEATED 武汉/杭州",
+  ];
+
+  const japanNames = [
+    "JP057_自由が丘RESTRANT",
+    "JP060_真ホテル 高田馬場",
+    "JP061_真ホテル 浅草",
+    "JP059_POF Rebranding",
+    "JP062_POF渋谷ヒカリエ",
   ];
 
   const projects: Project[] = [
-    {
-      id: "prj-brand",
-      name: "Aurora Foods ブランドリニューアル",
-      clientId: "cli-aurora",
-      managerId: "usr-pm",
-      memberIds: ["usr-pm", "usr-designer"],
-      status: "IN_PROGRESS",
-      contractAmount: 3600000,
-      startDate: "2026-04-01",
-      endDate: "2026-07-31",
-      memo: "ロゴ、パッケージ、撮影ディレクション",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "prj-hotel",
-      name: "North Shore Hotel サイン計画",
-      clientId: "cli-north",
-      managerId: "usr-pm",
-      memberIds: ["usr-pm"],
-      status: "WAITING",
-      contractAmount: 2400000,
-      startDate: "2026-03-15",
-      endDate: "2026-06-15",
-      memo: "現地採寸後に第2期見積",
-      createdAt,
-      updatedAt: createdAt,
-    },
-  ];
-
-  const issuedInvoices: IssuedInvoice[] = [
-    {
-      id: "inv-001",
-      invoiceNumber: "TRI-2026-0001",
-      projectId: "prj-brand",
-      clientId: "cli-aurora",
-      issueDate: "2026-05-01",
-      dueDate: "2026-05-31",
-      transactionDate: "2026-05-01",
-      subtotal: 1200000,
-      taxTotal: 120000,
-      total: 1320000,
-      status: "PARTIALLY_PAID",
-      notes: "ブランド設計 第1フェーズ",
-      internalMemo: "5月末入金予定",
-      createdById: "usr-accounting",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "inv-002",
-      invoiceNumber: "TRI-2026-0002",
-      projectId: "prj-hotel",
-      clientId: "cli-north",
-      issueDate: "2026-04-01",
-      dueDate: "2026-04-30",
-      transactionDate: "2026-04-01",
-      subtotal: 800000,
-      taxTotal: 80000,
-      total: 880000,
-      status: "OVERDUE",
-      notes: "サイン基本設計費",
-      internalMemo: "先方確認中",
-      createdById: "usr-accounting",
-      createdAt,
-      updatedAt: createdAt,
-    },
-  ];
-
-  const issuedInvoiceItems: IssuedInvoiceItem[] = [
-    {
-      id: "item-001",
-      invoiceId: "inv-001",
-      description: "ブランド戦略・VI設計",
-      quantity: 1,
-      unitPrice: 700000,
-      taxRate: 10,
-      amount: 700000,
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "item-002",
-      invoiceId: "inv-001",
-      description: "パッケージデザイン初期案",
-      quantity: 1,
-      unitPrice: 500000,
-      taxRate: 10,
-      amount: 500000,
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "item-003",
-      invoiceId: "inv-002",
-      description: "サイン基本設計",
-      quantity: 1,
-      unitPrice: 800000,
-      taxRate: 10,
-      amount: 800000,
-      createdAt,
-      updatedAt: createdAt,
-    },
-  ];
-
-  const receivedInvoices: ReceivedInvoice[] = [
-    {
-      id: "rinv-001",
-      vendorId: "ven-print",
-      projectId: "prj-brand",
-      receivedDate: "2026-05-08",
-      issueDate: "2026-05-05",
-      dueDate: "2026-05-25",
-      subtotal: 260000,
-      taxTotal: 26000,
-      total: 286000,
-      status: "APPROVAL_PENDING",
-      fileUrl: "",
-      originalFileName: "print-proof.pdf",
-      mimeType: "application/pdf",
-      ocrText: "",
-      memo: "色校正・試作印刷",
-      uploadedById: "usr-designer",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "rinv-002",
-      vendorId: "ven-build",
-      projectId: "prj-hotel",
-      receivedDate: "2026-04-20",
-      issueDate: "2026-04-18",
-      dueDate: "2026-05-20",
-      subtotal: 420000,
-      taxTotal: 42000,
-      total: 462000,
-      status: "SCHEDULED",
-      fileUrl: "",
-      originalFileName: "site-survey.pdf",
-      mimeType: "application/pdf",
-      ocrText: "",
-      memo: "現地調査・採寸",
-      uploadedById: "usr-pm",
-      createdAt,
-      updatedAt: createdAt,
-    },
-  ];
-
-  const payments: Payment[] = [
-    {
-      id: "pay-001",
-      type: "INCOME",
-      issuedInvoiceId: "inv-001",
-      amount: 660000,
-      paymentDate: "2026-05-10",
-      method: "銀行振込",
-      memo: "半金入金",
-      createdById: "usr-accounting",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "pay-002",
-      type: "EXPENSE",
-      receivedInvoiceId: "rinv-002",
-      amount: 462000,
-      paymentDate: "2026-05-12",
-      method: "銀行振込",
-      memo: "支払い済み",
-      createdById: "usr-accounting",
-      createdAt,
-      updatedAt: createdAt,
-    },
+    ...chinaNames.map((name, index) =>
+      project(
+        `prj-cn-${String(index + 1).padStart(3, "0")}`,
+        name,
+        "CHINA",
+        index < 9 ? "制作资料" : "施工中",
+        index < 9 ? "PLANNING" : "IN_PROGRESS",
+        index + 1,
+      ),
+    ),
+    ...japanNames.map((name, index) =>
+      project(
+        `prj-jp-${String(index + 1).padStart(3, "0")}`,
+        name,
+        "JAPAN",
+        index < 3 ? "制作资料" : index === 3 ? "施工中" : "待拍摄",
+        index < 3 ? "PLANNING" : index === 3 ? "IN_PROGRESS" : "WAITING",
+        index + 1,
+      ),
+    ),
   ];
 
   return {
+    seedVersion: DATA_VERSION,
     users,
     clients,
     vendors,
     projects,
-    issuedInvoices,
-    issuedInvoiceItems,
-    receivedInvoices,
-    payments,
+    issuedInvoices: [],
+    issuedInvoiceItems: [],
+    receivedInvoices: [],
+    payments: [],
     attachments: [],
     auditLogs: [],
     invoiceNumberSettings: [
       {
         id: "num-2026",
         prefix: "TRI",
-        nextNumber: 3,
+        nextNumber: 1,
         fiscalYear: 2026,
         createdAt,
         updatedAt: createdAt,
@@ -341,16 +200,22 @@ export function readData(): AppData {
   const runtimeDir = path.dirname(RUNTIME_DATA_FILE);
   if (!existsSync(runtimeDir)) mkdirSync(runtimeDir, { recursive: true });
   if (!existsSync(RUNTIME_DATA_FILE)) {
-    const initialData = existsSync(DATA_FILE) ? readFileSync(DATA_FILE, "utf8") : JSON.stringify(seedData(), null, 2);
-    writeFileSync(RUNTIME_DATA_FILE, initialData);
+    writeFileSync(RUNTIME_DATA_FILE, JSON.stringify(seedData(), null, 2));
   }
-  return JSON.parse(readFileSync(RUNTIME_DATA_FILE, "utf8")) as AppData;
+
+  const data = JSON.parse(readFileSync(RUNTIME_DATA_FILE, "utf8")) as AppData;
+  if (data.seedVersion !== DATA_VERSION) {
+    const nextData = seedData();
+    writeFileSync(RUNTIME_DATA_FILE, JSON.stringify(nextData, null, 2));
+    return nextData;
+  }
+  return data;
 }
 
 export function writeData(data: AppData) {
   const runtimeDir = path.dirname(RUNTIME_DATA_FILE);
   if (!existsSync(runtimeDir)) mkdirSync(runtimeDir, { recursive: true });
-  writeFileSync(RUNTIME_DATA_FILE, JSON.stringify(data, null, 2));
+  writeFileSync(RUNTIME_DATA_FILE, JSON.stringify({ ...data, seedVersion: DATA_VERSION }, null, 2));
 }
 
 export function mutateData<T>(
@@ -406,10 +271,10 @@ export function paidForReceived(data: AppData, receivedInvoiceId: string) {
 }
 
 export function projectMoney(data: AppData, projectId: string): ProjectMoney {
-  const project = data.projects.find((item) => item.id === projectId);
+  const projectItem = data.projects.find((item) => item.id === projectId);
   const issued = active(data.issuedInvoices).filter((item) => item.projectId === projectId);
   const received = active(data.receivedInvoices).filter((item) => item.projectId === projectId);
-  const contractAmount = project?.contractAmount ?? 0;
+  const contractAmount = projectItem?.contractAmount ?? 0;
   const invoicedAmount = issued.reduce((sum, invoice) => sum + invoice.total, 0);
   const paidIncomeAmount = issued.reduce((sum, invoice) => sum + paidForIssued(data, invoice.id), 0);
   const receivedInvoiceTotal = received.reduce((sum, invoice) => sum + invoice.total, 0);
@@ -433,7 +298,7 @@ export function projectMoney(data: AppData, projectId: string): ProjectMoney {
 export function scopedProjectsForUser(data: AppData, user: Pick<User, "id" | "role">) {
   if (user.role === "ADMIN" || user.role === "ACCOUNTING") return active(data.projects);
   return active(data.projects).filter(
-    (project) => project.managerId === user.id || project.memberIds.includes(user.id),
+    (projectItem) => projectItem.managerId === user.id || projectItem.memberIds.includes(user.id),
   );
 }
 

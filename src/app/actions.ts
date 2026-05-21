@@ -139,8 +139,11 @@ export async function updateProjectInline(formData: FormData) {
     if (!project) throw new Error("案件が見つかりません");
 
     project.name = value(formData, "name");
-    project.clientId = value(formData, "clientId");
-    project.status = value(formData, "status") as Project["status"];
+    project.company = value(formData, "company") as Project["company"];
+    project.clientId = project.company === "CHINA" ? "cli-china" : "cli-japan";
+    project.stage = value(formData, "stage");
+    project.status =
+      project.stage === "施工中" ? "IN_PROGRESS" : project.stage === "待拍摄" ? "WAITING" : "PLANNING";
     project.updatedAt = now();
 
     return project;
