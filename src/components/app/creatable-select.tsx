@@ -25,7 +25,6 @@ export function CreatableSelect({
   name,
   options,
   placeholder = "選択",
-  required,
   searchPlaceholder = "検索または作成",
 }: {
   className?: string;
@@ -78,7 +77,7 @@ export function CreatableSelect({
     <div ref={rootRef} className={cn("relative", className)} onBlur={(event) => {
       if (!rootRef.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
     }}>
-      <input name={name} value={value} required={required} readOnly className="sr-only" tabIndex={-1} />
+      <input name={name} value={value} readOnly type="hidden" />
       <button
         type="button"
         className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50"
