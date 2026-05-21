@@ -232,18 +232,32 @@ function shouldUseDatabaseStore() {
   return Boolean(url && !isLocalDatabaseUrl(url));
 }
 
+function databasePoolConfig() {
+  const rawUrl = process.env.DATABASE_URL;
+  if (!rawUrl) {
+    throw new Error("DATABASE_URL is required for durable production storage.");
+  }
+
+  const url = new URL(rawUrl);
+  const sslMode = url.searchParams.get("sslmode");
+  const needsSsl = sslMode === "require" || sslMode === "prefer" || sslMode === "verify-full";
+  if (needsSsl) {
+    url.searchParams.delete("sslmode");
+  }
+
+  return {
+    connectionString: url.toString(),
+    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+  };
+}
+
 async function ensureDatabaseStore() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required for durable production storage.");
   }
 
   if (!databasePool) {
-    databasePool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes("sslmode=require")
-        ? { rejectUnauthorized: false }
-        : undefined,
-    });
+    databasePool = new Pool(databasePoolConfig());
   }
 
   await databasePool.query(`
