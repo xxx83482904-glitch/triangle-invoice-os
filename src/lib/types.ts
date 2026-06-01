@@ -39,6 +39,15 @@ export type PaymentType = "INCOME" | "EXPENSE";
 
 export type TaxRate = 10 | 8 | 0 | -1;
 
+export type MailDocumentCategory =
+  | "INVOICE"
+  | "CONTRACT"
+  | "ESTIMATE"
+  | "DELIVERY_NOTE"
+  | "RECEIPT"
+  | "NOTICE"
+  | "OTHER";
+
 export type SelectOptionGroup =
   | "PROJECT_STAGE"
   | "PROJECT_STATUS"
@@ -192,6 +201,24 @@ export type ReceivedInvoice = {
   deletedAt?: string | null;
 };
 
+export type MailDocument = {
+  id: string;
+  company?: "CHINA" | "JAPAN";
+  category: MailDocumentCategory;
+  title: string;
+  fileUrl: string;
+  originalFileName: string;
+  mimeType: string;
+  ocrText?: string;
+  confidence?: number;
+  relatedReceivedInvoiceId?: string;
+  memo?: string;
+  uploadedById: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+};
+
 export type Payment = {
   id: string;
   type: PaymentType;
@@ -249,6 +276,7 @@ export type AppData = {
   issuedInvoices: IssuedInvoice[];
   issuedInvoiceItems: IssuedInvoiceItem[];
   receivedInvoices: ReceivedInvoice[];
+  mailDocuments: MailDocument[];
   payments: Payment[];
   attachments: Attachment[];
   auditLogs: AuditLog[];

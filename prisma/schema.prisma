@@ -52,6 +52,16 @@ enum PaymentType {
   EXPENSE
 }
 
+enum MailDocumentCategory {
+  INVOICE
+  CONTRACT
+  ESTIMATE
+  DELIVERY_NOTE
+  RECEIPT
+  NOTICE
+  OTHER
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -69,6 +79,7 @@ model User {
   approvedReceivedInvoices ReceivedInvoice[] @relation("ReceivedInvoiceApprover")
   payments Payment[] @relation("PaymentCreator")
   attachments Attachment[] @relation("AttachmentUploader")
+  mailDocuments MailDocument[] @relation("MailDocumentUploader")
   auditLogs AuditLog[]
 }
 
@@ -231,8 +242,32 @@ model ReceivedInvoice {
   uploadedBy User @relation("ReceivedInvoiceUploader", fields: [uploadedById], references: [id])
   approvedBy User? @relation("ReceivedInvoiceApprover", fields: [approvedById], references: [id])
   payments Payment[]
+  mailDocuments MailDocument[]
 
   @@index([vendorId, total, issueDate])
+}
+
+model MailDocument {
+  id                       String               @id @default(cuid())
+  company                  String?
+  category                 MailDocumentCategory @default(OTHER)
+  title                    String
+  fileUrl                  String
+  originalFileName         String
+  mimeType                 String
+  ocrText                  String?
+  confidence               Int?
+  relatedReceivedInvoiceId String?
+  memo                     String?
+  uploadedById             String
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  deletedAt                DateTime?
+
+  relatedReceivedInvoice ReceivedInvoice? @relation(fields: [relatedReceivedInvoiceId], references: [id])
+  uploadedBy User @relation("MailDocumentUploader", fields: [uploadedById], references: [id])
+
+  @@index([company, category, createdAt])
 }
 
 model Payment {

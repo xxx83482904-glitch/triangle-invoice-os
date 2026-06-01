@@ -1,7 +1,7 @@
 import "server-only";
 
 import { companyFromParam, matchesCompany, type CompanyScope } from "@/lib/company";
-import type { AppData } from "@/lib/types";
+import type { AppData, MailDocumentCategory } from "@/lib/types";
 
 export type ExtractedText = {
   confidence?: number;
@@ -31,6 +31,12 @@ export type InferredContractBilling = {
   memo: string;
   total: number;
   warnings: string[];
+};
+
+export type MailDocumentClassification = {
+  category: MailDocumentCategory;
+  confidence: number;
+  reason: string;
 };
 
 function normalize(value: string) {
@@ -106,6 +112,61 @@ function extractAmounts(text: string) {
     return { subtotal: total - inferredTax, taxTotal: inferredTax, total };
   }
   return { subtotal: 0, taxTotal: 0, total: 0 };
+}
+
+function includesAny(text: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+export function classifyMailDocument(extracted: ExtractedText): MailDocumentClassification {
+  const text = extracted.text;
+  const invoicePatterns = [
+    /請求書|御請求|ご請求|invoice|tax invoice/i,
+    /支払期限|お支払期限|振込先|請求金額|消費税|適格請求書|登録番号/i,
+    /amount due|payment due|bank transfer/i,
+  ];
+  const categoryPatterns: Array<[MailDocumentCategory, RegExp[]]> = [
+    ["CONTRACT", [/契約書|業務委託契約|覚書|agreement|contract/i]],
+    ["ESTIMATE", [/見積書|御見積|quotation|estimate/i]],
+    ["DELIVERY_NOTE", [/納品書|delivery note|delivered/i]],
+    ["RECEIPT", [/領収書|receipt/i]],
+    ["NOTICE", [/通知|案内|お知らせ|notice|information/i]],
+  ];
+  const dates = extractDates(text);
+  const amounts = extractAmounts(text);
+  const invoiceSignal = includesAny(text, invoicePatterns);
+
+  if (invoiceSignal && amounts.total > 0) {
+    return {
+      category: "INVOICE",
+      confidence: Math.min(100, 60 + (dates.length ? 15 : 0) + (extracted.confidence ? 10 : 0)),
+      reason: "請求書キーワードと金額を検出",
+    };
+  }
+
+  for (const [category, patterns] of categoryPatterns) {
+    if (includesAny(text, patterns)) {
+      return {
+        category,
+        confidence: Math.min(100, 55 + (dates.length ? 10 : 0) + (amounts.total ? 10 : 0)),
+        reason: "書類種別キーワードを検出",
+      };
+    }
+  }
+
+  if (invoiceSignal) {
+    return {
+      category: "OTHER",
+      confidence: 45,
+      reason: "請求書らしい文言はありますが金額が不明",
+    };
+  }
+
+  return {
+    category: "OTHER",
+    confidence: extracted.confidence ? Math.min(70, Math.round(extracted.confidence)) : 30,
+    reason: "請求書として確定できないためその他へ分類",
+  };
 }
 
 function extractContractAmount(text: string) {

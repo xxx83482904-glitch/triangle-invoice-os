@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, FileText, ReceiptText, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, FileText, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { companyFromParam, companyOptions, type CompanyScope } from "@/lib/company";
 
 const nav = [
   { href: "/dashboard", label: "一覧", icon: Building2 },
   { href: "/projects", label: "案件", icon: Building2 },
+  { href: "/mail-sorter", label: "郵便仕分け", icon: Mail },
   { href: "/issued-invoices", label: "発行請求書", icon: FileText },
   { href: "/received-invoices", label: "受領請求書", icon: ReceiptText },
   { href: "/payments", label: "入金・支払い", icon: WalletCards },
