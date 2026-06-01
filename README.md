@@ -1,23 +1,24 @@
 # TRIANGLE Invoice OS
 
-社内向けの請求書・受領請求書・入金・支払い管理アプリです。請求書を単なるPDFではなく、案件ごとの売上、入金、受領請求、支払い、粗利を追うためのInvoice OSとして構成しています。
+TRIANGLE Invoice OS is an internal invoice and payment management app for design, branding, and architecture teams. It manages issued invoices, received invoices, payments, contracts, and project profitability by project.
 
-## 実装済みMVP
+## MVP Features
 
-- ログイン、ロール管理、権限チェック
-- ダッシュボード
-- クライアント管理、支払先管理
-- 案件一覧、案件詳細、案件別の契約額・請求・入金・支払い・粗利
-- 発行請求書作成、税率別計算、PDF出力
-- 入金登録、一部入金、複数回入金
-- 受領請求書PDF/JPEG/PNGアップロード、案件・支払先紐づけ、簡易重複検知
-- 受領請求書ステータス変更、支払い登録
-- 月別・案件別・取引先別レポート
-- CSVエクスポート
-- AuditLog記録
-- PostgreSQL向けPrisma schema
+- Login and role-based access control
+- Japan / China company switch across the interface
+- Client, vendor, and project management
+- Compact editable project list
+- Project detail page with contract amount, invoicing, payments, and gross profit
+- Issued invoice creation and PDF export
+- Received invoice upload and payment status management
+- Mail sorter for uploaded PDFs/images
+- Contract upload with OCR-assisted billing count and amount extraction
+- CSV export
+- Audit log
+- PostgreSQL-backed app data state
+- Local or database-backed uploaded file storage
 
-## ローカル起動
+## Local Setup
 
 ```bash
 npm install
@@ -25,20 +26,18 @@ copy .env.example .env
 npm run dev
 ```
 
-ブラウザで `http://localhost:3000` を開きます。
+Open `http://localhost:3000`.
 
-デモユーザー:
+Demo accounts:
 
 - `admin@triangle.local` / `password123`
 - `accounting@triangle.local` / `password123`
 - `pm@triangle.local` / `password123`
 - `designer@triangle.local` / `password123`
 
-## PostgreSQL / Prisma
+## Database
 
-MVPの画面はすぐ触れるように `data/app-data.json` へ保存するローカルデータ層で動きます。Prisma schemaは本番DB移行用の契約として用意しています。
-
-PostgreSQLを起動する場合:
+For local PostgreSQL:
 
 ```bash
 docker compose up -d
@@ -46,31 +45,75 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
-将来的に `src/lib/store.ts` のリポジトリ実装をPrismaへ差し替える想定です。DBスキーマは `prisma/schema.prisma` にあります。
+The Prisma schema is in `prisma/schema.prisma`. The current application state is stored through `src/lib/store.ts`.
 
-## ファイル保存
+## File Storage
 
-受領請求書はローカル開発では `public/uploads/received-invoices` に保存します。保存処理は `src/app/api/uploads/received-invoices/route.ts` に集約しているため、本番ではS3互換ストレージのアダプターへ差し替えやすい構成です。
+Local development stores files in `public/uploads/received-invoices`.
 
-## セキュリティ
+Production can force database-backed file storage:
 
-- ログイン必須
-- ロールベースアクセス制御
-- アップロードはPDF/JPEG/PNGのみ許可
-- 10MBファイルサイズ制限
-- 請求書番号の重複禁止
-- `vendorId + total + issueDate` の受領請求書重複検知
-- 主要な作成、更新、支払い、アップロードはAuditLogへ記録
-- 削除はsoft delete前提のデータモデル
+```bash
+FILE_STORAGE_DRIVER="database"
+```
 
-## 今後の拡張TODO
+This keeps uploaded PDFs/images viewable on hosts where local disk is ephemeral.
 
-- Prismaリポジトリへの完全移行
-- OCR読み取りキューと `ocrText` の自動更新
-- 外部業者専用アップロードURL
-- Gmail/メール取り込み
-- freee、マネーフォワード連携
-- 銀行口座API連携
-- 自動リマインドメール
-- AIによる請求書チェック
-- 電子帳簿保存法を意識した保管ポリシー強化
+## OCR / AI Classification
+
+Received invoice drop and mail sorting use this flow:
+
+1. Google Cloud Vision OCR extracts text from PDF/JPEG/PNG.
+2. OpenAI classifies the document as invoice, contract, estimate, receipt, notice, or other.
+3. If it is an invoice, AI extracts vendor name, project hint, issue date, due date, subtotal, tax, and total.
+4. The app stores the result as a review draft with warnings and confidence.
+
+Set these variables in `.env`:
+
+```bash
+GOOGLE_CLOUD_VISION_API_KEY="..."
+OPENAI_API_KEY="..."
+OCR_AI_MODEL="gpt-4.1-nano"
+```
+
+Google Vision can also use a service account JSON:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS_JSON='{"type":"service_account",...}'
+```
+
+If keys are not configured, the app falls back to PDF text extraction and local Tesseract OCR. In the MVP, synchronous Google Vision OCR reads up to the first 5 PDF pages.
+
+## Alibaba / VPS Deployment
+
+The Docker deployment files are in `deploy/alibaba`.
+
+```bash
+cd deploy/alibaba
+cp .env.example .env
+docker compose up -d --build
+```
+
+Use the same setup on Alibaba Cloud ECS, XServer VPS, or another Ubuntu VPS with Docker.
+
+## Security Notes
+
+- Login is required
+- Role-based access control is enforced in server actions and upload APIs
+- Uploads allow only PDF, JPEG, and PNG
+- Upload size is limited
+- Important changes write to AuditLog
+- Invoice number duplication is blocked
+- Received invoice duplicate detection uses vendor, issue date, and total
+
+## Future TODO
+
+- Full Prisma repository migration
+- Background OCR queue for large PDFs
+- External vendor upload URL
+- Gmail / mail import
+- freee and Money Forward integration
+- Bank API integration
+- Automatic reminder email
+- AI invoice validation rules
+- Electronic book preservation policy hardening

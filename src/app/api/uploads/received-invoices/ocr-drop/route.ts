@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
-import { extractDocumentText, inferReceivedInvoice } from "@/lib/ocr";
+import { extractDocumentText, inferReceivedInvoiceWithAi } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
 import type { ReceivedInvoice } from "@/lib/types";
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const extracted = await extractDocumentText(file.name, file.type, buffer);
     const data = await readData();
-    const inferred = inferReceivedInvoice(data, extracted, company);
+    const inferred = await inferReceivedInvoiceWithAi(data, extracted, company);
 
     if (!inferred.vendorId || !inferred.projectId) {
       results.push({

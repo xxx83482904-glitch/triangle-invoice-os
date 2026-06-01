@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
-import { classifyMailDocument, extractDocumentText, inferReceivedInvoice } from "@/lib/ocr";
+import { analyzeMailDocument, extractDocumentText } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
 import type { MailDocument, MailDocumentCategory, ReceivedInvoice } from "@/lib/types";
@@ -50,9 +50,9 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const extracted = await extractDocumentText(file.name, file.type, buffer);
-    const classification = classifyMailDocument(extracted);
     const data = await readData();
+    const extracted = await extractDocumentText(file.name, file.type, buffer);
+    const { classification, invoice: inferred } = await analyzeMailDocument(data, extracted, company);
     const id = newId();
     const timestamp = new Date().toISOString();
     const safeName = `${id}${extension}`;
@@ -60,8 +60,7 @@ export async function POST(request: Request) {
     const fileUrl = receivedInvoiceFileUrl(safeName);
 
     if (classification.category === "INVOICE") {
-      const inferred = inferReceivedInvoice(data, extracted, company);
-      if (inferred.vendorId && inferred.projectId) {
+      if (inferred?.vendorId && inferred.projectId) {
         const duplicate = data.receivedInvoices.find(
           (invoice) =>
             !invoice.deletedAt &&
