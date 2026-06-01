@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const id = newId();
     const timestamp = new Date().toISOString();
     const safeName = `${id}${extension}`;
-    await saveReceivedInvoiceFile(safeName, buffer);
+    await saveReceivedInvoiceFile(safeName, buffer, file.type);
     const fileUrl = receivedInvoiceFileUrl(safeName);
 
     if (classification.category === "INVOICE") {

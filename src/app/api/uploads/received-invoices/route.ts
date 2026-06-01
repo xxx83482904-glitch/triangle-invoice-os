@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
   const id = newId();
   const safeName = `${id}${extension}`;
-  await saveReceivedInvoiceFile(safeName, Buffer.from(await file.arrayBuffer()));
+  await saveReceivedInvoiceFile(safeName, Buffer.from(await file.arrayBuffer()), file.type);
 
   const timestamp = new Date().toISOString();
   const subtotal = numeric(formData, "subtotal");

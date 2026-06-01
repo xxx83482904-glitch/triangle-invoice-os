@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const inferred = inferContractBilling(extracted);
   const fileUrl = contractFileUrl(safeName);
 
-  await saveContractFile(safeName, buffer);
+  await saveContractFile(safeName, buffer, file.type);
 
   await mutateData(user.id, "UPLOAD_PROJECT_CONTRACT", "Project", projectId, (draft) => {
     const project = draft.projects.find((item) => item.id === projectId);

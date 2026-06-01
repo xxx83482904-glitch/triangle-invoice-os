@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
-import { readReceivedInvoiceFile } from "@/lib/files";
-
-const mimeByExtension: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".pdf": "application/pdf",
-  ".png": "image/png",
-};
+import { readUploadedFile } from "@/lib/files";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
-  const file = await readReceivedInvoiceFile(name);
+  const file = await readUploadedFile(name);
   if (!file) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const extension = name.slice(name.lastIndexOf(".")).toLowerCase();
-  return new NextResponse(new Uint8Array(file), {
+  return new NextResponse(new Uint8Array(file.data), {
     headers: {
-      "Content-Type": mimeByExtension[extension] ?? "application/octet-stream",
+      "Content-Type": file.mimeType,
       "Content-Disposition": `inline; filename="${name}"`,
     },
   });

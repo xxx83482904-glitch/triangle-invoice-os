@@ -12,6 +12,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.0",
     "@prisma/client": "^7.8.0",
     "@types/pdfkit": "^0.17.6",
     "bcryptjs": "^3.0.3",

@@ -348,3 +348,10 @@ model AppDataState {
   value     Json
   updatedAt DateTime @updatedAt
 }
+
+model UploadFile {
+  fileName  String   @id
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+}

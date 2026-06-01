@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS "UploadFile" (
+  "fileName" TEXT NOT NULL,
+  "mimeType" TEXT NOT NULL,
+  "data" BYTEA NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "UploadFile_pkey" PRIMARY KEY ("fileName")
+);
