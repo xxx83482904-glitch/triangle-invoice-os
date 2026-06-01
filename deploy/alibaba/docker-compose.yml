@@ -1,0 +1,56 @@
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: triangle-invoice-os-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      APP_URL: ${APP_URL}
+      FILE_STORAGE_DRIVER: ${FILE_STORAGE_DRIVER:-database}
+      NODE_ENV: production
+      PORT: 3000
+    expose:
+      - "3000"
+
+  postgres:
+    image: postgres:16
+    container_name: triangle-invoice-os-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-triangle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-triangle_invoice_os}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-triangle} -d ${POSTGRES_DB:-triangle_invoice_os}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  caddy:
+    image: caddy:2
+    container_name: triangle-invoice-os-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

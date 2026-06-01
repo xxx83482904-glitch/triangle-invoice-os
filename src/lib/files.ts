@@ -32,7 +32,11 @@ function isLocalDatabaseUrl(url: string) {
 
 function shouldUseDatabaseFileStore() {
   const url = process.env.DATABASE_URL;
-  return Boolean(process.env.VERCEL === "1" && url && !isLocalDatabaseUrl(url));
+  return Boolean(
+    url &&
+      !isLocalDatabaseUrl(url) &&
+      (process.env.VERCEL === "1" || process.env.FILE_STORAGE_DRIVER === "database"),
+  );
 }
 
 function databasePoolConfig() {

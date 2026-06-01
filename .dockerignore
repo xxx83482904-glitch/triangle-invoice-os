@@ -1,0 +1,11 @@
+.git
+.next
+.vercel
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+data/*.json
+public/uploads/*
+!public/uploads/.gitkeep
