@@ -245,14 +245,14 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
       } & ((input: Buffer) => Promise<{ text?: string }>);
       const parsePdf = pdfModule.default ?? pdfModule;
       const parsed = await parsePdf(buffer);
-      if (parsed.text) {
+      if (parsed.text?.trim()) {
         parts.push(parsed.text);
         engine = "pdf-text";
       } else {
-        warnings.push("PDF内のテキストを抽出できませんでした。スキャンPDFは画像として再アップロードするとOCRできます。");
+        warnings.push("PDF??????????????????????PDF???????????????OCR?????");
       }
     } catch {
-      warnings.push("PDFテキスト抽出に失敗しました。ファイル名から推定します。");
+      warnings.push("PDF?????????????????????????????");
     }
   }
 
@@ -264,7 +264,7 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
       confidence = result.data.confidence;
       engine = "tesseract-jpn-eng";
     } catch {
-      warnings.push("画像OCRに失敗しました。ファイル名から推定します。");
+      warnings.push("??OCR??????????????????????");
     }
   }
 
