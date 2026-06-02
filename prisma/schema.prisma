@@ -252,6 +252,7 @@ model MailDocument {
   company                  String?
   category                 MailDocumentCategory @default(OTHER)
   title                    String
+  senderName               String?
   fileUrl                  String
   originalFileName         String
   mimeType                 String

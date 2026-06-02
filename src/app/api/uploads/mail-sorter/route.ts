@@ -25,6 +25,17 @@ type SortResult = {
   warnings?: string[];
 };
 
+function inferSenderName(text: string, fileName: string) {
+  const organizationPattern = /(株式会社|有限会社|合同会社|一般社団法人|学校法人|医療法人|股份有限公司|有限公司|公司|Inc\.?|Co\.?\s*Ltd\.?|LLC)/i;
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 2 && line.length <= 60);
+  const matched = lines.find((line) => organizationPattern.test(line));
+  if (matched) return matched;
+  return lines[0] || fileName.replace(/\.[^.]+$/, "");
+}
+
 function companyLabel(company: "CHINA" | "JAPAN") {
   return company === "CHINA" ? "中国" : "日本";
 }
@@ -60,6 +71,27 @@ function ensureReviewVendor(data: AppData, company: "CHINA" | "JAPAN", timestamp
     companyName: `${companyLabel(company)} OCR未確認支払先`,
     contactName: "OCR確認待ち",
     memo: "OCRで支払先を特定できなかった請求書の仮支払先です。",
+    sortOrder: data.vendors.filter((vendorItem) => vendorItem.company === company).length + 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  data.vendors.unshift(vendor);
+  return vendor;
+}
+
+function ensureVendorByName(data: AppData, company: "CHINA" | "JAPAN", companyName: string, timestamp: string): Vendor {
+  const normalized = companyName.trim().toLowerCase();
+  const existing = data.vendors.find(
+    (vendor) => !vendor.deletedAt && vendor.company === company && vendor.companyName.trim().toLowerCase() === normalized,
+  );
+  if (existing) return existing;
+
+  const vendor: Vendor = {
+    id: newId(),
+    company,
+    companyName: companyName.trim(),
+    contactName: "OCR自動登録",
+    memo: "OCRで発送元として読み取った会社・組織を支払先として自動登録しました。",
     sortOrder: data.vendors.filter((vendorItem) => vendorItem.company === company).length + 1,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -122,6 +154,7 @@ export async function POST(request: Request) {
     const data = await readData();
     const extracted = await extractDocumentText(file.name, file.type, buffer);
     const { classification, invoice: inferred } = await analyzeMailDocument(data, extracted, company);
+    const senderName = classification.senderName || inferred?.vendorName || inferSenderName(extracted.text, file.name);
     const id = newId();
     const timestamp = new Date().toISOString();
     const safeName = `${id}${extension}`;
@@ -140,6 +173,7 @@ export async function POST(request: Request) {
         company,
         category: "INVOICE",
         title: file.name,
+        senderName,
         fileUrl,
         originalFileName: file.name,
         mimeType: file.type,
@@ -155,7 +189,9 @@ export async function POST(request: Request) {
       await mutateData(user.id, "SORT_MAIL_DOCUMENT", "MailDocument", mailDocument.id, (draft) => {
         const vendor = inferred.vendorId
           ? draft.vendors.find((item) => item.id === inferred.vendorId && !item.deletedAt) ?? ensureReviewVendor(draft, company, timestamp)
-          : ensureReviewVendor(draft, company, timestamp);
+          : senderName
+            ? ensureVendorByName(draft, company, senderName, timestamp)
+            : ensureReviewVendor(draft, company, timestamp);
         const project = inferred.projectId
           ? draft.projects.find((item) => item.id === inferred.projectId && !item.deletedAt) ?? ensureReviewProject(draft, company, timestamp)
           : ensureReviewProject(draft, company, timestamp);
@@ -164,6 +200,7 @@ export async function POST(request: Request) {
         if (!inferred.projectId) fallbackWarnings.push("案件を特定できなかったため、OCR未確認案件に仮登録しました。");
 
         vendorName = vendor.companyName;
+        mailDocument.senderName = vendor.companyName || senderName;
         projectName = project.name;
         const existing = draft.receivedInvoices.find(
           (invoice) =>
@@ -240,6 +277,7 @@ export async function POST(request: Request) {
       company,
       category: classification.category === "INVOICE" ? "OTHER" : classification.category,
       title: file.name,
+      senderName,
       fileUrl,
       originalFileName: file.name,
       mimeType: file.type,

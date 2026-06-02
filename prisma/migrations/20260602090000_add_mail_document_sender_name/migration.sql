@@ -1,0 +1,2 @@
+ALTER TABLE "MailDocument"
+  ADD COLUMN IF NOT EXISTS "senderName" TEXT;

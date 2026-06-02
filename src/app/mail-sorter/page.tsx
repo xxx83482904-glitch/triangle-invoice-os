@@ -75,6 +75,7 @@ export default async function MailSorterPage({
         ocrText: document.ocrText,
         receivedInvoiceId: invoice?.id,
         savedAs: invoice ? "受領請求書" : "その他書類",
+        senderName: document.senderName || vendor?.companyName,
       };
     });
 
@@ -111,6 +112,7 @@ export default async function MailSorterPage({
         ocrText: invoice.ocrText,
         receivedInvoiceId: invoice.id,
         savedAs: "受領請求書",
+        senderName: vendor?.companyName,
       };
     });
 

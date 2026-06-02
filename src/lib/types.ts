@@ -206,6 +206,7 @@ export type MailDocument = {
   company?: "CHINA" | "JAPAN";
   category: MailDocumentCategory;
   title: string;
+  senderName?: string;
   fileUrl: string;
   originalFileName: string;
   mimeType: string;

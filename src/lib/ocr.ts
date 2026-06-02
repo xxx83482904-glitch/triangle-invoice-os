@@ -39,6 +39,7 @@ export type MailDocumentClassification = {
   category: MailDocumentCategory;
   confidence: number;
   reason: string;
+  senderName?: string;
 };
 
 type AiDocumentAnalysis = {
@@ -50,6 +51,8 @@ type AiDocumentAnalysis = {
   projectHint?: string;
   reason?: string;
   registrationNumber?: string;
+  senderName?: string;
+  senderOrganization?: string;
   subtotal?: number;
   taxTotal?: number;
   total?: number;
@@ -374,7 +377,7 @@ async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalys
       messages: [
         {
           content:
-            "You classify Japanese/Chinese business documents and extract invoice fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include confidence 0-100, reason, warnings array.",
+            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. Always infer senderName as the company or organization that sent the document. For invoices, also set vendorName. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include confidence 0-100, reason, warnings array.",
           role: "system",
         },
         {
@@ -523,10 +526,12 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
 function classifyFromAnalysis(extracted: ExtractedText, analysis: AiDocumentAnalysis | null): MailDocumentClassification | null {
   const category = categoryFromAi(analysis?.documentType);
   if (!category) return null;
+  const senderName = textFromAi(analysis?.senderName) || textFromAi(analysis?.senderOrganization) || textFromAi(analysis?.vendorName);
   return {
     category,
     confidence: Math.min(100, numberFromAi(analysis?.confidence) || 60),
     reason: textFromAi(analysis?.reason) || "Classified by AI from OCR text.",
+    senderName: senderName || undefined,
   };
 }
 

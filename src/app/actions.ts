@@ -636,6 +636,7 @@ export async function updateOcrDocumentInline(formData: FormData) {
 
     if (mailDocument) {
       mailDocument.category = value(formData, "category") as MailDocumentCategory;
+      mailDocument.senderName = optional(formData, "senderName");
       mailDocument.title = value(formData, "fileName") || mailDocument.title;
       mailDocument.originalFileName = value(formData, "fileName") || mailDocument.originalFileName;
       mailDocument.memo = optional(formData, "memo");

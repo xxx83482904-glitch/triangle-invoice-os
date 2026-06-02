@@ -44,6 +44,7 @@ export type OcrDocumentListItem = {
   ocrText?: string;
   receivedInvoiceId?: string;
   savedAs: string;
+  senderName?: string;
 };
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
@@ -101,14 +102,15 @@ function selectClass() {
   return "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 }
 
-function senderName(row: OcrDocumentListItem) {
+function shippingSenderName(row: OcrDocumentListItem) {
+  if (row.senderName?.trim()) return row.senderName.trim();
   if (row.extracted?.vendorName && row.extracted.vendorName !== "支払先未設定") return row.extracted.vendorName;
   const firstLine = row.ocrText?.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length >= 2 && line.length <= 40);
   return firstLine || row.fileName.replace(/\.[^.]+$/, "");
 }
 
 function summaryLines(row: OcrDocumentListItem) {
-  const lines = [`郵送元: ${senderName(row)}`, `種別: ${categoryLabels[row.category]}`, `保存先: ${row.savedAs}`];
+  const lines = [`発送元: ${shippingSenderName(row)}`, `種別: ${categoryLabels[row.category]}`, `保存先: ${row.savedAs}`];
   if (row.extracted) {
     lines.push(`案件: ${row.extracted.projectName}`);
     lines.push(`請求日: ${formatDate(row.extracted.issueDate)}`);
@@ -225,7 +227,7 @@ export function OcrDocumentsTable({
               </aside>
 
               <aside className="border-b p-3 lg:border-r lg:border-b-0">
-                <div className="mb-3 text-xs font-medium text-muted-foreground">郵送元</div>
+                <div className="mb-3 text-xs font-medium text-muted-foreground">発送元</div>
                 <div className="space-y-2">
                   {activeRows.map((row) => {
                     const isActive = row.id === activeRow?.id;
@@ -239,7 +241,7 @@ export function OcrDocumentsTable({
                         onClick={() => setActiveRowId(row.id)}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div className="truncate text-sm font-medium">{senderName(row)}</div>
+                          <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
                           <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
                         </div>
                         <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div>
@@ -254,7 +256,7 @@ export function OcrDocumentsTable({
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
                       <div>
-                        <div className="text-lg font-medium">{senderName(activeRow)}</div>
+                        <div className="text-lg font-medium">{shippingSenderName(activeRow)}</div>
                         <div className="mt-1 text-sm text-muted-foreground">{activeRow.ocrPreview}</div>
                       </div>
                       <div className="flex gap-2">
@@ -286,8 +288,14 @@ export function OcrDocumentsTable({
                     <div className="grid gap-4 xl:grid-cols-2" onClick={stopEditClick}>
                       <div className="space-y-3">
                         <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground">表示名</label>
-                          <Input form={`ocr-edit-${activeRow.id}`} name="fileName" defaultValue={senderName(activeRow)} disabled={!canEdit || !activeRow.mailDocumentId} />
+                          <label className="text-xs font-medium text-muted-foreground">発送元</label>
+                          <Input
+                            form={`ocr-edit-${activeRow.id}`}
+                            name="senderName"
+                            defaultValue={shippingSenderName(activeRow)}
+                            disabled={!canEdit || !activeRow.mailDocumentId}
+                          />
+                          <input form={`ocr-edit-${activeRow.id}`} type="hidden" name="fileName" value={activeRow.fileName} />
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-muted-foreground">分類</label>
@@ -381,7 +389,7 @@ export function OcrDocumentsTable({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex h-full min-h-80 items-center justify-center text-sm text-muted-foreground">郵送元を選択してください。</div>
+                  <div className="flex h-full min-h-80 items-center justify-center text-sm text-muted-foreground">発送元を選択してください。</div>
                 )}
               </section>
             </div>
@@ -396,7 +404,7 @@ export function OcrDocumentsTable({
           {dialogRow ? (
             <>
               <DialogHeader>
-                <DialogTitle>{senderName(dialogRow)}</DialogTitle>
+                <DialogTitle>{shippingSenderName(dialogRow)}</DialogTitle>
                 <DialogDescription>
                   {categoryLabels[dialogRow.category]} / {formatDate(dialogRow.createdAt.slice(0, 10))}
                 </DialogDescription>
@@ -460,7 +468,7 @@ export function OcrDocumentsTable({
               <DialogHeader>
                 <DialogTitle>書類を削除しますか？</DialogTitle>
                 <DialogDescription>
-                  {senderName(deleteTarget)} を削除します。受領請求書に反映済みの場合は、受領請求書側からも削除されます。
+                  {shippingSenderName(deleteTarget)} を削除します。受領請求書に反映済みの場合は、受領請求書側からも削除されます。
                 </DialogDescription>
               </DialogHeader>
               <form action={deleteOcrDocument} className="flex justify-end gap-2">
