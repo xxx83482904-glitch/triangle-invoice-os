@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCurrentUser } from "@/lib/auth";
-import { companyFromParam } from "@/lib/company";
-import { formatDate } from "@/lib/format";
+import { companyFromParam, matchesCompany } from "@/lib/company";
+import { formatDate, yen } from "@/lib/format";
 import { can } from "@/lib/rbac";
 import { readData } from "@/lib/store";
-import type { MailDocumentCategory } from "@/lib/types";
+import type { MailDocumentCategory, ReceivedInvoice } from "@/lib/types";
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
   INVOICE: "請求書",
@@ -22,6 +22,58 @@ const categoryLabels: Record<MailDocumentCategory, string> = {
   OTHER: "その他",
 };
 
+type OcrDocumentRow = {
+  category: MailDocumentCategory;
+  confidence?: number;
+  createdAt: string;
+  fileName: string;
+  fileUrl?: string;
+  id: string;
+  memo?: string;
+  ocrText?: string;
+  receivedInvoice?: ReceivedInvoice;
+  source: "mail-sorter" | "received-invoice";
+};
+
+function ocrPreview(text?: string) {
+  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "OCR本文はまだありません。";
+  return normalized.length > 180 ? `${normalized.slice(0, 180)}...` : normalized;
+}
+
+function extractedSummary(row: OcrDocumentRow, data: Awaited<ReturnType<typeof readData>>, company: string) {
+  if (!row.receivedInvoice) {
+    return (
+      <div className="space-y-1 text-sm">
+        <div className="text-muted-foreground">{row.memo || "分類のみ保存されています。"}</div>
+      </div>
+    );
+  }
+
+  const invoice = row.receivedInvoice;
+  const vendor = data.vendors.find((item) => item.id === invoice.vendorId);
+  const project = data.projects.find((item) => item.id === invoice.projectId);
+
+  return (
+    <div className="space-y-1 text-sm">
+      <div className="font-medium">{vendor?.companyName ?? "支払先未設定"}</div>
+      <div>
+        {project ? (
+          <Link className="underline underline-offset-2" href={`/projects/${project.id}?company=${company}`}>
+            {project.name}
+          </Link>
+        ) : (
+          "案件未設定"
+        )}
+      </div>
+      <div className="text-muted-foreground">
+        {formatDate(invoice.issueDate)} / 期限 {formatDate(invoice.dueDate)}
+      </div>
+      <div className="font-mono font-medium">{yen.format(invoice.total)}</div>
+    </div>
+  );
+}
+
 export default async function MailSorterPage({
   searchParams,
 }: {
@@ -32,15 +84,48 @@ export default async function MailSorterPage({
   const user = await getCurrentUser();
   const data = await readData();
   const mayUpload = user && (can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices"));
-  const documents = data.mailDocuments
+  const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
+  const projectIds = new Set(projects.map((project) => project.id));
+
+  const mailDocuments = data.mailDocuments
     .filter((document) => !document.deletedAt && companyFromParam(document.company) === company)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .map<OcrDocumentRow>((document) => ({
+      category: document.category,
+      confidence: document.confidence,
+      createdAt: document.createdAt,
+      fileName: document.originalFileName,
+      fileUrl: document.fileUrl,
+      id: document.id,
+      memo: document.memo,
+      ocrText: document.ocrText,
+      receivedInvoice: document.relatedReceivedInvoiceId
+        ? data.receivedInvoices.find((invoice) => invoice.id === document.relatedReceivedInvoiceId)
+        : undefined,
+      source: "mail-sorter",
+    }));
+
+  const linkedReceivedInvoiceIds = new Set(mailDocuments.map((document) => document.receivedInvoice?.id).filter(Boolean));
+  const directReceivedInvoices = data.receivedInvoices
+    .filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId) && invoice.ocrText && !linkedReceivedInvoiceIds.has(invoice.id))
+    .map<OcrDocumentRow>((invoice) => ({
+      category: "INVOICE",
+      createdAt: invoice.createdAt,
+      fileName: invoice.originalFileName ?? "受領請求書",
+      fileUrl: invoice.fileUrl,
+      id: invoice.id,
+      memo: invoice.memo,
+      ocrText: invoice.ocrText,
+      receivedInvoice: invoice,
+      source: "received-invoice",
+    }));
+
+  const rows = [...mailDocuments, ...directReceivedInvoices].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <AppShell>
       <PageHeader
-        title="郵便物仕分け"
-        description="郵便物をまとめてアップロードし、請求書は受領請求書へ、その他の書類はその他書類として保存します。"
+        title="OCR書類一覧"
+        description="アップロードした郵便物・請求書・契約書のOCR結果を一覧で確認します。請求書は抽出された支払先、案件、日付、金額も表示します。"
       >
         <Button asChild variant="outline">
           <Link href={`/received-invoices?company=${company}`}>受領請求書を見る</Link>
@@ -53,65 +138,81 @@ export default async function MailSorterPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>仕分けルール</CardTitle>
+              <CardTitle>OCRの流れ</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div>請求書キーワードと金額がある書類は受領請求書として登録します。</div>
-              <div>契約書・見積書・納品書・領収書・通知は書類種別を付けて保管します。</div>
-              <div>判定できない郵便物は「その他」に入り、後から確認できます。</div>
+              <div>Google Vision OCRで文字を読み取り、AIで書類種別と主要項目を分類します。</div>
+              <div>請求書は受領請求書として保存され、その他の書類はこの一覧に保管されます。</div>
+              <div>AIの読み取り結果は下書き扱いです。金額や期限は保存前に確認してください。</div>
             </CardContent>
           </Card>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>仕分け済み郵便物</CardTitle>
+            <CardTitle>OCRした書類</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>受領日</TableHead>
-                  <TableHead>分類</TableHead>
-                  <TableHead>ファイル名</TableHead>
-                  <TableHead>保存先</TableHead>
-                  <TableHead>判定</TableHead>
-                  <TableHead>ファイル</TableHead>
+                  <TableHead className="w-28">登録日</TableHead>
+                  <TableHead className="w-24">種別</TableHead>
+                  <TableHead>ファイル / OCR内容</TableHead>
+                  <TableHead className="w-60">抽出内容</TableHead>
+                  <TableHead className="w-24">保存先</TableHead>
+                  <TableHead className="w-20">表示</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {documents.map((document) => (
-                  <TableRow key={document.id}>
-                    <TableCell className="whitespace-nowrap">{formatDate(document.createdAt.slice(0, 10))}</TableCell>
+                {rows.map((row) => (
+                  <TableRow key={`${row.source}-${row.id}`} className="align-top">
+                    <TableCell className="whitespace-nowrap">{formatDate(row.createdAt.slice(0, 10))}</TableCell>
                     <TableCell>
-                      <Badge variant={document.category === "INVOICE" ? "default" : "secondary"}>
-                        {categoryLabels[document.category]}
-                      </Badge>
+                      <div className="space-y-2">
+                        <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
+                        <div className="text-xs text-muted-foreground">{row.confidence ? `${row.confidence}%` : "-"}</div>
+                      </div>
                     </TableCell>
-                    <TableCell className="max-w-[320px] truncate font-medium">{document.originalFileName}</TableCell>
                     <TableCell>
-                      {document.relatedReceivedInvoiceId ? (
-                        <Link className="text-sm underline" href={`/received-invoices?company=${company}`}>
+                      <div className="max-w-[460px] space-y-2">
+                        <div className="truncate font-medium">{row.fileName}</div>
+                        <div className="max-h-12 overflow-hidden text-sm leading-6 text-muted-foreground">{ocrPreview(row.ocrText)}</div>
+                        {row.ocrText ? (
+                          <details className="text-xs text-muted-foreground">
+                            <summary className="cursor-pointer underline underline-offset-2">OCR全文を表示</summary>
+                            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
+                              {row.ocrText}
+                            </pre>
+                          </details>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>{extractedSummary(row, data, company)}</TableCell>
+                    <TableCell>
+                      {row.receivedInvoice ? (
+                        <Link className="text-sm underline underline-offset-2" href={`/received-invoices?company=${company}`}>
                           受領請求書
                         </Link>
                       ) : (
                         <span className="text-sm text-muted-foreground">その他書類</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {document.confidence ? `信頼度 ${document.confidence}%` : "-"}
-                    </TableCell>
                     <TableCell>
-                      <a className="text-sm underline" href={document.fileUrl} target="_blank">
-                        表示
-                      </a>
+                      {row.fileUrl ? (
+                        <a className="text-sm underline underline-offset-2" href={row.fileUrl} target="_blank">
+                          表示
+                        </a>
+                      ) : (
+                        "-"
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
-                {!documents.length ? (
+                {!rows.length ? (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      まだ仕分け済みの郵便物はありません。
+                      まだOCRした書類はありません。
                     </TableCell>
                   </TableRow>
                 ) : null}
