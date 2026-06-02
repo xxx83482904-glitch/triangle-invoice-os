@@ -1,15 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, FileText, Image as ImageIcon } from "lucide-react";
+import { ExternalLink, FileText, Folder, FolderOpen, Image as ImageIcon, Save } from "lucide-react";
 import { useMemo, useState } from "react";
+import { updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import type { CompanyScope } from "@/lib/company";
-import type { MailDocumentCategory } from "@/lib/types";
+import type { MailDocumentCategory, ReceivedInvoiceStatus } from "@/lib/types";
+
+type Option = {
+  label: string;
+  value: string;
+};
 
 export type OcrDocumentListItem = {
   category: MailDocumentCategory;
@@ -20,16 +28,22 @@ export type OcrDocumentListItem = {
     issueDate: string;
     projectId?: string;
     projectName: string;
+    status?: ReceivedInvoiceStatus;
+    subtotal: number;
+    taxTotal: number;
     total: number;
+    vendorId?: string;
     vendorName: string;
   };
   fileName: string;
   fileUrl?: string;
   id: string;
+  mailDocumentId?: string;
   memo?: string;
   mimeType?: string;
   ocrPreview: string;
   ocrText?: string;
+  receivedInvoiceId?: string;
   savedAs: string;
 };
 
@@ -42,6 +56,16 @@ const categoryLabels: Record<MailDocumentCategory, string> = {
   NOTICE: "通知",
   OTHER: "その他",
 };
+
+const categoryOptions: Array<{ label: string; value: MailDocumentCategory }> = [
+  { label: "請求書", value: "INVOICE" },
+  { label: "契約書", value: "CONTRACT" },
+  { label: "見積書", value: "ESTIMATE" },
+  { label: "納品書", value: "DELIVERY_NOTE" },
+  { label: "領収書", value: "RECEIPT" },
+  { label: "通知", value: "NOTICE" },
+  { label: "その他", value: "OTHER" },
+];
 
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
   day: "2-digit",
@@ -74,6 +98,10 @@ function monthLabel(value: string) {
   return monthFormatter.format(new Date(`${value}-01T00:00:00`));
 }
 
+function nativeSelectClass(extra = "") {
+  return `h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 ${extra}`;
+}
+
 function summaryLines(row: OcrDocumentListItem) {
   const lines = [`種別: ${categoryLabels[row.category]}`, `保存先: ${row.savedAs}`];
   if (row.extracted) {
@@ -81,6 +109,8 @@ function summaryLines(row: OcrDocumentListItem) {
     lines.push(`案件: ${row.extracted.projectName}`);
     lines.push(`請求日: ${formatDate(row.extracted.issueDate)}`);
     lines.push(`支払期限: ${formatDate(row.extracted.dueDate)}`);
+    lines.push(`税抜: ${moneyFormatter.format(row.extracted.subtotal)}`);
+    lines.push(`消費税: ${moneyFormatter.format(row.extracted.taxTotal)}`);
     lines.push(`金額: ${moneyFormatter.format(row.extracted.total)}`);
   }
   if (row.confidence) lines.push(`信頼度: ${row.confidence}%`);
@@ -117,7 +147,25 @@ function DocumentPreview({ row }: { row: OcrDocumentListItem }) {
   );
 }
 
-export function OcrDocumentsTable({ company, rows }: { company: CompanyScope; rows: OcrDocumentListItem[] }) {
+function stopEditClick(event: React.MouseEvent<HTMLElement>) {
+  event.stopPropagation();
+}
+
+export function OcrDocumentsTable({
+  canEdit,
+  company,
+  projects,
+  rows,
+  statusOptions,
+  vendors,
+}: {
+  canEdit: boolean;
+  company: CompanyScope;
+  projects: Option[];
+  rows: OcrDocumentListItem[];
+  statusOptions: Option[];
+  vendors: Option[];
+}) {
   const [selected, setSelected] = useState<OcrDocumentListItem | null>(null);
   const groups = useMemo(() => {
     const grouped = new Map<string, OcrDocumentListItem[]>();
@@ -127,72 +175,194 @@ export function OcrDocumentsTable({ company, rows }: { company: CompanyScope; ro
     }
     return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [rows]);
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(groups.map(([month]) => [month, true])),
+  );
 
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>OCRした書類</CardTitle>
+          <CardTitle>月別フォルダー</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {groups.map(([month, monthRows]) => (
-            <section key={month} className="space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
-                <h2 className="text-base font-medium">{monthLabel(month)}</h2>
-                <Badge variant="outline">{monthRows.length}件</Badge>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-24">登録日</TableHead>
-                    <TableHead className="w-24">種別</TableHead>
-                    <TableHead>ファイル / OCR内容</TableHead>
-                    <TableHead className="w-56">抽出内容</TableHead>
-                    <TableHead className="w-24">保存先</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {monthRows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="cursor-pointer align-top hover:bg-muted/60"
-                      onClick={() => setSelected(row)}
-                      tabIndex={0}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") setSelected(row);
-                      }}
-                    >
-                      <TableCell className="whitespace-nowrap">{formatDate(row.createdAt.slice(0, 10))}</TableCell>
-                      <TableCell>
-                        <div className="space-y-2">
-                          <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
-                          <div className="text-xs text-muted-foreground">{row.confidence ? `${row.confidence}%` : "-"}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="max-w-[460px] space-y-1">
-                          <div className="truncate font-medium">{row.fileName}</div>
-                          <div className="line-clamp-2 text-sm leading-6 text-muted-foreground">{row.ocrPreview}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {row.extracted ? (
-                          <div className="space-y-1 text-sm">
-                            <div className="font-medium">{row.extracted.vendorName}</div>
-                            <div className="truncate text-muted-foreground">{row.extracted.projectName}</div>
-                            <div className="font-mono">{moneyFormatter.format(row.extracted.total)}</div>
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">{row.memo || "分類のみ保存"}</div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{row.savedAs}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </section>
-          ))}
+        <CardContent className="space-y-4">
+          {groups.map(([month, monthRows]) => {
+            const isOpen = openFolders[month] ?? true;
+            const invoiceCount = monthRows.filter((row) => row.category === "INVOICE").length;
+            return (
+              <section key={month} className="overflow-hidden rounded-lg border">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 bg-muted/50 px-4 py-3 text-left hover:bg-muted"
+                  onClick={() => setOpenFolders((current) => ({ ...current, [month]: !isOpen }))}
+                >
+                  <div className="flex items-center gap-2">
+                    {isOpen ? <FolderOpen className="h-5 w-5 text-primary" /> : <Folder className="h-5 w-5 text-muted-foreground" />}
+                    <span className="font-medium">{monthLabel(month)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{monthRows.length}件</Badge>
+                    {invoiceCount ? <Badge>{invoiceCount}請求書</Badge> : null}
+                  </div>
+                </button>
+
+                {isOpen ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-24">登録日</TableHead>
+                          <TableHead className="min-w-48">書類</TableHead>
+                          <TableHead className="min-w-44">分類</TableHead>
+                          <TableHead className="min-w-64">支払先 / 案件</TableHead>
+                          <TableHead className="min-w-64">日付 / 金額</TableHead>
+                          <TableHead className="min-w-56">メモ</TableHead>
+                          <TableHead className="w-28">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {monthRows.map((row) => (
+                          <TableRow
+                            key={row.id}
+                            className="cursor-pointer align-top hover:bg-muted/40"
+                            onClick={() => setSelected(row)}
+                            tabIndex={0}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") setSelected(row);
+                            }}
+                          >
+                            <TableCell className="whitespace-nowrap">{formatDate(row.createdAt.slice(0, 10))}</TableCell>
+                            <TableCell>
+                              <div className="space-y-2" onClick={stopEditClick}>
+                                <input type="hidden" form={`ocr-edit-${row.id}`} name="company" value={company} />
+                                {row.mailDocumentId ? <input type="hidden" form={`ocr-edit-${row.id}`} name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                                {row.receivedInvoiceId ? (
+                                  <input type="hidden" form={`ocr-edit-${row.id}`} name="receivedInvoiceId" value={row.receivedInvoiceId} />
+                                ) : null}
+                                <Input
+                                  form={`ocr-edit-${row.id}`}
+                                  name="fileName"
+                                  defaultValue={row.fileName}
+                                  disabled={!canEdit || !row.mailDocumentId}
+                                />
+                                <div className="line-clamp-2 text-xs leading-5 text-muted-foreground">{row.ocrPreview}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-2" onClick={stopEditClick}>
+                                {row.mailDocumentId ? (
+                                  <select
+                                    form={`ocr-edit-${row.id}`}
+                                    name="category"
+                                    defaultValue={row.category}
+                                    className={nativeSelectClass()}
+                                    disabled={!canEdit}
+                                  >
+                                    {categoryOptions.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <>
+                                    <input form={`ocr-edit-${row.id}`} type="hidden" name="category" value={row.category} />
+                                    <Badge>{categoryLabels[row.category]}</Badge>
+                                  </>
+                                )}
+                                <div className="text-xs text-muted-foreground">{row.confidence ? `信頼度 ${row.confidence}%` : "信頼度 -"}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {row.extracted ? (
+                                <div className="space-y-2" onClick={stopEditClick}>
+                                  <select
+                                    form={`ocr-edit-${row.id}`}
+                                    name="vendorId"
+                                    defaultValue={row.extracted.vendorId}
+                                    className={nativeSelectClass()}
+                                    disabled={!canEdit}
+                                  >
+                                    {vendors.map((vendor) => (
+                                      <option key={vendor.value} value={vendor.value}>
+                                        {vendor.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    form={`ocr-edit-${row.id}`}
+                                    name="projectId"
+                                    defaultValue={row.extracted.projectId}
+                                    className={nativeSelectClass()}
+                                    disabled={!canEdit}
+                                  >
+                                    {projects.map((project) => (
+                                      <option key={project.value} value={project.value}>
+                                        {project.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    form={`ocr-edit-${row.id}`}
+                                    name="status"
+                                    defaultValue={row.extracted.status ?? "REVIEWING"}
+                                    className={nativeSelectClass()}
+                                    disabled={!canEdit}
+                                  >
+                                    {statusOptions.map((status) => (
+                                      <option key={status.value} value={status.value}>
+                                        {status.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">その他書類</div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {row.extracted ? (
+                                <div className="grid grid-cols-2 gap-2" onClick={stopEditClick}>
+                                  <Input form={`ocr-edit-${row.id}`} name="issueDate" type="date" defaultValue={row.extracted.issueDate} disabled={!canEdit} />
+                                  <Input form={`ocr-edit-${row.id}`} name="dueDate" type="date" defaultValue={row.extracted.dueDate} disabled={!canEdit} />
+                                  <Input form={`ocr-edit-${row.id}`} name="subtotal" type="number" defaultValue={row.extracted.subtotal} disabled={!canEdit} />
+                                  <Input form={`ocr-edit-${row.id}`} name="taxTotal" type="number" defaultValue={row.extracted.taxTotal} disabled={!canEdit} />
+                                  <Input
+                                    form={`ocr-edit-${row.id}`}
+                                    name="total"
+                                    type="number"
+                                    defaultValue={row.extracted.total}
+                                    disabled={!canEdit}
+                                    className="col-span-2 font-mono"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">-</div>
+                              )}
+                            </TableCell>
+                            <TableCell onClick={stopEditClick}>
+                              <Textarea form={`ocr-edit-${row.id}`} name="memo" defaultValue={row.memo ?? ""} disabled={!canEdit} className="min-h-24" />
+                            </TableCell>
+                            <TableCell onClick={stopEditClick}>
+                              <form id={`ocr-edit-${row.id}`} action={updateOcrDocumentInline} className="space-y-2">
+                                <Button type="submit" size="sm" disabled={!canEdit} className="w-full gap-1">
+                                  <Save className="h-4 w-4" />
+                                  保存
+                                </Button>
+                                <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => setSelected(row)}>
+                                  詳細
+                                </Button>
+                              </form>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
           {!rows.length ? <div className="py-12 text-center text-sm text-muted-foreground">まだOCRした書類はありません。</div> : null}
         </CardContent>
       </Card>

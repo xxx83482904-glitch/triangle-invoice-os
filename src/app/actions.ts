@@ -11,6 +11,7 @@ import type {
   Client,
   IssuedInvoice,
   IssuedInvoiceItem,
+  MailDocumentCategory,
   Payment,
   Project,
   ReceivedInvoice,
@@ -611,6 +612,58 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
   }, before);
   revalidatePath("/received-invoices");
   revalidatePath("/dashboard");
+}
+
+export async function updateOcrDocumentInline(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("権限がありません");
+  }
+
+  const mailDocumentId = optional(formData, "mailDocumentId");
+  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
+  const company = companyFromParam(value(formData, "company"));
+  const timestamp = now();
+  const data = await readData();
+  const before = {
+    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
+    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
+  };
+
+  await mutateData(user.id, "UPDATE_OCR_DOCUMENT_INLINE", "OcrDocument", mailDocumentId ?? receivedInvoiceId ?? "unknown", (draft) => {
+    const mailDocument = mailDocumentId ? draft.mailDocuments.find((item) => item.id === mailDocumentId) : undefined;
+    const receivedInvoice = receivedInvoiceId ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined;
+
+    if (mailDocument) {
+      mailDocument.category = value(formData, "category") as MailDocumentCategory;
+      mailDocument.title = value(formData, "fileName") || mailDocument.title;
+      mailDocument.originalFileName = value(formData, "fileName") || mailDocument.originalFileName;
+      mailDocument.memo = optional(formData, "memo");
+      mailDocument.updatedAt = timestamp;
+    }
+
+    if (receivedInvoice) {
+      const vendorId = value(formData, "vendorId");
+      const projectId = value(formData, "projectId");
+      if (draft.vendors.some((vendor) => vendor.id === vendorId && !vendor.deletedAt)) receivedInvoice.vendorId = vendorId;
+      if (draft.projects.some((project) => project.id === projectId && !project.deletedAt)) receivedInvoice.projectId = projectId;
+      receivedInvoice.issueDate = value(formData, "issueDate") || receivedInvoice.issueDate;
+      receivedInvoice.dueDate = value(formData, "dueDate") || receivedInvoice.dueDate;
+      receivedInvoice.subtotal = money(formData, "subtotal");
+      receivedInvoice.taxTotal = money(formData, "taxTotal");
+      receivedInvoice.total = money(formData, "total");
+      receivedInvoice.status = value(formData, "status") as ReceivedInvoice["status"];
+      receivedInvoice.memo = optional(formData, "memo");
+      receivedInvoice.updatedAt = timestamp;
+    }
+
+    return { mailDocument, receivedInvoice };
+  }, before);
+
+  revalidatePath("/mail-sorter");
+  revalidatePath("/received-invoices");
+  revalidatePath("/dashboard");
+  redirect(`/mail-sorter?company=${company}`);
 }
 
 export async function recordExpensePayment(formData: FormData) {
