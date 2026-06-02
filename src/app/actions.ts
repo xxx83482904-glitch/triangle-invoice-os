@@ -666,6 +666,53 @@ export async function updateOcrDocumentInline(formData: FormData) {
   redirect(`/mail-sorter?company=${company}`);
 }
 
+export async function deleteOcrDocument(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("権限がありません");
+  }
+
+  const mailDocumentId = optional(formData, "mailDocumentId");
+  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
+  const company = companyFromParam(value(formData, "company"));
+  const timestamp = now();
+  const data = await readData();
+  const before = {
+    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
+    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
+  };
+
+  await mutateData(user.id, "DELETE_OCR_DOCUMENT", "OcrDocument", mailDocumentId ?? receivedInvoiceId ?? "unknown", (draft) => {
+    const mailDocument = mailDocumentId ? draft.mailDocuments.find((item) => item.id === mailDocumentId) : undefined;
+    if (mailDocument) {
+      mailDocument.deletedAt = timestamp;
+      mailDocument.updatedAt = timestamp;
+    }
+
+    const receivedInvoice = receivedInvoiceId ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined;
+    if (receivedInvoice) {
+      receivedInvoice.deletedAt = timestamp;
+      receivedInvoice.updatedAt = timestamp;
+    }
+
+    for (const attachment of draft.attachments) {
+      if (
+        (mailDocumentId && attachment.relatedType === "MailDocument" && attachment.relatedId === mailDocumentId) ||
+        (receivedInvoiceId && attachment.relatedType === "ReceivedInvoice" && attachment.relatedId === receivedInvoiceId)
+      ) {
+        attachment.deletedAt = timestamp;
+      }
+    }
+
+    return { mailDocument, receivedInvoice };
+  }, before);
+
+  revalidatePath("/mail-sorter");
+  revalidatePath("/received-invoices");
+  revalidatePath("/dashboard");
+  redirect(`/mail-sorter?company=${company}`);
+}
+
 export async function recordExpensePayment(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "manage:expensePayments");

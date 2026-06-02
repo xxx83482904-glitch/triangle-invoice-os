@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, FileText, Folder, Image as ImageIcon, Save } from "lucide-react";
+import { ExternalLink, FileText, Folder, Image as ImageIcon, Save, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { updateOcrDocumentInline } from "@/app/actions";
+import { deleteOcrDocument, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -183,6 +183,7 @@ export function OcrDocumentsTable({
   const [activeRowId, setActiveRowId] = useState<string | null>(activeRows[0]?.id ?? null);
   const activeRow = activeRows.find((row) => row.id === activeRowId) ?? activeRows[0] ?? null;
   const [dialogRow, setDialogRow] = useState<OcrDocumentListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<OcrDocumentListItem | null>(null);
 
   const chooseMonth = (month: string, monthRows: OcrDocumentListItem[]) => {
     setActiveMonth(month);
@@ -268,6 +269,10 @@ export function OcrDocumentsTable({
                             </a>
                           </Button>
                         ) : null}
+                        <Button type="button" variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteTarget(activeRow)} disabled={!canEdit}>
+                          <Trash2 className="h-4 w-4" />
+                          削除
+                        </Button>
                       </div>
                     </div>
 
@@ -443,6 +448,32 @@ export function OcrDocumentsTable({
                   <DocumentPreview row={dialogRow} />
                 </div>
               </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="max-w-md">
+          {deleteTarget ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>書類を削除しますか？</DialogTitle>
+                <DialogDescription>
+                  {senderName(deleteTarget)} を削除します。受領請求書に反映済みの場合は、受領請求書側からも削除されます。
+                </DialogDescription>
+              </DialogHeader>
+              <form action={deleteOcrDocument} className="flex justify-end gap-2">
+                <input type="hidden" name="company" value={company} />
+                {deleteTarget.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={deleteTarget.mailDocumentId} /> : null}
+                {deleteTarget.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={deleteTarget.receivedInvoiceId} /> : null}
+                <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
+                  キャンセル
+                </Button>
+                <Button type="submit" variant="destructive">
+                  削除する
+                </Button>
+              </form>
             </>
           ) : null}
         </DialogContent>
