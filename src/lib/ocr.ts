@@ -150,21 +150,49 @@ function amountNear(text: string, labels: string[]) {
   return 0;
 }
 
+function dateNear(text: string, labels: string[]) {
+  const normalizedText = text.replace(/\s+/g, " ");
+  for (const label of labels) {
+    const pattern = new RegExp(`${label}.{0,24}(20\\d{2})[./\\-年]\\s*(\\d{1,2})[./\\-月]\\s*(\\d{1,2})日?`, "i");
+    const match = normalizedText.match(pattern);
+    if (match) return toIsoDate(match[1], match[2], match[3]);
+  }
+  return "";
+}
+
 function extractAmounts(text: string) {
+  const excludedLinePattern = /(口座|銀行|支店|登録番号|郵便番号|住所|電話|TEL|FAX|Email|メール|No\.|番号|账号|帳號|银行|電話|地址|税号|納品番号|請求番号|invoice\s*no)/i;
+  const moneyCandidates = text
+    .split(/\r?\n/)
+    .filter((line) => !excludedLinePattern.test(line))
+    .flatMap((line) => Array.from(line.matchAll(/[¥￥]?\s*([0-9][0-9,]{3,})(?:\s*円)?/g), (match) => parseAmount(match[1])))
+    .filter((amount) => amount > 0 && amount < 100_000_000);
   const total =
     amountNear(text, [
       "税込合計",
       "御請求金額",
       "ご請求額",
       "請求金額",
+      "請求額",
+      "請求合計",
       "合計金額",
+      "合計額",
+      "総額",
       "お支払金額",
+      "支払金額",
+      "請求总额",
+      "价税合计",
+      "含税金额",
+      "合计金额",
+      "总金额",
+      "应付金额",
       "amount due",
       "total amount",
+      "grand total",
       "total",
-    ]) || Math.max(0, ...Array.from(text.matchAll(/[¥￥]?\s*([0-9][0-9,]{3,})/g), (match) => parseAmount(match[1])));
-  const taxTotal = amountNear(text, ["消費税額", "消費税", "税額", "tax"]);
-  const subtotal = amountNear(text, ["税抜合計", "小計", "税抜", "subtotal"]);
+    ]) || Math.max(0, ...moneyCandidates);
+  const taxTotal = amountNear(text, ["消費税額", "消費税", "税額", "税金", "税款", "税额", "tax"]);
+  const subtotal = amountNear(text, ["税抜合計", "小計", "税抜", "税別", "不含税", "未税", "subtotal"]);
 
   if (subtotal && taxTotal) return { subtotal, taxTotal, total: total || subtotal + taxTotal };
   if (total && taxTotal) return { subtotal: Math.max(total - taxTotal, 0), taxTotal, total };
@@ -183,6 +211,12 @@ function numberFromAi(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
   if (typeof value === "string") return parseAmount(value);
   return 0;
+}
+
+function optionalNumberFromAi(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  if (typeof value === "string" && value.trim()) return parseAmount(value);
+  return undefined;
 }
 
 function textFromAi(value: unknown) {
@@ -377,7 +411,7 @@ async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalys
       messages: [
         {
           content:
-            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. senderName is required: aggressively find the company or organization that sent/issued the document from the OCR text. Do not use the recipient, bill-to, client, delivery destination, or file name as senderName. Prefer labels such as 発送元, 差出人, 発行者, 請求者, 販売者, 支払先, 发件人, 寄件人, 开票方, 销售方, 供应商, 收款方, From. If uncertain, choose the strongest company/organization candidate in the header, issuer block, stamp area, or footer. For invoices, vendorName should normally be the same sender/issuer company. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include confidence 0-100, reason, warnings array.",
+            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. senderName is required: aggressively find the company or organization that sent/issued the document from the OCR text. Do not use the recipient, bill-to, client, delivery destination, or file name as senderName. Prefer labels such as 発送元, 差出人, 発行者, 請求者, 販売者, 支払先, 发件人, 寄件人, 开票方, 销售方, 供应商, 收款方, From. If uncertain, choose the strongest company/organization candidate in the header, issuer block, stamp area, or footer. For invoices, vendorName should normally be the same sender/issuer company. Extract issueDate from 請求日/発行日/开票日期/invoice date, and dueDate from 支払期限/付款期限/due date. Extract total from 請求金額/税込合計/合計金額/价税合计/应付金额/amount due. Never use bank account numbers, phone numbers, postal codes, registration numbers, invoice numbers, or project numbers as money values. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include confidence 0-100, reason, warnings array.",
           role: "system",
         },
         {
@@ -476,19 +510,36 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
 
   const fallbackDates = extractDates(extracted.text);
   const fallbackAmounts = extractAmounts(extracted.text);
-  const issueDate = isIsoDate(analysis?.issueDate) ? analysis.issueDate : fallbackDates[0] ?? new Date().toISOString().slice(0, 10);
-  const dueDate = isIsoDate(analysis?.dueDate) ? analysis.dueDate : fallbackDates.find((date) => date > issueDate) ?? addDays(issueDate, 30);
-  const subtotal = numberFromAi(analysis?.subtotal) || fallbackAmounts.subtotal;
-  const taxTotal = numberFromAi(analysis?.taxTotal) || fallbackAmounts.taxTotal;
-  const total = numberFromAi(analysis?.total) || fallbackAmounts.total || subtotal + taxTotal;
-  const vendor = vendorMatch?.item ?? activeVendors[0];
-  const project = projectMatch?.item ?? activeProjects[0];
+  const issueDate =
+    (isIsoDate(analysis?.issueDate) ? analysis.issueDate : "") ||
+    dateNear(extracted.text, ["請求日", "発行日", "取引年月日", "日付", "开票日期", "发票日期", "請求日期", "invoice date"]) ||
+    fallbackDates[0] ||
+    new Date().toISOString().slice(0, 10);
+  const dueDate =
+    (isIsoDate(analysis?.dueDate) ? analysis.dueDate : "") ||
+    dateNear(extracted.text, ["支払期限", "お支払期限", "振込期限", "支払期日", "付款期限", "付款日期", "due date", "payment due"]) ||
+    fallbackDates.find((date) => date > issueDate) ||
+    addDays(issueDate, 30);
+  const aiSubtotal = optionalNumberFromAi(analysis?.subtotal);
+  const aiTaxTotal = optionalNumberFromAi(analysis?.taxTotal);
+  const aiTotal = optionalNumberFromAi(analysis?.total);
+  let subtotal = aiSubtotal ?? fallbackAmounts.subtotal;
+  let taxTotal = aiTaxTotal ?? fallbackAmounts.taxTotal;
+  let total = aiTotal ?? fallbackAmounts.total;
+  if (!total && subtotal + taxTotal > 0) total = subtotal + taxTotal;
+  if (total && !subtotal && taxTotal) subtotal = Math.max(total - taxTotal, 0);
+  if (total && !taxTotal && aiTaxTotal === undefined) {
+    taxTotal = Math.round(total / 11);
+    subtotal = subtotal || total - taxTotal;
+  }
+  const vendor = vendorMatch?.item;
+  const project = projectMatch?.item;
   const warnings = [...extracted.warnings, ...warningsFromAi(analysis?.warnings)];
 
-  if (!vendorMatch) warnings.push("Vendor was not matched automatically. Please confirm it.");
-  if (!projectMatch) warnings.push("Project was not matched automatically. Please confirm it.");
-  if (!total) warnings.push("Amount was not extracted. Please confirm it.");
-  if (!fallbackDates.length && !isIsoDate(analysis?.issueDate)) warnings.push("Issue date was not extracted. Today's date was used.");
+  if (!vendorMatch) warnings.push("支払先は既存リストと一致しませんでした。発送元名で自動登録、または確認待ちになります。");
+  if (!projectMatch) warnings.push("案件は既存リストと一致しませんでした。確認待ち案件に入ります。");
+  if (!total) warnings.push("金額を反映できませんでした。確認してください。");
+  if (!fallbackDates.length && !isIsoDate(analysis?.issueDate)) warnings.push("請求日を反映できませんでした。今日の日付を仮入力しました。");
 
   const confidence = Math.min(
     100,
@@ -513,12 +564,12 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
       .filter(Boolean)
       .join("\n"),
     projectId: project?.id ?? "",
-    projectName: project?.name ?? "Unassigned",
+    projectName: project?.name ?? aiProjectHint ?? "案件確認待ち",
     subtotal,
     taxTotal,
     total,
     vendorId: vendor?.id ?? "",
-    vendorName: vendor?.companyName ?? "Unassigned",
+    vendorName: vendor?.companyName ?? aiVendorName ?? "支払先確認待ち",
     warnings,
   };
 }

@@ -30,7 +30,7 @@ const organizationPattern =
 const senderCuePattern = /(発送元|差出人|送信者|発行者|請求者|販売者|支払先|振込先|発件人|发件人|寄件人|開票方|开票方|銷售方|销售方|供應商|供应商|出票人|收款方|From)/i;
 const recipientCuePattern = /(御中|様|殿|宛|宛先|請求先|納品先|送付先|送付先|送った相手|受取人|收件人|收货方|收貨方|购买方|購買方|客户|客戶|付款方|Bill\s*To|Ship\s*To|To:)/i;
 const nonCompanyPattern = /(請求書|見積書|納品書|領収書|契約書|通知書|件名|日付|発行日|請求日|支払期限|合計|小計|消費税|税抜|税込|数量|単価|銀行|口座|登録番号|郵便番号|住所|電話|TEL|FAX|Email|メール|http|www\.)/i;
-const placeholderSenderPattern = /^(Unassigned|支払先未設定|発送元確認待ち|OCR未確認支払先|未設定|-)?$/i;
+const placeholderSenderPattern = /^(Unassigned|支払先未設定|支払先確認待ち|発送元確認待ち|OCR未確認支払先|未設定|-)?$/i;
 
 function cleanSenderCandidate(value: string) {
   return value
