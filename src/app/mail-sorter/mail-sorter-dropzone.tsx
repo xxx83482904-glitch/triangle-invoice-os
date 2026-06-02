@@ -74,9 +74,9 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
 
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent className="p-3">
         <div
-          className={`flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed p-6 text-center transition ${
+          className={`flex min-h-28 cursor-pointer flex-col justify-center gap-4 rounded-md border border-dashed p-4 transition md:flex-row md:items-center md:justify-between ${
             dragging ? "border-primary bg-muted" : "border-border bg-background"
           }`}
           onClick={() => inputRef.current?.click()}
@@ -97,12 +97,16 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
           role="button"
           tabIndex={0}
         >
-          <UploadCloud className="mb-3 h-9 w-9 text-muted-foreground" />
-          <div className="font-medium">郵便物をまとめてドロップ</div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            請求書は受領請求書へ保存し、それ以外はその他書類として保管します
+          <div className="flex items-center gap-3">
+            <UploadCloud className="h-9 w-9 shrink-0 text-muted-foreground" />
+            <div>
+              <div className="font-medium">郵便物をまとめてドロップ</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                PDF/JPEG/PNGをOCRし、請求書は受領請求書へ、それ以外は月別フォルダーへ保存します。
+              </div>
+            </div>
           </div>
-          <Button type="button" variant="outline" size="sm" className="mt-4" disabled={isPending}>
+          <Button type="button" variant="outline" size="sm" className="shrink-0" disabled={isPending}>
             {isPending ? "OCR仕分け中..." : "ファイルを選択"}
           </Button>
           <input
@@ -119,13 +123,13 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
         </div>
 
         {error ? (
-          <Alert variant="destructive" className="mt-4">
+          <Alert variant="destructive" className="mt-3">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
 
         {results.length ? (
-          <div className="mt-4 space-y-2">
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
             {results.map((result) => (
               <div key={result.fileName} className="rounded-md border p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">

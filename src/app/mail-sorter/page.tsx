@@ -3,7 +3,6 @@ import { MailSorterDropzone } from "@/app/mail-sorter/mail-sorter-dropzone";
 import { OcrDocumentsTable, type OcrDocumentListItem } from "@/app/mail-sorter/ocr-documents-table";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { can } from "@/lib/rbac";
@@ -121,29 +120,15 @@ export default async function MailSorterPage({
     <AppShell>
       <PageHeader
         title="郵便物フォルダー"
-        description="OCRした郵便物を月別フォルダーで管理します。各行で分類や請求書項目を直接編集できます。"
+        description="OCRした郵便物を月別フォルダーで管理します。上部にまとめてドロップし、下のフォルダー領域を広く使えます。"
       >
         <Button asChild variant="outline">
           <Link href={`/received-invoices?company=${company}`}>受領請求書を見る</Link>
         </Button>
       </PageHeader>
 
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <div className="space-y-4">
-          {mayUpload ? <MailSorterDropzone company={company} /> : null}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>月別管理</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div>書類は登録月ごとにフォルダー化されます。件数が増えても月単位で開閉できます。</div>
-              <div>請求書は受領請求書にも連動し、支払先・案件・日付・金額を表の中で編集できます。</div>
-              <div>行の「詳細」から要約とPDF/画像プレビューを同時に確認できます。</div>
-            </CardContent>
-          </Card>
-        </div>
-
+      <div className="space-y-6">
+        {mayUpload ? <MailSorterDropzone company={company} /> : null}
         <OcrDocumentsTable
           canEdit={mayEdit}
           company={company}
