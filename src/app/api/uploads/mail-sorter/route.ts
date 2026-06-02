@@ -25,15 +25,61 @@ type SortResult = {
   warnings?: string[];
 };
 
-function inferSenderName(text: string, fileName: string) {
-  const organizationPattern = /(株式会社|有限会社|合同会社|一般社団法人|学校法人|医療法人|股份有限公司|有限公司|公司|Inc\.?|Co\.?\s*Ltd\.?|LLC)/i;
-  const lines = text
+const organizationPattern =
+  /(株式会社|有限会社|合同会社|一般社団法人|学校法人|医療法人|行政書士法人|税理士法人|弁護士法人|股份有限公司|有限公司|公司|集团|集團|事务所|事務所|工作室|设计院|設計|建築|印刷|施工|工務店|製作所|協会|協會|协会|財団|大学|学校|病院|Inc\.?|Co\.?\s*Ltd\.?|Corporation|Limited|Company|LLC|Studio|Design|Architects?|Partners?)/i;
+const senderCuePattern = /(発送元|差出人|送信者|発行者|請求者|販売者|支払先|振込先|発件人|发件人|寄件人|開票方|开票方|銷售方|销售方|供應商|供应商|出票人|收款方|From)/i;
+const recipientCuePattern = /(御中|様|殿|宛|宛先|請求先|納品先|送付先|送付先|送った相手|受取人|收件人|收货方|收貨方|购买方|購買方|客户|客戶|付款方|Bill\s*To|Ship\s*To|To:)/i;
+const nonCompanyPattern = /(請求書|見積書|納品書|領収書|契約書|通知書|件名|日付|発行日|請求日|支払期限|合計|小計|消費税|税抜|税込|数量|単価|銀行|口座|登録番号|郵便番号|住所|電話|TEL|FAX|Email|メール|http|www\.)/i;
+const placeholderSenderPattern = /^(Unassigned|支払先未設定|発送元確認待ち|OCR未確認支払先|未設定|-)?$/i;
+
+function cleanSenderCandidate(value: string) {
+  return value
+    .replace(/^[\s:：・\-–—|/\\［\]【】()[\]{}]+/, "")
+    .replace(senderCuePattern, "")
+    .replace(/^[\s:：・\-–—|/\\［\]【】()[\]{}]+/, "")
+    .replace(/\s*(御中|様|殿)\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isUsableSenderName(value?: string) {
+  const cleaned = cleanSenderCandidate(value ?? "");
+  return cleaned.length >= 2 && !placeholderSenderPattern.test(cleaned);
+}
+
+function inferSenderName(text: string) {
+  const rawLines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length >= 2 && line.length <= 60);
-  const matched = lines.find((line) => organizationPattern.test(line));
-  if (matched) return matched;
-  return lines[0] || fileName.replace(/\.[^.]+$/, "");
+    .map((line) => line.replace(/\u0000/g, "").trim())
+    .filter(Boolean);
+
+  const candidates: Array<{ name: string; score: number }> = [];
+  rawLines.forEach((line, index) => {
+    const withNext = rawLines[index + 1] ? `${line} ${rawLines[index + 1]}` : line;
+    for (const candidateLine of [line, withNext]) {
+      const name = cleanSenderCandidate(candidateLine);
+      if (name.length < 2 || name.length > 80) continue;
+
+      let score = 0;
+      if (organizationPattern.test(name)) score += 70;
+      if (senderCuePattern.test(candidateLine) || senderCuePattern.test(rawLines[index - 1] ?? "")) score += 60;
+      if (/[一-龯ぁ-んァ-ヶA-Za-z]{2,}/.test(name)) score += 12;
+      if (index < 20) score += 22 - index;
+      if (recipientCuePattern.test(candidateLine) || recipientCuePattern.test(rawLines[index - 1] ?? "")) score -= 85;
+      if (nonCompanyPattern.test(name) && !organizationPattern.test(name)) score -= 45;
+      if ((name.match(/[0-9]/g)?.length ?? 0) > name.length / 2) score -= 30;
+      if (name.includes("TRIANGLE") || name.includes("トライアングル")) score -= 25;
+      if (score > 0) candidates.push({ name, score });
+    }
+  });
+
+  const best = candidates.sort((a, b) => b.score - a.score || a.name.length - b.name.length)[0];
+  if (best) return best.name;
+
+  const fallback = rawLines
+    .map(cleanSenderCandidate)
+    .find((line) => line.length >= 2 && line.length <= 60 && !recipientCuePattern.test(line) && !nonCompanyPattern.test(line));
+  return fallback || "発送元確認待ち";
 }
 
 function companyLabel(company: "CHINA" | "JAPAN") {
@@ -154,7 +200,11 @@ export async function POST(request: Request) {
     const data = await readData();
     const extracted = await extractDocumentText(file.name, file.type, buffer);
     const { classification, invoice: inferred } = await analyzeMailDocument(data, extracted, company);
-    const senderName = classification.senderName || inferred?.vendorName || inferSenderName(extracted.text, file.name);
+    const senderName = isUsableSenderName(classification.senderName)
+      ? cleanSenderCandidate(classification.senderName ?? "")
+      : isUsableSenderName(inferred?.vendorName)
+        ? cleanSenderCandidate(inferred?.vendorName ?? "")
+        : inferSenderName(extracted.text);
     const id = newId();
     const timestamp = new Date().toISOString();
     const safeName = `${id}${extension}`;
@@ -189,14 +239,15 @@ export async function POST(request: Request) {
       await mutateData(user.id, "SORT_MAIL_DOCUMENT", "MailDocument", mailDocument.id, (draft) => {
         const vendor = inferred.vendorId
           ? draft.vendors.find((item) => item.id === inferred.vendorId && !item.deletedAt) ?? ensureReviewVendor(draft, company, timestamp)
-          : senderName
+          : senderName !== "発送元確認待ち"
             ? ensureVendorByName(draft, company, senderName, timestamp)
             : ensureReviewVendor(draft, company, timestamp);
         const project = inferred.projectId
           ? draft.projects.find((item) => item.id === inferred.projectId && !item.deletedAt) ?? ensureReviewProject(draft, company, timestamp)
           : ensureReviewProject(draft, company, timestamp);
 
-        if (!inferred.vendorId) fallbackWarnings.push("支払先を特定できなかったため、OCR未確認支払先に仮登録しました。");
+        if (!inferred.vendorId && senderName === "発送元確認待ち") fallbackWarnings.push("支払先を特定できなかったため、OCR未確認支払先に仮登録しました。");
+        if (!inferred.vendorId && senderName !== "発送元確認待ち") fallbackWarnings.push("発送元を支払先として自動登録しました。");
         if (!inferred.projectId) fallbackWarnings.push("案件を特定できなかったため、OCR未確認案件に仮登録しました。");
 
         vendorName = vendor.companyName;

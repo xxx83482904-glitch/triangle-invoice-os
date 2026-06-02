@@ -377,7 +377,7 @@ async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalys
       messages: [
         {
           content:
-            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. Always infer senderName as the company or organization that sent the document. For invoices, also set vendorName. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include confidence 0-100, reason, warnings array.",
+            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. senderName is required: aggressively find the company or organization that sent/issued the document from the OCR text. Do not use the recipient, bill-to, client, delivery destination, or file name as senderName. Prefer labels such as 発送元, 差出人, 発行者, 請求者, 販売者, 支払先, 发件人, 寄件人, 开票方, 销售方, 供应商, 收款方, From. If uncertain, choose the strongest company/organization candidate in the header, issuer block, stamp area, or footer. For invoices, vendorName should normally be the same sender/issuer company. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include confidence 0-100, reason, warnings array.",
           role: "system",
         },
         {
