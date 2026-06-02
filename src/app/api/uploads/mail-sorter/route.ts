@@ -5,7 +5,7 @@ import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceived
 import { analyzeMailDocument, extractDocumentText } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
-import type { MailDocument, MailDocumentCategory, ReceivedInvoice } from "@/lib/types";
+import type { AppData, Client, MailDocument, MailDocumentCategory, Project, ReceivedInvoice, Vendor } from "@/lib/types";
 
 type SortResult = {
   category?: MailDocumentCategory;
@@ -24,6 +24,75 @@ type SortResult = {
   savedAs?: "received-invoice" | "other-document";
   warnings?: string[];
 };
+
+function companyLabel(company: "CHINA" | "JAPAN") {
+  return company === "CHINA" ? "中国" : "日本";
+}
+
+function ensureReviewClient(data: AppData, company: "CHINA" | "JAPAN", timestamp: string): Client {
+  const existing =
+    data.clients.find((client) => !client.deletedAt && client.company === company) ??
+    data.clients.find((client) => !client.deletedAt);
+  if (existing) return existing;
+
+  const client: Client = {
+    id: `ocr-review-client-${company.toLowerCase()}`,
+    company,
+    companyName: `${companyLabel(company)} OCR未確認クライアント`,
+    contactName: "OCR確認待ち",
+    memo: "OCRで請求書を取り込むための仮クライアントです。",
+    sortOrder: data.clients.length + 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  data.clients.unshift(client);
+  return client;
+}
+
+function ensureReviewVendor(data: AppData, company: "CHINA" | "JAPAN", timestamp: string): Vendor {
+  const id = `ocr-review-vendor-${company.toLowerCase()}`;
+  const existing = data.vendors.find((vendor) => !vendor.deletedAt && vendor.id === id);
+  if (existing) return existing;
+
+  const vendor: Vendor = {
+    id,
+    company,
+    companyName: `${companyLabel(company)} OCR未確認支払先`,
+    contactName: "OCR確認待ち",
+    memo: "OCRで支払先を特定できなかった請求書の仮支払先です。",
+    sortOrder: data.vendors.filter((vendorItem) => vendorItem.company === company).length + 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  data.vendors.unshift(vendor);
+  return vendor;
+}
+
+function ensureReviewProject(data: AppData, company: "CHINA" | "JAPAN", timestamp: string): Project {
+  const id = `ocr-review-project-${company.toLowerCase()}`;
+  const existing = data.projects.find((project) => !project.deletedAt && project.id === id);
+  if (existing) return existing;
+
+  const client = ensureReviewClient(data, company, timestamp);
+  const project: Project = {
+    id,
+    name: `${companyLabel(company)} OCR未確認案件`,
+    clientId: client.id,
+    company,
+    managerId: "usr-admin",
+    memberIds: ["usr-admin"],
+    status: "WAITING",
+    stage: "確認待ち",
+    contractAmount: 0,
+    billingCount: 1,
+    memo: "OCRで案件を特定できなかった受領請求書の仮案件です。",
+    sortOrder: data.projects.filter((projectItem) => projectItem.company === company).length + 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  data.projects.unshift(project);
+  return project;
+}
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -59,39 +128,60 @@ export async function POST(request: Request) {
     await saveReceivedInvoiceFile(safeName, buffer, file.type);
     const fileUrl = receivedInvoiceFileUrl(safeName);
 
-    if (classification.category === "INVOICE") {
-      if (inferred?.vendorId && inferred.projectId) {
-        const duplicate = data.receivedInvoices.find(
+    if (classification.category === "INVOICE" && inferred) {
+      const fallbackWarnings = [...inferred.warnings];
+      let invoiceId = id;
+      let duplicate = false;
+      let projectName = inferred.projectName;
+      let vendorName = inferred.vendorName;
+
+      const mailDocument: MailDocument = {
+        id: newId(),
+        company,
+        category: "INVOICE",
+        title: file.name,
+        fileUrl,
+        originalFileName: file.name,
+        mimeType: file.type,
+        ocrText: extracted.text,
+        confidence: classification.confidence,
+        relatedReceivedInvoiceId: invoiceId,
+        memo: classification.reason,
+        uploadedById: user.id,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      await mutateData(user.id, "SORT_MAIL_DOCUMENT", "MailDocument", mailDocument.id, (draft) => {
+        const vendor = inferred.vendorId
+          ? draft.vendors.find((item) => item.id === inferred.vendorId && !item.deletedAt) ?? ensureReviewVendor(draft, company, timestamp)
+          : ensureReviewVendor(draft, company, timestamp);
+        const project = inferred.projectId
+          ? draft.projects.find((item) => item.id === inferred.projectId && !item.deletedAt) ?? ensureReviewProject(draft, company, timestamp)
+          : ensureReviewProject(draft, company, timestamp);
+
+        if (!inferred.vendorId) fallbackWarnings.push("支払先を特定できなかったため、OCR未確認支払先に仮登録しました。");
+        if (!inferred.projectId) fallbackWarnings.push("案件を特定できなかったため、OCR未確認案件に仮登録しました。");
+
+        vendorName = vendor.companyName;
+        projectName = project.name;
+        const existing = draft.receivedInvoices.find(
           (invoice) =>
             !invoice.deletedAt &&
-            invoice.vendorId === inferred.vendorId &&
+            invoice.vendorId === vendor.id &&
             invoice.issueDate === inferred.issueDate &&
             invoice.total === inferred.total &&
             inferred.total > 0,
         );
-        const invoiceId = duplicate?.id ?? id;
-
-        const mailDocument: MailDocument = {
-          id: newId(),
-          company,
-          category: "INVOICE",
-          title: file.name,
-          fileUrl,
-          originalFileName: file.name,
-          mimeType: file.type,
-          ocrText: extracted.text,
-          confidence: classification.confidence,
-          relatedReceivedInvoiceId: invoiceId,
-          memo: duplicate ? "重複候補のため既存の受領請求書に紐づけました" : classification.reason,
-          uploadedById: user.id,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
+        duplicate = Boolean(existing);
+        invoiceId = existing?.id ?? invoiceId;
+        mailDocument.relatedReceivedInvoiceId = invoiceId;
+        mailDocument.memo = duplicate ? "重複候補のため既存の受領請求書に紐づけました" : classification.reason;
 
         const invoice: ReceivedInvoice = {
           id: invoiceId,
-          vendorId: inferred.vendorId,
-          projectId: inferred.projectId,
+          vendorId: vendor.id,
+          projectId: project.id,
           receivedDate: timestamp.slice(0, 10),
           issueDate: inferred.issueDate,
           dueDate: inferred.dueDate,
@@ -103,48 +193,46 @@ export async function POST(request: Request) {
           originalFileName: file.name,
           mimeType: file.type,
           ocrText: extracted.text,
-          memo: [inferred.memo, classification.reason, ...inferred.warnings].join("\n"),
+          memo: [inferred.memo, classification.reason, ...fallbackWarnings].filter(Boolean).join("\n"),
           uploadedById: user.id,
           createdAt: timestamp,
           updatedAt: timestamp,
         };
 
-        await mutateData(user.id, "SORT_MAIL_DOCUMENT", "MailDocument", mailDocument.id, (draft) => {
-          draft.mailDocuments.unshift(mailDocument);
-          if (!duplicate) {
-            draft.receivedInvoices.unshift(invoice);
-            draft.attachments.unshift({
-              id: newId(),
-              relatedType: "ReceivedInvoice",
-              relatedId: invoice.id,
-              fileUrl,
-              fileName: file.name,
-              mimeType: file.type,
-              uploadedById: user.id,
-              createdAt: timestamp,
-            });
-          }
-          return mailDocument;
-        });
+        draft.mailDocuments.unshift(mailDocument);
+        if (!existing) {
+          draft.receivedInvoices.unshift(invoice);
+          draft.attachments.unshift({
+            id: newId(),
+            relatedType: "ReceivedInvoice",
+            relatedId: invoice.id,
+            fileUrl,
+            fileName: file.name,
+            mimeType: file.type,
+            uploadedById: user.id,
+            createdAt: timestamp,
+          });
+        }
+        return mailDocument;
+      });
 
-        results.push({
-          category: "INVOICE",
-          confidence: classification.confidence,
-          duplicate: Boolean(duplicate),
-          fileName: file.name,
-          invoice: {
-            dueDate: inferred.dueDate,
-            issueDate: inferred.issueDate,
-            projectName: inferred.projectName,
-            total: inferred.total,
-            vendorName: inferred.vendorName,
-          },
-          reason: classification.reason,
-          savedAs: duplicate ? "other-document" : "received-invoice",
-          warnings: inferred.warnings,
-        });
-        continue;
-      }
+      results.push({
+        category: "INVOICE",
+        confidence: classification.confidence,
+        duplicate,
+        fileName: file.name,
+        invoice: {
+          dueDate: inferred.dueDate,
+          issueDate: inferred.issueDate,
+          projectName,
+          total: inferred.total,
+          vendorName,
+        },
+        reason: classification.reason,
+        savedAs: duplicate ? "other-document" : "received-invoice",
+        warnings: fallbackWarnings,
+      });
+      continue;
     }
 
     const mailDocument: MailDocument = {
