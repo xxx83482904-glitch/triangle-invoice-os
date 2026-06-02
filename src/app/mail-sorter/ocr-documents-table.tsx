@@ -124,14 +124,17 @@ function summaryLines(row: OcrDocumentListItem) {
   return lines;
 }
 
-function DocumentPreview({ row }: { row: OcrDocumentListItem }) {
+function DocumentPreview({ compact = false, row }: { compact?: boolean; row: OcrDocumentListItem }) {
+  const frameClass = compact ? "h-[56vh] min-h-[360px]" : "h-[68vh] min-h-96";
+  const boxClass = compact ? "min-h-[360px]" : "min-h-80";
+
   if (!row.fileUrl) {
-    return <div className="flex h-full min-h-80 items-center justify-center rounded-md bg-muted text-sm text-muted-foreground">ファイルがありません。</div>;
+    return <div className={`flex h-full ${boxClass} items-center justify-center rounded-md bg-muted text-sm text-muted-foreground`}>ファイルがありません。</div>;
   }
 
   if (row.mimeType?.startsWith("image/")) {
     return (
-      <div className="flex h-full min-h-80 items-center justify-center overflow-hidden rounded-md bg-muted">
+      <div className={`flex h-full ${boxClass} items-center justify-center overflow-hidden rounded-md bg-muted`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={row.fileUrl} alt={row.fileName} className="max-h-full w-full object-contain" />
       </div>
@@ -139,11 +142,11 @@ function DocumentPreview({ row }: { row: OcrDocumentListItem }) {
   }
 
   if (row.mimeType === "application/pdf") {
-    return <iframe title={row.fileName} src={row.fileUrl} className="h-[68vh] min-h-96 w-full rounded-md border bg-muted" />;
+    return <iframe title={row.fileName} src={row.fileUrl} className={`${frameClass} w-full rounded-md border bg-muted`} />;
   }
 
   return (
-    <div className="flex h-full min-h-80 items-center justify-center rounded-md bg-muted">
+    <div className={`flex h-full ${boxClass} items-center justify-center rounded-md bg-muted`}>
       <Button asChild variant="outline">
         <a href={row.fileUrl} target="_blank">
           ファイルを開く
@@ -261,7 +264,7 @@ export function OcrDocumentsTable({
                       </div>
                       <div className="flex gap-2">
                         <Button type="button" variant="outline" size="sm" onClick={() => setDialogRow(activeRow)}>
-                          内容とスクショ
+                          拡大表示
                         </Button>
                         {activeRow.fileUrl ? (
                           <Button asChild variant="outline" size="sm">
@@ -285,7 +288,64 @@ export function OcrDocumentsTable({
                       <input type="hidden" form={`ocr-edit-${activeRow.id}`} name="receivedInvoiceId" value={activeRow.receivedInvoiceId} />
                     ) : null}
 
-                    <div className="grid gap-4 xl:grid-cols-2" onClick={stopEditClick}>
+                    <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+                      <div className="space-y-4 rounded-lg border p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <FileText className="h-4 w-4" />
+                          要約
+                        </div>
+                        <dl className="space-y-2 text-sm">
+                          {summaryLines(activeRow).map((line) => {
+                            const [label, ...rest] = line.split(": ");
+                            return (
+                              <div key={line} className="grid grid-cols-[72px_1fr] gap-3">
+                                <dt className="text-muted-foreground">{label}</dt>
+                                <dd className="whitespace-pre-wrap break-words">{rest.join(": ")}</dd>
+                              </div>
+                            );
+                          })}
+                        </dl>
+                        {activeRow.extracted?.projectId ? (
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/projects/${activeRow.extracted.projectId}?company=${company}`}>案件を開く</Link>
+                          </Button>
+                        ) : null}
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium">OCR本文</div>
+                          <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
+                            {activeRow.ocrText || "OCR本文はありません。"}
+                          </pre>
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 space-y-3 rounded-lg border p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            <ImageIcon className="h-4 w-4" />
+                            PDF / 画像
+                          </div>
+                          {activeRow.fileUrl ? (
+                            <Button asChild variant="outline" size="sm">
+                              <a href={activeRow.fileUrl} target="_blank">
+                                <ExternalLink className="h-4 w-4" />
+                                別画面
+                              </a>
+                            </Button>
+                          ) : null}
+                        </div>
+                        <DocumentPreview compact row={activeRow} />
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/10 p-4" onClick={stopEditClick}>
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium">編集</div>
+                        <Button type="submit" form={`ocr-edit-${activeRow.id}`} disabled={!canEdit} size="sm" className="gap-1">
+                          <Save className="h-4 w-4" />
+                          保存
+                        </Button>
+                      </div>
+                      <div className="grid gap-4 xl:grid-cols-2">
                       <div className="space-y-3">
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-muted-foreground">発送元</label>
@@ -381,10 +441,7 @@ export function OcrDocumentsTable({
                           <label className="text-xs font-medium text-muted-foreground">メモ</label>
                           <Textarea form={`ocr-edit-${activeRow.id}`} name="memo" defaultValue={activeRow.memo ?? ""} disabled={!canEdit} className="min-h-28" />
                         </div>
-                        <Button type="submit" form={`ocr-edit-${activeRow.id}`} disabled={!canEdit} className="gap-1">
-                          <Save className="h-4 w-4" />
-                          保存
-                        </Button>
+                      </div>
                       </div>
                     </div>
                   </div>
