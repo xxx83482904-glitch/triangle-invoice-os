@@ -368,7 +368,7 @@ async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalys
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const model = process.env.OCR_AI_MODEL || "gpt-4.1-nano";
+  const model = process.env.OCR_AI_MODEL || "gpt-5.4-mini";
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     body: JSON.stringify({
       messages: [
@@ -504,7 +504,7 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
     issueDate,
     memo: [
       `OCR engine: ${extracted.engine}`,
-      analysis ? `AI model: ${process.env.OCR_AI_MODEL || "gpt-4.1-nano"}` : "AI analysis: fallback rules",
+      analysis ? `AI model: ${process.env.OCR_AI_MODEL || "gpt-5.4-mini"}` : "AI analysis: fallback rules",
       textFromAi(analysis?.memo),
     ]
       .filter(Boolean)

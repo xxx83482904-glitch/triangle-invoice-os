@@ -73,7 +73,7 @@ Set these variables in `.env`:
 ```bash
 GOOGLE_CLOUD_VISION_API_KEY="..."
 OPENAI_API_KEY="..."
-OCR_AI_MODEL="gpt-4.1-nano"
+OCR_AI_MODEL="gpt-5.4-mini"
 ```
 
 Google Vision can also use a service account JSON:
