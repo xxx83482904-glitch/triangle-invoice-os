@@ -14,7 +14,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[104px] border-r bg-sidebar px-5 py-8 lg:flex lg:flex-col lg:items-center">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[96px] border-r bg-sidebar px-5 py-7 lg:flex lg:flex-col lg:items-center">
         <ScopedBrandLink />
         <div className="mt-12 w-full">
           <CompanySwitch />
@@ -39,12 +39,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </aside>
-      <div className="lg:pl-[104px]">
+      <div className="lg:pl-[96px]">
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
           <ScopedBrandLink compact />
           <MobileCompanySwitch />
         </header>
-        <main className="mx-auto w-full max-w-[1760px] px-4 py-7 sm:px-8 lg:px-12">{children}</main>
+        <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-7 lg:px-10">{children}</main>
       </div>
     </div>
   );
@@ -60,18 +60,18 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="text-3xl font-semibold">{title}</h1>
-        {description ? <p className="mt-1.5 text-base text-muted-foreground">{description}</p> : null}
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="hidden h-11 w-[min(380px,32vw)] items-center gap-3 rounded-lg border bg-card px-4 text-muted-foreground shadow-sm xl:flex">
+        <div className="hidden h-10 w-[min(360px,32vw)] items-center gap-3 rounded-lg border bg-card px-4 text-muted-foreground shadow-sm xl:flex">
           <Search className="h-4 w-4 text-foreground" />
-          <span className="text-sm">Search</span>
+          <span className="text-xs">Search</span>
         </div>
         {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
-        <Button variant="outline" size="icon" className="h-11 w-11 rounded-full bg-card">
+        <Button variant="outline" size="icon" className="h-10 w-10 rounded-full bg-card">
           <HelpCircle className="h-4 w-4" />
           <span className="sr-only">ヘルプ</span>
         </Button>

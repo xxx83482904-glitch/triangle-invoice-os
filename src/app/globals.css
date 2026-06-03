@@ -49,16 +49,16 @@
 }
 
 :root {
-  --background: oklch(0.975 0.004 248);
+  --background: oklch(0.974 0.006 250);
   --foreground: oklch(0.19 0.012 248);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.19 0.012 248);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.19 0.012 248);
-  --primary: oklch(0.67 0.17 174);
-  --primary-foreground: oklch(0.99 0.002 180);
-  --secondary: oklch(0.955 0.018 184);
-  --secondary-foreground: oklch(0.23 0.055 178);
+  --primary: oklch(0.56 0.19 255);
+  --primary-foreground: oklch(0.99 0.002 255);
+  --secondary: oklch(0.945 0.027 255);
+  --secondary-foreground: oklch(0.28 0.085 255);
   --muted: oklch(0.958 0.006 248);
   --muted-foreground: oklch(0.54 0.018 248);
   --accent: oklch(0.945 0.025 255);
@@ -66,21 +66,21 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.895 0.012 248);
   --input: oklch(0.885 0.018 248);
-  --ring: oklch(0.67 0.17 174);
-  --chart-1: oklch(0.75 0.18 190);
-  --chart-2: oklch(0.63 0.16 172);
-  --chart-3: oklch(0.64 0.19 39);
-  --chart-4: oklch(0.58 0.16 250);
-  --chart-5: oklch(0.55 0.14 340);
+  --ring: oklch(0.56 0.19 255);
+  --chart-1: oklch(0.68 0.18 245);
+  --chart-2: oklch(0.74 0.16 218);
+  --chart-3: oklch(0.58 0.16 265);
+  --chart-4: oklch(0.64 0.12 196);
+  --chart-5: oklch(0.54 0.08 250);
   --radius: 0.625rem;
   --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.28 0.04 180);
-  --sidebar-primary: oklch(0.67 0.17 174);
-  --sidebar-primary-foreground: oklch(0.99 0.002 180);
-  --sidebar-accent: oklch(0.925 0.05 178);
-  --sidebar-accent-foreground: oklch(0.23 0.055 178);
+  --sidebar-foreground: oklch(0.3 0.06 255);
+  --sidebar-primary: oklch(0.56 0.19 255);
+  --sidebar-primary-foreground: oklch(0.99 0.002 255);
+  --sidebar-accent: oklch(0.93 0.045 255);
+  --sidebar-accent-foreground: oklch(0.28 0.085 255);
   --sidebar-border: oklch(0.895 0.012 248);
-  --sidebar-ring: oklch(0.67 0.17 174);
+  --sidebar-ring: oklch(0.56 0.19 255);
 }
 
 .dark {
@@ -122,7 +122,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-sm text-foreground;
     letter-spacing: 0;
   }
   html {

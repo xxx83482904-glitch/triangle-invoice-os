@@ -71,10 +71,10 @@ export default async function DashboardPage({
       </PageHeader>
 
       <div className="mb-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard accent="cyan" icon={FolderKanban} label="Projects" progress={Math.min(100, rows.length * 6)} value={`${rows.length}件`} />
-        <MetricCard accent="orange" icon={ReceiptText} label="Issued Total" progress={Math.min(100, Math.round(issuedTotal / Math.max(rows.reduce((sum, row) => sum + row.billingTotal, 1), 1) * 100))} value={yen.format(issuedTotal)} />
-        <MetricCard accent="purple" icon={FileCheck2} label="Paid Income" progress={Math.min(100, Math.round((paidIncome / Math.max(issuedTotal, 1)) * 100))} value={yen.format(paidIncome)} />
-        <MetricCard accent="green" icon={BarChart3} label="Gross Profit" progress={Math.max(0, Math.min(100, Math.round((grossProfit / Math.max(paidIncome, 1)) * 100)))} value={yen.format(grossProfit)} />
+        <MetricCard accent="blue" icon={FolderKanban} label="Projects" progress={Math.min(100, rows.length * 6)} value={`${rows.length}件`} />
+        <MetricCard accent="sky" icon={ReceiptText} label="Issued Total" progress={Math.min(100, Math.round(issuedTotal / Math.max(rows.reduce((sum, row) => sum + row.billingTotal, 1), 1) * 100))} value={yen.format(issuedTotal)} />
+        <MetricCard accent="indigo" icon={FileCheck2} label="Paid Income" progress={Math.min(100, Math.round((paidIncome / Math.max(issuedTotal, 1)) * 100))} value={yen.format(paidIncome)} />
+        <MetricCard accent="slate" icon={BarChart3} label="Gross Profit" progress={Math.max(0, Math.min(100, Math.round((grossProfit / Math.max(paidIncome, 1)) * 100)))} value={yen.format(grossProfit)} />
       </div>
 
       <div className="mb-7 grid gap-5 xl:grid-cols-[1.45fr_0.75fr]">
@@ -82,14 +82,14 @@ export default async function DashboardPage({
           <CardHeader className="flex-row items-start justify-between gap-4">
             <div>
               <CardTitle>Total Revenue</CardTitle>
-              <div className="mt-2 text-3xl font-semibold">{yen.format(issuedTotal)}</div>
+              <div className="mt-2 text-2xl font-semibold">{yen.format(issuedTotal)}</div>
             </div>
             <div className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">Progress {progress}%</div>
           </CardHeader>
           <CardContent>
             <div className="mb-5 flex gap-5 text-xs">
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-cyan-400" />請求</span>
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-violet-500" />支払い</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-blue-500" />請求</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-sky-400" />支払い</span>
             </div>
             <RevenueChart issuedTotal={issuedTotal} receivedTotal={receivedTotal} />
           </CardContent>
@@ -102,9 +102,9 @@ export default async function DashboardPage({
           </CardHeader>
           <CardContent>
             <div className="space-y-5">
-              <BalanceRow color="bg-cyan-400" label="発行請求" value={issuedTotal} max={Math.max(issuedTotal, receivedTotal, 1)} />
-              <BalanceRow color="bg-violet-500" label="受領請求" value={receivedTotal} max={Math.max(issuedTotal, receivedTotal, 1)} />
-              <BalanceRow color="bg-emerald-500" label="入金済み" value={paidIncome} max={Math.max(issuedTotal, receivedTotal, 1)} />
+              <BalanceRow color="bg-blue-500" label="発行請求" value={issuedTotal} max={Math.max(issuedTotal, receivedTotal, 1)} />
+              <BalanceRow color="bg-sky-400" label="受領請求" value={receivedTotal} max={Math.max(issuedTotal, receivedTotal, 1)} />
+              <BalanceRow color="bg-indigo-500" label="入金済み" value={paidIncome} max={Math.max(issuedTotal, receivedTotal, 1)} />
             </div>
           </CardContent>
         </Card>
@@ -127,17 +127,17 @@ function MetricCard({
   progress,
   value,
 }: {
-  accent: "cyan" | "green" | "orange" | "purple";
+  accent: "blue" | "indigo" | "sky" | "slate";
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   progress: number;
   value: string;
 }) {
   const tone = {
-    cyan: { bar: "bg-cyan-400", bg: "bg-cyan-50", text: "text-cyan-700" },
-    green: { bar: "bg-emerald-500", bg: "bg-emerald-50", text: "text-emerald-700" },
-    orange: { bar: "bg-orange-400", bg: "bg-orange-50", text: "text-orange-700" },
-    purple: { bar: "bg-violet-500", bg: "bg-violet-50", text: "text-violet-700" },
+    blue: { bar: "bg-blue-500", bg: "bg-blue-50", text: "text-blue-700" },
+    indigo: { bar: "bg-indigo-500", bg: "bg-indigo-50", text: "text-indigo-700" },
+    sky: { bar: "bg-sky-400", bg: "bg-sky-50", text: "text-sky-700" },
+    slate: { bar: "bg-slate-500", bg: "bg-slate-50", text: "text-slate-700" },
   }[accent];
 
   return (
@@ -149,7 +149,7 @@ function MetricCard({
             <Icon className="h-5 w-5" />
           </div>
         </div>
-        <div className="text-2xl font-semibold">{value}</div>
+        <div className="text-xl font-semibold">{value}</div>
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>0%</span>
@@ -176,8 +176,8 @@ function RevenueChart({ issuedTotal, receivedTotal }: { issuedTotal: number; rec
       <div className="relative flex h-full items-end gap-2 pb-8">
         {issuedPoints.map((point, index) => (
           <div key={index} className="flex h-full flex-1 items-end gap-1">
-            <div className="w-full rounded-t bg-cyan-400/70" style={{ height: `${point}%` }} />
-            <div className="w-full rounded-t bg-violet-500/70" style={{ height: `${receivedPoints[index]}%` }} />
+            <div className="w-full rounded-t bg-blue-500/70" style={{ height: `${point}%` }} />
+            <div className="w-full rounded-t bg-sky-400/70" style={{ height: `${receivedPoints[index]}%` }} />
           </div>
         ))}
       </div>

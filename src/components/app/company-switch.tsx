@@ -40,7 +40,7 @@ export function CompanySwitch() {
           asChild
           size="xs"
           variant={company === option.value ? "default" : "ghost"}
-          className="h-8 w-full rounded-lg px-2 text-[11px]"
+          className="h-7 w-full rounded-lg px-2 text-[10px]"
         >
           <Link href={scopedHref(pathname, searchParams, option.value)}>{option.shortLabel}</Link>
         </Button>
@@ -86,13 +86,13 @@ export function AppNav() {
             key={item.href}
             href={navHref(item.href, company)}
             title={item.label}
-            className={`grid h-12 w-12 place-items-center rounded-lg transition ${
+            className={`grid h-11 w-11 place-items-center rounded-lg transition ${
               active
                 ? "bg-primary/15 text-sidebar-accent-foreground shadow-sm"
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             }`}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4" />
             <span className="sr-only">{item.label}</span>
           </Link>
         );
@@ -107,7 +107,7 @@ export function ScopedBrandLink({ compact = false }: { compact?: boolean }) {
 
   return (
     <Link href={navHref("/dashboard", company)} className={compact ? "font-semibold" : "flex flex-col items-center gap-2"}>
-      <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-lg font-bold text-primary-foreground shadow-sm">T</div>
+      <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-sm">T</div>
       {!compact ? <div className="sr-only">TRIANGLE Invoice OS</div> : null}
     </Link>
   );
