@@ -38,16 +38,27 @@ export type InferredContractBilling = {
 export type MailDocumentClassification = {
   category: MailDocumentCategory;
   confidence: number;
+  amountSummary?: string;
+  contentSummary?: string;
+  paymentDestination?: string;
   reason: string;
   senderName?: string;
 };
 
 type AiDocumentAnalysis = {
+  amountSummary?: string;
+  bankAccountHolder?: string;
+  bankAccountNumber?: string;
+  bankAccountType?: string;
+  bankBranch?: string;
+  bankName?: string;
   confidence?: number;
+  contentSummary?: string;
   documentType?: string;
   dueDate?: string;
   issueDate?: string;
   memo?: string;
+  paymentDestination?: string;
   projectHint?: string;
   reason?: string;
   registrationNumber?: string;
@@ -221,6 +232,84 @@ function optionalNumberFromAi(value: unknown) {
 
 function textFromAi(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function compactInline(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function formatAmountSummary(amounts: { subtotal?: number; taxTotal?: number; total?: number }) {
+  const parts = [];
+  if (amounts.total) parts.push(`合計 ${amounts.total.toLocaleString("ja-JP")}円`);
+  if (amounts.subtotal) parts.push(`税抜 ${amounts.subtotal.toLocaleString("ja-JP")}円`);
+  if (amounts.taxTotal) parts.push(`消費税 ${amounts.taxTotal.toLocaleString("ja-JP")}円`);
+  return parts.join(" / ");
+}
+
+function buildAmountSummary(text: string, analysis: AiDocumentAnalysis | null) {
+  const aiAmounts = {
+    subtotal: optionalNumberFromAi(analysis?.subtotal),
+    taxTotal: optionalNumberFromAi(analysis?.taxTotal),
+    total: optionalNumberFromAi(analysis?.total),
+  };
+  const aiSummary = formatAmountSummary(aiAmounts);
+  if (aiSummary) return aiSummary;
+  return formatAmountSummary(extractAmounts(text));
+}
+
+function buildPaymentDestinationFromAi(analysis: AiDocumentAnalysis | null) {
+  const parts = [
+    textFromAi(analysis?.paymentDestination),
+    textFromAi(analysis?.bankName),
+    textFromAi(analysis?.bankBranch),
+    textFromAi(analysis?.bankAccountType),
+    textFromAi(analysis?.bankAccountNumber),
+    textFromAi(analysis?.bankAccountHolder),
+  ].filter(Boolean);
+  return Array.from(new Set(parts)).join(" / ");
+}
+
+function extractPaymentDestination(text: string) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => compactInline(line.replace(/\u0000/g, "")))
+    .filter(Boolean);
+  const labelPattern =
+    /(振込先|お振込先|振込口座|銀行口座|口座情報|支払先|支払い先|入金先|付款|收款|收款账户|收款方|开户行|银行账号|銀行|银行|支店|账号|帳號|口座|account|bank)/i;
+  const noisePattern = /(郵便番号|住所|電話|TEL|FAX|Email|メール|請求番号|登録番号|invoice\s*no|見積番号|納品番号)/i;
+  const candidates: string[] = [];
+
+  lines.forEach((line, index) => {
+    if (!labelPattern.test(line)) return;
+    for (const nearby of lines.slice(index, index + 5)) {
+      if (noisePattern.test(nearby) && !labelPattern.test(nearby)) continue;
+      if (nearby.length < 2 || nearby.length > 120) continue;
+      candidates.push(nearby);
+    }
+  });
+
+  return Array.from(new Set(candidates)).slice(0, 5).join(" / ");
+}
+
+function inferContentSummary(text: string, category: MailDocumentCategory) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => compactInline(line.replace(/\u0000/g, "")))
+    .filter((line) => line.length >= 4 && line.length <= 100);
+  const titlePattern = /(請求書|御請求書|見積書|納品書|領収書|契約書|通知書|invoice|estimate|quotation|receipt|contract|发票|請求|通知)/i;
+  const detailPattern = /(件名|内容|摘要|品名|項目|業務|制作|施工|設計|案件|project|description|service|事项|项目)/i;
+  const title = lines.find((line) => titlePattern.test(line));
+  const detail = lines.find((line) => detailPattern.test(line) && !/(口座|銀行|TEL|FAX|Email)/i.test(line));
+  const categoryLabel: Record<MailDocumentCategory, string> = {
+    CONTRACT: "契約書",
+    DELIVERY_NOTE: "納品書",
+    ESTIMATE: "見積書",
+    INVOICE: "請求書",
+    NOTICE: "通知書",
+    OTHER: "その他書類",
+    RECEIPT: "領収書",
+  };
+  return [categoryLabel[category], title, detail].filter(Boolean).slice(0, 3).join(" / ");
 }
 
 function warningsFromAi(value: unknown) {
@@ -411,7 +500,7 @@ async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalys
       messages: [
         {
           content:
-            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. senderName is required: aggressively find the company or organization that sent/issued the document from the OCR text. Do not use the recipient, bill-to, client, delivery destination, or file name as senderName. Prefer labels such as 発送元, 差出人, 発行者, 請求者, 販売者, 支払先, 发件人, 寄件人, 开票方, 销售方, 供应商, 收款方, From. If uncertain, choose the strongest company/organization candidate in the header, issuer block, stamp area, or footer. For invoices, vendorName should normally be the same sender/issuer company. Extract issueDate from 請求日/発行日/开票日期/invoice date, and dueDate from 支払期限/付款期限/due date. Extract total from 請求金額/税込合計/合計金額/价税合计/应付金额/amount due. Never use bank account numbers, phone numbers, postal codes, registration numbers, invoice numbers, or project numbers as money values. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include confidence 0-100, reason, warnings array.",
+            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. Required fields: senderName, contentSummary, amountSummary, paymentDestination, confidence, reason, warnings. senderName: aggressively find the company or organization that sent/issued the document from the OCR text. Do not use the recipient, bill-to, client, delivery destination, or file name as senderName. Prefer labels such as 発送元, 差出人, 発行者, 請求者, 販売者, 支払先, 发件人, 寄件人, 开票方, 销售方, 供应商, 收款方, From. If uncertain, choose the strongest company/organization candidate in the header, issuer block, stamp area, or footer. contentSummary: summarize what the document is about in one short Japanese sentence, including item/service/project when visible. amountSummary: extract the actual billed/payable/contract amount and tax if visible, e.g. 合計 123,456円 / 税抜 112,233円 / 消費税 11,223円. paymentDestination: strongly search for transfer/payment destination including bank name, branch, account type, account number, account holder, or Chinese receiving account labels such as 收款方, 开户行, 银行账号. If no payment destination exists, return an empty string. For invoices, vendorName should normally be the same sender/issuer company. Extract issueDate from 請求日/発行日/开票日期/invoice date, and dueDate from 支払期限/付款期限/due date. Extract total from 請求金額/税込合計/合計金額/价税合计/应付金额/amount due. Never use bank account numbers, phone numbers, postal codes, registration numbers, invoice numbers, or project numbers as money values. Never use invoice numbers, registration numbers, phone numbers, postal codes, or project numbers as amountSummary. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include bankName, bankBranch, bankAccountType, bankAccountNumber, bankAccountHolder when visible.",
           role: "system",
         },
         {
@@ -532,6 +621,10 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
     taxTotal = Math.round(total / 11);
     subtotal = subtotal || total - taxTotal;
   }
+  if (total && subtotal + taxTotal > 0 && Math.abs(subtotal + taxTotal - total) > Math.max(10, Math.round(total * 0.05))) {
+    taxTotal = Math.round(total / 11);
+    subtotal = total - taxTotal;
+  }
   const vendor = vendorMatch?.item;
   const project = projectMatch?.item;
   const warnings = [...extracted.warnings, ...warningsFromAi(analysis?.warnings)];
@@ -578,9 +671,15 @@ function classifyFromAnalysis(extracted: ExtractedText, analysis: AiDocumentAnal
   const category = categoryFromAi(analysis?.documentType);
   if (!category) return null;
   const senderName = textFromAi(analysis?.senderName) || textFromAi(analysis?.senderOrganization) || textFromAi(analysis?.vendorName);
+  const contentSummary = textFromAi(analysis?.contentSummary) || textFromAi(analysis?.memo) || inferContentSummary(extracted.text, category);
+  const amountSummary = textFromAi(analysis?.amountSummary) || buildAmountSummary(extracted.text, analysis);
+  const paymentDestination = buildPaymentDestinationFromAi(analysis) || extractPaymentDestination(extracted.text);
   return {
     category,
     confidence: Math.min(100, numberFromAi(analysis?.confidence) || 60),
+    amountSummary: amountSummary || undefined,
+    contentSummary: contentSummary || undefined,
+    paymentDestination: paymentDestination || undefined,
     reason: textFromAi(analysis?.reason) || "Classified by AI from OCR text.",
     senderName: senderName || undefined,
   };
@@ -623,6 +722,9 @@ export function classifyMailDocument(extracted: ExtractedText): MailDocumentClas
     return {
       category: "INVOICE",
       confidence: Math.min(100, 60 + (dates.length ? 15 : 0) + (extracted.confidence ? 10 : 0)),
+      amountSummary: buildAmountSummary(text, null),
+      contentSummary: inferContentSummary(text, "INVOICE"),
+      paymentDestination: extractPaymentDestination(text) || undefined,
       reason: "Invoice keywords and amount were detected.",
     };
   }
@@ -632,6 +734,9 @@ export function classifyMailDocument(extracted: ExtractedText): MailDocumentClas
       return {
         category,
         confidence: Math.min(100, 55 + (dates.length ? 10 : 0) + (amounts.total ? 10 : 0)),
+        amountSummary: buildAmountSummary(text, null) || undefined,
+        contentSummary: inferContentSummary(text, category),
+        paymentDestination: extractPaymentDestination(text) || undefined,
         reason: "Document category keyword was detected.",
       };
     }
@@ -641,6 +746,9 @@ export function classifyMailDocument(extracted: ExtractedText): MailDocumentClas
     return {
       category: "OTHER",
       confidence: 45,
+      amountSummary: buildAmountSummary(text, null) || undefined,
+      contentSummary: inferContentSummary(text, "OTHER"),
+      paymentDestination: extractPaymentDestination(text) || undefined,
       reason: "Invoice-like keywords were detected, but the amount was unclear.",
     };
   }
@@ -648,6 +756,9 @@ export function classifyMailDocument(extracted: ExtractedText): MailDocumentClas
   return {
     category: "OTHER",
     confidence: extracted.confidence ? Math.min(70, Math.round(extracted.confidence)) : 30,
+    amountSummary: buildAmountSummary(text, null) || undefined,
+    contentSummary: inferContentSummary(text, "OTHER"),
+    paymentDestination: extractPaymentDestination(text) || undefined,
     reason: "Could not confidently classify this as an invoice.",
   };
 }

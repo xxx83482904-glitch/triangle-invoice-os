@@ -114,18 +114,66 @@ function shippingSenderName(row: OcrDocumentListItem) {
   return firstLine || row.fileName.replace(/\.[^.]+$/, "");
 }
 
+function memoField(row: OcrDocumentListItem, label: string) {
+  const prefix = `${label}:`;
+  return (
+    row.memo
+      ?.split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith(prefix))
+      ?.slice(prefix.length)
+      .trim() ?? ""
+  );
+}
+
+function memoRemainder(row: OcrDocumentListItem) {
+  const structuredLabels = new Set(["発送元", "内容", "金額", "振込先", "請求日", "支払期限", "判定"]);
+  return (
+    row.memo
+      ?.split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => {
+        const [label] = line.split(":");
+        return !structuredLabels.has(label);
+      })
+      .slice(0, 2)
+      .join(" / ") ?? ""
+  );
+}
+
+function hasConsistentTaxBreakdown(row: OcrDocumentListItem) {
+  const extracted = row.extracted;
+  if (!extracted?.total) return false;
+  const breakdownTotal = extracted.subtotal + extracted.taxTotal;
+  return breakdownTotal > 0 && Math.abs(breakdownTotal - extracted.total) <= Math.max(10, Math.round(extracted.total * 0.05));
+}
+
 function summaryLines(row: OcrDocumentListItem) {
-  const lines = [`発送元: ${shippingSenderName(row)}`, `種別: ${categoryLabels[row.category]}`, `保存先: ${row.savedAs}`];
+  const content = memoField(row, "内容") || row.ocrPreview || "内容確認待ち";
+  const amount = memoField(row, "金額") || (row.extracted ? moneyFormatter.format(row.extracted.total) : "");
+  const paymentDestination = memoField(row, "振込先") || "記載なし / 未検出";
+  const lines = [
+    `発送元: ${memoField(row, "発送元") || shippingSenderName(row)}`,
+    `内容: ${content}`,
+    `金額: ${amount || "未検出"}`,
+    `振込先: ${paymentDestination}`,
+    `種別: ${categoryLabels[row.category]}`,
+    `保存先: ${row.savedAs}`,
+  ];
   if (row.extracted) {
     lines.push(`案件: ${row.extracted.projectName}`);
     lines.push(`請求日: ${formatDate(row.extracted.issueDate)}`);
     lines.push(`支払期限: ${formatDate(row.extracted.dueDate)}`);
-    lines.push(`税抜: ${moneyFormatter.format(row.extracted.subtotal)}`);
-    lines.push(`消費税: ${moneyFormatter.format(row.extracted.taxTotal)}`);
+    if (hasConsistentTaxBreakdown(row)) {
+      lines.push(`税抜: ${moneyFormatter.format(row.extracted.subtotal)}`);
+      lines.push(`消費税: ${moneyFormatter.format(row.extracted.taxTotal)}`);
+    }
     lines.push(`合計: ${moneyFormatter.format(row.extracted.total)}`);
   }
   if (row.confidence) lines.push(`信頼度: ${row.confidence}%`);
-  if (row.memo) lines.push(`メモ: ${row.memo.split("\n").filter(Boolean).slice(0, 2).join(" / ")}`);
+  const remainder = memoRemainder(row);
+  if (remainder) lines.push(`メモ: ${remainder}`);
   return lines;
 }
 

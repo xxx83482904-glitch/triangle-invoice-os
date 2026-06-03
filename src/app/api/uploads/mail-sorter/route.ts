@@ -5,6 +5,7 @@ import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceived
 import { analyzeMailDocument, extractDocumentText } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
+import type { MailDocumentClassification } from "@/lib/ocr";
 import type { AppData, Client, MailDocument, MailDocumentCategory, Project, ReceivedInvoice, Vendor } from "@/lib/types";
 
 type SortResult = {
@@ -80,6 +81,49 @@ function inferSenderName(text: string) {
     .map(cleanSenderCandidate)
     .find((line) => line.length >= 2 && line.length <= 60 && !recipientCuePattern.test(line) && !nonCompanyPattern.test(line));
   return fallback || "発送元確認待ち";
+}
+
+function buildMailSummaryMemo({
+  classification,
+  duplicate,
+  invoice,
+  senderName,
+}: {
+  classification: MailDocumentClassification;
+  duplicate?: boolean;
+  invoice?: {
+    dueDate?: string;
+    issueDate?: string;
+    memo?: string;
+    subtotal?: number;
+    taxTotal?: number;
+    total?: number;
+  } | null;
+  senderName: string;
+}) {
+  const amountSummary =
+    classification.amountSummary ||
+    (invoice?.total
+      ? [
+          `合計 ${invoice.total.toLocaleString("ja-JP")}円`,
+          invoice.subtotal ? `税抜 ${invoice.subtotal.toLocaleString("ja-JP")}円` : "",
+          invoice.taxTotal ? `消費税 ${invoice.taxTotal.toLocaleString("ja-JP")}円` : "",
+        ]
+          .filter(Boolean)
+          .join(" / ")
+      : "");
+  return [
+    `発送元: ${senderName}`,
+    classification.contentSummary ? `内容: ${classification.contentSummary}` : "",
+    amountSummary ? `金額: ${amountSummary}` : "",
+    classification.paymentDestination ? `振込先: ${classification.paymentDestination}` : "",
+    invoice?.issueDate ? `請求日: ${invoice.issueDate}` : "",
+    invoice?.dueDate ? `支払期限: ${invoice.dueDate}` : "",
+    duplicate ? "判定: 重複候補のため既存の受領請求書に紐づけました" : `判定: ${classification.reason}`,
+    invoice?.memo,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function companyLabel(company: "CHINA" | "JAPAN") {
@@ -230,7 +274,7 @@ export async function POST(request: Request) {
         ocrText: extracted.text,
         confidence: classification.confidence,
         relatedReceivedInvoiceId: invoiceId,
-        memo: classification.reason,
+        memo: buildMailSummaryMemo({ classification, invoice: inferred, senderName }),
         uploadedById: user.id,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -264,7 +308,7 @@ export async function POST(request: Request) {
         duplicate = Boolean(existing);
         invoiceId = existing?.id ?? invoiceId;
         mailDocument.relatedReceivedInvoiceId = invoiceId;
-        mailDocument.memo = duplicate ? "重複候補のため既存の受領請求書に紐づけました" : classification.reason;
+        mailDocument.memo = buildMailSummaryMemo({ classification, duplicate, invoice: inferred, senderName: mailDocument.senderName || senderName });
 
         const invoice: ReceivedInvoice = {
           id: invoiceId,
@@ -281,7 +325,7 @@ export async function POST(request: Request) {
           originalFileName: file.name,
           mimeType: file.type,
           ocrText: extracted.text,
-          memo: [inferred.memo, classification.reason, ...fallbackWarnings].filter(Boolean).join("\n"),
+          memo: [buildMailSummaryMemo({ classification, invoice: inferred, senderName: mailDocument.senderName || senderName }), ...fallbackWarnings].filter(Boolean).join("\n"),
           uploadedById: user.id,
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -334,7 +378,7 @@ export async function POST(request: Request) {
       mimeType: file.type,
       ocrText: extracted.text,
       confidence: classification.confidence,
-      memo: classification.reason,
+      memo: buildMailSummaryMemo({ classification, senderName }),
       uploadedById: user.id,
       createdAt: timestamp,
       updatedAt: timestamp,
