@@ -457,7 +457,7 @@ export function OcrDocumentsTable({
                       <input type="hidden" form={`ocr-edit-${activeRow.id}`} name="receivedInvoiceId" value={activeRow.receivedInvoiceId} />
                     ) : null}
 
-                    <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+                    <div className="space-y-4">
                       <div className="space-y-4 rounded-lg border p-4">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <FileText className="h-4 w-4" />
@@ -626,7 +626,7 @@ export function OcrDocumentsTable({
       </Card>
 
       <Dialog open={Boolean(dialogRow)} onOpenChange={(open) => !open && setDialogRow(null)}>
-        <DialogContent className="max-h-[92vh] max-w-[min(1200px,calc(100vw-2rem))] overflow-hidden">
+        <DialogContent className="max-h-[92vh] max-w-[min(1200px,calc(100vw-2rem))] overflow-y-auto">
           {dialogRow ? (
             <>
               <DialogHeader>
@@ -635,7 +635,7 @@ export function OcrDocumentsTable({
                   {categoryLabels[dialogRow.category]} / {formatDate(dialogRow.createdAt.slice(0, 10))}
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid min-h-0 gap-4 lg:grid-cols-[360px_1fr]">
+              <div className="min-h-0 space-y-4">
                 <div className="min-h-0 space-y-4 overflow-auto rounded-md border p-4">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <FileText className="h-4 w-4" />
