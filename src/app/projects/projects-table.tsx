@@ -120,7 +120,7 @@ export function ProjectsTable({
                 <ProjectIdentity row={row} />
               </TableCell>
               <TableCell>
-                <div className="truncate text-sm">{row.clientName || "-"}</div>
+                <div className="truncate text-xs">{row.clientName || "-"}</div>
               </TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-1">
@@ -132,19 +132,19 @@ export function ProjectsTable({
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                <div className="font-mono text-sm">{yen.format(row.billingTotal)}</div>
+                <div className="font-mono text-xs">{yen.format(row.billingTotal)}</div>
                 <div className="text-xs text-muted-foreground">{row.billingCount}回請求</div>
               </TableCell>
               <TableCell>
-                <div className="text-sm">請求 {yen.format(row.invoicedAmount)}</div>
-                <div className="text-sm">入金 {yen.format(row.paidIncomeAmount)}</div>
-                <div className={row.unpaidIncomeAmount > 0 ? "text-sm font-medium text-amber-700" : "text-sm text-muted-foreground"}>
+                <div className="text-xs">請求 {yen.format(row.invoicedAmount)}</div>
+                <div className="text-xs">入金 {yen.format(row.paidIncomeAmount)}</div>
+                <div className={row.unpaidIncomeAmount > 0 ? "text-xs font-medium text-amber-700" : "text-xs text-muted-foreground"}>
                   未入金 {yen.format(row.unpaidIncomeAmount)}
                 </div>
               </TableCell>
               <TableCell>
-                <div className="text-sm">支払済 {yen.format(row.paidExpenseAmount)}</div>
-                <div className="text-sm font-medium">粗利 {yen.format(row.grossProfit)}</div>
+                <div className="text-xs">支払済 {yen.format(row.paidExpenseAmount)}</div>
+                <div className="text-xs font-medium">粗利 {yen.format(row.grossProfit)}</div>
               </TableCell>
               <TableCell>
                 <ContractUpload canEdit={canEdit} row={row} />
@@ -176,7 +176,7 @@ function ProjectIdentity({ row }: { row: ProjectListRow }) {
   return (
     <div className="min-w-0">
       <div className="text-xs font-medium text-muted-foreground">No. {row.index}</div>
-      <Link href={`/projects/${row.id}`} className="block truncate font-medium hover:underline">
+      <Link href={`/projects/${row.id}`} className="block truncate text-xs font-medium hover:underline">
         {row.name}
       </Link>
     </div>
@@ -196,13 +196,13 @@ function EditRow({
 }) {
   return (
     <TableRow className="bg-muted/40">
-      <TableCell colSpan={9} className="p-3">
-        <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_180px_120px_130px_150px_100px_auto]">
+      <TableCell colSpan={9} className="p-2">
+        <form action={updateProjectInline} className="grid items-end gap-2 md:grid-cols-[1fr_170px_110px_120px_140px_90px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <input type="hidden" name="returnPath" value="/projects" />
           <div>
             <div className="mb-1 text-xs text-muted-foreground">案件名</div>
-            <Input name="name" defaultValue={row.name} required />
+            <Input name="name" defaultValue={row.name} required className="h-7 text-xs" />
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">クライアント</div>
@@ -217,7 +217,7 @@ function EditRow({
           <div>
             <div className="mb-1 text-xs text-muted-foreground">会社</div>
             <Select name="company" defaultValue={row.company}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-7 w-full text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -241,17 +241,17 @@ function EditRow({
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">請求総額</div>
-            <Input name="contractAmount" type="number" min="0" step="1" defaultValue={row.billingTotal} required />
+            <Input name="contractAmount" type="number" min="0" step="1" defaultValue={row.billingTotal} required className="h-7 text-xs" />
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">請求回数</div>
-            <Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={row.billingCount} required />
+            <Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={row.billingCount} required className="h-7 text-xs" />
           </div>
           <div className="flex gap-2">
             <Button type="submit" size="sm">
               保存
             </Button>
-            <Button type="button" size="icon" variant="outline" className="h-9 w-9" onClick={onCancel} aria-label="編集をキャンセル">
+            <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={onCancel} aria-label="編集をキャンセル">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -341,7 +341,7 @@ function SortableHead({
     <TableHead className={className}>
       <button
         type="button"
-        className="inline-flex w-full items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        className="inline-flex w-full items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
         onClick={() => onSort(sortKey)}
       >
         <span>{label}</span>

@@ -108,7 +108,7 @@ export function DashboardTable({
                     <ProjectIdentity row={row} />
                   </TableCell>
                   <TableCell>
-                    <div className="truncate text-sm">{row.clientName || "-"}</div>
+                    <div className="truncate text-xs">{row.clientName || "-"}</div>
                   </TableCell>
                   <TableCell>
                     <CompanyBadge company={row.company} />
@@ -116,7 +116,7 @@ export function DashboardTable({
                   <TableCell>
                     <StageBadge stage={row.stage} />
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">{yen.format(row.billingTotal)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs">{yen.format(row.billingTotal)}</TableCell>
                   <TableCell className="text-right">{row.billingCount}回</TableCell>
                   <TableCell>
                     <InstallmentButtons canEdit={canEdit} row={row} />
@@ -158,13 +158,13 @@ function EditRow({
 }) {
   return (
     <TableRow className="bg-muted/40">
-      <TableCell colSpan={8} className="p-3">
-        <form action={updateProjectInline} className="grid items-end gap-3 md:grid-cols-[1fr_180px_120px_130px_150px_100px_auto]">
+      <TableCell colSpan={8} className="p-2">
+        <form action={updateProjectInline} className="grid items-end gap-2 md:grid-cols-[1fr_170px_110px_120px_140px_90px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <input type="hidden" name="returnPath" value="/dashboard" />
           <div>
             <div className="mb-1 text-xs text-muted-foreground">案件名</div>
-            <Input name="name" defaultValue={row.name} required />
+            <Input name="name" defaultValue={row.name} required className="h-7 text-xs" />
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">クライアント</div>
@@ -179,7 +179,7 @@ function EditRow({
           <div>
             <div className="mb-1 text-xs text-muted-foreground">会社</div>
             <Select name="company" defaultValue={row.company}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-7 w-full text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -203,17 +203,17 @@ function EditRow({
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">請求総額</div>
-            <Input name="contractAmount" type="number" min="0" step="1" defaultValue={row.billingTotal} required />
+            <Input name="contractAmount" type="number" min="0" step="1" defaultValue={row.billingTotal} required className="h-7 text-xs" />
           </div>
           <div>
             <div className="mb-1 text-xs text-muted-foreground">請求回数</div>
-            <Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={row.billingCount} required />
+            <Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={row.billingCount} required className="h-7 text-xs" />
           </div>
           <div className="flex gap-2">
             <Button type="submit" size="sm">
               保存
             </Button>
-            <Button type="button" size="icon" variant="outline" className="h-9 w-9" onClick={onCancel} aria-label="編集をキャンセル">
+            <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={onCancel} aria-label="編集をキャンセル">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -227,7 +227,7 @@ function ProjectIdentity({ row }: { row: DashboardRow }) {
   return (
     <div className="min-w-0">
       <div className="text-xs font-medium text-muted-foreground">No. {row.index}</div>
-      <Link href={`/projects/${row.id}`} className="block truncate font-medium hover:underline">
+      <Link href={`/projects/${row.id}`} className="block truncate text-xs font-medium hover:underline">
         {row.name}
       </Link>
     </div>
@@ -235,7 +235,7 @@ function ProjectIdentity({ row }: { row: DashboardRow }) {
 }
 
 function InstallmentButtons({ canEdit, row }: { canEdit: boolean; row: DashboardRow }) {
-  if (!canEdit) return <span className="text-sm text-muted-foreground">-</span>;
+  if (!canEdit) return <span className="text-xs text-muted-foreground">-</span>;
   if (row.billingTotal <= 0) return <span className="text-xs text-muted-foreground">総額を入力</span>;
 
   return (
@@ -301,7 +301,7 @@ function SortableHead({
     <TableHead className={className}>
       <button
         type="button"
-        className="inline-flex w-full items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        className="inline-flex w-full items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
         onClick={() => onSort(sortKey)}
       >
         <span>{label}</span>
