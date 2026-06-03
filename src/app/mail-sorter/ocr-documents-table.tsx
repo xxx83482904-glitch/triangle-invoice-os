@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, FileText, Folder, Image as ImageIcon, Save, Trash2 } from "lucide-react";
+import { ExternalLink, FileText, Folder, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { deleteOcrDocument, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +98,11 @@ function monthLabel(value: string) {
   return monthFormatter.format(new Date(`${value}-01T00:00:00`));
 }
 
+function shortMonthLabel(value: string) {
+  const [year, month] = value.split("-");
+  return `${year.slice(-2)}/${month}`;
+}
+
 function selectClass() {
   return "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 }
@@ -160,6 +165,19 @@ function stopEditClick(event: React.MouseEvent<HTMLElement>) {
   event.stopPropagation();
 }
 
+type ColumnMode = "compact" | "normal";
+
+const folderGridColumns: Record<ColumnMode, Record<ColumnMode, string>> = {
+  compact: {
+    compact: "lg:grid-cols-[92px_150px_minmax(0,1fr)]",
+    normal: "lg:grid-cols-[92px_240px_minmax(0,1fr)]",
+  },
+  normal: {
+    compact: "lg:grid-cols-[200px_150px_minmax(0,1fr)]",
+    normal: "lg:grid-cols-[200px_240px_minmax(0,1fr)]",
+  },
+};
+
 export function OcrDocumentsTable({
   canEdit,
   company,
@@ -189,23 +207,53 @@ export function OcrDocumentsTable({
   const activeRow = activeRows.find((row) => row.id === activeRowId) ?? activeRows[0] ?? null;
   const [dialogRow, setDialogRow] = useState<OcrDocumentListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OcrDocumentListItem | null>(null);
+  const [monthColumn, setMonthColumn] = useState<ColumnMode>("normal");
+  const [senderColumn, setSenderColumn] = useState<ColumnMode>("normal");
+  const [showEditor, setShowEditor] = useState(false);
 
   const chooseMonth = (month: string, monthRows: OcrDocumentListItem[]) => {
     setActiveMonth(month);
     setActiveRowId(monthRows[0]?.id ?? null);
   };
 
+  const openDropzone = () => {
+    document.getElementById("mail-dropzone")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
     <>
       <Card>
-        <CardHeader>
-          <CardTitle>郵便物フォルダー</CardTitle>
+        <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle>郵便物フォルダー</CardTitle>
+            <div className="mt-1 text-xs text-muted-foreground">追加・変更・削除と、カラム幅の切り替えができます。</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={openDropzone}>
+              <Plus className="h-3.5 w-3.5" />
+              追加
+            </Button>
+            <Button type="button" size="sm" variant={showEditor ? "default" : "outline"} className="gap-1" onClick={() => setShowEditor((value) => !value)} disabled={!canEdit || !activeRow}>
+              <Pencil className="h-3.5 w-3.5" />
+              変更
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setMonthColumn((value) => (value === "normal" ? "compact" : "normal"))}>
+              {monthColumn === "normal" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              月{monthColumn === "normal" ? "小" : "広"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setSenderColumn((value) => (value === "normal" ? "compact" : "normal"))}>
+              {senderColumn === "normal" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              発送元{senderColumn === "normal" ? "小" : "広"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {rows.length ? (
-            <div className="grid min-h-[640px] overflow-hidden rounded-lg border lg:grid-cols-[220px_260px_1fr]">
+            <div className={`grid min-h-[640px] overflow-hidden rounded-lg border ${folderGridColumns[monthColumn][senderColumn]}`}>
               <aside className="border-b bg-muted/20 p-3 lg:border-r lg:border-b-0">
-                <div className="mb-3 text-xs font-medium text-muted-foreground">月</div>
+                <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                  <span>{monthColumn === "compact" ? "月" : "月フォルダー"}</span>
+                </div>
                 <div className="space-y-2">
                   {groups.map(([month, monthRows]) => {
                     const isActive = month === activeMonth;
@@ -220,8 +268,8 @@ export function OcrDocumentsTable({
                       >
                         <Folder className={`h-5 w-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{monthLabel(month)}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">{monthRows.length}件</div>
+                          <div className="truncate text-sm font-medium">{monthColumn === "compact" ? shortMonthLabel(month) : monthLabel(month)}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{monthColumn === "compact" ? monthRows.length : `${monthRows.length}件`}</div>
                         </div>
                       </button>
                     );
@@ -245,9 +293,9 @@ export function OcrDocumentsTable({
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
-                          <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
+                          {senderColumn === "normal" ? <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge> : null}
                         </div>
-                        <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div>
+                        {senderColumn === "normal" ? <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div> : null}
                       </button>
                     );
                   })}
@@ -265,6 +313,10 @@ export function OcrDocumentsTable({
                       <div className="flex gap-2">
                         <Button type="button" variant="outline" size="sm" onClick={() => setDialogRow(activeRow)}>
                           拡大表示
+                        </Button>
+                        <Button type="button" variant={showEditor ? "default" : "outline"} size="sm" onClick={() => setShowEditor((value) => !value)} disabled={!canEdit}>
+                          <Pencil className="h-4 w-4" />
+                          変更
                         </Button>
                         {activeRow.fileUrl ? (
                           <Button asChild variant="outline" size="sm">
@@ -337,7 +389,7 @@ export function OcrDocumentsTable({
                       </div>
                     </div>
 
-                    <div className="rounded-lg border bg-muted/10 p-4" onClick={stopEditClick}>
+                    {showEditor ? <div className="rounded-lg border bg-muted/10 p-4" onClick={stopEditClick}>
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div className="text-sm font-medium">編集</div>
                         <Button type="submit" form={`ocr-edit-${activeRow.id}`} disabled={!canEdit} size="sm" className="gap-1">
@@ -443,7 +495,7 @@ export function OcrDocumentsTable({
                         </div>
                       </div>
                       </div>
-                    </div>
+                    </div> : null}
                   </div>
                 ) : (
                   <div className="flex h-full min-h-80 items-center justify-center text-sm text-muted-foreground">発送元を選択してください。</div>

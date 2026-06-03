@@ -73,7 +73,7 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
   };
 
   return (
-    <Card>
+    <Card id="mail-dropzone">
       <CardContent className="p-3">
         <div
           className={`flex min-h-28 cursor-pointer flex-col justify-center gap-4 rounded-md border border-dashed p-4 transition md:flex-row md:items-center md:justify-between ${
