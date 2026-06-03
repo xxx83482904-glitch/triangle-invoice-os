@@ -96,6 +96,27 @@ docker compose up -d --build
 
 Use the same setup on Alibaba Cloud ECS, XServer VPS, or another Ubuntu VPS with Docker.
 
+## Synology Deployment
+
+Synology DSM can run this app with Container Manager as a Docker Compose project.
+
+```bash
+cd deploy/synology
+copy .env.example .env
+docker compose up -d --build
+```
+
+On DSM, create a Container Manager Project from `deploy/synology/docker-compose.yml`.
+The app uses:
+
+- `deploy/synology/data` for app data
+- `deploy/synology/uploads` for uploaded PDFs/images
+
+Open `http://<synology-ip>:3000`.
+
+For LAN HTTP testing, keep `SESSION_COOKIE_SECURE=false`.
+For HTTPS through Synology Reverse Proxy, set `SESSION_COOKIE_SECURE=true`.
+
 ## Security Notes
 
 - Login is required

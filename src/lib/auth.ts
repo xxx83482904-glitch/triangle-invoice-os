@@ -9,6 +9,12 @@ import type { User } from "@/lib/types";
 
 const cookieName = "triangle-session";
 
+function secureSessionCookie() {
+  if (process.env.SESSION_COOKIE_SECURE === "false") return false;
+  if (process.env.SESSION_COOKIE_SECURE === "true") return true;
+  return process.env.NODE_ENV === "production";
+}
+
 function secretKey() {
   return new TextEncoder().encode(
     process.env.SESSION_SECRET ?? "triangle-invoice-os-local-development-secret",
@@ -39,7 +45,7 @@ export async function signIn(email: string, password: string) {
   cookieStore.set(cookieName, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: secureSessionCookie(),
     path: "/",
     maxAge: 60 * 60 * 8,
   });

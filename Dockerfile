@@ -22,6 +22,7 @@ RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+RUN mkdir -p /app/data /app/public/uploads/received-invoices && chown -R nextjs:nodejs /app/data /app/public/uploads
 
 USER nextjs
 EXPOSE 3000
