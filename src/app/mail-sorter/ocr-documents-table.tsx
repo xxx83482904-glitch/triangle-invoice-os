@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ExternalLink, FileText, Folder, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { deleteOcrDocument, updateOcrDocumentInline } from "@/app/actions";
+import { useMemo, useState, useTransition } from "react";
+import { createMailFolder, deleteMailFolder, deleteOcrDocument, moveOcrDocumentToMonth, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +37,7 @@ export type OcrDocumentListItem = {
   };
   fileName: string;
   fileUrl?: string;
+  folderMonth?: string;
   id: string;
   mailDocumentId?: string;
   memo?: string;
@@ -45,6 +47,11 @@ export type OcrDocumentListItem = {
   receivedInvoiceId?: string;
   savedAs: string;
   senderName?: string;
+};
+
+type FolderOption = {
+  label?: string;
+  month: string;
 };
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
@@ -233,22 +240,31 @@ export function OcrDocumentsTable({
   rows,
   statusOptions,
   vendors,
+  folders,
 }: {
   canEdit: boolean;
   company: CompanyScope;
+  folders: FolderOption[];
   projects: Option[];
   rows: OcrDocumentListItem[];
   statusOptions: Option[];
   vendors: Option[];
 }) {
+  const router = useRouter();
+  const [isMoving, startMoveTransition] = useTransition();
+  const [draggedRow, setDraggedRow] = useState<OcrDocumentListItem | null>(null);
   const groups = useMemo(() => {
     const grouped = new Map<string, OcrDocumentListItem[]>();
     for (const row of rows) {
-      const key = monthKey(row.createdAt);
+      const key = row.folderMonth || monthKey(row.createdAt);
       grouped.set(key, [...(grouped.get(key) ?? []), row]);
     }
+    for (const folder of folders) {
+      if (!grouped.has(folder.month)) grouped.set(folder.month, []);
+    }
     return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
-  }, [rows]);
+  }, [folders, rows]);
+  const customFolderMonths = useMemo(() => new Set(folders.map((folder) => folder.month)), [folders]);
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
   const activeRows = groups.find(([month]) => month === activeMonth)?.[1] ?? [];
   const [activeRowId, setActiveRowId] = useState<string | null>(activeRows[0]?.id ?? null);
@@ -268,6 +284,24 @@ export function OcrDocumentsTable({
     document.getElementById("mail-dropzone")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const moveRowToMonth = (row: OcrDocumentListItem | null, targetMonth: string) => {
+    if (!row || !canEdit) return;
+    const sourceMonth = row.folderMonth || monthKey(row.createdAt);
+    if (sourceMonth === targetMonth) return;
+    const formData = new FormData();
+    formData.set("company", company);
+    formData.set("targetMonth", targetMonth);
+    if (row.mailDocumentId) formData.set("mailDocumentId", row.mailDocumentId);
+    if (row.receivedInvoiceId) formData.set("receivedInvoiceId", row.receivedInvoiceId);
+    startMoveTransition(async () => {
+      await moveOcrDocumentToMonth(formData);
+      setActiveMonth(targetMonth);
+      setActiveRowId(row.id);
+      setDraggedRow(null);
+      router.refresh();
+    });
+  };
+
   return (
     <>
       <Card>
@@ -277,6 +311,14 @@ export function OcrDocumentsTable({
             <div className="mt-1 text-xs text-muted-foreground">追加・変更・削除と、カラム幅の切り替えができます。</div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <form action={createMailFolder} className="flex items-center gap-2">
+              <input type="hidden" name="company" value={company} />
+              <Input name="month" type="month" className="h-8 w-32 text-xs" disabled={!canEdit} />
+              <Button type="submit" size="sm" variant="outline" className="gap-1" disabled={!canEdit}>
+                <Folder className="h-3.5 w-3.5" />
+                フォルダー
+              </Button>
+            </form>
             <Button type="button" size="sm" variant="outline" className="gap-1" onClick={openDropzone}>
               <Plus className="h-3.5 w-3.5" />
               追加
@@ -296,30 +338,50 @@ export function OcrDocumentsTable({
           </div>
         </CardHeader>
         <CardContent>
-          {rows.length ? (
+          {groups.length ? (
             <div className={`grid min-h-[640px] overflow-hidden rounded-lg border ${folderGridColumns[monthColumn][senderColumn]}`}>
               <aside className="border-b bg-muted/20 p-3 lg:border-r lg:border-b-0">
                 <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                   <span>{monthColumn === "compact" ? "月" : "月フォルダー"}</span>
+                  {isMoving ? <span className="text-primary">移動中</span> : null}
                 </div>
                 <div className="space-y-2">
                   {groups.map(([month, monthRows]) => {
                     const isActive = month === activeMonth;
+                    const canDeleteFolder = canEdit && customFolderMonths.has(month) && monthRows.length === 0;
                     return (
-                      <button
-                        key={month}
-                        type="button"
-                        className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition ${
-                          isActive ? "bg-background shadow-sm ring-1 ring-primary/30" : "hover:bg-background"
-                        }`}
-                        onClick={() => chooseMonth(month, monthRows)}
-                      >
-                        <Folder className={`h-5 w-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{monthColumn === "compact" ? shortMonthLabel(month) : monthLabel(month)}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">{monthColumn === "compact" ? monthRows.length : `${monthRows.length}件`}</div>
-                        </div>
-                      </button>
+                      <div key={month} className="group relative">
+                        <button
+                          type="button"
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition ${
+                            isActive ? "bg-background shadow-sm ring-1 ring-primary/30" : "hover:bg-background"
+                          } ${draggedRow ? "ring-1 ring-dashed ring-primary/30" : ""}`}
+                          onClick={() => chooseMonth(month, monthRows)}
+                          onDragOver={(event) => {
+                            if (!canEdit || !draggedRow) return;
+                            event.preventDefault();
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            moveRowToMonth(draggedRow, month);
+                          }}
+                        >
+                          <Folder className={`h-5 w-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium">{monthColumn === "compact" ? shortMonthLabel(month) : monthLabel(month)}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">{monthColumn === "compact" ? monthRows.length : `${monthRows.length}件`}</div>
+                          </div>
+                        </button>
+                        {canDeleteFolder ? (
+                          <form action={deleteMailFolder} className="absolute top-2 right-2 opacity-0 transition group-hover:opacity-100">
+                            <input type="hidden" name="company" value={company} />
+                            <input type="hidden" name="month" value={month} />
+                            <Button type="submit" size="icon" variant="ghost" className="h-7 w-7 text-destructive">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </form>
+                        ) : null}
+                      </div>
                     );
                   })}
                 </div>
@@ -334,10 +396,17 @@ export function OcrDocumentsTable({
                       <button
                         key={row.id}
                         type="button"
+                        draggable={canEdit}
                         className={`w-full rounded-lg border px-3 py-3 text-left transition ${
                           isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"
-                        }`}
+                        } ${draggedRow?.id === row.id ? "cursor-grabbing opacity-60" : "cursor-grab"}`}
                         onClick={() => setActiveRowId(row.id)}
+                        onDragStart={(event) => {
+                          setDraggedRow(row);
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", row.id);
+                        }}
+                        onDragEnd={() => setDraggedRow(null)}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>

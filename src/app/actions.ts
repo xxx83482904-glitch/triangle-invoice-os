@@ -12,6 +12,7 @@ import type {
   IssuedInvoice,
   IssuedInvoiceItem,
   MailDocumentCategory,
+  MailFolder,
   Payment,
   Project,
   ReceivedInvoice,
@@ -67,6 +68,10 @@ function addDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00`);
   value.setDate(value.getDate() + days);
   return value.toISOString().slice(0, 10);
+}
+
+function validMonth(value: string) {
+  return /^\d{4}-\d{2}$/.test(value) ? value : "";
 }
 
 function nextInvoiceNumber(data: AppData, timestamp: string) {
@@ -712,6 +717,133 @@ export async function deleteOcrDocument(formData: FormData) {
   revalidatePath("/received-invoices");
   revalidatePath("/dashboard");
   redirect(`/mail-sorter?company=${company}`);
+}
+
+export async function createMailFolder(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("権限がありません");
+  }
+
+  const company = companyFromParam(value(formData, "company"));
+  const month = validMonth(value(formData, "month"));
+  if (!month) throw new Error("月を選択してください");
+
+  const timestamp = now();
+  await mutateData(user.id, "CREATE_MAIL_FOLDER", "MailFolder", month, (draft) => {
+    const existing = draft.mailFolders.find(
+      (folder) => !folder.deletedAt && companyFromParam(folder.company) === company && folder.month === month,
+    );
+    if (existing) return existing;
+
+    const folder: MailFolder = {
+      id: newId(),
+      company,
+      month,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    draft.mailFolders.unshift(folder);
+    return folder;
+  });
+
+  revalidatePath("/mail-sorter");
+}
+
+export async function deleteMailFolder(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("権限がありません");
+  }
+
+  const company = companyFromParam(value(formData, "company"));
+  const month = validMonth(value(formData, "month"));
+  if (!month) throw new Error("月を選択してください");
+
+  const timestamp = now();
+  const data = await readData();
+  const before = data.mailFolders.find((folder) => !folder.deletedAt && companyFromParam(folder.company) === company && folder.month === month);
+
+  await mutateData(user.id, "DELETE_MAIL_FOLDER", "MailFolder", month, (draft) => {
+    const hasMailDocuments = draft.mailDocuments.some(
+      (document) =>
+        !document.deletedAt &&
+        companyFromParam(document.company) === company &&
+        ((document.folderMonth && document.folderMonth === month) || (!document.folderMonth && document.createdAt.slice(0, 7) === month)),
+    );
+    const hasReceivedInvoices = draft.receivedInvoices.some(
+      (invoice) => {
+        const project = draft.projects.find((item) => item.id === invoice.projectId && !item.deletedAt);
+        return (
+          !invoice.deletedAt &&
+          project &&
+          companyFromParam(project.company) === company &&
+          ((invoice.folderMonth && invoice.folderMonth === month) || (!invoice.folderMonth && invoice.createdAt.slice(0, 7) === month))
+        );
+      },
+    );
+    if (hasMailDocuments || hasReceivedInvoices) throw new Error("書類が入っているフォルダーは削除できません");
+
+    const folder = draft.mailFolders.find((item) => !item.deletedAt && companyFromParam(item.company) === company && item.month === month);
+    if (!folder) return { month, deleted: false };
+    folder.deletedAt = timestamp;
+    folder.updatedAt = timestamp;
+    return folder;
+  }, before);
+
+  revalidatePath("/mail-sorter");
+}
+
+export async function moveOcrDocumentToMonth(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("権限がありません");
+  }
+
+  const mailDocumentId = optional(formData, "mailDocumentId");
+  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
+  const company = companyFromParam(value(formData, "company"));
+  const targetMonth = validMonth(value(formData, "targetMonth"));
+  if (!targetMonth) throw new Error("移動先フォルダーを選択してください");
+
+  const timestamp = now();
+  const data = await readData();
+  const before = {
+    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
+    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
+  };
+
+  await mutateData(user.id, "MOVE_OCR_DOCUMENT_TO_MONTH", "OcrDocument", mailDocumentId ?? receivedInvoiceId ?? "unknown", (draft) => {
+    const mailDocument = mailDocumentId ? draft.mailDocuments.find((item) => item.id === mailDocumentId && !item.deletedAt) : undefined;
+    const receivedInvoice = receivedInvoiceId ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId && !item.deletedAt) : undefined;
+    if (!mailDocument && !receivedInvoice) throw new Error("書類が見つかりません");
+
+    const existingFolder = draft.mailFolders.find(
+      (folder) => !folder.deletedAt && companyFromParam(folder.company) === company && folder.month === targetMonth,
+    );
+    if (!existingFolder) {
+      draft.mailFolders.unshift({
+        id: newId(),
+        company,
+        month: targetMonth,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+    }
+
+    if (mailDocument) {
+      mailDocument.folderMonth = targetMonth;
+      mailDocument.updatedAt = timestamp;
+    }
+    if (receivedInvoice) {
+      receivedInvoice.folderMonth = targetMonth;
+      receivedInvoice.updatedAt = timestamp;
+    }
+    return { mailDocument, receivedInvoice, targetMonth };
+  }, before);
+
+  revalidatePath("/mail-sorter");
+  revalidatePath("/received-invoices");
 }
 
 export async function recordExpensePayment(formData: FormData) {

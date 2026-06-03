@@ -180,6 +180,7 @@ export type ReceivedInvoice = {
   id: string;
   vendorId: string;
   projectId: string;
+  folderMonth?: string;
   receivedDate: string;
   issueDate: string;
   dueDate: string;
@@ -205,6 +206,7 @@ export type MailDocument = {
   id: string;
   company?: "CHINA" | "JAPAN";
   category: MailDocumentCategory;
+  folderMonth?: string;
   title: string;
   senderName?: string;
   fileUrl: string;
@@ -215,6 +217,16 @@ export type MailDocument = {
   relatedReceivedInvoiceId?: string;
   memo?: string;
   uploadedById: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+};
+
+export type MailFolder = {
+  id: string;
+  company?: "CHINA" | "JAPAN";
+  month: string;
+  label?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -277,6 +289,7 @@ export type AppData = {
   issuedInvoices: IssuedInvoice[];
   issuedInvoiceItems: IssuedInvoiceItem[];
   receivedInvoices: ReceivedInvoice[];
+  mailFolders: MailFolder[];
   mailDocuments: MailDocument[];
   payments: Payment[];
   attachments: Attachment[];

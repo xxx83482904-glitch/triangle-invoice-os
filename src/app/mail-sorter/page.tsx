@@ -67,6 +67,7 @@ export default async function MailSorterPage({
           : undefined,
         fileName: document.originalFileName,
         fileUrl: document.fileUrl,
+        folderMonth: document.folderMonth,
         id: `mail-${document.id}`,
         mailDocumentId: document.id,
         memo: document.memo,
@@ -105,6 +106,7 @@ export default async function MailSorterPage({
         },
         fileName: invoice.originalFileName ?? "受領請求書",
         fileUrl: invoice.fileUrl,
+        folderMonth: invoice.folderMonth,
         id: `invoice-${invoice.id}`,
         memo: invoice.memo,
         mimeType: invoice.mimeType,
@@ -134,6 +136,9 @@ export default async function MailSorterPage({
         <OcrDocumentsTable
           canEdit={mayEdit}
           company={company}
+          folders={data.mailFolders
+            .filter((folder) => !folder.deletedAt && companyFromParam(folder.company) === company)
+            .map((folder) => ({ label: folder.label, month: folder.month }))}
           projects={projects.map((project) => ({ label: project.name, value: project.id }))}
           rows={rows}
           statusOptions={statusOptions}

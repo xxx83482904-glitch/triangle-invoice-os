@@ -203,6 +203,7 @@ function seedData(): AppData {
     issuedInvoices: [],
     issuedInvoiceItems: [],
     receivedInvoices: [],
+    mailFolders: [],
     mailDocuments: [],
     payments: [],
     attachments: [],
@@ -328,6 +329,7 @@ async function normalizeData(data: AppData) {
   if (!Array.isArray(data.issuedInvoices)) { data.issuedInvoices = []; changed = true; }
   if (!Array.isArray(data.issuedInvoiceItems)) { data.issuedInvoiceItems = []; changed = true; }
   if (!Array.isArray(data.receivedInvoices)) { data.receivedInvoices = []; changed = true; }
+  if (!Array.isArray(data.mailFolders)) { data.mailFolders = []; changed = true; }
   if (!Array.isArray(data.mailDocuments)) { data.mailDocuments = []; changed = true; }
   if (!Array.isArray(data.payments)) { data.payments = []; changed = true; }
   if (!Array.isArray(data.attachments)) { data.attachments = []; changed = true; }
@@ -429,6 +431,7 @@ export async function getActiveData() {
     projects: active(data.projects),
     issuedInvoices: active(data.issuedInvoices),
     receivedInvoices: active(data.receivedInvoices),
+    mailFolders: active(data.mailFolders),
     mailDocuments: active(data.mailDocuments),
     payments: active(data.payments),
     attachments: active(data.attachments),
