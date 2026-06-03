@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, FileText, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, FileText, LayoutGrid, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { companyFromParam, companyOptions, type CompanyScope } from "@/lib/company";
 
 const nav = [
-  { href: "/dashboard", label: "一覧", icon: Building2 },
+  { href: "/dashboard", label: "一覧", icon: LayoutGrid },
   { href: "/projects", label: "案件", icon: Building2 },
   { href: "/mail-sorter", label: "郵便仕分け", icon: Mail },
   { href: "/issued-invoices", label: "発行請求書", icon: FileText },
@@ -33,16 +33,16 @@ export function CompanySwitch() {
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <div className="grid grid-cols-2 gap-1 rounded-lg border bg-muted/40 p-1">
+    <div className="grid gap-2">
       {companyOptions.map((option) => (
         <Button
           key={option.value}
           asChild
-          size="sm"
+          size="xs"
           variant={company === option.value ? "default" : "ghost"}
-          className="h-8 px-2 text-xs"
+          className="h-8 w-full rounded-lg px-2 text-[11px]"
         >
-          <Link href={scopedHref(pathname, searchParams, option.value)}>{option.label}</Link>
+          <Link href={scopedHref(pathname, searchParams, option.value)}>{option.shortLabel}</Link>
         </Button>
       ))}
     </div>
@@ -77,23 +77,24 @@ export function AppNav() {
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <nav className="space-y-1">
+    <nav className="flex flex-col items-center gap-4">
       {nav.map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href;
         return (
-          <Button
+          <Link
             key={item.href}
-            asChild
-            variant={active ? "secondary" : "ghost"}
-            size="sm"
-            className="w-full justify-start gap-2"
+            href={navHref(item.href, company)}
+            title={item.label}
+            className={`grid h-12 w-12 place-items-center rounded-lg transition ${
+              active
+                ? "bg-primary/15 text-sidebar-accent-foreground shadow-sm"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            }`}
           >
-            <Link href={navHref(item.href, company)}>
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          </Button>
+            <Icon className="h-5 w-5" />
+            <span className="sr-only">{item.label}</span>
+          </Link>
         );
       })}
     </nav>
@@ -105,9 +106,9 @@ export function ScopedBrandLink({ compact = false }: { compact?: boolean }) {
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <Link href={navHref("/dashboard", company)} className={compact ? "font-semibold" : "block"}>
-      <div className="text-base font-semibold tracking-tight">TRIANGLE Invoice OS</div>
-      {!compact ? <div className="mt-1 text-xs text-muted-foreground">案件別のお金一覧</div> : null}
+    <Link href={navHref("/dashboard", company)} className={compact ? "font-semibold" : "flex flex-col items-center gap-2"}>
+      <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-lg font-bold text-primary-foreground shadow-sm">T</div>
+      {!compact ? <div className="sr-only">TRIANGLE Invoice OS</div> : null}
     </Link>
   );
 }
