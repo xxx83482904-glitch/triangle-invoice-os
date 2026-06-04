@@ -126,6 +126,20 @@ For browserless maintenance, enable DSM SSH for a trusted LAN/VPN user and run:
 This restarts the `triangle-invoice-os` container. On the live Synology setup,
 the container pulls the latest GitHub `main` branch and rebuilds on startup.
 
+For future updates without DSM browser control, enable the self-deploy endpoint
+on the live container:
+
+```env
+ALLOW_SELF_DEPLOY=true
+DEPLOY_TOKEN=<long-random-token>
+```
+
+Then trigger it:
+
+```powershell
+.\deploy\synology\deploy-api.ps1 -Token <long-random-token>
+```
+
 ## Security Notes
 
 - Login is required

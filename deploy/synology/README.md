@@ -80,6 +80,43 @@ Optional parameters:
 
 This avoids depending on the DSM web UI for routine deploys.
 
+## Self-Deploy API
+
+After one manual deploy that includes this feature, Synology can be updated
+without DSM browser operations or SSH. Enable it only on a trusted private
+deployment.
+
+Set these variables in the live container environment:
+
+```env
+ALLOW_SELF_DEPLOY=true
+DEPLOY_TOKEN=<long-random-token-at-least-32-characters>
+DEPLOY_BRANCH=main
+```
+
+Then trigger a deploy from a trusted machine:
+
+```powershell
+.\deploy\synology\deploy-api.ps1 -Token <long-random-token-at-least-32-characters>
+```
+
+Equivalent raw curl:
+
+```powershell
+curl.exe -k -X POST `
+  -H "x-deploy-token: <long-random-token-at-least-32-characters>" `
+  https://trianglejp14f.synology.me/api/admin/deploy
+```
+
+Check the latest deploy log:
+
+```powershell
+.\deploy\synology\deploy-api.ps1 -Token <long-random-token-at-least-32-characters> -LogsOnly
+```
+
+The endpoint fetches GitHub `main`, rebuilds the app, and then exits the app
+process so Docker's restart policy starts the fresh build. Keep the token secret.
+
 ## Default Login
 
 - `admin@triangle.local`
