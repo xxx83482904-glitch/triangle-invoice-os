@@ -50,6 +50,36 @@ SESSION_COOKIE_SECURE=true
 
 Then rebuild/restart the project.
 
+## Browserless Deploy For Maintenance
+
+For reliable maintenance from Codex, enable SSH on DSM and restart the app
+container from the local machine. The current live Synology container pulls the
+latest GitHub `main` branch and rebuilds the app when the container starts, so a
+container restart is enough to publish the newest pushed code.
+
+1. In DSM, open **Control Panel** -> **Terminal & SNMP**.
+2. Enable **SSH service** on port `22`.
+3. Keep SSH limited to LAN or VPN access. Do not expose port `22` directly to the
+   public internet.
+4. Use a DSM user that is allowed to run Container Manager / Docker commands.
+5. From this repository on Windows, run:
+
+```powershell
+.\deploy\synology\deploy-ssh.ps1 -User <dsm-user>
+```
+
+Optional parameters:
+
+```powershell
+.\deploy\synology\deploy-ssh.ps1 `
+  -User <dsm-user> `
+  -HostName 192.168.1.218 `
+  -ContainerName triangle-invoice-os `
+  -PublicUrl https://trianglejp14f.synology.me/login
+```
+
+This avoids depending on the DSM web UI for routine deploys.
+
 ## Default Login
 
 - `admin@triangle.local`

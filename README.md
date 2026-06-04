@@ -117,6 +117,15 @@ Open `http://<synology-ip>:3000`.
 For LAN HTTP testing, keep `SESSION_COOKIE_SECURE=false`.
 For HTTPS through Synology Reverse Proxy, set `SESSION_COOKIE_SECURE=true`.
 
+For browserless maintenance, enable DSM SSH for a trusted LAN/VPN user and run:
+
+```powershell
+.\deploy\synology\deploy-ssh.ps1 -User <dsm-user>
+```
+
+This restarts the `triangle-invoice-os` container. On the live Synology setup,
+the container pulls the latest GitHub `main` branch and rebuilds on startup.
+
 ## Security Notes
 
 - Login is required
