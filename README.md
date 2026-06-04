@@ -28,6 +28,10 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+Continuing from another PC or Codex session:
+
+- See [docs/codex-handoff.md](docs/codex-handoff.md)
+
 Demo accounts:
 
 - `admin@triangle.local` / `password123`
