@@ -3,6 +3,7 @@ import "server-only";
 import { createSign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { companyFromParam, matchesCompany, type CompanyScope } from "@/lib/company";
+import { effectiveOcrConfig } from "@/lib/ocr-settings";
 import type { AppData, MailDocumentCategory } from "@/lib/types";
 
 export type ExtractedText = {
@@ -329,10 +330,6 @@ function visionFeature() {
   return { type: "DOCUMENT_TEXT_DETECTION" };
 }
 
-function getVisionApiKey() {
-  return process.env.GOOGLE_CLOUD_VISION_API_KEY || process.env.GOOGLE_VISION_API_KEY || "";
-}
-
 async function loadServiceAccount(): Promise<GoogleServiceAccount | null> {
   const inline = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
   if (inline) return JSON.parse(inline) as GoogleServiceAccount;
@@ -381,7 +378,7 @@ async function getGoogleAccessToken() {
 }
 
 async function getVisionAuth(): Promise<VisionAuth | null> {
-  const key = getVisionApiKey();
+  const { googleVisionApiKey: key } = await effectiveOcrConfig();
   if (key) return { headers: {}, suffix: `?key=${encodeURIComponent(key)}` };
 
   const token = await getGoogleAccessToken();
@@ -491,10 +488,9 @@ async function extractWithLocalFallback(fileName: string, mimeType: string, buff
 }
 
 async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalysis | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const { openAiApiKey: apiKey, ocrAiModel: model } = await effectiveOcrConfig();
   if (!apiKey) return null;
 
-  const model = process.env.OCR_AI_MODEL || "gpt-5.4-mini";
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     body: JSON.stringify({
       messages: [

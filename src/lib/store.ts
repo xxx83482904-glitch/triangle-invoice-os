@@ -1,9 +1,10 @@
 import "server-only";
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { hashSync } from "bcryptjs";
 import { Pool } from "pg";
+import { runtimeDataDir } from "@/lib/runtime-paths";
 import { defaultSelectOptions } from "@/lib/select-options";
 import type {
   AppData,
@@ -17,8 +18,9 @@ import type {
 
 const DATA_VERSION = 3;
 const DB_STATE_KEY = "app-data";
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = runtimeDataDir();
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
+const LEGACY_DATA_FILE = path.join(process.cwd(), "data", "app-data.json");
 
 const now = () => new Date().toISOString();
 export const newId = () => crypto.randomUUID();
@@ -291,10 +293,18 @@ async function readRawData() {
   }
 
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  migrateLegacyDataFile();
   if (!existsSync(DATA_FILE)) {
     writeFileSync(DATA_FILE, JSON.stringify(seedData(), null, 2));
   }
   return JSON.parse(readFileSync(DATA_FILE, "utf8")) as AppData;
+}
+
+function migrateLegacyDataFile() {
+  if (path.resolve(DATA_FILE) === path.resolve(LEGACY_DATA_FILE) || !existsSync(LEGACY_DATA_FILE)) return;
+  if (!existsSync(DATA_FILE) || statSync(LEGACY_DATA_FILE).mtimeMs > statSync(DATA_FILE).mtimeMs) {
+    copyFileSync(LEGACY_DATA_FILE, DATA_FILE);
+  }
 }
 
 async function writeRawData(data: AppData) {

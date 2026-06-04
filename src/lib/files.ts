@@ -5,11 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Pool } from "pg";
-
-function projectRoot() {
-  const cwd = process.cwd();
-  return cwd.endsWith(path.join(".next", "standalone")) ? path.resolve(cwd, "..", "..") : cwd;
-}
+import { projectRoot } from "@/lib/runtime-paths";
 
 const uploadRoot =
   process.env.UPLOAD_DIR ??
