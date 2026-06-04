@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
-import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
+import { allowedUploadTypes, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { extractDocumentText, inferReceivedInvoiceWithAi } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
 
     const id = newId();
     const timestamp = new Date().toISOString();
-    const safeName = `${id}${extension}`;
+    const safeName = readableUploadFileName({ date: timestamp.slice(0, 10), extension, id, senderName: inferred.vendorName });
     await saveReceivedInvoiceFile(safeName, buffer, file.type);
 
     const invoice: ReceivedInvoice = {
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
       total: inferred.total,
       status: "REVIEWING",
       fileUrl: receivedInvoiceFileUrl(safeName),
-      originalFileName: file.name,
+      originalFileName: safeName,
       mimeType: file.type,
       ocrText: extracted.text,
       memo: [inferred.memo, ...inferred.warnings].join("\n"),
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
         relatedType: "ReceivedInvoice",
         relatedId: id,
         fileUrl: invoice.fileUrl ?? "",
-        fileName: file.name,
+        fileName: safeName,
         mimeType: file.type,
         uploadedById: user.id,
         createdAt: timestamp,
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
 
     results.push({
       confidence: inferred.confidence,
-      fileName: file.name,
+      fileName: safeName,
       invoice: {
         dueDate: inferred.dueDate,
         issueDate: inferred.issueDate,

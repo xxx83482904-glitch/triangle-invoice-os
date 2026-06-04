@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, FileText, Folder, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { CheckSquare, Download, ExternalLink, FileText, Folder, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
-import { createMailFolder, deleteMailFolder, deleteOcrDocument, moveOcrDocumentToMonth, updateOcrDocumentInline } from "@/app/actions";
+import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -274,10 +274,41 @@ export function OcrDocumentsTable({
   const [monthColumn, setMonthColumn] = useState<ColumnMode>("normal");
   const [senderColumn, setSenderColumn] = useState<ColumnMode>("normal");
   const [showEditor, setShowEditor] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
+  const selectedActiveCount = activeRows.filter((row) => selectedIds.has(row.id)).length;
+  const allActiveSelected = activeRows.length > 0 && selectedActiveCount === activeRows.length;
+  const exportHref = `/api/export/ocr-documents?company=${company}${
+    selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
+  }`;
 
   const chooseMonth = (month: string, monthRows: OcrDocumentListItem[]) => {
     setActiveMonth(month);
     setActiveRowId(monthRows[0]?.id ?? null);
+  };
+
+  const toggleRowSelection = (row: OcrDocumentListItem) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(row.id)) {
+        next.delete(row.id);
+      } else {
+        next.add(row.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleActiveMonthSelection = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allActiveSelected) {
+        activeRows.forEach((row) => next.delete(row.id));
+      } else {
+        activeRows.forEach((row) => next.add(row.id));
+      }
+      return next;
+    });
   };
 
   const openDropzone = () => {
@@ -311,6 +342,37 @@ export function OcrDocumentsTable({
             <div className="mt-1 text-xs text-muted-foreground">追加・変更・削除と、カラム幅の切り替えができます。</div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleActiveMonthSelection} disabled={!activeRows.length}>
+              {allActiveSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+              {allActiveSelected ? "解除" : "表示中を選択"}
+            </Button>
+            <Button asChild size="sm" variant="outline" className="gap-1">
+              <a href={exportHref}>
+                <Download className="h-3.5 w-3.5" />
+                {selectedRows.length ? `${selectedRows.length}件CSV` : "全件CSV"}
+              </a>
+            </Button>
+            <form
+              action={deleteOcrDocumentsBulk}
+              className="flex"
+              onSubmit={(event) => {
+                if (!selectedRows.length || !confirm(`${selectedRows.length}件の書類と未参照のアップロードファイルを削除します。よろしいですか？`)) {
+                  event.preventDefault();
+                }
+              }}
+            >
+              <input type="hidden" name="company" value={company} />
+              {selectedRows.map((row) => (
+                <span key={row.id}>
+                  {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                  {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                </span>
+              ))}
+              <Button type="submit" size="sm" variant="outline" className="gap-1 text-destructive" disabled={!canEdit || !selectedRows.length}>
+                <Trash2 className="h-3.5 w-3.5" />
+                選択削除
+              </Button>
+            </form>
             <form action={createMailFolder} className="flex items-center gap-2">
               <input type="hidden" name="company" value={company} />
               <Input name="month" type="month" className="h-8 w-32 text-xs" disabled={!canEdit} />
@@ -388,19 +450,30 @@ export function OcrDocumentsTable({
               </aside>
 
               <aside className="border-b p-3 lg:border-r lg:border-b-0">
-                <div className="mb-3 text-xs font-medium text-muted-foreground">発送元</div>
+                <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                  <span>発送元</span>
+                  {selectedRows.length ? <span>{selectedRows.length}件選択</span> : null}
+                </div>
                 <div className="space-y-2">
                   {activeRows.map((row) => {
                     const isActive = row.id === activeRow?.id;
+                    const isSelected = selectedIds.has(row.id);
                     return (
-                      <button
+                      <div
                         key={row.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         draggable={canEdit}
                         className={`w-full rounded-lg border px-3 py-3 text-left transition ${
                           isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"
                         } ${draggedRow?.id === row.id ? "cursor-grabbing opacity-60" : "cursor-grab"}`}
                         onClick={() => setActiveRowId(row.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setActiveRowId(row.id);
+                          }
+                        }}
                         onDragStart={(event) => {
                           setDraggedRow(row);
                           event.dataTransfer.effectAllowed = "move";
@@ -408,12 +481,26 @@ export function OcrDocumentsTable({
                         }}
                         onDragEnd={() => setDraggedRow(null)}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
-                          {senderColumn === "normal" ? <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge> : null}
+                        <div className="flex items-start gap-2">
+                          {canEdit ? (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              className="mt-0.5 h-4 w-4 rounded border-muted-foreground/40"
+                              aria-label={`${shippingSenderName(row)}を選択`}
+                              onChange={() => toggleRowSelection(row)}
+                              onClick={(event) => event.stopPropagation()}
+                            />
+                          ) : null}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
+                              {senderColumn === "normal" ? <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge> : null}
+                            </div>
+                            {senderColumn === "normal" ? <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div> : null}
+                          </div>
                         </div>
-                        {senderColumn === "normal" ? <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div> : null}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

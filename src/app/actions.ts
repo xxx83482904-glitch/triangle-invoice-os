@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, type CompanyScope } from "@/lib/company";
+import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, can } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
 import type {
@@ -72,6 +73,45 @@ function addDays(date: string, days: number) {
 
 function validMonth(value: string) {
   return /^\d{4}-\d{2}$/.test(value) ? value : "";
+}
+
+function uniqueFormValues(formData: FormData, key: string) {
+  return Array.from(new Set(formData.getAll(key).map((item) => String(item).trim()).filter(Boolean)));
+}
+
+function ocrFileUrlsForTargets(data: AppData, mailDocumentIds: string[], receivedInvoiceIds: string[]) {
+  const urls = new Set<string>();
+  for (const mailDocument of data.mailDocuments) {
+    if (mailDocumentIds.includes(mailDocument.id) && mailDocument.fileUrl) urls.add(mailDocument.fileUrl);
+  }
+  for (const receivedInvoice of data.receivedInvoices) {
+    if (receivedInvoiceIds.includes(receivedInvoice.id) && receivedInvoice.fileUrl) urls.add(receivedInvoice.fileUrl);
+  }
+  for (const attachment of data.attachments) {
+    if (
+      (mailDocumentIds.includes(attachment.relatedId) && attachment.relatedType === "MailDocument") ||
+      (receivedInvoiceIds.includes(attachment.relatedId) && attachment.relatedType === "ReceivedInvoice")
+    ) {
+      if (attachment.fileUrl) urls.add(attachment.fileUrl);
+    }
+  }
+  return urls;
+}
+
+async function deleteUnreferencedUploadFiles(fileUrls: Iterable<string>) {
+  const urls = Array.from(fileUrls).filter(Boolean);
+  if (!urls.length) return;
+
+  const data = await readData();
+  for (const url of urls) {
+    const fileName = uploadedFileNameFromUrl(url);
+    if (!fileName) continue;
+    const stillReferenced =
+      data.mailDocuments.some((item) => !item.deletedAt && uploadedFileNameFromUrl(item.fileUrl) === fileName) ||
+      data.receivedInvoices.some((item) => !item.deletedAt && uploadedFileNameFromUrl(item.fileUrl) === fileName) ||
+      data.attachments.some((item) => !item.deletedAt && uploadedFileNameFromUrl(item.fileUrl) === fileName);
+    if (!stillReferenced) await deleteReceivedInvoiceFile(fileName);
+  }
 }
 
 function nextInvoiceNumber(data: AppData, timestamp: string) {
@@ -219,8 +259,7 @@ export async function updateProjectInline(formData: FormData) {
     );
     project.clientId = selectedClient?.id ?? companyClientId(project.company);
     project.stage = value(formData, "stage");
-    project.status =
-      project.stage === "施工中" ? "IN_PROGRESS" : project.stage === "待拍摄" ? "WAITING" : "PLANNING";
+    project.status = project.stage === "施工中" ? "IN_PROGRESS" : project.stage === "待拍摄" ? "WAITING" : "PLANNING";
     project.contractAmount = money(formData, "contractAmount");
     project.billingCount = Math.max(1, Math.min(12, Number(value(formData, "billingCount")) || 1));
     project.updatedAt = now();
@@ -683,6 +722,7 @@ export async function deleteOcrDocument(formData: FormData) {
   const company = companyFromParam(value(formData, "company"));
   const timestamp = now();
   const data = await readData();
+  const fileUrls = ocrFileUrlsForTargets(data, mailDocumentId ? [mailDocumentId] : [], receivedInvoiceId ? [receivedInvoiceId] : []);
   const before = {
     mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
     receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
@@ -712,6 +752,62 @@ export async function deleteOcrDocument(formData: FormData) {
 
     return { mailDocument, receivedInvoice };
   }, before);
+
+  await deleteUnreferencedUploadFiles(fileUrls);
+
+  revalidatePath("/mail-sorter");
+  revalidatePath("/received-invoices");
+  revalidatePath("/dashboard");
+  redirect(`/mail-sorter?company=${company}`);
+}
+
+export async function deleteOcrDocumentsBulk(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("Permission denied");
+  }
+
+  const company = companyFromParam(value(formData, "company"));
+  const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
+  if (!mailDocumentIds.length && !receivedInvoiceIds.length) redirect(`/mail-sorter?company=${company}`);
+
+  const timestamp = now();
+  const data = await readData();
+  const fileUrls = ocrFileUrlsForTargets(data, mailDocumentIds, receivedInvoiceIds);
+  const before = {
+    mailDocuments: data.mailDocuments.filter((item) => mailDocumentIds.includes(item.id)),
+    receivedInvoices: data.receivedInvoices.filter((item) => receivedInvoiceIds.includes(item.id)),
+  };
+
+  await mutateData(user.id, "BULK_DELETE_OCR_DOCUMENTS", "OcrDocument", `${mailDocumentIds.length}:${receivedInvoiceIds.length}`, (draft) => {
+    for (const mailDocument of draft.mailDocuments) {
+      if (mailDocumentIds.includes(mailDocument.id)) {
+        mailDocument.deletedAt = timestamp;
+        mailDocument.updatedAt = timestamp;
+      }
+    }
+
+    for (const receivedInvoice of draft.receivedInvoices) {
+      if (receivedInvoiceIds.includes(receivedInvoice.id)) {
+        receivedInvoice.deletedAt = timestamp;
+        receivedInvoice.updatedAt = timestamp;
+      }
+    }
+
+    for (const attachment of draft.attachments) {
+      if (
+        (attachment.relatedType === "MailDocument" && mailDocumentIds.includes(attachment.relatedId)) ||
+        (attachment.relatedType === "ReceivedInvoice" && receivedInvoiceIds.includes(attachment.relatedId))
+      ) {
+        attachment.deletedAt = timestamp;
+      }
+    }
+
+    return before;
+  }, before);
+
+  await deleteUnreferencedUploadFiles(fileUrls);
 
   revalidatePath("/mail-sorter");
   revalidatePath("/received-invoices");
@@ -893,6 +989,7 @@ export async function softDelete(formData: FormData) {
   const id = value(formData, "id");
   const data = await readData();
   const before = (data[collection] as Array<{ id: string }>).find((item) => item.id === id);
+  const fileUrls = collection === "receivedInvoices" ? ocrFileUrlsForTargets(data, [], [id]) : new Set<string>();
 
   await mutateData(user.id, `SOFT_DELETE_${collection.toUpperCase()}`, collection, id, (draft) => {
     const row = (draft[collection] as Array<{ id: string; deletedAt?: string; updatedAt?: string }>).find(
@@ -902,8 +999,14 @@ export async function softDelete(formData: FormData) {
       row.deletedAt = now();
       row.updatedAt = now();
     }
+    if (collection === "receivedInvoices") {
+      for (const attachment of draft.attachments) {
+        if (attachment.relatedType === "ReceivedInvoice" && attachment.relatedId === id) attachment.deletedAt = now();
+      }
+    }
     return row;
   }, before);
+  await deleteUnreferencedUploadFiles(fileUrls);
   revalidatePath("/");
 }
 

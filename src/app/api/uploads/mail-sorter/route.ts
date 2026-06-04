@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
-import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
+import { allowedUploadTypes, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { analyzeMailDocument, extractDocumentText } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
@@ -251,7 +251,7 @@ export async function POST(request: Request) {
         : inferSenderName(extracted.text);
     const id = newId();
     const timestamp = new Date().toISOString();
-    const safeName = `${id}${extension}`;
+    const safeName = readableUploadFileName({ date: timestamp.slice(0, 10), extension, id, senderName });
     await saveReceivedInvoiceFile(safeName, buffer, file.type);
     const fileUrl = receivedInvoiceFileUrl(safeName);
 
@@ -266,10 +266,10 @@ export async function POST(request: Request) {
         id: newId(),
         company,
         category: "INVOICE",
-        title: file.name,
+        title: safeName,
         senderName,
         fileUrl,
-        originalFileName: file.name,
+        originalFileName: safeName,
         mimeType: file.type,
         ocrText: extracted.text,
         confidence: classification.confidence,
@@ -322,7 +322,7 @@ export async function POST(request: Request) {
           total: inferred.total,
           status: "REVIEWING",
           fileUrl,
-          originalFileName: file.name,
+          originalFileName: safeName,
           mimeType: file.type,
           ocrText: extracted.text,
           memo: [buildMailSummaryMemo({ classification, invoice: inferred, senderName: mailDocument.senderName || senderName }), ...fallbackWarnings].filter(Boolean).join("\n"),
@@ -339,7 +339,7 @@ export async function POST(request: Request) {
             relatedType: "ReceivedInvoice",
             relatedId: invoice.id,
             fileUrl,
-            fileName: file.name,
+            fileName: safeName,
             mimeType: file.type,
             uploadedById: user.id,
             createdAt: timestamp,
@@ -352,7 +352,7 @@ export async function POST(request: Request) {
         category: "INVOICE",
         confidence: classification.confidence,
         duplicate,
-        fileName: file.name,
+        fileName: safeName,
         invoice: {
           dueDate: inferred.dueDate,
           issueDate: inferred.issueDate,
@@ -371,10 +371,10 @@ export async function POST(request: Request) {
       id,
       company,
       category: classification.category === "INVOICE" ? "OTHER" : classification.category,
-      title: file.name,
+      title: safeName,
       senderName,
       fileUrl,
-      originalFileName: file.name,
+      originalFileName: safeName,
       mimeType: file.type,
       ocrText: extracted.text,
       confidence: classification.confidence,
@@ -391,7 +391,7 @@ export async function POST(request: Request) {
         relatedType: "MailDocument",
         relatedId: id,
         fileUrl,
-        fileName: file.name,
+        fileName: safeName,
         mimeType: file.type,
         uploadedById: user.id,
         createdAt: timestamp,
@@ -402,7 +402,7 @@ export async function POST(request: Request) {
     results.push({
       category: mailDocument.category,
       confidence: classification.confidence,
-      fileName: file.name,
+      fileName: safeName,
       reason: classification.reason,
       savedAs: "other-document",
       warnings: extracted.warnings,

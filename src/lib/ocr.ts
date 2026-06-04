@@ -94,44 +94,85 @@ const aiCategoryMap: Record<string, MailDocumentCategory> = {
   receipt: "RECEIPT",
 };
 
+const JP = {
+  bank:
+    "\\u9280\\u884c|\\u652f\\u5e97|\\u53e3\\u5ea7|\\u632f\\u8fbc|\\u53d7\\u53d6\\u4eba|\\u53e3\\u5ea7\\u540d\\u7fa9|\\u632f\\u8fbc\\u5148",
+  contractAmount:
+    "\\u5951\\u7d04\\u91d1\\u984d|\\u696d\\u52d9\\u59d4\\u8a17\\u6599|\\u59d4\\u8a17\\u6599|\\u5831\\u916c|\\u898b\\u7a4d\\u91d1\\u984d|\\u5236\\u4f5c\\u8cbb",
+  dueDate:
+    "\\u652f\\u6255\\u671f\\u9650|\\u304a\\u652f\\u6255\\u671f\\u9650|\\u632f\\u8fbc\\u671f\\u9650|\\u5165\\u91d1\\u671f\\u9650|due date|payment due",
+  excludedNumber:
+    "\\u53e3\\u5ea7|\\u9280\\u884c|\\u632f\\u8fbc|\\u652f\\u5e97|\\u90f5\\u4fbf|\\u4f4f\\u6240|\\u96fb\\u8a71|TEL|FAX|Email|No\\.|\\u756a\\u53f7|\\u767b\\u9332\\u756a\\u53f7|invoice\\s*no|registration|tax\\s*id",
+  issueDate: "\\u8acb\\u6c42\\u65e5|\\u767a\\u884c\\u65e5|\\u53d6\\u5f15\\u5e74\\u6708\\u65e5|invoice date|issue date",
+  subtotal: "\\u7a0e\\u629c|\\u7a0e\\u629c\\u5408\\u8a08|\\u5c0f\\u8a08|subtotal",
+  tax: "\\u6d88\\u8cbb\\u7a0e|\\u7a0e\\u984d|\\u6d88\\u8cbb\\u7a0e\\u984d|tax",
+  total:
+    "\\u7a0e\\u8fbc\\u5408\\u8a08|\\u3054\\u8acb\\u6c42\\u91d1\\u984d|\\u8acb\\u6c42\\u91d1\\u984d|\\u8acb\\u6c42\\u984d|\\u5408\\u8a08\\u91d1\\u984d|\\u5408\\u8a08|\\u7dcf\\u984d|\\u304a\\u652f\\u6255\\u3044\\u91d1\\u984d|amount due|total amount|grand total|total",
+};
+
+const CN = {
+  bank: "\\u6536\\u6b3e\\u65b9|\\u5f00\\u6237\\u884c|\\u94f6\\u884c\\u8d26\\u53f7|\\u8d26\\u6237|\\u6536\\u6b3e\\u4eba",
+  issueDate: "\\u5f00\\u7968\\u65e5\\u671f|\\u53d1\\u7968\\u65e5\\u671f|\\u65e5\\u671f",
+  total: "\\u4ef7\\u7a0e\\u5408\\u8ba1|\\u5408\\u8ba1\\u91d1\\u989d|\\u542b\\u7a0e\\u91d1\\u989d|\\u603b\\u91d1\\u989d",
+};
+
+const AI_SYSTEM_PROMPT =
+  "You classify Japanese and Chinese business documents and extract business fields. Return JSON only. " +
+  "documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. " +
+  "Required fields: senderName, contentSummary, amountSummary, paymentDestination, confidence, reason, warnings. " +
+  "senderName: aggressively find the company or organization that sent, issued, billed, sold, mailed, or requests payment. Never use the recipient, bill-to company, client, delivery destination, project owner, or file name as senderName. " +
+  "For Japanese documents prefer labels meaning sender, issuer, biller, seller, payee, transfer destination, receipt issuer. For Chinese documents prefer seller, invoice issuer, payee, account holder, supplier. " +
+  "contentSummary: summarize the document in one short Japanese sentence and include item, service, contract, project, or notice topic when visible. " +
+  "amountSummary: extract the actual billed, payable, contract, or tax-included amount and tax if visible. " +
+  "paymentDestination: strongly search transfer/payment destination: bank name, branch, account type, account number, account holder. If absent, return an empty string. " +
+  "For invoices, vendorName should normally be the sender or issuer. Extract issueDate from invoice date or issue date labels. Extract dueDate from payment due or transfer deadline labels. Extract total from amount due, tax-included total, grand total, or Chinese tax-included total labels. " +
+  "Never use bank account numbers, phone numbers, postal codes, registration numbers, invoice numbers, project numbers, or delivery numbers as money values. Dates must be YYYY-MM-DD. Money values must be integer JPY or CNY values without commas. Include bankName, bankBranch, bankAccountType, bankAccountNumber, bankAccountHolder when visible.";
+
 let cachedGoogleToken: { accessToken: string; expiresAt: number } | null = null;
 
-function normalize(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[\s.,_\-()（）・　]/g, "")
-    .replace(/株式会社|有限会社|合同会社|股份有限公司|有限公司|co\.?ltd\.?|inc\.?/gi, "");
-}
-
-function parseAmount(value: string) {
+function parseAmount(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  if (typeof value !== "string") return 0;
   const amount = Number(value.replace(/[^\d]/g, ""));
   return Number.isFinite(amount) ? amount : 0;
 }
 
-function parseJapaneseNumber(value: string) {
-  const numeric = Number(value.replace(/[^\d]/g, ""));
-  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+function optionalNumberFromAi(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  if (typeof value === "string" && value.trim()) return parseAmount(value);
+  return undefined;
+}
 
-  const digits: Record<string, number> = {
-    一: 1,
-    二: 2,
-    三: 3,
-    四: 4,
-    五: 5,
-    六: 6,
-    七: 7,
-    八: 8,
-    九: 9,
-    十: 10,
-  };
-  if (value === "十") return 10;
-  const tenMatch = value.match(/^([一二三四五六七八九])?十([一二三四五六七八九])?$/);
-  if (tenMatch) return (digits[tenMatch[1]] || 1) * 10 + (digits[tenMatch[2]] || 0);
-  return digits[value] || 0;
+function numberFromAi(value: unknown) {
+  return optionalNumberFromAi(value) ?? 0;
+}
+
+function textFromAi(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function warningsFromAi(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function normalize(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/[\s.,_\-()[\]{}・･/\\]/g, "")
+    .replace(/株式会社|有限会社|合同会社|股份有限公司|有限公司|会社|公司|co\.?ltd\.?|inc\.?|llc/gi, "");
+}
+
+function compactInline(value: string) {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function toIsoDate(year: string, month: string, day: string) {
-  return `${year.padStart(4, "20")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d) || m < 1 || m > 12 || d < 1 || d > 31) return "";
+  return `${String(y).padStart(4, "20")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 function isIsoDate(value: unknown): value is string {
@@ -145,66 +186,44 @@ function addDays(date: string, days: number) {
 }
 
 function extractDates(text: string) {
-  const dates = Array.from(
-    text.matchAll(/(20\d{2})[./\-年]\s*(\d{1,2})[./\-月]\s*(\d{1,2})日?/g),
-    (match) => toIsoDate(match[1], match[2], match[3]),
-  );
+  const normalizedText = text.normalize("NFKC");
+  const datePattern = /(20\d{2})[./\-\u5e74]\s*(\d{1,2})[./\-\u6708]\s*(\d{1,2})\u65e5?/g;
+  const dates = Array.from(normalizedText.matchAll(datePattern), (match) => toIsoDate(match[1], match[2], match[3])).filter(Boolean);
   return Array.from(new Set(dates)).sort();
 }
 
-function amountNear(text: string, labels: string[]) {
-  const normalizedText = text.replace(/\s+/g, " ");
-  for (const label of labels) {
-    const pattern = new RegExp(`${label}[^0-9]{0,24}([0-9][0-9,]{2,})`, "i");
-    const match = normalizedText.match(pattern);
-    if (match) return parseAmount(match[1]);
-  }
-  return 0;
-}
-
 function dateNear(text: string, labels: string[]) {
-  const normalizedText = text.replace(/\s+/g, " ");
+  const normalizedText = text.replace(/\s+/g, " ").normalize("NFKC");
   for (const label of labels) {
-    const pattern = new RegExp(`${label}.{0,24}(20\\d{2})[./\\-年]\\s*(\\d{1,2})[./\\-月]\\s*(\\d{1,2})日?`, "i");
+    const pattern = new RegExp(`(?:${label}).{0,56}(20\\d{2})[./\\-\\u5e74]\\s*(\\d{1,2})[./\\-\\u6708]\\s*(\\d{1,2})\\u65e5?`, "i");
     const match = normalizedText.match(pattern);
     if (match) return toIsoDate(match[1], match[2], match[3]);
   }
   return "";
 }
 
+function amountNear(text: string, labels: string[]) {
+  const normalizedText = text.replace(/\s+/g, " ").normalize("NFKC");
+  for (const label of labels) {
+    const pattern = new RegExp(`(?:${label})[^0-9]{0,56}(?:JPY|CNY|RMB|¥|￥|円|元)?\\s*([0-9][0-9,]{2,})`, "i");
+    const match = normalizedText.match(pattern);
+    if (match) return parseAmount(match[1]);
+  }
+  return 0;
+}
+
 function extractAmounts(text: string) {
-  const excludedLinePattern = /(口座|銀行|支店|登録番号|郵便番号|住所|電話|TEL|FAX|Email|メール|No\.|番号|账号|帳號|银行|電話|地址|税号|納品番号|請求番号|invoice\s*no)/i;
-  const moneyCandidates = text
+  const normalizedText = text.normalize("NFKC");
+  const excludedLinePattern = new RegExp(`(?:${JP.excludedNumber})`, "i");
+  const moneyPattern = /(?:JPY|CNY|RMB|¥|￥|円|元)?\s*([0-9][0-9,]{3,})(?:\s*(?:円|元|税込|税抜))?/gi;
+  const candidates = normalizedText
     .split(/\r?\n/)
     .filter((line) => !excludedLinePattern.test(line))
-    .flatMap((line) => Array.from(line.matchAll(/[¥￥]?\s*([0-9][0-9,]{3,})(?:\s*円)?/g), (match) => parseAmount(match[1])))
+    .flatMap((line) => Array.from(line.matchAll(moneyPattern), (match) => parseAmount(match[1])))
     .filter((amount) => amount > 0 && amount < 100_000_000);
-  const total =
-    amountNear(text, [
-      "税込合計",
-      "御請求金額",
-      "ご請求額",
-      "請求金額",
-      "請求額",
-      "請求合計",
-      "合計金額",
-      "合計額",
-      "総額",
-      "お支払金額",
-      "支払金額",
-      "請求总额",
-      "价税合计",
-      "含税金额",
-      "合计金额",
-      "总金额",
-      "应付金额",
-      "amount due",
-      "total amount",
-      "grand total",
-      "total",
-    ]) || Math.max(0, ...moneyCandidates);
-  const taxTotal = amountNear(text, ["消費税額", "消費税", "税額", "税金", "税款", "税额", "tax"]);
-  const subtotal = amountNear(text, ["税抜合計", "小計", "税抜", "税別", "不含税", "未税", "subtotal"]);
+  const total = amountNear(normalizedText, [JP.total, CN.total]) || Math.max(0, ...candidates);
+  const taxTotal = amountNear(normalizedText, [JP.tax]);
+  const subtotal = amountNear(normalizedText, [JP.subtotal]);
 
   if (subtotal && taxTotal) return { subtotal, taxTotal, total: total || subtotal + taxTotal };
   if (total && taxTotal) return { subtotal: Math.max(total - taxTotal, 0), taxTotal, total };
@@ -215,28 +234,28 @@ function extractAmounts(text: string) {
   return { subtotal: 0, taxTotal: 0, total: 0 };
 }
 
+function parseJapaneseNumber(value: string) {
+  const numeric = Number(value.replace(/[^\d]/g, ""));
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  const digits: Record<string, number> = {
+    "\u4e00": 1,
+    "\u4e8c": 2,
+    "\u4e09": 3,
+    "\u56db": 4,
+    "\u4e94": 5,
+    "\u516d": 6,
+    "\u4e03": 7,
+    "\u516b": 8,
+    "\u4e5d": 9,
+    "\u5341": 10,
+  };
+  const tenMatch = value.match(/^([\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d])?\u5341([\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d])?$/);
+  if (tenMatch) return (digits[tenMatch[1]] || 1) * 10 + (digits[tenMatch[2]] || 0);
+  return digits[value] || 0;
+}
+
 function includesAny(text: string, patterns: RegExp[]) {
   return patterns.some((pattern) => pattern.test(text));
-}
-
-function numberFromAi(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
-  if (typeof value === "string") return parseAmount(value);
-  return 0;
-}
-
-function optionalNumberFromAi(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
-  if (typeof value === "string" && value.trim()) return parseAmount(value);
-  return undefined;
-}
-
-function textFromAi(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function compactInline(value: string) {
-  return value.replace(/\s+/g, " ").trim();
 }
 
 function formatAmountSummary(amounts: { subtotal?: number; taxTotal?: number; total?: number }) {
@@ -248,14 +267,12 @@ function formatAmountSummary(amounts: { subtotal?: number; taxTotal?: number; to
 }
 
 function buildAmountSummary(text: string, analysis: AiDocumentAnalysis | null) {
-  const aiAmounts = {
+  const aiSummary = formatAmountSummary({
     subtotal: optionalNumberFromAi(analysis?.subtotal),
     taxTotal: optionalNumberFromAi(analysis?.taxTotal),
     total: optionalNumberFromAi(analysis?.total),
-  };
-  const aiSummary = formatAmountSummary(aiAmounts);
-  if (aiSummary) return aiSummary;
-  return formatAmountSummary(extractAmounts(text));
+  });
+  return aiSummary || formatAmountSummary(extractAmounts(text));
 }
 
 function buildPaymentDestinationFromAi(analysis: AiDocumentAnalysis | null) {
@@ -275,9 +292,8 @@ function extractPaymentDestination(text: string) {
     .split(/\r?\n/)
     .map((line) => compactInline(line.replace(/\u0000/g, "")))
     .filter(Boolean);
-  const labelPattern =
-    /(振込先|お振込先|振込口座|銀行口座|口座情報|支払先|支払い先|入金先|付款|收款|收款账户|收款方|开户行|银行账号|銀行|银行|支店|账号|帳號|口座|account|bank)/i;
-  const noisePattern = /(郵便番号|住所|電話|TEL|FAX|Email|メール|請求番号|登録番号|invoice\s*no|見積番号|納品番号)/i;
+  const labelPattern = new RegExp(`(?:${JP.bank}|${CN.bank}|account|bank|transfer)`, "i");
+  const noisePattern = new RegExp(`(?:${JP.excludedNumber}|invoice\\s*no)`, "i");
   const candidates: string[] = [];
 
   lines.forEach((line, index) => {
@@ -297,10 +313,10 @@ function inferContentSummary(text: string, category: MailDocumentCategory) {
     .split(/\r?\n/)
     .map((line) => compactInline(line.replace(/\u0000/g, "")))
     .filter((line) => line.length >= 4 && line.length <= 100);
-  const titlePattern = /(請求書|御請求書|見積書|納品書|領収書|契約書|通知書|invoice|estimate|quotation|receipt|contract|发票|請求|通知)/i;
-  const detailPattern = /(件名|内容|摘要|品名|項目|業務|制作|施工|設計|案件|project|description|service|事项|项目)/i;
+  const titlePattern = /\u8acb\u6c42\u66f8|\u898b\u7a4d\u66f8|\u7d0d\u54c1\u66f8|\u9818\u53ce\u66f8|\u5951\u7d04\u66f8|\u901a\u77e5\u66f8|invoice|estimate|quotation|receipt|contract|notice/i;
+  const detailPattern = /\u4ef6\u540d|\u5185\u5bb9|\u54c1\u540d|\u9805\u76ee|\u696d\u52d9|\u5236\u4f5c|\u65bd\u5de5|\u8a2d\u8a08|\u6848\u4ef6|project|description|service/i;
   const title = lines.find((line) => titlePattern.test(line));
-  const detail = lines.find((line) => detailPattern.test(line) && !/(口座|銀行|TEL|FAX|Email)/i.test(line));
+  const detail = lines.find((line) => detailPattern.test(line) && !new RegExp(`(?:${JP.bank}|TEL|FAX|Email)`, "i").test(line));
   const categoryLabel: Record<MailDocumentCategory, string> = {
     CONTRACT: "契約書",
     DELIVERY_NOTE: "納品書",
@@ -313,17 +329,13 @@ function inferContentSummary(text: string, category: MailDocumentCategory) {
   return [categoryLabel[category], title, detail].filter(Boolean).slice(0, 3).join(" / ");
 }
 
-function warningsFromAi(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+function categoryFromAi(value: unknown): MailDocumentCategory | null {
+  const normalized = textFromAi(value).toLowerCase().replace(/[^a-z_]/g, "");
+  return aiCategoryMap[normalized] ?? null;
 }
 
 function base64Url(value: string) {
   return Buffer.from(value).toString("base64url");
-}
-
-function categoryFromAi(value: unknown): MailDocumentCategory | null {
-  const normalized = textFromAi(value).toLowerCase().replace(/[^a-z_]/g, "");
-  return aiCategoryMap[normalized] ?? null;
 }
 
 function visionFeature() {
@@ -396,8 +408,8 @@ function parseVisionResponses(json: unknown) {
   const texts = responses.map((response) => response.fullTextAnnotation?.text ?? "").filter(Boolean);
   const confidences =
     responses
-      ?.flatMap((response) => response.fullTextAnnotation?.pages?.map((page) => page.confidence).filter(Boolean) ?? [])
-      .filter((value): value is number => typeof value === "number") ?? [];
+      .flatMap((response) => response.fullTextAnnotation?.pages?.map((page) => page.confidence).filter(Boolean) ?? [])
+      .filter((value): value is number => typeof value === "number");
   return {
     confidence: confidences.length ? Math.round((confidences.reduce((sum, value) => sum + value, 0) / confidences.length) * 100) : undefined,
     text: texts.join("\n\n"),
@@ -495,8 +507,7 @@ async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalys
     body: JSON.stringify({
       messages: [
         {
-          content:
-            "You classify Japanese/Chinese business documents and extract fields. Return JSON only. documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. Required fields: senderName, contentSummary, amountSummary, paymentDestination, confidence, reason, warnings. senderName: aggressively find the company or organization that sent/issued the document from the OCR text. Do not use the recipient, bill-to, client, delivery destination, or file name as senderName. Prefer labels such as 発送元, 差出人, 発行者, 請求者, 販売者, 支払先, 发件人, 寄件人, 开票方, 销售方, 供应商, 收款方, From. If uncertain, choose the strongest company/organization candidate in the header, issuer block, stamp area, or footer. contentSummary: summarize what the document is about in one short Japanese sentence, including item/service/project when visible. amountSummary: extract the actual billed/payable/contract amount and tax if visible, e.g. 合計 123,456円 / 税抜 112,233円 / 消費税 11,223円. paymentDestination: strongly search for transfer/payment destination including bank name, branch, account type, account number, account holder, or Chinese receiving account labels such as 收款方, 开户行, 银行账号. If no payment destination exists, return an empty string. For invoices, vendorName should normally be the same sender/issuer company. Extract issueDate from 請求日/発行日/开票日期/invoice date, and dueDate from 支払期限/付款期限/due date. Extract total from 請求金額/税込合計/合計金額/价税合计/应付金额/amount due. Never use bank account numbers, phone numbers, postal codes, registration numbers, invoice numbers, or project numbers as money values. Never use invoice numbers, registration numbers, phone numbers, postal codes, or project numbers as amountSummary. Dates must be YYYY-MM-DD. Money values must be integer JPY/CNY values without commas. Include bankName, bankBranch, bankAccountType, bankAccountNumber, bankAccountHolder when visible.",
+          content: AI_SYSTEM_PROMPT,
           role: "system",
         },
         {
@@ -523,31 +534,18 @@ async function analyzeWithAi(extracted: ExtractedText): Promise<AiDocumentAnalys
 }
 
 function extractContractAmount(text: string) {
-  return (
-    amountNear(text, [
-      "契約金額",
-      "契約料金",
-      "業務委託料",
-      "委託料",
-      "請負金額",
-      "報酬額",
-      "報酬",
-      "制作費",
-      "総額",
-      "税込合計",
-      "合計金額",
-      "合計",
-    ]) || extractAmounts(text).total
-  );
+  return amountNear(text, [JP.contractAmount, JP.total, CN.total, "contract amount|amount"]) || extractAmounts(text).total;
 }
 
 function extractBillingCount(text: string) {
-  const normalizedText = text.replace(/\s+/g, " ");
-  const explicit = normalizedText.match(/(?:請求回数|支払回数|支払い回数|分割回数|分割)[^0-9一二三四五六七八九十]{0,12}([0-9]{1,2}|[一二三四五六七八九十]{1,3})\s*回/);
+  const normalizedText = text.replace(/\s+/g, " ").normalize("NFKC");
+  const explicit = normalizedText.match(
+    /(?:\u8acb\u6c42\u56de\u6570|\u652f\u6255\u56de\u6570|\u652f\u6255\u3044\u56de\u6570|\u5206\u5272\u56de\u6570|\u5206\u5272)[^0-9\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]{0,16}([0-9]{1,2}|[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]{1,3})\s*\u56de/,
+  );
   if (explicit) return parseJapaneseNumber(explicit[1]);
 
   const rounds = Array.from(
-    normalizedText.matchAll(/第\s*([0-9]{1,2}|[一二三四五六七八九十]{1,3})\s*回/g),
+    normalizedText.matchAll(/\u7b2c\s*([0-9]{1,2}|[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]{1,3})\s*\u56de/g),
     (match) => parseJapaneseNumber(match[1]),
   ).filter((round) => round > 0);
   if (rounds.length) return Math.max(...rounds);
@@ -583,9 +581,10 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
   const activeProjects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, scope));
   const activeClients = data.clients.filter((client) => !client.deletedAt);
 
-  const aiVendorName = textFromAi(analysis?.vendorName);
+  const aiSenderName = textFromAi(analysis?.senderName) || textFromAi(analysis?.senderOrganization);
+  const aiVendorName = textFromAi(analysis?.vendorName) || aiSenderName;
   const aiProjectHint = textFromAi(analysis?.projectHint);
-  const matchingText = [extracted.text, aiVendorName, aiProjectHint, textFromAi(analysis?.registrationNumber)].filter(Boolean).join("\n");
+  const matchingText = [extracted.text, aiSenderName, aiVendorName, aiProjectHint, textFromAi(analysis?.registrationNumber)].filter(Boolean).join("\n");
 
   const vendorMatch = bestMatch(matchingText, activeVendors, (vendor) => [vendor.companyName, vendor.contactName, vendor.invoiceRegistrationNumber]);
   const projectMatch = bestMatch(matchingText, activeProjects, (project) => {
@@ -597,12 +596,12 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
   const fallbackAmounts = extractAmounts(extracted.text);
   const issueDate =
     (isIsoDate(analysis?.issueDate) ? analysis.issueDate : "") ||
-    dateNear(extracted.text, ["請求日", "発行日", "取引年月日", "日付", "开票日期", "发票日期", "請求日期", "invoice date"]) ||
+    dateNear(extracted.text, [JP.issueDate, CN.issueDate]) ||
     fallbackDates[0] ||
     new Date().toISOString().slice(0, 10);
   const dueDate =
     (isIsoDate(analysis?.dueDate) ? analysis.dueDate : "") ||
-    dateNear(extracted.text, ["支払期限", "お支払期限", "振込期限", "支払期日", "付款期限", "付款日期", "due date", "payment due"]) ||
+    dateNear(extracted.text, [JP.dueDate]) ||
     fallbackDates.find((date) => date > issueDate) ||
     addDays(issueDate, 30);
   const aiSubtotal = optionalNumberFromAi(analysis?.subtotal);
@@ -621,14 +620,14 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
     taxTotal = Math.round(total / 11);
     subtotal = total - taxTotal;
   }
+
   const vendor = vendorMatch?.item;
   const project = projectMatch?.item;
   const warnings = [...extracted.warnings, ...warningsFromAi(analysis?.warnings)];
-
   if (!vendorMatch) warnings.push("支払先は既存リストと一致しませんでした。発送元名で自動登録、または確認待ちになります。");
   if (!projectMatch) warnings.push("案件は既存リストと一致しませんでした。確認待ち案件に入ります。");
-  if (!total) warnings.push("金額を反映できませんでした。確認してください。");
-  if (!fallbackDates.length && !isIsoDate(analysis?.issueDate)) warnings.push("請求日を反映できませんでした。今日の日付を仮入力しました。");
+  if (!total) warnings.push("金額を抽出できませんでした。内容を確認してください。");
+  if (!fallbackDates.length && !isIsoDate(analysis?.issueDate)) warnings.push("請求日を抽出できませんでした。今日の日付を仮入力しました。");
 
   const confidence = Math.min(
     100,
@@ -699,16 +698,16 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
 export function classifyMailDocument(extracted: ExtractedText): MailDocumentClassification {
   const text = extracted.text;
   const invoicePatterns = [
-    /請求書|御請求|ご請求|invoice|tax invoice/i,
-    /支払期限|お支払期限|振込先|請求金額|消費税|適格請求書|登録番号/i,
+    /\u8acb\u6c42\u66f8|\u5fa1\u8acb\u6c42\u66f8|invoice|tax invoice/i,
+    /\u652f\u6255\u671f\u9650|\u632f\u8fbc\u5148|\u8acb\u6c42\u91d1\u984d|\u6d88\u8cbb\u7a0e|\u9069\u683c\u8acb\u6c42\u66f8/i,
     /amount due|payment due|bank transfer/i,
   ];
   const categoryPatterns: Array<[MailDocumentCategory, RegExp[]]> = [
-    ["CONTRACT", [/契約書|業務委託契約|覚書|agreement|contract/i]],
-    ["ESTIMATE", [/見積書|御見積|quotation|estimate/i]],
-    ["DELIVERY_NOTE", [/納品書|delivery note|delivered/i]],
-    ["RECEIPT", [/領収書|receipt/i]],
-    ["NOTICE", [/通知|案内|お知らせ|notice|information/i]],
+    ["CONTRACT", [/\u5951\u7d04\u66f8|\u696d\u52d9\u59d4\u8a17\u5951\u7d04|agreement|contract/i]],
+    ["ESTIMATE", [/\u898b\u7a4d\u66f8|\u5fa1\u898b\u7a4d|quotation|estimate/i]],
+    ["DELIVERY_NOTE", [/\u7d0d\u54c1\u66f8|delivery note|delivered/i]],
+    ["RECEIPT", [/\u9818\u53ce\u66f8|receipt/i]],
+    ["NOTICE", [/\u901a\u77e5|\u6848\u5185|\u304a\u77e5\u3089\u305b|notice|information/i]],
   ];
   const dates = extractDates(text);
   const amounts = extractAmounts(text);

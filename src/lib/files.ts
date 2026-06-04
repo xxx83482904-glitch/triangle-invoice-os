@@ -1,7 +1,7 @@
 import "server-only";
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Pool } from "pg";
@@ -100,6 +100,51 @@ export async function saveReceivedInvoiceFile(fileName: string, buffer: Buffer, 
 
 export function receivedInvoiceFileUrl(fileName: string) {
   return process.env.VERCEL === "1" ? `/api/files/${fileName}` : `/uploads/received-invoices/${fileName}`;
+}
+
+export function uploadedFileNameFromUrl(fileUrl?: string | null) {
+  if (!fileUrl) return "";
+  try {
+    return path.basename(new URL(fileUrl, "http://localhost").pathname);
+  } catch {
+    return path.basename(fileUrl);
+  }
+}
+
+export function readableUploadFileName({
+  date,
+  extension,
+  id,
+  senderName,
+}: {
+  date?: string;
+  extension: string;
+  id: string;
+  senderName?: string;
+}) {
+  const normalizedDate = /^\d{4}-\d{2}-\d{2}$/.test(date ?? "") ? date : new Date().toISOString().slice(0, 10);
+  const sender = (senderName || "unknown-sender")
+    .normalize("NFKC")
+    .replace(/[\\/:*?"<>|#%&{}$!'@+`=]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60)
+    .replace(/\s/g, "_") || "unknown-sender";
+  return `${normalizedDate}_${sender}_${id.slice(0, 8)}${extension}`;
+}
+
+export async function deleteReceivedInvoiceFile(fileUrlOrName?: string | null) {
+  const safeName = path.basename(uploadedFileNameFromUrl(fileUrlOrName));
+  if (!safeName) return;
+
+  if (shouldUseDatabaseFileStore()) {
+    const pool = await ensureUploadFileStore();
+    await pool.query(`DELETE FROM "UploadFile" WHERE "fileName" = $1`, [safeName]);
+    return;
+  }
+
+  const paths = [uploadRoot, legacyUploadRoot].map((root) => path.join(root, safeName));
+  await Promise.all(paths.map((filePath) => rm(filePath, { force: true }).catch(() => undefined)));
 }
 
 export async function saveContractFile(fileName: string, buffer: Buffer, mimeType = mimeTypeFromName(fileName)) {
