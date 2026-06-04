@@ -7,7 +7,7 @@ another Codex session.
 
 - GitHub: `https://github.com/xxx83482904-glitch/triangle-invoice-os.git`
 - Main branch: `main`
-- Current prepared commit: `5f9ac39 Add Codex handoff guide`
+- Check the current prepared commit with `git log -1 --oneline` after cloning.
 - Local Windows workspace used so far:
   `C:\Users\info\Documents\Codex\2026-05-13\pdf-invoice-os-triangle-invoice-os`
 
