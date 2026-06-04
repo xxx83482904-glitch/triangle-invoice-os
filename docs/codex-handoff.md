@@ -7,7 +7,7 @@ another Codex session.
 
 - GitHub: `https://github.com/xxx83482904-glitch/triangle-invoice-os.git`
 - Main branch: `main`
-- Current prepared commit: `f8872dc Add self deploy endpoint for Synology`
+- Current prepared commit: `5f9ac39 Add Codex handoff guide`
 - Local Windows workspace used so far:
   `C:\Users\info\Documents\Codex\2026-05-13\pdf-invoice-os-triangle-invoice-os`
 
