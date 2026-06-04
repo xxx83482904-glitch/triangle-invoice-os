@@ -6,10 +6,18 @@ import os from "node:os";
 import path from "node:path";
 import { Pool } from "pg";
 
+function projectRoot() {
+  const cwd = process.cwd();
+  return cwd.endsWith(path.join(".next", "standalone")) ? path.resolve(cwd, "..", "..") : cwd;
+}
+
 const uploadRoot =
-  process.env.VERCEL === "1"
+  process.env.UPLOAD_DIR ??
+  (process.env.VERCEL === "1"
     ? path.join(os.tmpdir(), "triangle-invoice-os", "uploads", "received-invoices")
-    : path.join(process.cwd(), "public", "uploads", "received-invoices");
+    : path.join(projectRoot(), "public", "uploads", "received-invoices"));
+
+const legacyUploadRoot = path.join(process.cwd(), "public", "uploads", "received-invoices");
 
 export const allowedUploadTypes = new Map([
   ["application/pdf", ".pdf"],
@@ -122,8 +130,10 @@ export async function readUploadedFile(fileName: string) {
     return rows[0] ?? null;
   }
 
-  const filePath = path.join(uploadRoot, safeName);
-  if (!existsSync(filePath)) return null;
+  const filePath = [uploadRoot, legacyUploadRoot]
+    .map((root) => path.join(root, safeName))
+    .find((candidate) => existsSync(candidate));
+  if (!filePath) return null;
   return {
     data: await readFile(filePath),
     mimeType: mimeTypeFromName(safeName),
