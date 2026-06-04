@@ -67,7 +67,7 @@ export default async function MailSorterPage({
           : undefined,
         fileName: document.originalFileName,
         fileUrl: document.fileUrl,
-        folderMonth: document.folderMonth,
+        folderMonth: document.folderMonth ?? invoice?.folderMonth,
         id: `mail-${document.id}`,
         mailDocumentId: document.id,
         memo: document.memo,

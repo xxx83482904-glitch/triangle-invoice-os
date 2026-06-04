@@ -75,6 +75,38 @@ function validMonth(value: string) {
   return /^\d{4}-\d{2}$/.test(value) ? value : "";
 }
 
+const receivedInvoiceStatuses: ReceivedInvoice["status"][] = [
+  "RECEIVED",
+  "OCR_PENDING",
+  "REVIEWING",
+  "APPROVAL_PENDING",
+  "SCHEDULED",
+  "PAID",
+  "ON_HOLD",
+  "REJECTED",
+  "ARCHIVED",
+];
+
+function receivedInvoiceStatus(value: string): ReceivedInvoice["status"] {
+  return receivedInvoiceStatuses.includes(value as ReceivedInvoice["status"])
+    ? (value as ReceivedInvoice["status"])
+    : "REVIEWING";
+}
+
+const mailDocumentCategories: MailDocumentCategory[] = [
+  "INVOICE",
+  "CONTRACT",
+  "ESTIMATE",
+  "DELIVERY_NOTE",
+  "RECEIPT",
+  "NOTICE",
+  "OTHER",
+];
+
+function mailDocumentCategory(value: string): MailDocumentCategory {
+  return mailDocumentCategories.includes(value as MailDocumentCategory) ? (value as MailDocumentCategory) : "OTHER";
+}
+
 function uniqueFormValues(formData: FormData, key: string) {
   return Array.from(new Set(formData.getAll(key).map((item) => String(item).trim()).filter(Boolean)));
 }
@@ -96,6 +128,32 @@ function ocrFileUrlsForTargets(data: AppData, mailDocumentIds: string[], receive
     }
   }
   return urls;
+}
+
+function markReceivedInvoicePaid(data: AppData, invoice: ReceivedInvoice, userId: string, timestamp: string) {
+  const paid = paidForReceived(data, invoice.id);
+  const remaining = Math.max(invoice.total - paid, 0);
+  const paymentDate = timestamp.slice(0, 10);
+
+  if (remaining > 0) {
+    data.payments.unshift({
+      id: newId(),
+      type: "EXPENSE",
+      receivedInvoiceId: invoice.id,
+      amount: remaining,
+      paymentDate,
+      method: invoice.paymentMethod ?? "ステータス変更",
+      memo: "ステータス変更で支払済みにしました",
+      createdById: userId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+  }
+
+  invoice.status = "PAID";
+  invoice.paidAt = invoice.paidAt ?? paymentDate;
+  invoice.paymentMethod = invoice.paymentMethod ?? "ステータス変更";
+  invoice.updatedAt = timestamp;
 }
 
 async function deleteUnreferencedUploadFiles(fileUrls: Iterable<string>) {
@@ -645,16 +703,22 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
   const status = value(formData, "status") as ReceivedInvoice["status"];
   const data = await readData();
   const before = data.receivedInvoices.find((item) => item.id === id);
+  const timestamp = now();
 
   await mutateData(user.id, "UPDATE_RECEIVED_INVOICE_STATUS", "ReceivedInvoice", id, (draft) => {
     const invoice = draft.receivedInvoices.find((item) => item.id === id);
     if (!invoice) throw new Error("受領請求書が見つかりません");
-    invoice.status = status;
+    if (status === "PAID") {
+      markReceivedInvoicePaid(draft, invoice, user.id, timestamp);
+    } else {
+      invoice.status = status;
+      invoice.updatedAt = timestamp;
+    }
     invoice.approvedById = status === "SCHEDULED" || status === "PAID" ? user.id : invoice.approvedById;
-    invoice.updatedAt = now();
     return invoice;
   }, before);
   revalidatePath("/received-invoices");
+  revalidatePath("/payments");
   revalidatePath("/dashboard");
 }
 
@@ -697,9 +761,14 @@ export async function updateOcrDocumentInline(formData: FormData) {
       receivedInvoice.subtotal = money(formData, "subtotal");
       receivedInvoice.taxTotal = money(formData, "taxTotal");
       receivedInvoice.total = money(formData, "total");
-      receivedInvoice.status = value(formData, "status") as ReceivedInvoice["status"];
+      const status = receivedInvoiceStatus(value(formData, "status"));
       receivedInvoice.memo = optional(formData, "memo");
-      receivedInvoice.updatedAt = timestamp;
+      if (status === "PAID") {
+        markReceivedInvoicePaid(draft, receivedInvoice, user.id, timestamp);
+      } else {
+        receivedInvoice.status = status;
+        receivedInvoice.updatedAt = timestamp;
+      }
     }
 
     return { mailDocument, receivedInvoice };
@@ -707,6 +776,128 @@ export async function updateOcrDocumentInline(formData: FormData) {
 
   revalidatePath("/mail-sorter");
   revalidatePath("/received-invoices");
+  revalidatePath("/dashboard");
+  redirect(`/mail-sorter?company=${company}`);
+}
+
+export async function updateMailDocumentCategory(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
+  }
+
+  const company = companyFromParam(value(formData, "company"));
+  const mailDocumentId = value(formData, "mailDocumentId");
+  const category = mailDocumentCategory(value(formData, "category"));
+  const timestamp = now();
+  const data = await readData();
+  const before = data.mailDocuments.find((item) => item.id === mailDocumentId);
+
+  await mutateData(user.id, "UPDATE_MAIL_DOCUMENT_CATEGORY", "MailDocument", mailDocumentId, (draft) => {
+    const mailDocument = draft.mailDocuments.find(
+      (item) => item.id === mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company,
+    );
+    if (!mailDocument) throw new Error("譖ｸ鬘槭′隕九▽縺九ｊ縺ｾ縺帙ｓ");
+    mailDocument.category = category;
+    mailDocument.updatedAt = timestamp;
+    return mailDocument;
+  }, before);
+
+  revalidatePath("/mail-sorter");
+}
+
+export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
+  }
+
+  const company = companyFromParam(value(formData, "company"));
+  const mailDocumentId = value(formData, "mailDocumentId");
+  const vendorId = value(formData, "vendorId");
+  const projectId = value(formData, "projectId");
+  const issueDate = value(formData, "issueDate") || now().slice(0, 10);
+  const dueDate = value(formData, "dueDate") || addDays(issueDate, 30);
+  const subtotal = money(formData, "subtotal");
+  const taxTotal = money(formData, "taxTotal");
+  const totalInput = money(formData, "total");
+  const total = totalInput || subtotal + taxTotal;
+  const status = receivedInvoiceStatus(value(formData, "status"));
+  const memo = optional(formData, "memo");
+  const timestamp = now();
+  const data = await readData();
+  const before = data.mailDocuments.find((item) => item.id === mailDocumentId);
+
+  await mutateData(user.id, "REFLECT_MAIL_DOCUMENT_TO_RECEIVED_INVOICE", "MailDocument", mailDocumentId, (draft) => {
+    const mailDocument = draft.mailDocuments.find(
+      (item) => item.id === mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company,
+    );
+    if (!mailDocument) throw new Error("譖ｸ鬘槭′隕九▽縺九ｊ縺ｾ縺帙ｓ");
+
+    const existingLinkedInvoice = mailDocument.relatedReceivedInvoiceId
+      ? draft.receivedInvoices.find((item) => item.id === mailDocument.relatedReceivedInvoiceId && !item.deletedAt)
+      : undefined;
+    if (existingLinkedInvoice) return { mailDocument, receivedInvoice: existingLinkedInvoice };
+
+    const vendor = draft.vendors.find(
+      (item) => item.id === vendorId && !item.deletedAt && companyFromParam(item.company) === company,
+    );
+    if (!vendor) throw new Error("謾ｯ謇募・縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ");
+
+    const project = draft.projects.find(
+      (item) => item.id === projectId && !item.deletedAt && companyFromParam(item.company) === company,
+    );
+    if (!project) throw new Error("譯井ｻｶ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ");
+
+    const invoiceId = newId();
+    const invoice: ReceivedInvoice = {
+      id: invoiceId,
+      vendorId: vendor.id,
+      projectId: project.id,
+      folderMonth: mailDocument.folderMonth,
+      receivedDate: timestamp.slice(0, 10),
+      issueDate,
+      dueDate,
+      subtotal,
+      taxTotal,
+      total,
+      status,
+      fileUrl: mailDocument.fileUrl,
+      originalFileName: mailDocument.originalFileName,
+      mimeType: mailDocument.mimeType,
+      ocrText: mailDocument.ocrText,
+      memo: memo ?? mailDocument.memo,
+      uploadedById: mailDocument.uploadedById || user.id,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    mailDocument.category = "INVOICE";
+    mailDocument.relatedReceivedInvoiceId = invoiceId;
+    mailDocument.memo = memo ?? mailDocument.memo;
+    mailDocument.updatedAt = timestamp;
+
+    draft.receivedInvoices.unshift(invoice);
+    if (status === "PAID") {
+      markReceivedInvoicePaid(draft, invoice, user.id, timestamp);
+    }
+    draft.attachments.unshift({
+      id: newId(),
+      relatedType: "ReceivedInvoice",
+      relatedId: invoice.id,
+      fileUrl: mailDocument.fileUrl,
+      fileName: mailDocument.originalFileName,
+      mimeType: mailDocument.mimeType,
+      uploadedById: user.id,
+      createdAt: timestamp,
+    });
+
+    return { mailDocument, receivedInvoice: invoice };
+  }, before);
+
+  revalidatePath("/mail-sorter");
+  revalidatePath("/received-invoices");
+  revalidatePath("/payments");
   revalidatePath("/dashboard");
   redirect(`/mail-sorter?company=${company}`);
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckSquare, Download, ExternalLink, FileText, Folder, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
-import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, updateOcrDocumentInline } from "@/app/actions";
+import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -101,6 +101,12 @@ function monthKey(value: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function addDaysIso(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function monthLabel(value: string) {
   return monthFormatter.format(new Date(`${value}-01T00:00:00`));
 }
@@ -112,6 +118,14 @@ function shortMonthLabel(value: string) {
 
 function selectClass() {
   return "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+}
+
+function categorySelectClass(category: MailDocumentCategory) {
+  const tone =
+    category === "INVOICE"
+      ? "border-primary bg-primary text-primary-foreground"
+      : "border-border bg-secondary text-secondary-foreground";
+  return `h-6 max-w-[104px] rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
 }
 
 function shippingSenderName(row: OcrDocumentListItem) {
@@ -266,7 +280,9 @@ export function OcrDocumentsTable({
   }, [folders, rows]);
   const customFolderMonths = useMemo(() => new Set(folders.map((folder) => folder.month)), [folders]);
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
-  const activeRows = groups.find(([month]) => month === activeMonth)?.[1] ?? [];
+  const activeGroup = groups.find(([month]) => month === activeMonth) ?? groups[0];
+  const selectedMonth = activeGroup?.[0] ?? null;
+  const activeRows = activeGroup?.[1] ?? [];
   const [activeRowId, setActiveRowId] = useState<string | null>(activeRows[0]?.id ?? null);
   const activeRow = activeRows.find((row) => row.id === activeRowId) ?? activeRows[0] ?? null;
   const [dialogRow, setDialogRow] = useState<OcrDocumentListItem | null>(null);
@@ -409,7 +425,7 @@ export function OcrDocumentsTable({
                 </div>
                 <div className="space-y-2">
                   {groups.map(([month, monthRows]) => {
-                    const isActive = month === activeMonth;
+                    const isActive = month === selectedMonth;
                     const canDeleteFolder = canEdit && customFolderMonths.has(month) && monthRows.length === 0;
                     return (
                       <div key={month} className="group relative">
@@ -495,7 +511,29 @@ export function OcrDocumentsTable({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
                               <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
-                              {senderColumn === "normal" ? <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge> : null}
+                              {senderColumn === "normal" ? (
+                                canEdit && row.mailDocumentId ? (
+                                  <form action={updateMailDocumentCategory} className="shrink-0" onClick={stopEditClick}>
+                                    <input type="hidden" name="company" value={company} />
+                                    <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} />
+                                    <select
+                                      name="category"
+                                      defaultValue={row.category}
+                                      className={categorySelectClass(row.category)}
+                                      aria-label="分類"
+                                      onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                                    >
+                                      {categoryOptions.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </form>
+                                ) : (
+                                  <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
+                                )
+                              ) : null}
                             </div>
                             {senderColumn === "normal" ? <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div> : null}
                           </div>
@@ -542,6 +580,13 @@ export function OcrDocumentsTable({
                     {activeRow.mailDocumentId ? <input type="hidden" form={`ocr-edit-${activeRow.id}`} name="mailDocumentId" value={activeRow.mailDocumentId} /> : null}
                     {activeRow.receivedInvoiceId ? (
                       <input type="hidden" form={`ocr-edit-${activeRow.id}`} name="receivedInvoiceId" value={activeRow.receivedInvoiceId} />
+                    ) : null}
+                    {activeRow.mailDocumentId && !activeRow.receivedInvoiceId ? (
+                      <>
+                        <form id={`ocr-reflect-${activeRow.id}`} action={reflectMailDocumentToReceivedInvoice} />
+                        <input type="hidden" form={`ocr-reflect-${activeRow.id}`} name="company" value={company} />
+                        <input type="hidden" form={`ocr-reflect-${activeRow.id}`} name="mailDocumentId" value={activeRow.mailDocumentId} />
+                      </>
                     ) : null}
 
                     <div className="space-y-4">
@@ -691,7 +736,110 @@ export function OcrDocumentsTable({
                             </div>
                           </div>
                         ) : (
-                          <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">その他書類として保存されています。</div>
+                          <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">受領請求書へ反映</div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  この郵便物を、現在のフォルダーのまま受領請求書として登録します。
+                                </div>
+                              </div>
+                              <Button
+                                type="submit"
+                                form={`ocr-reflect-${activeRow.id}`}
+                                disabled={!canEdit || !activeRow.mailDocumentId || !vendors.length || !projects.length}
+                                size="sm"
+                                className="gap-1"
+                              >
+                                <Plus className="h-4 w-4" />
+                                反映
+                              </Button>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">支払先</label>
+                                <select
+                                  form={`ocr-reflect-${activeRow.id}`}
+                                  name="vendorId"
+                                  defaultValue={vendors[0]?.value}
+                                  className={selectClass()}
+                                  disabled={!canEdit || !vendors.length}
+                                  required
+                                >
+                                  {vendors.map((vendor) => (
+                                    <option key={vendor.value} value={vendor.value}>
+                                      {vendor.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">案件</label>
+                                <select
+                                  form={`ocr-reflect-${activeRow.id}`}
+                                  name="projectId"
+                                  defaultValue={projects[0]?.value}
+                                  className={selectClass()}
+                                  disabled={!canEdit || !projects.length}
+                                  required
+                                >
+                                  {projects.map((project) => (
+                                    <option key={project.value} value={project.value}>
+                                      {project.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">状態</label>
+                                <select
+                                  form={`ocr-reflect-${activeRow.id}`}
+                                  name="status"
+                                  defaultValue="REVIEWING"
+                                  className={selectClass()}
+                                  disabled={!canEdit}
+                                >
+                                  {statusOptions.map((status) => (
+                                    <option key={status.value} value={status.value}>
+                                      {status.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">請求日</label>
+                                <Input
+                                  form={`ocr-reflect-${activeRow.id}`}
+                                  name="issueDate"
+                                  type="date"
+                                  defaultValue={activeRow.createdAt.slice(0, 10)}
+                                  disabled={!canEdit}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">支払期限</label>
+                                <Input
+                                  form={`ocr-reflect-${activeRow.id}`}
+                                  name="dueDate"
+                                  type="date"
+                                  defaultValue={addDaysIso(activeRow.createdAt.slice(0, 10), 30)}
+                                  disabled={!canEdit}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">小計</label>
+                                <Input form={`ocr-reflect-${activeRow.id}`} name="subtotal" type="number" defaultValue={0} disabled={!canEdit} />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">消費税</label>
+                                <Input form={`ocr-reflect-${activeRow.id}`} name="taxTotal" type="number" defaultValue={0} disabled={!canEdit} />
+                              </div>
+                              <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-medium text-muted-foreground">合計</label>
+                                <Input form={`ocr-reflect-${activeRow.id}`} name="total" type="number" defaultValue={0} disabled={!canEdit} className="font-mono" />
+                              </div>
+                            </div>
+                          </div>
                         )}
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-muted-foreground">メモ</label>
