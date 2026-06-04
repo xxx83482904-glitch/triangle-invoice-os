@@ -99,16 +99,27 @@ export async function saveReceivedInvoiceFile(fileName: string, buffer: Buffer, 
 }
 
 export function receivedInvoiceFileUrl(fileName: string) {
-  return process.env.VERCEL === "1" ? `/api/files/${fileName}` : `/uploads/received-invoices/${fileName}`;
+  const encodedName = encodeURIComponent(path.basename(fileName));
+  return process.env.VERCEL === "1" ? `/api/files/${encodedName}` : `/uploads/received-invoices/${encodedName}`;
 }
 
 export function uploadedFileNameFromUrl(fileUrl?: string | null) {
   if (!fileUrl) return "";
   try {
-    return path.basename(new URL(fileUrl, "http://localhost").pathname);
+    return decodeURIComponent(path.basename(new URL(fileUrl, "http://localhost").pathname));
   } catch {
-    return path.basename(fileUrl);
+    try {
+      return decodeURIComponent(path.basename(fileUrl));
+    } catch {
+      return path.basename(fileUrl);
+    }
   }
+}
+
+export function contentDispositionFileName(fileName: string) {
+  const safeName = path.basename(fileName);
+  const asciiName = safeName.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_") || "document";
+  return `inline; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
 }
 
 export function readableUploadFileName({
@@ -161,7 +172,7 @@ export async function readReceivedInvoiceFile(fileName: string) {
 }
 
 export async function readUploadedFile(fileName: string) {
-  const safeName = path.basename(fileName);
+  const safeName = uploadedFileNameFromUrl(fileName);
   if (shouldUseDatabaseFileStore()) {
     const pool = await ensureUploadFileStore();
     const { rows } = await pool.query<UploadFileRow>(

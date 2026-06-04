@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readUploadedFile } from "@/lib/files";
+import { contentDispositionFileName, readUploadedFile } from "@/lib/files";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
@@ -9,7 +9,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
   return new NextResponse(new Uint8Array(file.data), {
     headers: {
       "Content-Type": file.mimeType,
-      "Content-Disposition": `inline; filename="${name}"`,
+      "Content-Disposition": contentDispositionFileName(name),
     },
   });
 }
