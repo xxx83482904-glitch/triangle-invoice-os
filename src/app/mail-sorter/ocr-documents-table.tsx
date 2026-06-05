@@ -634,7 +634,6 @@ export function OcrDocumentsTable({
                                 </div>
                               ) : null}
                             </div>
-                            {senderColumn === "normal" ? <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div> : null}
                           </div>
                         </div>
                       </div>
