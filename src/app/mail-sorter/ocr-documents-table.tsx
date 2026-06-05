@@ -4,7 +4,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpDown, CheckSquare, Download, ExternalLink, FileText, Folder, Image as ImageIcon, ListFilter, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState, useTransition } from "react";
-import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateMailDocumentProcessingStatus, updateOcrDocumentInline } from "@/app/actions";
+import {
+  createMailFolder,
+  deleteMailFolder,
+  deleteOcrDocument,
+  deleteOcrDocumentsBulk,
+  moveOcrDocumentToMonth,
+  reflectMailDocumentToReceivedInvoice,
+  updateMailDocumentCategory,
+  updateMailDocumentProcessingStatus,
+  updateMailDocumentsBulkCategory,
+  updateOcrDocumentInline,
+  updateOcrDocumentsBulkProcessingStatus,
+} from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -384,6 +396,7 @@ export function OcrDocumentsTable({
   const [selectionDrag, setSelectionDrag] = useState<SelectionDragState | null>(null);
   const selectionDragRef = useRef<SelectionDragState | null>(null);
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
+  const selectedMailRows = useMemo(() => selectedRows.filter((row) => row.mailDocumentId), [selectedRows]);
   const duplicateData = useMemo(() => {
     const keyedRows = new Map<string, OcrDocumentListItem[]>();
     for (const row of rows) {
@@ -574,6 +587,57 @@ export function OcrDocumentsTable({
               {allDuplicatesSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
               {allDuplicatesSelected ? "重複解除" : `重複片方を選択 ${duplicateFilteredRows.length}`}
             </Button>
+            <form action={updateOcrDocumentsBulkProcessingStatus} className="flex">
+              <input type="hidden" name="company" value={company} />
+              {selectedRows.map((row) => (
+                <span key={row.id}>
+                  {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                  {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                </span>
+              ))}
+              <select
+                name="processingStatus"
+                defaultValue=""
+                className="h-8 w-32 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+                disabled={!canEdit || !selectedRows.length}
+                onChange={(event) => {
+                  if (event.currentTarget.value) event.currentTarget.form?.requestSubmit();
+                }}
+              >
+                <option value="" disabled>
+                  一括状態
+                </option>
+                {processingStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </form>
+            <form action={updateMailDocumentsBulkCategory} className="flex">
+              <input type="hidden" name="company" value={company} />
+              {selectedMailRows.map((row) => (
+                row.mailDocumentId ? <input key={row.id} type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null
+              ))}
+              <select
+                name="category"
+                defaultValue=""
+                className="h-8 w-32 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+                disabled={!canEdit || !selectedMailRows.length}
+                onChange={(event) => {
+                  if (event.currentTarget.value) event.currentTarget.form?.requestSubmit();
+                }}
+              >
+                <option value="" disabled>
+                  一括分類
+                </option>
+                {categoryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </form>
             {canExport ? (
               <Button asChild size="sm" variant="outline" className="gap-1">
                 <a href={exportHref}>
