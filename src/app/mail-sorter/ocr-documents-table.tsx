@@ -604,11 +604,10 @@ export function OcrDocumentsTable({
                               onClick={(event) => event.stopPropagation()}
                             />
                           ) : null}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <div className="line-clamp-2 break-words text-sm font-medium leading-snug">{shippingSenderName(row)}</div>
                               {senderColumn === "normal" ? (
-                                <div className="flex shrink-0 items-center gap-1">
+                                <div className="flex flex-wrap items-center gap-1">
                                   <Badge variant={isProcessedRow(row) ? "outline" : "secondary"}>{isProcessedRow(row) ? "\u51e6\u7406\u6e08" : "\u672a\u51e6\u7406"}</Badge>
                                   {canEdit && row.mailDocumentId ? (
                                   <form action={updateMailDocumentCategory} className="shrink-0" onClick={stopEditClick}>
@@ -633,7 +632,6 @@ export function OcrDocumentsTable({
                                   )}
                                 </div>
                               ) : null}
-                            </div>
                           </div>
                         </div>
                       </div>
