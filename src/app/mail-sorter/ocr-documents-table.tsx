@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckSquare, Download, ExternalLink, FileText, Folder, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
+import { ArrowUpDown, CheckSquare, Download, ExternalLink, FileText, Folder, Image as ImageIcon, ListFilter, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,24 @@ type FolderOption = {
   label?: string;
   month: string;
 };
+
+type ProcessingFilter = "all" | "unprocessed" | "processed";
+type DocumentSortMode = "newest" | "oldest" | "sender" | "category" | "amount-desc" | "amount-asc";
+
+const processingFilters: Array<{ icon: typeof ListFilter; label: string; value: ProcessingFilter }> = [
+  { icon: ListFilter, label: "\u5168\u4ef6", value: "all" },
+  { icon: Square, label: "\u672a\u51e6\u7406", value: "unprocessed" },
+  { icon: CheckSquare, label: "\u51e6\u7406\u6e08", value: "processed" },
+];
+
+const documentSortOptions: Array<{ label: string; value: DocumentSortMode }> = [
+  { label: "\u65b0\u3057\u3044\u9806", value: "newest" },
+  { label: "\u53e4\u3044\u9806", value: "oldest" },
+  { label: "\u767a\u9001\u5143\u9806", value: "sender" },
+  { label: "\u5206\u985e\u9806", value: "category" },
+  { label: "\u91d1\u984d \u9ad8\u3044\u9806", value: "amount-desc" },
+  { label: "\u91d1\u984d \u4f4e\u3044\u9806", value: "amount-asc" },
+];
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
   INVOICE: "請求書",
@@ -133,6 +151,32 @@ function shippingSenderName(row: OcrDocumentListItem) {
   if (row.extracted?.vendorName && row.extracted.vendorName !== "支払先未設定") return row.extracted.vendorName;
   const firstLine = row.ocrText?.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length >= 2 && line.length <= 40);
   return firstLine || row.fileName.replace(/\.[^.]+$/, "");
+}
+
+function documentAmount(row: OcrDocumentListItem) {
+  return row.extracted?.total ?? 0;
+}
+
+function isProcessedRow(row: OcrDocumentListItem) {
+  return Boolean(row.receivedInvoiceId);
+}
+
+function compareDocuments(a: OcrDocumentListItem, b: OcrDocumentListItem, sortMode: DocumentSortMode) {
+  switch (sortMode) {
+    case "oldest":
+      return a.createdAt.localeCompare(b.createdAt);
+    case "sender":
+      return shippingSenderName(a).localeCompare(shippingSenderName(b), "ja") || b.createdAt.localeCompare(a.createdAt);
+    case "category":
+      return categoryLabels[a.category].localeCompare(categoryLabels[b.category], "ja") || b.createdAt.localeCompare(a.createdAt);
+    case "amount-desc":
+      return documentAmount(b) - documentAmount(a) || b.createdAt.localeCompare(a.createdAt);
+    case "amount-asc":
+      return documentAmount(a) - documentAmount(b) || b.createdAt.localeCompare(a.createdAt);
+    case "newest":
+    default:
+      return b.createdAt.localeCompare(a.createdAt);
+  }
 }
 
 function memoField(row: OcrDocumentListItem, label: string) {
@@ -267,22 +311,29 @@ export function OcrDocumentsTable({
   const router = useRouter();
   const [isMoving, startMoveTransition] = useTransition();
   const [draggedRow, setDraggedRow] = useState<OcrDocumentListItem | null>(null);
+  const [processingFilter, setProcessingFilter] = useState<ProcessingFilter>("all");
+  const [documentSortMode, setDocumentSortMode] = useState<DocumentSortMode>("newest");
+  const filteredRows = useMemo(() => {
+    if (processingFilter === "all") return rows;
+    return rows.filter((row) => (processingFilter === "processed" ? isProcessedRow(row) : !isProcessedRow(row)));
+  }, [processingFilter, rows]);
   const groups = useMemo(() => {
     const grouped = new Map<string, OcrDocumentListItem[]>();
-    for (const row of rows) {
+    for (const row of filteredRows) {
       const key = row.folderMonth || monthKey(row.createdAt);
       grouped.set(key, [...(grouped.get(key) ?? []), row]);
     }
     for (const folder of folders) {
       if (!grouped.has(folder.month)) grouped.set(folder.month, []);
     }
-    return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
-  }, [folders, rows]);
+    return Array.from(grouped.entries())
+      .map(([month, monthRows]) => [month, [...monthRows].sort((a, b) => compareDocuments(a, b, documentSortMode))] as const)
+      .sort(([a], [b]) => b.localeCompare(a));
+  }, [documentSortMode, filteredRows, folders]);
   const customFolderMonths = useMemo(() => new Set(folders.map((folder) => folder.month)), [folders]);
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
-  const activeGroup = groups.find(([month]) => month === activeMonth) ?? groups[0];
-  const selectedMonth = activeGroup?.[0] ?? null;
-  const activeRows = activeGroup?.[1] ?? [];
+  const resolvedActiveMonth = activeMonth && groups.some(([month]) => month === activeMonth) ? activeMonth : groups[0]?.[0] ?? null;
+  const activeRows = groups.find(([month]) => month === resolvedActiveMonth)?.[1] ?? [];
   const [activeRowId, setActiveRowId] = useState<string | null>(activeRows[0]?.id ?? null);
   const activeRow = activeRows.find((row) => row.id === activeRowId) ?? activeRows[0] ?? null;
   const [dialogRow, setDialogRow] = useState<OcrDocumentListItem | null>(null);
@@ -292,6 +343,8 @@ export function OcrDocumentsTable({
   const [showEditor, setShowEditor] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
+  const processedCount = rows.filter(isProcessedRow).length;
+  const unprocessedCount = rows.length - processedCount;
   const selectedActiveCount = activeRows.filter((row) => selectedIds.has(row.id)).length;
   const allActiveSelected = activeRows.length > 0 && selectedActiveCount === activeRows.length;
   const exportHref = `/api/export/ocr-documents?company=${company}${
@@ -358,6 +411,30 @@ export function OcrDocumentsTable({
             <div className="mt-1 text-xs text-muted-foreground">追加・変更・削除と、カラム幅の切り替えができます。</div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <div className="flex items-center rounded-md border bg-background p-0.5">
+              {processingFilters.map((filter) => {
+                const Icon = filter.icon;
+                const count = filter.value === "all" ? rows.length : filter.value === "processed" ? processedCount : unprocessedCount;
+                return (
+                  <Button
+                    key={filter.value}
+                    type="button"
+                    size="sm"
+                    variant={processingFilter === filter.value ? "default" : "ghost"}
+                    className="h-7 gap-1 rounded-sm px-2 text-xs"
+                    onClick={() => {
+                      setProcessingFilter(filter.value);
+                      setActiveMonth(null);
+                      setActiveRowId(null);
+                    }}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {filter.label}
+                    <span className="tabular-nums">{count}</span>
+                  </Button>
+                );
+              })}
+            </div>
             <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleActiveMonthSelection} disabled={!activeRows.length}>
               {allActiveSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
               {allActiveSelected ? "解除" : "表示中を選択"}
@@ -425,7 +502,7 @@ export function OcrDocumentsTable({
                 </div>
                 <div className="space-y-2">
                   {groups.map(([month, monthRows]) => {
-                    const isActive = month === selectedMonth;
+                    const isActive = month === resolvedActiveMonth;
                     const canDeleteFolder = canEdit && customFolderMonths.has(month) && monthRows.length === 0;
                     return (
                       <div key={month} className="group relative">
@@ -466,6 +543,25 @@ export function OcrDocumentsTable({
               </aside>
 
               <aside className="border-b p-3 lg:border-r lg:border-b-0">
+                <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <label className="flex min-w-0 flex-1 items-center gap-1">
+                    <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
+                    <select
+                      value={documentSortMode}
+                      className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+                      onChange={(event) => {
+                        setDocumentSortMode(event.target.value as DocumentSortMode);
+                        setActiveRowId(null);
+                      }}
+                    >
+                      {documentSortOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                   <span>発送元</span>
                   {selectedRows.length ? <span>{selectedRows.length}件選択</span> : null}
@@ -512,7 +608,9 @@ export function OcrDocumentsTable({
                             <div className="flex items-center justify-between gap-2">
                               <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
                               {senderColumn === "normal" ? (
-                                canEdit && row.mailDocumentId ? (
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <Badge variant={isProcessedRow(row) ? "outline" : "secondary"}>{isProcessedRow(row) ? "\u51e6\u7406\u6e08" : "\u672a\u51e6\u7406"}</Badge>
+                                  {canEdit && row.mailDocumentId ? (
                                   <form action={updateMailDocumentCategory} className="shrink-0" onClick={stopEditClick}>
                                     <input type="hidden" name="company" value={company} />
                                     <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} />
@@ -532,7 +630,8 @@ export function OcrDocumentsTable({
                                   </form>
                                 ) : (
                                   <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
-                                )
+                                  )}
+                                </div>
                               ) : null}
                             </div>
                             {senderColumn === "normal" ? <div className="mt-1 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div> : null}
