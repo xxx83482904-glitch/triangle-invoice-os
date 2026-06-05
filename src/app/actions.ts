@@ -1252,24 +1252,21 @@ export async function moveOcrDocumentToMonth(formData: FormData) {
     throw new Error("権限がありません");
   }
 
-  const mailDocumentId = optional(formData, "mailDocumentId");
-  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
+  const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
   const company = companyFromParam(value(formData, "company"));
   const targetMonth = validMonth(value(formData, "targetMonth"));
   if (!targetMonth) throw new Error("移動先フォルダーを選択してください");
+  if (!mailDocumentIds.length && !receivedInvoiceIds.length) throw new Error("書類を選択してください");
 
   const timestamp = now();
   const data = await readData();
   const before = {
-    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
-    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
+    mailDocuments: data.mailDocuments.filter((item) => mailDocumentIds.includes(item.id)),
+    receivedInvoices: data.receivedInvoices.filter((item) => receivedInvoiceIds.includes(item.id)),
   };
 
-  await mutateData(user.id, "MOVE_OCR_DOCUMENT_TO_MONTH", "OcrDocument", mailDocumentId ?? receivedInvoiceId ?? "unknown", (draft) => {
-    const mailDocument = mailDocumentId ? draft.mailDocuments.find((item) => item.id === mailDocumentId && !item.deletedAt) : undefined;
-    const receivedInvoice = receivedInvoiceId ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId && !item.deletedAt) : undefined;
-    if (!mailDocument && !receivedInvoice) throw new Error("書類が見つかりません");
-
+  await mutateData(user.id, "MOVE_OCR_DOCUMENT_TO_MONTH", "OcrDocument", mailDocumentIds[0] ?? receivedInvoiceIds[0] ?? "unknown", (draft) => {
     const existingFolder = draft.mailFolders.find(
       (folder) => !folder.deletedAt && companyFromParam(folder.company) === company && folder.month === targetMonth,
     );
@@ -1283,15 +1280,26 @@ export async function moveOcrDocumentToMonth(formData: FormData) {
       });
     }
 
-    if (mailDocument) {
+    const movedMailDocuments = [];
+    const movedReceivedInvoices = [];
+    for (const mailDocument of draft.mailDocuments) {
+      if (!mailDocumentIds.includes(mailDocument.id) || mailDocument.deletedAt || companyFromParam(mailDocument.company) !== company) continue;
       mailDocument.folderMonth = targetMonth;
       mailDocument.updatedAt = timestamp;
+      movedMailDocuments.push(mailDocument);
     }
-    if (receivedInvoice) {
+
+    for (const receivedInvoice of draft.receivedInvoices) {
+      if (!receivedInvoiceIds.includes(receivedInvoice.id) || receivedInvoice.deletedAt) continue;
+      const project = draft.projects.find((item) => item.id === receivedInvoice.projectId);
+      if (companyFromParam(project?.company) !== company) continue;
       receivedInvoice.folderMonth = targetMonth;
       receivedInvoice.updatedAt = timestamp;
+      movedReceivedInvoices.push(receivedInvoice);
     }
-    return { mailDocument, receivedInvoice, targetMonth };
+
+    if (!movedMailDocuments.length && !movedReceivedInvoices.length) throw new Error("書類が見つかりません");
+    return { mailDocuments: movedMailDocuments, receivedInvoices: movedReceivedInvoices, targetMonth };
   }, before);
 
   revalidatePath("/mail-sorter");

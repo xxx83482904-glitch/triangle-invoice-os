@@ -430,6 +430,7 @@ export function OcrDocumentsTable({
   const exportHref = `/api/export/ocr-documents?company=${company}${
     selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
   }`;
+  const draggedMoveCount = draggedRow && selectedIds.has(draggedRow.id) ? selectedRows.length : draggedRow ? 1 : 0;
 
   const chooseMonth = (month: string, monthRows: OcrDocumentListItem[]) => {
     setActiveMonth(month);
@@ -526,17 +527,27 @@ export function OcrDocumentsTable({
 
   const moveRowToMonth = (row: OcrDocumentListItem | null, targetMonth: string) => {
     if (!row || !canEdit) return;
-    const sourceMonth = row.folderMonth || monthKey(row.createdAt);
-    if (sourceMonth === targetMonth) return;
+    const rowsToMove = selectedIds.has(row.id) ? selectedRows : [row];
+    const movableRows = rowsToMove.filter((item) => item.mailDocumentId || item.receivedInvoiceId);
+    if (!movableRows.length) return;
+    const hasDifferentMonth = movableRows.some((item) => (item.folderMonth || monthKey(item.createdAt)) !== targetMonth);
+    if (!hasDifferentMonth) return;
     const formData = new FormData();
     formData.set("company", company);
     formData.set("targetMonth", targetMonth);
-    if (row.mailDocumentId) formData.set("mailDocumentId", row.mailDocumentId);
-    if (row.receivedInvoiceId) formData.set("receivedInvoiceId", row.receivedInvoiceId);
+    for (const item of movableRows) {
+      if (item.mailDocumentId) formData.append("mailDocumentId", item.mailDocumentId);
+      if (item.receivedInvoiceId) formData.append("receivedInvoiceId", item.receivedInvoiceId);
+    }
     startMoveTransition(async () => {
       await moveOcrDocumentToMonth(formData);
       setActiveMonth(targetMonth);
       setActiveRowId(row.id);
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        movableRows.forEach((item) => next.delete(item.id));
+        return next;
+      });
       setDraggedRow(null);
       router.refresh();
     });
@@ -725,7 +736,9 @@ export function OcrDocumentsTable({
                           <Folder className={`h-5 w-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-medium">{monthColumn === "compact" ? shortMonthLabel(month) : monthLabel(month)}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">{monthColumn === "compact" ? monthRows.length : `${monthRows.length}件`}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {draggedMoveCount && !isActive ? `${draggedMoveCount}件を移動` : monthColumn === "compact" ? monthRows.length : `${monthRows.length}件`}
+                            </div>
                           </div>
                         </button>
                         {canDeleteFolder ? (
