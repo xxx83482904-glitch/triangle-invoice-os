@@ -50,38 +50,25 @@ jobs:
               "${DEPLOY_URL}/api/admin/deploy" || true)"
 
             if [ "$deploy_status" = "200" ]; then
-              set +e
-              SHORT_SHA="$SHORT_SHA" python3 - <<'PY'
-import json
-import os
-import sys
+              log="$(python3 -c 'import json; print((json.load(open("deploy-status.json", encoding="utf-8")).get("log") or ""))')"
+              marker="HEAD is now at ${SHORT_SHA}"
 
-with open("deploy-status.json", encoding="utf-8") as file:
-    payload = json.load(file)
+              if printf '%s' "$log" | grep -Fq "$marker"; then
+                tail="${log##*${marker}}"
+                printf '%s\n' "${marker}${tail}"
 
-log = payload.get("log") or ""
-marker = f"HEAD is now at {os.environ['SHORT_SHA']}"
-index = log.rfind(marker)
-tail = log[index:] if index >= 0 else log
+                if printf '%s' "$tail" | grep -Fq "self deploy child exited: code=1"; then
+                  echo "Self deploy build failed." >&2
+                  exit 1
+                fi
 
-if index >= 0 and "self deploy child exited: code=1" in tail:
-    print(tail)
-    sys.exit(2)
-
-if index >= 0 and ("Build finished" in tail or "self deploy child exited: code=0" in tail):
-    print(tail)
-    sys.exit(0)
-
-sys.exit(3)
-PY
-              deploy_check="$?"
-              set -e
-
-              if [ "$deploy_check" = "0" ]; then
-                echo "Self deploy build finished."
-                break
+                if printf '%s' "$tail" | grep -Eq "Build finished|self deploy child exited: code=0"; then
+                  echo "Self deploy build finished."
+                  break
+                fi
               fi
-              if [ "$deploy_check" = "2" ]; then
+
+              if [ "$attempt" = "120" ]; then
                 echo "Self deploy build failed." >&2
                 exit 1
               fi
