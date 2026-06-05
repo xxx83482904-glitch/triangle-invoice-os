@@ -56,6 +56,18 @@ function normalizedBranch() {
   return branch;
 }
 
+function deployEnvironment() {
+  const env: NodeJS.ProcessEnv = { ...process.env, NEXT_TELEMETRY_DISABLED: "1" };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("__NEXT_PRIVATE_")) {
+      delete env[key];
+    }
+  }
+  delete env.NEXT_DEPLOYMENT_ID;
+  delete env.NEXT_OTEL_FETCH_DISABLED;
+  return env;
+}
+
 function requireDeployToken(request: Request) {
   if (!deployEnabled()) {
     return NextResponse.json({ error: "Self deploy is disabled" }, { status: 404 });
@@ -121,7 +133,7 @@ export async function POST(request: Request) {
   const child = spawn("sh", ["-lc", script], {
     cwd: appRoot,
     detached: true,
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+    env: deployEnvironment(),
   });
 
   child.stdout.pipe(log, { end: false });

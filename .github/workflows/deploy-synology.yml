@@ -42,6 +42,60 @@ jobs:
             exit 1
           fi
 
+          echo "Waiting for self deploy build..."
+          SHORT_SHA="${GITHUB_SHA::7}"
+          for attempt in $(seq 1 120); do
+            deploy_status="$(curl -skS -o deploy-status.json -w "%{http_code}" \
+              -H "x-deploy-token: ${DEPLOY_TOKEN}" \
+              "${DEPLOY_URL}/api/admin/deploy" || true)"
+
+            if [ "$deploy_status" = "200" ]; then
+              set +e
+              SHORT_SHA="$SHORT_SHA" python3 - <<'PY'
+import json
+import os
+import sys
+
+with open("deploy-status.json", encoding="utf-8") as file:
+    payload = json.load(file)
+
+log = payload.get("log") or ""
+marker = f"HEAD is now at {os.environ['SHORT_SHA']}"
+index = log.rfind(marker)
+tail = log[index:] if index >= 0 else log
+
+if index >= 0 and "self deploy child exited: code=1" in tail:
+    print(tail)
+    sys.exit(2)
+
+if index >= 0 and ("Build finished" in tail or "self deploy child exited: code=0" in tail):
+    print(tail)
+    sys.exit(0)
+
+sys.exit(3)
+PY
+              deploy_check="$?"
+              set -e
+
+              if [ "$deploy_check" = "0" ]; then
+                echo "Self deploy build finished."
+                break
+              fi
+              if [ "$deploy_check" = "2" ]; then
+                echo "Self deploy build failed." >&2
+                exit 1
+              fi
+            fi
+
+            echo "Attempt ${attempt}: deploy HTTP ${deploy_status}. Waiting..."
+            sleep 10
+
+            if [ "$attempt" = "120" ]; then
+              echo "Self deploy build did not finish in time." >&2
+              exit 1
+            fi
+          done
+
           echo "Waiting for production to return..."
           for attempt in $(seq 1 90); do
             health_status="$(curl -skS -o /dev/null -w "%{http_code}" "${DEPLOY_URL}/login" || true)"
