@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, FileText, LayoutGrid, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ellipsis, FileText, LayoutGrid, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, type CompanyScope } from "@/lib/company";
 import { canRole, defaultPathForRole } from "@/lib/rbac";
 import type { UserRole } from "@/lib/types";
@@ -77,10 +78,17 @@ export function MobileAppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const company = companyFromParam(searchParams.get("company"));
+  const allowedNav = nav.filter((item) => canRole(role, item.permission));
+  const primaryHrefs = ["/dashboard", "/projects", "/mail-sorter", "/received-invoices"];
+  const primaryItems = primaryHrefs
+    .map((href) => allowedNav.find((item) => item.href === href))
+    .filter((item): item is (typeof nav)[number] => Boolean(item));
+  const moreItems = allowedNav.filter((item) => !primaryHrefs.includes(item.href));
+  const moreActive = moreItems.some((item) => pathname === item.href);
 
   return (
-    <nav className="flex h-16 items-stretch gap-1 overflow-x-auto px-2 py-1.5">
-      {nav.filter((item) => canRole(role, item.permission)).map((item) => {
+    <nav className={`grid h-16 ${moreItems.length ? "grid-cols-5" : "grid-cols-4"} items-stretch gap-1 px-2 py-1.5`}>
+      {primaryItems.map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href;
         return (
@@ -88,15 +96,43 @@ export function MobileAppNav({ role }: { role: UserRole }) {
             key={item.href}
             href={navHref(item.href, company)}
             title={item.label}
-            className={`flex min-w-[64px] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-2 transition ${
+            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 transition ${
               active ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" />
-            <span className="max-w-[68px] truncate text-[10px] leading-tight">{item.label}</span>
+            <span className="max-w-full truncate text-[10px] leading-tight">{item.label}</span>
           </Link>
         );
       })}
+      {moreItems.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 transition ${
+                moreActive ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Ellipsis className="h-4 w-4" />
+              <span className="max-w-full truncate text-[10px] leading-tight">その他</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" sideOffset={8} className="w-44">
+            {moreItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <DropdownMenuItem key={item.href} asChild>
+                  <Link href={navHref(item.href, company)} className="flex items-center gap-2">
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </nav>
   );
 }

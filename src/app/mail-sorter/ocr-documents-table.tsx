@@ -555,7 +555,323 @@ export function OcrDocumentsTable({
 
   return (
     <>
-      <Card>
+      <Card className="lg:hidden">
+        <CardHeader className="gap-3 px-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <CardTitle className="text-base">郵便物</CardTitle>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {activeRows.length}件表示 / {selectedRows.length ? `${selectedRows.length}件選択中` : `${rows.length}件`}
+              </div>
+            </div>
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={openDropzone}>
+              <Plus className="h-3.5 w-3.5" />
+              追加
+            </Button>
+          </div>
+
+          <div className="grid gap-2">
+            <div className="flex overflow-x-auto rounded-lg border bg-background p-1">
+              {processingFilters.map((filter) => {
+                const Icon = filter.icon;
+                const count = filter.value === "all" ? rows.length : filter.value === "processed" ? processedCount : unprocessedCount;
+                return (
+                  <Button
+                    key={filter.value}
+                    type="button"
+                    size="sm"
+                    variant={processingFilter === filter.value ? "default" : "ghost"}
+                    className="h-9 min-w-[88px] gap-1 rounded-md px-2 text-xs"
+                    onClick={() => {
+                      setProcessingFilter(filter.value);
+                      setActiveMonth(null);
+                      setActiveRowId(null);
+                    }}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {filter.label}
+                    <span className="tabular-nums">{count}</span>
+                  </Button>
+                );
+              })}
+            </div>
+
+            <label className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
+              <ArrowUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <select
+                value={documentSortMode}
+                className="h-8 min-w-0 flex-1 bg-background text-[16px] outline-none"
+                onChange={(event) => {
+                  setDocumentSortMode(event.target.value as DocumentSortMode);
+                  setActiveRowId(null);
+                }}
+              >
+                {documentSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-3 px-3">
+          {groups.length ? (
+            <>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {groups.map(([month, monthRows]) => {
+                  const isActive = month === resolvedActiveMonth;
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      className={`min-w-[112px] rounded-xl border px-3 py-2 text-left ${
+                        isActive ? "border-primary bg-primary text-primary-foreground" : "bg-background"
+                      }`}
+                      onClick={() => chooseMonth(month, monthRows)}
+                    >
+                      <div className="text-xs font-medium">{shortMonthLabel(month)}</div>
+                      <div className={`mt-1 text-[11px] ${isActive ? "text-primary-foreground/75" : "text-muted-foreground"}`}>{monthRows.length}件</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleFilteredSelection} disabled={!filteredRows.length}>
+                  {allFilteredSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                  全件
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleActiveMonthSelection} disabled={!activeRows.length}>
+                  {allActiveSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                  表示中
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleDuplicateSelection} disabled={!duplicateFilteredRows.length}>
+                  {allDuplicatesSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                  重複
+                </Button>
+              </div>
+
+              {selectedRows.length ? (
+                <div className="sticky top-[64px] z-10 space-y-2 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
+                  <div className="flex items-center justify-between gap-2 text-xs font-medium">
+                    <span>{selectedRows.length}件選択中</span>
+                    <Button type="button" size="xs" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                      解除
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <form action={updateOcrDocumentsBulkProcessingStatus} className="min-w-0">
+                      <input type="hidden" name="company" value={company} />
+                      {selectedRows.map((row) => (
+                        <span key={row.id}>
+                          {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                          {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                        </span>
+                      ))}
+                      <select
+                        name="processingStatus"
+                        defaultValue=""
+                        className="h-9 w-full rounded-lg border border-input bg-background px-2 text-[16px] outline-none"
+                        disabled={!canEdit}
+                        onChange={(event) => {
+                          if (event.currentTarget.value) event.currentTarget.form?.requestSubmit();
+                        }}
+                      >
+                        <option value="" disabled>
+                          状態
+                        </option>
+                        {processingStatusOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </form>
+                    <form action={updateMailDocumentsBulkCategory} className="min-w-0">
+                      <input type="hidden" name="company" value={company} />
+                      {selectedMailRows.map((row) => (
+                        row.mailDocumentId ? <input key={row.id} type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null
+                      ))}
+                      <select
+                        name="category"
+                        defaultValue=""
+                        className="h-9 w-full rounded-lg border border-input bg-background px-2 text-[16px] outline-none"
+                        disabled={!canEdit || !selectedMailRows.length}
+                        onChange={(event) => {
+                          if (event.currentTarget.value) event.currentTarget.form?.requestSubmit();
+                        }}
+                      >
+                        <option value="" disabled>
+                          分類
+                        </option>
+                        {categoryOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </form>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                    <form action={moveOcrDocumentToMonth} className="min-w-0">
+                      <input type="hidden" name="company" value={company} />
+                      {selectedRows.map((row) => (
+                        <span key={row.id}>
+                          {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                          {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                        </span>
+                      ))}
+                      <select
+                        name="targetMonth"
+                        defaultValue=""
+                        className="h-9 w-full rounded-lg border border-input bg-background px-2 text-[16px] outline-none"
+                        disabled={!canEdit}
+                        onChange={(event) => {
+                          if (event.currentTarget.value) event.currentTarget.form?.requestSubmit();
+                        }}
+                      >
+                        <option value="" disabled>
+                          移動先
+                        </option>
+                        {groups.map(([month]) => (
+                          <option key={month} value={month}>
+                            {monthLabel(month)}
+                          </option>
+                        ))}
+                      </select>
+                    </form>
+                    {canExport ? (
+                      <Button asChild size="icon-sm" variant="outline" aria-label="CSV">
+                        <a href={exportHref}>
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    ) : null}
+                    <form
+                      action={deleteOcrDocumentsBulk}
+                      onSubmit={(event) => {
+                        if (!selectedRows.length || !confirm(`${selectedRows.length}件の書類を削除します。よろしいですか？`)) {
+                          event.preventDefault();
+                        }
+                      }}
+                    >
+                      <input type="hidden" name="company" value={company} />
+                      {selectedRows.map((row) => (
+                        <span key={row.id}>
+                          {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                          {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                        </span>
+                      ))}
+                      <Button type="submit" size="icon-sm" variant="outline" className="text-destructive" disabled={!canEdit}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </form>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                {activeRows.map((row) => {
+                  const isSelected = selectedIds.has(row.id);
+                  const isDuplicate = duplicateIds.has(row.id);
+                  return (
+                    <div
+                      key={row.id}
+                      className={`rounded-xl border bg-background p-3 shadow-sm ${
+                        isSelected ? "border-primary ring-1 ring-primary/30" : isDuplicate ? "border-amber-300" : "border-border"
+                      }`}
+                    >
+                      <div className="flex gap-3">
+                        {canEdit ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            className="mt-1 h-5 w-5 rounded border-muted-foreground/40"
+                            aria-label={`${shippingSenderName(row)}を選択`}
+                            onChange={() => toggleRowSelection(row)}
+                          />
+                        ) : null}
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => {
+                            setActiveRowId(row.id);
+                            setDialogRow(row);
+                          }}
+                        >
+                          <div className="flex min-w-0 items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="line-clamp-2 break-words text-sm font-semibold leading-snug">{shippingSenderName(row)}</div>
+                              <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{row.ocrPreview}</div>
+                            </div>
+                            {row.extracted?.total ? <div className="shrink-0 font-mono text-xs">{moneyFormatter.format(row.extracted.total)}</div> : null}
+                          </div>
+                        </button>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                        {canEdit && (row.mailDocumentId || row.receivedInvoiceId) ? (
+                          <form action={updateMailDocumentProcessingStatus} onClick={stopEditClick}>
+                            <input type="hidden" name="company" value={company} />
+                            {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                            {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                            <select
+                              name="processingStatus"
+                              defaultValue={isProcessedRow(row) ? "processed" : "unprocessed"}
+                              className={processingStatusSelectClass(isProcessedRow(row))}
+                              aria-label="処理状態"
+                              onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                            >
+                              {processingStatusOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </form>
+                        ) : (
+                          <Badge variant={isProcessedRow(row) ? "outline" : "secondary"}>{isProcessedRow(row) ? "処理済" : "未処理"}</Badge>
+                        )}
+                        {canEdit && row.mailDocumentId ? (
+                          <form action={updateMailDocumentCategory} onClick={stopEditClick}>
+                            <input type="hidden" name="company" value={company} />
+                            <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} />
+                            <select
+                              name="category"
+                              defaultValue={row.category}
+                              className={categorySelectClass(row.category)}
+                              aria-label="分類"
+                              onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                            >
+                              {categoryOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </form>
+                        ) : (
+                          <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
+                        )}
+                        {isDuplicate ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-700">重複</Badge> : null}
+                        <Button type="button" size="xs" variant="ghost" className="ml-auto" onClick={() => setDialogRow(row)}>
+                          詳細
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="py-10 text-center text-sm text-muted-foreground">まだOCRした書類がありません。</div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="hidden lg:flex">
         <CardHeader className="gap-3 px-3 sm:px-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <CardTitle>郵便物フォルダー</CardTitle>
