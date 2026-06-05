@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpDown, CheckSquare, Download, ExternalLink, FileText, Folder, Image as ImageIcon, ListFilter, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
-import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
+import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateMailDocumentProcessingStatus, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,7 @@ export type OcrDocumentListItem = {
   fileUrl?: string;
   folderMonth?: string;
   id: string;
+  mailProcessed?: boolean;
   mailDocumentId?: string;
   memo?: string;
   mimeType?: string;
@@ -70,6 +71,11 @@ const documentSortOptions: Array<{ label: string; value: DocumentSortMode }> = [
   { label: "\u5206\u985e\u9806", value: "category" },
   { label: "\u91d1\u984d \u9ad8\u3044\u9806", value: "amount-desc" },
   { label: "\u91d1\u984d \u4f4e\u3044\u9806", value: "amount-asc" },
+];
+
+const processingStatusOptions = [
+  { label: "\u672a\u51e6\u7406", value: "unprocessed" },
+  { label: "\u51e6\u7406\u6e08", value: "processed" },
 ];
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
@@ -153,12 +159,19 @@ function shippingSenderName(row: OcrDocumentListItem) {
   return firstLine || row.fileName.replace(/\.[^.]+$/, "");
 }
 
+function processingStatusSelectClass(processed: boolean) {
+  const tone = processed
+    ? "border-border bg-background text-foreground"
+    : "border-secondary bg-secondary text-secondary-foreground";
+  return `h-6 rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
+}
+
 function documentAmount(row: OcrDocumentListItem) {
   return row.extracted?.total ?? 0;
 }
 
 function isProcessedRow(row: OcrDocumentListItem) {
-  return Boolean(row.receivedInvoiceId);
+  return row.mailProcessed ?? Boolean(row.receivedInvoiceId);
 }
 
 function compareDocuments(a: OcrDocumentListItem, b: OcrDocumentListItem, sortMode: DocumentSortMode) {
@@ -608,7 +621,28 @@ export function OcrDocumentsTable({
                             <div className="line-clamp-2 break-words text-sm font-medium leading-snug">{shippingSenderName(row)}</div>
                               {senderColumn === "normal" ? (
                                 <div className="flex flex-wrap items-center gap-1">
-                                  <Badge variant={isProcessedRow(row) ? "outline" : "secondary"}>{isProcessedRow(row) ? "\u51e6\u7406\u6e08" : "\u672a\u51e6\u7406"}</Badge>
+                                  {canEdit && (row.mailDocumentId || row.receivedInvoiceId) ? (
+                                    <form action={updateMailDocumentProcessingStatus} className="shrink-0" onClick={stopEditClick}>
+                                      <input type="hidden" name="company" value={company} />
+                                      {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                                      {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                                      <select
+                                        name="processingStatus"
+                                        defaultValue={isProcessedRow(row) ? "processed" : "unprocessed"}
+                                        className={processingStatusSelectClass(isProcessedRow(row))}
+                                        aria-label="\u51e6\u7406\u72b6\u614b"
+                                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                                      >
+                                        {processingStatusOptions.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </form>
+                                  ) : (
+                                    <Badge variant={isProcessedRow(row) ? "outline" : "secondary"}>{isProcessedRow(row) ? "\u51e6\u7406\u6e08" : "\u672a\u51e6\u7406"}</Badge>
+                                  )}
                                   {canEdit && row.mailDocumentId ? (
                                   <form action={updateMailDocumentCategory} className="shrink-0" onClick={stopEditClick}>
                                     <input type="hidden" name="company" value={company} />
@@ -707,12 +741,6 @@ export function OcrDocumentsTable({
                             <Link href={`/projects/${activeRow.extracted.projectId}?company=${company}`}>案件を開く</Link>
                           </Button>
                         ) : null}
-                        <div className="space-y-2">
-                          <div className="text-sm font-medium">OCR本文</div>
-                          <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
-                            {activeRow.ocrText || "OCR本文はありません。"}
-                          </pre>
-                        </div>
                       </div>
 
                       <div className="min-w-0 space-y-3 rounded-lg border p-4">
@@ -731,6 +759,13 @@ export function OcrDocumentsTable({
                           ) : null}
                         </div>
                         <DocumentPreview compact row={activeRow} />
+                      </div>
+
+                      <div className="space-y-2 rounded-lg border p-4">
+                        <div className="text-sm font-medium">OCR本文</div>
+                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
+                          {activeRow.ocrText || "OCR本文はありません。"}
+                        </pre>
                       </div>
                     </div>
 
@@ -988,12 +1023,6 @@ export function OcrDocumentsTable({
                       <Link href={`/projects/${dialogRow.extracted.projectId}?company=${company}`}>案件を開く</Link>
                     </Button>
                   ) : null}
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">OCR本文</div>
-                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
-                      {dialogRow.ocrText || "OCR本文はありません。"}
-                    </pre>
-                  </div>
                 </div>
                 <div className="min-h-0 space-y-3 overflow-hidden rounded-md border p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -1011,6 +1040,12 @@ export function OcrDocumentsTable({
                     ) : null}
                   </div>
                   <DocumentPreview row={dialogRow} />
+                </div>
+                <div className="space-y-2 rounded-md border p-4">
+                  <div className="text-sm font-medium">OCR本文</div>
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
+                    {dialogRow.ocrText || "OCR本文はありません。"}
+                  </pre>
                 </div>
               </div>
             </>

@@ -192,6 +192,7 @@ export type ReceivedInvoice = {
   originalFileName?: string;
   mimeType?: string;
   ocrText?: string;
+  mailProcessed?: boolean;
   approvedById?: string;
   paidAt?: string;
   paymentMethod?: string;
@@ -215,6 +216,7 @@ export type MailDocument = {
   ocrText?: string;
   confidence?: number;
   relatedReceivedInvoiceId?: string;
+  mailProcessed?: boolean;
   memo?: string;
   uploadedById: string;
   createdAt: string;

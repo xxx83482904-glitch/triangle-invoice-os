@@ -806,6 +806,51 @@ export async function updateMailDocumentCategory(formData: FormData) {
   revalidatePath("/mail-sorter");
 }
 
+export async function updateMailDocumentProcessingStatus(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+    throw new Error("権限がありません");
+  }
+
+  const company = companyFromParam(value(formData, "company"));
+  const mailDocumentId = optional(formData, "mailDocumentId");
+  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
+  const mailProcessed = value(formData, "processingStatus") === "processed";
+  const timestamp = now();
+  const data = await readData();
+  const before = {
+    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
+    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
+  };
+  const targetId = mailDocumentId ?? receivedInvoiceId ?? "unknown";
+
+  await mutateData(user.id, "UPDATE_MAIL_DOCUMENT_PROCESSING_STATUS", "OcrDocument", targetId, (draft) => {
+    const mailDocument = mailDocumentId
+      ? draft.mailDocuments.find((item) => item.id === mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company)
+      : undefined;
+
+    if (mailDocument) {
+      mailDocument.mailProcessed = mailProcessed;
+      mailDocument.updatedAt = timestamp;
+      return mailDocument;
+    }
+
+    const receivedInvoice = receivedInvoiceId
+      ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId && !item.deletedAt)
+      : undefined;
+    const project = receivedInvoice ? draft.projects.find((item) => item.id === receivedInvoice.projectId) : undefined;
+    if (!receivedInvoice || companyFromParam(project?.company) !== company) {
+      throw new Error("書類が見つかりません");
+    }
+
+    receivedInvoice.mailProcessed = mailProcessed;
+    receivedInvoice.updatedAt = timestamp;
+    return receivedInvoice;
+  }, before);
+
+  revalidatePath("/mail-sorter");
+}
+
 export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
   const user = await requireUser();
   if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
