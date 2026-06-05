@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpDown, CheckSquare, Download, ExternalLink, FileText, Folder, Image as ImageIcon, ListFilter, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateMailDocumentProcessingStatus, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,7 @@ type FolderOption = {
 
 type ProcessingFilter = "all" | "unprocessed" | "processed";
 type DocumentSortMode = "newest" | "oldest" | "sender" | "category" | "amount-desc" | "amount-asc";
+type SelectionDragState = { shouldSelect: boolean };
 
 const processingFilters: Array<{ icon: typeof ListFilter; label: string; value: ProcessingFilter }> = [
   { icon: ListFilter, label: "\u5168\u4ef6", value: "all" },
@@ -190,6 +191,29 @@ function compareDocuments(a: OcrDocumentListItem, b: OcrDocumentListItem, sortMo
     default:
       return b.createdAt.localeCompare(a.createdAt);
   }
+}
+
+function normalizeDuplicateText(value?: string) {
+  return (value ?? "").toLowerCase().replace(/\s+/g, "").trim();
+}
+
+function fileBaseName(value: string) {
+  return normalizeDuplicateText(value.replace(/\.[^.]+$/, "").replace(/\(\d+\)|copy|コピー/gi, ""));
+}
+
+function duplicateKeys(row: OcrDocumentListItem) {
+  const keys: string[] = [];
+  const ocr = normalizeDuplicateText(row.ocrText);
+  const fileName = fileBaseName(row.fileName);
+  const sender = normalizeDuplicateText(shippingSenderName(row));
+  const total = row.extracted?.total || normalizeDuplicateText(memoField(row, "金額"));
+  const issueDate = row.extracted?.issueDate || memoField(row, "請求日") || row.createdAt.slice(0, 10);
+
+  if (ocr.length >= 80) keys.push(`ocr:${ocr.slice(0, 1200)}`);
+  if (fileName.length >= 8) keys.push(`file:${fileName}`);
+  if (sender && total && issueDate) keys.push(`business:${sender}:${row.category}:${total}:${issueDate}`);
+
+  return keys;
 }
 
 function memoField(row: OcrDocumentListItem, label: string) {
@@ -357,11 +381,32 @@ export function OcrDocumentsTable({
   const [senderColumn, setSenderColumn] = useState<ColumnMode>("normal");
   const [showEditor, setShowEditor] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectionDrag, setSelectionDrag] = useState<SelectionDragState | null>(null);
+  const selectionDragRef = useRef<SelectionDragState | null>(null);
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
+  const duplicateIds = useMemo(() => {
+    const keyedRows = new Map<string, string[]>();
+    for (const row of rows) {
+      for (const key of duplicateKeys(row)) {
+        keyedRows.set(key, [...(keyedRows.get(key) ?? []), row.id]);
+      }
+    }
+
+    const ids = new Set<string>();
+    for (const rowIds of keyedRows.values()) {
+      if (rowIds.length > 1) rowIds.forEach((id) => ids.add(id));
+    }
+    return ids;
+  }, [rows]);
+  const duplicateFilteredRows = useMemo(() => filteredRows.filter((row) => duplicateIds.has(row.id)), [duplicateIds, filteredRows]);
   const processedCount = rows.filter(isProcessedRow).length;
   const unprocessedCount = rows.length - processedCount;
+  const selectedFilteredCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
   const selectedActiveCount = activeRows.filter((row) => selectedIds.has(row.id)).length;
+  const selectedDuplicateCount = duplicateFilteredRows.filter((row) => selectedIds.has(row.id)).length;
+  const allFilteredSelected = filteredRows.length > 0 && selectedFilteredCount === filteredRows.length;
   const allActiveSelected = activeRows.length > 0 && selectedActiveCount === activeRows.length;
+  const allDuplicatesSelected = duplicateFilteredRows.length > 0 && selectedDuplicateCount === duplicateFilteredRows.length;
   const exportHref = `/api/export/ocr-documents?company=${company}${
     selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
   }`;
@@ -383,6 +428,30 @@ export function OcrDocumentsTable({
     });
   };
 
+  const setRowSelected = (row: OcrDocumentListItem, shouldSelect: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (shouldSelect) {
+        next.add(row.id);
+      } else {
+        next.delete(row.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleFilteredSelection = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allFilteredSelected) {
+        filteredRows.forEach((row) => next.delete(row.id));
+      } else {
+        filteredRows.forEach((row) => next.add(row.id));
+      }
+      return next;
+    });
+  };
+
   const toggleActiveMonthSelection = () => {
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -393,6 +462,42 @@ export function OcrDocumentsTable({
       }
       return next;
     });
+  };
+
+  const toggleDuplicateSelection = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allDuplicatesSelected) {
+        duplicateFilteredRows.forEach((row) => next.delete(row.id));
+      } else {
+        duplicateFilteredRows.forEach((row) => next.add(row.id));
+      }
+      return next;
+    });
+  };
+
+  const startSelectionDrag = (row: OcrDocumentListItem, event: React.PointerEvent<HTMLElement>) => {
+    if (!canEdit || (event.pointerType === "mouse" && event.button !== 0)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const shouldSelect = !selectedIds.has(row.id);
+    const dragState = { shouldSelect };
+    selectionDragRef.current = dragState;
+    setSelectionDrag(dragState);
+    setActiveRowId(row.id);
+    setRowSelected(row, shouldSelect);
+  };
+
+  const continueSelectionDrag = (row: OcrDocumentListItem) => {
+    const dragState = selectionDragRef.current;
+    if (!dragState) return;
+    setActiveRowId(row.id);
+    setRowSelected(row, dragState.shouldSelect);
+  };
+
+  const stopSelectionDrag = () => {
+    selectionDragRef.current = null;
+    setSelectionDrag(null);
   };
 
   const openDropzone = () => {
@@ -450,9 +555,17 @@ export function OcrDocumentsTable({
                 );
               })}
             </div>
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleFilteredSelection} disabled={!filteredRows.length}>
+              {allFilteredSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+              {allFilteredSelected ? "全解除" : "全書類を選択"}
+            </Button>
             <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleActiveMonthSelection} disabled={!activeRows.length}>
               {allActiveSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
               {allActiveSelected ? "解除" : "表示中を選択"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleDuplicateSelection} disabled={!duplicateFilteredRows.length}>
+              {allDuplicatesSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+              {allDuplicatesSelected ? "重複解除" : `重複を選択 ${duplicateFilteredRows.length}`}
             </Button>
             {canExport ? (
               <Button asChild size="sm" variant="outline" className="gap-1">
@@ -583,20 +696,30 @@ export function OcrDocumentsTable({
                   <span>発送元</span>
                   {selectedRows.length ? <span>{selectedRows.length}件選択</span> : null}
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2" onPointerUp={stopSelectionDrag} onPointerLeave={stopSelectionDrag}>
                   {activeRows.map((row) => {
                     const isActive = row.id === activeRow?.id;
                     const isSelected = selectedIds.has(row.id);
+                    const isDuplicate = duplicateIds.has(row.id);
                     return (
                       <div
                         key={row.id}
                         role="button"
                         tabIndex={0}
-                        draggable={canEdit}
+                        draggable={canEdit && !selectionDrag}
                         className={`w-full rounded-lg border px-3 py-3 text-left transition ${
-                          isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"
-                        } ${draggedRow?.id === row.id ? "cursor-grabbing opacity-60" : "cursor-grab"}`}
+                          isActive
+                            ? "border-primary bg-primary/5"
+                            : isSelected
+                              ? "border-primary/40 bg-primary/5"
+                              : isDuplicate
+                                ? "border-amber-400/60 bg-amber-50/60 hover:bg-amber-50"
+                                : "border-transparent hover:bg-muted"
+                        } ${draggedRow?.id === row.id ? "cursor-grabbing opacity-60" : selectionDrag ? "cursor-cell" : "cursor-grab"}`}
                         onClick={() => setActiveRowId(row.id)}
+                        onPointerEnter={() => continueSelectionDrag(row)}
+                        onPointerMove={() => continueSelectionDrag(row)}
+                        onPointerUp={stopSelectionDrag}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
@@ -617,7 +740,10 @@ export function OcrDocumentsTable({
                               checked={isSelected}
                               className="mt-0.5 h-4 w-4 rounded border-muted-foreground/40"
                               aria-label={`${shippingSenderName(row)}を選択`}
+                              title="ドラッグで複数選択"
                               onChange={() => toggleRowSelection(row)}
+                              onPointerDown={(event) => startSelectionDrag(row, event)}
+                              onPointerMove={() => continueSelectionDrag(row)}
                               onClick={(event) => event.stopPropagation()}
                             />
                           ) : null}
@@ -668,6 +794,7 @@ export function OcrDocumentsTable({
                                 ) : (
                                   <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
                                   )}
+                                  {isDuplicate ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-700">重複</Badge> : null}
                                 </div>
                               ) : null}
                           </div>
