@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { updateReceivedInvoiceStatus } from "@/app/actions";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -13,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { paidForReceived, readData } from "@/lib/store";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
@@ -26,6 +27,8 @@ export default async function ReceivedInvoicesPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:receivedInvoices")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const projects = data.projects
     .filter((project) => !project.deletedAt && matchesCompany(project, company))

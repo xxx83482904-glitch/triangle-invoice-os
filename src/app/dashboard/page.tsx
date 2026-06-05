@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { BarChart3, FileCheck2, FolderKanban, ReceiptText } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { yen } from "@/lib/format";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { paidForIssued, projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
 import { DashboardTable } from "./dashboard-table";
@@ -19,6 +20,8 @@ export default async function DashboardPage({
   const params = await searchParams;
   const company: CompanyScope = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:dashboard")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const projects = user ? scopedProjectsForUser(data, user) : [];
   const clients = data.clients

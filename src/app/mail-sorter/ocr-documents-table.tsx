@@ -306,6 +306,7 @@ const folderGridColumns: Record<ColumnMode, Record<ColumnMode, string>> = {
 
 export function OcrDocumentsTable({
   canEdit,
+  canExport,
   company,
   projects,
   rows,
@@ -314,6 +315,7 @@ export function OcrDocumentsTable({
   folders,
 }: {
   canEdit: boolean;
+  canExport: boolean;
   company: CompanyScope;
   folders: FolderOption[];
   projects: Option[];
@@ -452,12 +454,14 @@ export function OcrDocumentsTable({
               {allActiveSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
               {allActiveSelected ? "解除" : "表示中を選択"}
             </Button>
-            <Button asChild size="sm" variant="outline" className="gap-1">
-              <a href={exportHref}>
-                <Download className="h-3.5 w-3.5" />
-                {selectedRows.length ? `${selectedRows.length}件CSV` : "全件CSV"}
-              </a>
-            </Button>
+            {canExport ? (
+              <Button asChild size="sm" variant="outline" className="gap-1">
+                <a href={exportHref}>
+                  <Download className="h-3.5 w-3.5" />
+                  {selectedRows.length ? `${selectedRows.length}件CSV` : "全件CSV"}
+                </a>
+              </Button>
+            ) : null}
             <form
               action={deleteOcrDocumentsBulk}
               className="flex"

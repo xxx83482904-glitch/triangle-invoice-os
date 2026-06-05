@@ -3,6 +3,7 @@ export type UserRole =
   | "ACCOUNTING"
   | "CHIEF_DESIGNER"
   | "PROJECT_MANAGER"
+  | "MAIL_EDITOR"
   | "DESIGNER"
   | "GUEST";
 

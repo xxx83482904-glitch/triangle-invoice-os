@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createProject } from "@/app/actions";
 import { ProjectsTable } from "@/app/projects/projects-table";
 import { CreatableSelect } from "@/components/app/creatable-select";
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
 
@@ -22,6 +23,8 @@ export default async function ProjectsPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:projects")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const projects = user ? scopedProjectsForUser(data, user) : [];
   const clients = data.clients
@@ -39,6 +42,7 @@ export default async function ProjectsPage({
     return true;
   });
   const canEdit = Boolean(user && can(user, "manage:projects"));
+  const showFinancials = Boolean(user && can(user, "view:dashboard"));
   const rows = filtered.map((project, index) => {
     const money = projectMoney(data, project.id);
     return {
@@ -68,7 +72,10 @@ export default async function ProjectsPage({
 
   return (
     <AppShell>
-      <PageHeader title="案件一覧" description="請求総額、請求回数、入金、支払い、粗利を案件単位で見ます。" />
+      <PageHeader
+        title="案件一覧"
+        description={showFinancials ? "請求総額、請求回数、入金、支払い、粗利を案件単位で見ます。" : "案件と発行請求書の作成状況を管理します。"}
+      />
 
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -115,6 +122,7 @@ export default async function ProjectsPage({
               canEdit={canEdit}
               clients={clients.map((client) => ({ id: client.id, companyName: client.companyName }))}
               stageOptions={stageOptions.map((option) => ({ label: option.label, value: option.value }))}
+              showFinancials={showFinancials}
               rows={rows}
             />
           </CardContent>

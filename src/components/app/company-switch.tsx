@@ -5,16 +5,18 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { BarChart3, Building2, FileText, LayoutGrid, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { companyFromParam, companyOptions, type CompanyScope } from "@/lib/company";
+import { canRole, defaultPathForRole } from "@/lib/rbac";
+import type { UserRole } from "@/lib/types";
 
 const nav = [
-  { href: "/dashboard", label: "一覧", icon: LayoutGrid },
-  { href: "/projects", label: "案件", icon: Building2 },
-  { href: "/mail-sorter", label: "郵便仕分け", icon: Mail },
-  { href: "/issued-invoices", label: "発行請求書", icon: FileText },
-  { href: "/received-invoices", label: "受領請求書", icon: ReceiptText },
-  { href: "/payments", label: "入金・支払い", icon: WalletCards },
-  { href: "/partners", label: "取引先", icon: Users },
-  { href: "/reports", label: "集計", icon: BarChart3 },
+  { href: "/dashboard", label: "一覧", icon: LayoutGrid, permission: "view:dashboard" },
+  { href: "/projects", label: "案件", icon: Building2, permission: "view:projects" },
+  { href: "/mail-sorter", label: "郵便仕分け", icon: Mail, permission: "view:mailSorter" },
+  { href: "/issued-invoices", label: "発行請求書", icon: FileText, permission: "view:issuedInvoices" },
+  { href: "/received-invoices", label: "受領請求書", icon: ReceiptText, permission: "view:receivedInvoices" },
+  { href: "/payments", label: "入金・支払い", icon: WalletCards, permission: "view:payments" },
+  { href: "/partners", label: "取引先", icon: Users, permission: "view:partners" },
+  { href: "/reports", label: "集計", icon: BarChart3, permission: "view:reports" },
 ];
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {
@@ -71,14 +73,14 @@ export function MobileCompanySwitch() {
   );
 }
 
-export function AppNav() {
+export function AppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const company = companyFromParam(searchParams.get("company"));
 
   return (
     <nav className="flex flex-col items-center gap-4">
-      {nav.map((item) => {
+      {nav.filter((item) => canRole(role, item.permission)).map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href;
         return (
@@ -101,12 +103,12 @@ export function AppNav() {
   );
 }
 
-export function ScopedBrandLink({ compact = false }: { compact?: boolean }) {
+export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; role: UserRole }) {
   const searchParams = useSearchParams();
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <Link href={navHref("/dashboard", company)} className={compact ? "font-semibold" : "flex flex-col items-center gap-2"}>
+    <Link href={navHref(defaultPathForRole(role), company)} className={compact ? "font-semibold" : "flex flex-col items-center gap-2"}>
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-sm">T</div>
       {!compact ? <div className="sr-only">TRIANGLE Invoice OS</div> : null}
     </Link>

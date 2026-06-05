@@ -218,7 +218,7 @@ function ensureReviewProject(data: AppData, company: "CHINA" | "JAPAN", timestam
 
 export async function POST(request: Request) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!can(user, "manage:mailSorter") && !can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
     return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   }
 

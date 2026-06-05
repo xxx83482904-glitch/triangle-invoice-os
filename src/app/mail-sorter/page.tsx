@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { MailSorterDropzone } from "@/app/mail-sorter/mail-sorter-dropzone";
 import { OcrDocumentsTable, type OcrDocumentListItem } from "@/app/mail-sorter/ocr-documents-table";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readData } from "@/lib/store";
 
@@ -27,8 +28,10 @@ export default async function MailSorterPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:mailSorter")) redirect(defaultPathForRole(user.role));
   const data = await readData();
-  const mayUpload = user && (can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices"));
+  const mayUpload = user && (can(user, "manage:mailSorter") || can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices"));
   const mayEdit = Boolean(mayUpload);
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));
@@ -128,15 +131,18 @@ export default async function MailSorterPage({
         title="郵便物フォルダー"
         description="OCRした郵便物を月別フォルダーで管理します。上部にまとめてドロップし、下のフォルダー領域を広く使えます。"
       >
-        <Button asChild variant="outline">
-          <Link href={`/received-invoices?company=${company}`}>受領請求書を見る</Link>
-        </Button>
+        {can(user, "view:receivedInvoices") ? (
+          <Button asChild variant="outline">
+            <Link href={`/received-invoices?company=${company}`}>受領請求書を見る</Link>
+          </Button>
+        ) : null}
       </PageHeader>
 
       <div className="space-y-6">
         {mayUpload ? <MailSorterDropzone company={company} /> : null}
         <OcrDocumentsTable
           canEdit={mayEdit}
+          canExport={can(user, "export:csv")}
           company={company}
           folders={data.mailFolders
             .filter((folder) => !folder.deletedAt && companyFromParam(folder.company) === company)

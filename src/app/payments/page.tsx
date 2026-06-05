@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { recordExpensePayment, recordIncomePayment } from "@/app/actions";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -11,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { paidForIssued, paidForReceived, readData } from "@/lib/store";
 
 export default async function PaymentsPage({
@@ -22,6 +23,8 @@ export default async function PaymentsPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:payments")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const projects = data.projects
     .filter((project) => !project.deletedAt && matchesCompany(project, company))

@@ -15,12 +15,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[96px] border-r bg-sidebar px-5 py-7 lg:flex lg:flex-col lg:items-center">
-        <ScopedBrandLink />
+        <ScopedBrandLink role={user.role} />
         <div className="mt-12 w-full">
           <CompanySwitch />
         </div>
         <div className="mt-8">
-          <AppNav />
+          <AppNav role={user.role} />
         </div>
         <div className="mt-auto flex w-full flex-col items-center gap-5">
           <form action={logoutAction}>
@@ -41,7 +41,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="lg:pl-[96px]">
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
-          <ScopedBrandLink compact />
+          <ScopedBrandLink compact role={user.role} />
           <MobileCompanySwitch />
         </header>
         <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-7 lg:px-10">{children}</main>

@@ -2,7 +2,7 @@ import "server-only";
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { hashSync } from "bcryptjs";
+import { compareSync, hashSync } from "bcryptjs";
 import { Pool } from "pg";
 import { runtimeDataDir } from "@/lib/runtime-paths";
 import { defaultSelectOptions } from "@/lib/select-options";
@@ -16,13 +16,16 @@ import type {
   Vendor,
 } from "@/lib/types";
 
-const DATA_VERSION = 3;
+const DATA_VERSION = 4;
 const DB_STATE_KEY = "app-data";
 const DATA_DIR = runtimeDataDir();
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
 const LEGACY_DATA_FILE = path.join(process.cwd(), "data", "app-data.json");
 
 const now = () => new Date().toISOString();
+
+const releaseAdminEmail = "kure@the-triangle.jp";
+const releaseAdminPassword = "triangle0843";
 export const newId = () => crypto.randomUUID();
 
 function active<T extends { deletedAt?: string | null }>(rows: T[]) {
@@ -61,51 +64,15 @@ function project(
 
 function seedData(): AppData {
   const createdAt = now();
-  const passwordHash = hashSync("password123", 10);
+  const passwordHash = hashSync(releaseAdminPassword, 10);
 
   const users: User[] = [
     {
       id: "usr-admin",
       name: "Triangle Admin",
-      email: "admin@triangle.local",
+      email: releaseAdminEmail,
       passwordHash,
       role: "ADMIN",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "usr-accounting",
-      name: "経理チーム",
-      email: "accounting@triangle.local",
-      passwordHash,
-      role: "ACCOUNTING",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "usr-pm",
-      name: "Project Manager",
-      email: "pm@triangle.local",
-      passwordHash,
-      role: "PROJECT_MANAGER",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "usr-designer",
-      name: "Designer",
-      email: "designer@triangle.local",
-      passwordHash,
-      role: "DESIGNER",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "usr-guest",
-      name: "Guest Invoice",
-      email: "guest@triangle.local",
-      passwordHash,
-      role: "GUEST",
       createdAt,
       updatedAt: createdAt,
     },
@@ -329,6 +296,66 @@ async function writeRawData(data: AppData) {
   writeFileSync(DATA_FILE, JSON.stringify(nextData, null, 2));
 }
 
+function normalizeReleaseUsers(data: AppData) {
+  let changed = false;
+  const timestamp = now();
+  const demoEmails = new Set([
+    "accounting@triangle.local",
+    "pm@triangle.local",
+    "designer@triangle.local",
+    "guest@triangle.local",
+  ]);
+  let admin =
+    data.users.find((user) => user.email.toLowerCase() === releaseAdminEmail) ??
+    data.users.find((user) => user.id === "usr-admin") ??
+    data.users.find((user) => user.email.toLowerCase() === "admin@triangle.local");
+
+  if (!admin) {
+    admin = {
+      id: "usr-admin",
+      name: "Triangle Admin",
+      email: releaseAdminEmail,
+      passwordHash: hashSync(releaseAdminPassword, 10),
+      role: "ADMIN",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    data.users.unshift(admin);
+    changed = true;
+  }
+
+  if (admin.email !== releaseAdminEmail) {
+    admin.email = releaseAdminEmail;
+    changed = true;
+  }
+  if (admin.role !== "ADMIN") {
+    admin.role = "ADMIN";
+    changed = true;
+  }
+  if (!compareSync(releaseAdminPassword, admin.passwordHash)) {
+    admin.passwordHash = hashSync(releaseAdminPassword, 10);
+    changed = true;
+  }
+  if (admin.deletedAt) {
+    admin.deletedAt = null;
+    changed = true;
+  }
+  if (changed) admin.updatedAt = timestamp;
+
+  for (const user of data.users) {
+    const email = user.email.toLowerCase();
+    if (demoEmails.has(email) || (email === "admin@triangle.local" && user.id !== admin.id)) {
+      if (!user.deletedAt) {
+        user.deletedAt = timestamp;
+        user.updatedAt = timestamp;
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
+}
+
 async function normalizeData(data: AppData) {
   let changed = data.seedVersion !== DATA_VERSION;
   data.seedVersion = DATA_VERSION;
@@ -345,19 +372,7 @@ async function normalizeData(data: AppData) {
   if (!Array.isArray(data.attachments)) { data.attachments = []; changed = true; }
   if (!Array.isArray(data.auditLogs)) { data.auditLogs = []; changed = true; }
   if (!Array.isArray(data.invoiceNumberSettings)) { data.invoiceNumberSettings = seedData().invoiceNumberSettings; changed = true; }
-  if (!data.users.some((user) => user.id === "usr-guest" || user.email === "guest@triangle.local")) {
-    const timestamp = now();
-    data.users.push({
-      id: "usr-guest",
-      name: "Guest Invoice",
-      email: "guest@triangle.local",
-      passwordHash: hashSync("password123", 10),
-      role: "GUEST",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-    changed = true;
-  }
+  if (normalizeReleaseUsers(data)) changed = true;
   if (!Array.isArray(data.selectOptions)) {
     data.selectOptions = defaultSelectOptions(now());
     changed = true;

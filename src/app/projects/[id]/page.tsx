@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,17 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { companyFromParam } from "@/lib/company";
 import { formatDate, percent, yen } from "@/lib/format";
-import { paidForIssued, paidForReceived, projectMoney, readData } from "@/lib/store";
+import { can, defaultPathForRole } from "@/lib/rbac";
+import { paidForIssued, paidForReceived, projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:projects")) redirect(defaultPathForRole(user.role));
   const data = await readData();
-  const project = data.projects.find((item) => item.id === id && !item.deletedAt);
+  const project = scopedProjectsForUser(data, user).find((item) => item.id === id && !item.deletedAt);
   if (!project) notFound();
   const company = companyFromParam(project.company);
   const client = data.clients.find((item) => item.id === project.clientId);
@@ -21,6 +26,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const issued = data.issuedInvoices.filter((item) => item.projectId === project.id && !item.deletedAt);
   const received = data.receivedInvoices.filter((item) => item.projectId === project.id && !item.deletedAt);
   const logs = data.auditLogs.filter((log) => log.targetId === project.id || issued.some((invoice) => invoice.id === log.targetId) || received.some((invoice) => invoice.id === log.targetId));
+  const showTotals = can(user, "view:dashboard");
 
   return (
     <AppShell>
@@ -29,27 +35,29 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <Button asChild variant="outline"><Link href={`/projects?company=${company}`}>一覧へ</Link></Button>
       </PageHeader>
 
-      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-        {[
-          ["請求総額", money.contractAmount],
-          ["請求済み", money.invoicedAmount],
-          ["入金済み", money.paidIncomeAmount],
-          ["未入金", money.unpaidIncomeAmount],
-          ["受領請求書合計", money.receivedInvoiceTotal],
-          ["支払い済み", money.paidExpenseAmount],
-          ["未払い", money.unpaidExpenseAmount],
-          ["案件粗利", money.grossProfit],
-        ].map(([label, value]) => (
-          <Card key={label as string}>
-            <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
-            <CardContent className="text-xl font-semibold">{yen.format(value as number)}</CardContent>
+      {showTotals ? (
+        <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+          {[
+            ["請求総額", money.contractAmount],
+            ["請求済み", money.invoicedAmount],
+            ["入金済み", money.paidIncomeAmount],
+            ["未入金", money.unpaidIncomeAmount],
+            ["受領請求書合計", money.receivedInvoiceTotal],
+            ["支払い済み", money.paidExpenseAmount],
+            ["未払い", money.unpaidExpenseAmount],
+            ["案件粗利", money.grossProfit],
+          ].map(([label, value]) => (
+            <Card key={label as string}>
+              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
+              <CardContent className="text-xl font-semibold">{yen.format(value as number)}</CardContent>
+            </Card>
+          ))}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">案件粗利率</CardTitle></CardHeader>
+            <CardContent className="text-xl font-semibold">{percent(money.grossProfitRate)}</CardContent>
           </Card>
-        ))}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">案件粗利率</CardTitle></CardHeader>
-          <CardContent className="text-xl font-semibold">{percent(money.grossProfitRate)}</CardContent>
-        </Card>
-      </section>
+        </section>
+      ) : null}
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
@@ -62,7 +70,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               </Table>
             </CardContent>
           </Card>
-          <Card>
+          {showTotals ? <Card>
             <CardHeader><CardTitle>受領請求書・支払い状況</CardTitle></CardHeader>
             <CardContent>
               <Table>
@@ -70,7 +78,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell><StatusBadge status={invoice.status} /></TableCell><TableCell>{invoice.fileUrl ? <a className="text-sm underline" href={invoice.fileUrl} target="_blank">表示</a> : "-"}</TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
-          </Card>
+          </Card> : null}
         </div>
         <div className="space-y-6">
           <Card>

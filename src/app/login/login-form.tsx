@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
-import { guestLoginAction, loginAction } from "@/app/actions";
+import { loginAction } from "@/app/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,26 +27,19 @@ export function LoginForm() {
           ) : null}
           <div className="space-y-2">
             <Label htmlFor="email">メールアドレス</Label>
-            <Input id="email" name="email" type="email" defaultValue="admin@triangle.local" required />
+            <Input id="email" name="email" type="email" autoComplete="email" required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">パスワード</Label>
-            <Input id="password" name="password" type="password" defaultValue="password123" required />
+            <Input id="password" name="password" type="password" autoComplete="current-password" required />
           </div>
           <Button className="w-full" disabled={pending}>
             {pending ? "ログイン中..." : "ログイン"}
           </Button>
         </form>
-        <div className="mt-5 rounded-md border bg-muted/50 p-3 text-xs text-muted-foreground">
-          デモ: admin@triangle.local / accounting@triangle.local / pm@triangle.local / designer@triangle.local / guest@triangle.local
-          <br />
-          共通パスワード: password123
-        </div>
-        <form action={guestLoginAction} className="mt-3">
-          <Button type="submit" variant="outline" className="w-full" disabled={pending}>
-            ゲストで請求書を発行
-          </Button>
-        </form>
+        <Button asChild variant="outline" className="mt-3 w-full">
+          <Link href="/register">初めての方は登録する</Link>
+        </Button>
       </CardContent>
     </Card>
   );

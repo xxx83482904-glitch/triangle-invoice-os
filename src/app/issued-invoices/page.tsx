@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createIssuedInvoice } from "@/app/actions";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -13,9 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { paidForIssued, readData } from "@/lib/store";
+import { paidForIssued, readData, scopedProjectsForUser } from "@/lib/store";
 
 export default async function IssuedInvoicesPage({
   searchParams,
@@ -25,10 +26,12 @@ export default async function IssuedInvoicesPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:issuedInvoices")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const setting = data.invoiceNumberSettings[0];
   const defaultNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
-  const projects = data.projects
+  const projects = scopedProjectsForUser(data, user)
     .filter((project) => !project.deletedAt && matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
   const projectIds = new Set(projects.map((project) => project.id));

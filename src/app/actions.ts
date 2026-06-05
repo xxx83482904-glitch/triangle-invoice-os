@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { hash } from "bcryptjs";
 import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
-import { assertCan, can } from "@/lib/rbac";
+import { assertCan, can, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
 import type {
   AppData,
@@ -18,6 +19,7 @@ import type {
   Project,
   ReceivedInvoice,
   SelectOptionGroup,
+  UserRole,
   Vendor,
 } from "@/lib/types";
 
@@ -28,6 +30,10 @@ function value(formData: FormData, key: string) {
 function optional(formData: FormData, key: string) {
   const item = value(formData, key);
   return item || undefined;
+}
+
+function canManageMailSorter(user: Parameters<typeof can>[0]) {
+  return can(user, "manage:mailSorter") || can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices");
 }
 
 function money(formData: FormData, key: string) {
@@ -182,12 +188,51 @@ function nextInvoiceNumber(data: AppData, timestamp: string) {
 }
 
 export type LoginState = { error: string };
+export type RegisterState = { error: string };
+
+function registrationRole(item: string): Extract<UserRole, "PROJECT_MANAGER" | "MAIL_EDITOR"> {
+  return item === "MAIL_EDITOR" ? "MAIL_EDITOR" : "PROJECT_MANAGER";
+}
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const user = await signIn(value(formData, "email"), value(formData, "password"));
   if (!user) return { error: "メールアドレスまたはパスワードが違います。" };
-  if (user.role === "GUEST") redirect("/guest-invoices");
-  redirect("/dashboard");
+  redirect(defaultPathForRole(user.role));
+}
+
+export async function registerAction(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  const password = value(formData, "password");
+  const role = registrationRole(value(formData, "role"));
+
+  if (!name || !email || !password) return { error: "名前、メールアドレス、パスワードを入力してください。" };
+  if (password.length < 8) return { error: "パスワードは8文字以上にしてください。" };
+
+  const data = await readData();
+  if (data.users.some((user) => user.email.toLowerCase() === email && !user.deletedAt)) {
+    return { error: "このメールアドレスはすでに登録されています。" };
+  }
+
+  const timestamp = now();
+  const user = {
+    id: newId(),
+    name,
+    email,
+    passwordHash: await hash(password, 10),
+    role,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  await mutateData(user.id, "REGISTER_USER", "User", user.id, (draft) => {
+    draft.users.unshift(user);
+    return user;
+  });
+
+  const signedIn = await signIn(email, password);
+  if (!signedIn) return { error: "登録は完了しました。ログインしてください。" };
+  redirect(defaultPathForRole(signedIn.role));
 }
 
 export async function guestLoginAction() {
@@ -724,7 +769,7 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
 
 export async function updateOcrDocumentInline(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
@@ -782,7 +827,7 @@ export async function updateOcrDocumentInline(formData: FormData) {
 
 export async function updateMailDocumentCategory(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
   }
 
@@ -808,7 +853,7 @@ export async function updateMailDocumentCategory(formData: FormData) {
 
 export async function updateMailDocumentProcessingStatus(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
@@ -853,7 +898,7 @@ export async function updateMailDocumentProcessingStatus(formData: FormData) {
 
 export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
   }
 
@@ -949,7 +994,7 @@ export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
 
 export async function deleteOcrDocument(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
@@ -999,7 +1044,7 @@ export async function deleteOcrDocument(formData: FormData) {
 
 export async function deleteOcrDocumentsBulk(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("Permission denied");
   }
 
@@ -1053,7 +1098,7 @@ export async function deleteOcrDocumentsBulk(formData: FormData) {
 
 export async function createMailFolder(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
@@ -1084,7 +1129,7 @@ export async function createMailFolder(formData: FormData) {
 
 export async function deleteMailFolder(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
@@ -1128,7 +1173,7 @@ export async function deleteMailFolder(formData: FormData) {
 
 export async function moveOcrDocumentToMonth(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
