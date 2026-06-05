@@ -630,7 +630,7 @@ export function OcrDocumentsTable({
                                         name="processingStatus"
                                         defaultValue={isProcessedRow(row) ? "processed" : "unprocessed"}
                                         className={processingStatusSelectClass(isProcessedRow(row))}
-                                        aria-label="\u51e6\u7406\u72b6\u614b"
+                                        aria-label={"\u51e6\u7406\u72b6\u614b"}
                                         onChange={(event) => event.currentTarget.form?.requestSubmit()}
                                       >
                                         {processingStatusOptions.map((option) => (
