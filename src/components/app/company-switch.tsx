@@ -73,6 +73,34 @@ export function MobileCompanySwitch() {
   );
 }
 
+export function MobileAppNav({ role }: { role: UserRole }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const company = companyFromParam(searchParams.get("company"));
+
+  return (
+    <nav className="flex h-16 items-stretch gap-1 overflow-x-auto px-2 py-1.5">
+      {nav.filter((item) => canRole(role, item.permission)).map((item) => {
+        const Icon = item.icon;
+        const active = pathname === item.href;
+        return (
+          <Link
+            key={item.href}
+            href={navHref(item.href, company)}
+            title={item.label}
+            className={`flex min-w-[64px] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-2 transition ${
+              active ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="max-w-[68px] truncate text-[10px] leading-tight">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function AppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();

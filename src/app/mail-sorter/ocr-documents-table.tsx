@@ -154,7 +154,7 @@ function shortMonthLabel(value: string) {
 }
 
 function selectClass() {
-  return "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  return "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-[16px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:text-sm";
 }
 
 function categorySelectClass(category: MailDocumentCategory) {
@@ -162,7 +162,7 @@ function categorySelectClass(category: MailDocumentCategory) {
     category === "INVOICE"
       ? "border-primary bg-primary text-primary-foreground"
       : "border-border bg-secondary text-secondary-foreground";
-  return `h-6 max-w-[104px] rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
+  return `h-7 max-w-[124px] rounded-full border px-2 text-[16px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-6 sm:max-w-[104px] sm:text-[11px] ${tone}`;
 }
 
 function shippingSenderName(row: OcrDocumentListItem) {
@@ -176,7 +176,7 @@ function processingStatusSelectClass(processed: boolean) {
   const tone = processed
     ? "border-border bg-background text-foreground"
     : "border-secondary bg-secondary text-secondary-foreground";
-  return `h-6 rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
+  return `h-7 rounded-full border px-2 text-[16px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-6 sm:text-[11px] ${tone}`;
 }
 
 function documentAmount(row: OcrDocumentListItem) {
@@ -292,8 +292,8 @@ function summaryLines(row: OcrDocumentListItem) {
 }
 
 function DocumentPreview({ compact = false, row }: { compact?: boolean; row: OcrDocumentListItem }) {
-  const frameClass = compact ? "h-[56vh] min-h-[360px]" : "h-[68vh] min-h-96";
-  const boxClass = compact ? "min-h-[360px]" : "min-h-80";
+  const frameClass = compact ? "h-[42vh] min-h-[280px] sm:h-[56vh] sm:min-h-[360px]" : "h-[68vh] min-h-96";
+  const boxClass = compact ? "min-h-[280px] sm:min-h-[360px]" : "min-h-80";
 
   if (!row.fileUrl) {
     return <div className={`flex h-full ${boxClass} items-center justify-center rounded-md bg-muted text-sm text-muted-foreground`}>ファイルがありません。</div>;
@@ -556,13 +556,13 @@ export function OcrDocumentsTable({
   return (
     <>
       <Card>
-        <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
+        <CardHeader className="gap-3 px-3 sm:px-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
             <CardTitle>郵便物フォルダー</CardTitle>
             <div className="mt-1 text-xs text-muted-foreground">追加・変更・削除と、カラム幅の切り替えができます。</div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="flex items-center rounded-md border bg-background p-0.5">
+          <div className="flex w-full min-w-0 flex-wrap gap-2 md:w-auto md:justify-end">
+            <div className="flex max-w-full items-center overflow-x-auto rounded-md border bg-background p-0.5">
               {processingFilters.map((filter) => {
                 const Icon = filter.icon;
                 const count = filter.value === "all" ? rows.length : filter.value === "processed" ? processedCount : unprocessedCount;
@@ -598,7 +598,7 @@ export function OcrDocumentsTable({
               {allDuplicatesSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
               {allDuplicatesSelected ? "重複解除" : `重複片方を選択 ${duplicateFilteredRows.length}`}
             </Button>
-            <form action={updateOcrDocumentsBulkProcessingStatus} className="flex">
+            <form action={updateOcrDocumentsBulkProcessingStatus} className="flex min-w-[132px] flex-1 sm:flex-none">
               <input type="hidden" name="company" value={company} />
               {selectedRows.map((row) => (
                 <span key={row.id}>
@@ -609,7 +609,7 @@ export function OcrDocumentsTable({
               <select
                 name="processingStatus"
                 defaultValue=""
-                className="h-8 w-32 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-[16px] outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 sm:w-32 sm:text-xs"
                 disabled={!canEdit || !selectedRows.length}
                 onChange={(event) => {
                   if (event.currentTarget.value) event.currentTarget.form?.requestSubmit();
@@ -625,7 +625,7 @@ export function OcrDocumentsTable({
                 ))}
               </select>
             </form>
-            <form action={updateMailDocumentsBulkCategory} className="flex">
+            <form action={updateMailDocumentsBulkCategory} className="flex min-w-[132px] flex-1 sm:flex-none">
               <input type="hidden" name="company" value={company} />
               {selectedMailRows.map((row) => (
                 row.mailDocumentId ? <input key={row.id} type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null
@@ -633,7 +633,7 @@ export function OcrDocumentsTable({
               <select
                 name="category"
                 defaultValue=""
-                className="h-8 w-32 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-[16px] outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 sm:w-32 sm:text-xs"
                 disabled={!canEdit || !selectedMailRows.length}
                 onChange={(event) => {
                   if (event.currentTarget.value) event.currentTarget.form?.requestSubmit();
@@ -678,9 +678,9 @@ export function OcrDocumentsTable({
                 選択削除
               </Button>
             </form>
-            <form action={createMailFolder} className="flex items-center gap-2">
+            <form action={createMailFolder} className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-none">
               <input type="hidden" name="company" value={company} />
-              <Input name="month" type="month" className="h-8 w-32 text-xs" disabled={!canEdit} />
+              <Input name="month" type="month" className="h-8 min-w-0 flex-1 sm:w-32" disabled={!canEdit} />
               <Button type="submit" size="sm" variant="outline" className="gap-1" disabled={!canEdit}>
                 <Folder className="h-3.5 w-3.5" />
                 フォルダー
@@ -704,20 +704,20 @@ export function OcrDocumentsTable({
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-4">
           {groups.length ? (
-            <div className={`grid min-h-[640px] overflow-hidden rounded-lg border ${folderGridColumns[monthColumn][senderColumn]}`}>
-              <aside className="border-b bg-muted/20 p-3 lg:border-r lg:border-b-0">
+            <div className={`grid min-h-0 overflow-hidden rounded-lg border lg:min-h-[640px] ${folderGridColumns[monthColumn][senderColumn]}`}>
+              <aside className="min-w-0 border-b bg-muted/20 p-3 lg:border-r lg:border-b-0">
                 <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                   <span>{monthColumn === "compact" ? "月" : "月フォルダー"}</span>
                   {isMoving ? <span className="text-primary">移動中</span> : null}
                 </div>
-                <div className="space-y-2">
+                <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
                   {groups.map(([month, monthRows]) => {
                     const isActive = month === resolvedActiveMonth;
                     const canDeleteFolder = canEdit && customFolderMonths.has(month) && monthRows.length === 0;
                     return (
-                      <div key={month} className="group relative">
+                      <div key={month} className="group relative min-w-[156px] lg:min-w-0">
                         <button
                           type="button"
                           className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition ${
@@ -756,13 +756,13 @@ export function OcrDocumentsTable({
                 </div>
               </aside>
 
-              <aside className="border-b p-3 lg:border-r lg:border-b-0">
+              <aside className="min-w-0 border-b p-3 lg:border-r lg:border-b-0">
                 <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <label className="flex min-w-0 flex-1 items-center gap-1">
                     <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
                     <select
                       value={documentSortMode}
-                      className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-[16px] outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-7 sm:text-xs"
                       onChange={(event) => {
                         setDocumentSortMode(event.target.value as DocumentSortMode);
                         setActiveRowId(null);
@@ -780,7 +780,7 @@ export function OcrDocumentsTable({
                   <span>発送元</span>
                   {selectedRows.length ? <span>{selectedRows.length}件選択</span> : null}
                 </div>
-                <div className="space-y-2" onPointerUp={stopSelectionDrag} onPointerLeave={stopSelectionDrag}>
+                <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1 lg:max-h-none lg:overflow-visible lg:pr-0" onPointerUp={stopSelectionDrag} onPointerLeave={stopSelectionDrag}>
                   {activeRows.map((row) => {
                     const isActive = row.id === activeRow?.id;
                     const isSelected = selectedIds.has(row.id);
@@ -889,15 +889,15 @@ export function OcrDocumentsTable({
                 </div>
               </aside>
 
-              <section className="min-w-0 p-4">
+              <section className="min-w-0 p-3 sm:p-4">
                 {activeRow ? (
                   <div className="space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
-                      <div>
-                        <div className="text-lg font-medium">{shippingSenderName(activeRow)}</div>
+                    <div className="flex flex-col gap-3 border-b pb-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="break-words text-base font-medium sm:text-lg">{shippingSenderName(activeRow)}</div>
                         <div className="mt-1 text-sm text-muted-foreground">{activeRow.ocrPreview}</div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 sm:justify-end">
                         <Button type="button" variant="outline" size="sm" onClick={() => setDialogRow(activeRow)}>
                           拡大表示
                         </Button>
@@ -944,7 +944,7 @@ export function OcrDocumentsTable({
                           {summaryLines(activeRow).map((line) => {
                             const [label, ...rest] = line.split(": ");
                             return (
-                              <div key={line} className="grid grid-cols-[72px_1fr] gap-3">
+                              <div key={line} className="grid gap-1 sm:grid-cols-[72px_1fr] sm:gap-3">
                                 <dt className="text-muted-foreground">{label}</dt>
                                 <dd className="whitespace-pre-wrap break-words">{rest.join(": ")}</dd>
                               </div>
@@ -958,7 +958,7 @@ export function OcrDocumentsTable({
                         ) : null}
                       </div>
 
-                      <div className="min-w-0 space-y-3 rounded-lg border p-4">
+                      <div className="min-w-0 space-y-3 rounded-lg border p-3 sm:p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <ImageIcon className="h-4 w-4" />
@@ -1059,7 +1059,7 @@ export function OcrDocumentsTable({
 
                       <div className="space-y-3">
                         {activeRow.extracted ? (
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-2">
                               <label className="text-xs font-medium text-muted-foreground">請求日</label>
                               <Input form={`ocr-edit-${activeRow.id}`} name="issueDate" type="date" defaultValue={activeRow.extracted.issueDate} disabled={!canEdit} />
@@ -1076,7 +1076,7 @@ export function OcrDocumentsTable({
                               <label className="text-xs font-medium text-muted-foreground">消費税</label>
                               <Input form={`ocr-edit-${activeRow.id}`} name="taxTotal" type="number" defaultValue={activeRow.extracted.taxTotal} disabled={!canEdit} />
                             </div>
-                            <div className="col-span-2 space-y-2">
+                            <div className="space-y-2 sm:col-span-2">
                               <label className="text-xs font-medium text-muted-foreground">合計</label>
                               <Input form={`ocr-edit-${activeRow.id}`} name="total" type="number" defaultValue={activeRow.extracted.total} disabled={!canEdit} className="font-mono" />
                             </div>
@@ -1207,7 +1207,7 @@ export function OcrDocumentsTable({
       </Card>
 
       <Dialog open={Boolean(dialogRow)} onOpenChange={(open) => !open && setDialogRow(null)}>
-        <DialogContent className="max-h-[92vh] max-w-[min(1200px,calc(100vw-2rem))] overflow-y-auto">
+        <DialogContent className="max-h-[92vh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-[min(1200px,calc(100vw-2rem))]">
           {dialogRow ? (
             <>
               <DialogHeader>
@@ -1226,7 +1226,7 @@ export function OcrDocumentsTable({
                     {summaryLines(dialogRow).map((line) => {
                       const [label, ...rest] = line.split(": ");
                       return (
-                        <div key={line} className="grid grid-cols-[80px_1fr] gap-3">
+                        <div key={line} className="grid gap-1 sm:grid-cols-[80px_1fr] sm:gap-3">
                           <dt className="text-muted-foreground">{label}</dt>
                           <dd className="whitespace-pre-wrap">{rest.join(": ")}</dd>
                         </div>

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { HelpCircle, LogOut, Search } from "lucide-react";
 import { logoutAction } from "@/app/actions";
-import { AppNav, CompanySwitch, MobileCompanySwitch, ScopedBrandLink } from "@/components/app/company-switch";
+import { AppNav, CompanySwitch, MobileAppNav, MobileCompanySwitch, ScopedBrandLink } from "@/components/app/company-switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
@@ -42,9 +42,20 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <div className="lg:pl-[96px]">
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
           <ScopedBrandLink compact role={user.role} />
-          <MobileCompanySwitch />
+          <div className="flex min-w-0 items-center gap-2">
+            <MobileCompanySwitch />
+            <form action={logoutAction}>
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="ログアウト">
+                <LogOut className="h-4 w-4" />
+                <span className="sr-only">ログアウト</span>
+              </Button>
+            </form>
+          </div>
         </header>
-        <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-7 lg:px-10">{children}</main>
+        <main className="mx-auto w-full max-w-[1760px] px-3 py-4 pb-24 sm:px-7 sm:py-6 lg:px-10 lg:pb-6">{children}</main>
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+          <MobileAppNav role={user.role} />
+        </div>
       </div>
     </div>
   );
@@ -60,17 +71,17 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-      <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
+    <div className="mb-4 flex flex-col gap-3 sm:mb-6 md:flex-row md:items-start md:justify-between">
+      <div className="min-w-0">
+        <h1 className="break-words text-xl font-semibold sm:text-2xl">{title}</h1>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="hidden h-10 w-[min(360px,32vw)] items-center gap-3 rounded-lg border bg-card px-4 text-muted-foreground shadow-sm xl:flex">
           <Search className="h-4 w-4 text-foreground" />
           <span className="text-xs">Search</span>
         </div>
-        {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
+        {children ? <div className="flex min-w-0 flex-wrap gap-2">{children}</div> : null}
         <Button variant="outline" size="icon" className="h-10 w-10 rounded-full bg-card">
           <HelpCircle className="h-4 w-4" />
           <span className="sr-only">ヘルプ</span>
