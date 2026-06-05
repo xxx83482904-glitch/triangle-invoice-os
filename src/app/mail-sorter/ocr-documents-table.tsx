@@ -384,21 +384,28 @@ export function OcrDocumentsTable({
   const [selectionDrag, setSelectionDrag] = useState<SelectionDragState | null>(null);
   const selectionDragRef = useRef<SelectionDragState | null>(null);
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
-  const duplicateIds = useMemo(() => {
-    const keyedRows = new Map<string, string[]>();
+  const duplicateData = useMemo(() => {
+    const keyedRows = new Map<string, OcrDocumentListItem[]>();
     for (const row of rows) {
       for (const key of duplicateKeys(row)) {
-        keyedRows.set(key, [...(keyedRows.get(key) ?? []), row.id]);
+        keyedRows.set(key, [...(keyedRows.get(key) ?? []), row]);
       }
     }
 
-    const ids = new Set<string>();
-    for (const rowIds of keyedRows.values()) {
-      if (rowIds.length > 1) rowIds.forEach((id) => ids.add(id));
+    const badgeIds = new Set<string>();
+    const selectableIds = new Set<string>();
+    for (const groupRows of keyedRows.values()) {
+      if (groupRows.length <= 1) continue;
+      const sortedRows = [...groupRows].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+      sortedRows.forEach((row) => badgeIds.add(row.id));
+      sortedRows.slice(1).forEach((row) => selectableIds.add(row.id));
     }
-    return ids;
+
+    return { badgeIds, selectableIds };
   }, [rows]);
-  const duplicateFilteredRows = useMemo(() => filteredRows.filter((row) => duplicateIds.has(row.id)), [duplicateIds, filteredRows]);
+  const duplicateIds = duplicateData.badgeIds;
+  const duplicateSelectableIds = duplicateData.selectableIds;
+  const duplicateFilteredRows = useMemo(() => filteredRows.filter((row) => duplicateSelectableIds.has(row.id)), [duplicateSelectableIds, filteredRows]);
   const processedCount = rows.filter(isProcessedRow).length;
   const unprocessedCount = rows.length - processedCount;
   const selectedFilteredCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
@@ -565,7 +572,7 @@ export function OcrDocumentsTable({
             </Button>
             <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleDuplicateSelection} disabled={!duplicateFilteredRows.length}>
               {allDuplicatesSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-              {allDuplicatesSelected ? "重複解除" : `重複を選択 ${duplicateFilteredRows.length}`}
+              {allDuplicatesSelected ? "重複解除" : `重複片方を選択 ${duplicateFilteredRows.length}`}
             </Button>
             {canExport ? (
               <Button asChild size="sm" variant="outline" className="gap-1">
