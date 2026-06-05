@@ -36,8 +36,16 @@ function tokenMatches(value: string | null) {
   return actualHashBuffer.length === trustedHashBuffer.length && timingSafeEqual(actualHashBuffer, trustedHashBuffer);
 }
 
+function appRootPath() {
+  const cwd = process.cwd();
+  if (path.basename(cwd) === "standalone" && path.basename(path.dirname(cwd)) === ".next") {
+    return path.resolve(cwd, "..", "..");
+  }
+  return cwd;
+}
+
 function deployLogPath() {
-  return path.join(process.env.DEPLOY_LOG_DIR || path.join(process.cwd(), "data", "deploy-logs"), "self-deploy.log");
+  return path.join(process.env.DEPLOY_LOG_DIR || path.join(appRootPath(), "data", "deploy-logs"), "self-deploy.log");
 }
 
 function normalizedBranch() {
@@ -94,12 +102,14 @@ export async function POST(request: Request) {
   const log = createWriteStream(logFile, { flags: "a" });
   const branch = normalizedBranch();
   const parentPid = process.pid;
+  const appRoot = appRootPath();
 
   const script = [
     "set -eu",
     `echo ""`,
     `echo "=== TRIANGLE Invoice OS self deploy $(date -Iseconds) ==="`,
     `echo "branch: ${branch}"`,
+    "echo \"app root: $(pwd)\"",
     `git fetch --depth 1 origin ${branch}`,
     `git reset --hard origin/${branch}`,
     "npm ci --include=dev",
@@ -109,7 +119,7 @@ export async function POST(request: Request) {
   ].join("\n");
 
   const child = spawn("sh", ["-lc", script], {
-    cwd: process.cwd(),
+    cwd: appRoot,
     detached: true,
     env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
   });
