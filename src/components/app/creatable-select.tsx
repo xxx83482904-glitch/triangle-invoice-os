@@ -80,7 +80,7 @@ export function CreatableSelect({
       <input name={name} value={value} readOnly type="hidden" />
       <button
         type="button"
-        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50"
+        className="flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-[16px] outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50 lg:h-8 lg:px-2.5 lg:text-sm"
         onClick={() => setOpen((current) => !current)}
       >
         <span className="min-w-0 flex-1 text-left">
@@ -108,7 +108,7 @@ export function CreatableSelect({
             autoFocus
             value={query}
             placeholder={searchPlaceholder}
-            className="mb-1 h-8"
+            className="mb-1"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -123,7 +123,7 @@ export function CreatableSelect({
                 key={item.value}
                 type="button"
                 className={cn(
-                  "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent",
+                  "flex min-h-10 w-full items-center justify-between rounded-md px-2 py-2 text-left text-[16px] hover:bg-accent lg:min-h-0 lg:py-1.5 lg:text-sm",
                   item.value === value && "bg-accent",
                 )}
                 onClick={() => selectItem(item)}

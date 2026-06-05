@@ -164,7 +164,7 @@ export default async function ReceivedInvoicesPage({
                     required
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>請求日</Label>
                     <Input name="issueDate" type="date" defaultValue={todayIso()} required />
@@ -174,7 +174,7 @@ export default async function ReceivedInvoicesPage({
                     <Input name="dueDate" type="date" required />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-3 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label>税抜</Label>
                     <Input name="subtotal" type="number" required />

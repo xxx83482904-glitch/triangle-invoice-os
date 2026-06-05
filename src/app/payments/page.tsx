@@ -71,7 +71,7 @@ export default async function PaymentsPage({
             <CardContent>
               <form action={recordIncomePayment} className="space-y-4">
                 <div className="space-y-2"><Label>対象請求書</Label><Select name="issuedInvoiceId" required><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{unpaidIssued.map((invoice) => <SelectItem key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} / {yen.format(invoice.total - paidForIssued(data, invoice.id))}</SelectItem>)}</SelectContent></Select></div>
-                <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label>入金日</Label><Input name="paymentDate" type="date" defaultValue={todayIso()} required /></div><div className="space-y-2"><Label>入金額</Label><Input name="amount" type="number" required /></div></div>
+                <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><Label>入金日</Label><Input name="paymentDate" type="date" defaultValue={todayIso()} required /></div><div className="space-y-2"><Label>入金額</Label><Input name="amount" type="number" required /></div></div>
                 <div className="space-y-2"><Label>方法</Label><Input name="method" defaultValue="銀行振込" /></div>
                 <div className="space-y-2"><Label>メモ</Label><Textarea name="memo" /></div>
                 <Button>入金を登録</Button>
@@ -85,7 +85,7 @@ export default async function PaymentsPage({
             <CardContent>
               <form action={recordExpensePayment} className="space-y-4">
                 <div className="space-y-2"><Label>対象受領請求書</Label><Select name="receivedInvoiceId" required><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{unpaidReceived.map((invoice) => <SelectItem key={invoice.id} value={invoice.id}>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName} / {yen.format(invoice.total - paidForReceived(data, invoice.id))}</SelectItem>)}</SelectContent></Select></div>
-                <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label>支払日</Label><Input name="paymentDate" type="date" defaultValue={todayIso()} required /></div><div className="space-y-2"><Label>支払額</Label><Input name="amount" type="number" required /></div></div>
+                <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><Label>支払日</Label><Input name="paymentDate" type="date" defaultValue={todayIso()} required /></div><div className="space-y-2"><Label>支払額</Label><Input name="amount" type="number" required /></div></div>
                 <div className="space-y-2"><Label>支払方法</Label><Input name="method" defaultValue="銀行振込" /></div>
                 <div className="space-y-2"><Label>メモ</Label><Textarea name="memo" /></div>
                 <Button>支払いを登録</Button>

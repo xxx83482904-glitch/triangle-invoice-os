@@ -137,4 +137,41 @@
   textarea {
     touch-action: manipulation;
   }
+  img,
+  video,
+  canvas,
+  iframe,
+  object,
+  embed {
+    max-width: 100%;
+  }
+  iframe {
+    display: block;
+  }
+  a,
+  p,
+  dd,
+  td,
+  th,
+  span,
+  div {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 1023px) {
+  button,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [data-slot="select-trigger"] {
+    min-height: 44px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 20px;
+    min-width: 20px;
+  }
 }

@@ -84,7 +84,7 @@ export default async function IssuedInvoicesPage({
             <CardHeader><CardTitle>請求書を作成</CardTitle></CardHeader>
             <CardContent>
               <form action={createIssuedInvoice} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2"><Label>請求書番号</Label><Input name="invoiceNumber" defaultValue={defaultNumber} required /></div>
                   <div className="space-y-2">
                     <Label>ステータス</Label>
@@ -97,7 +97,7 @@ export default async function IssuedInvoicesPage({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-3 md:grid-cols-3">
                   <div className="space-y-2"><Label>発行日</Label><Input name="issueDate" type="date" defaultValue={todayIso()} required /></div>
                   <div className="space-y-2"><Label>取引年月日</Label><Input name="transactionDate" type="date" defaultValue={todayIso()} required /></div>
                   <div className="space-y-2"><Label>支払期限</Label><Input name="dueDate" type="date" required /></div>
@@ -119,7 +119,7 @@ export default async function IssuedInvoicesPage({
                 <div className="rounded-md border p-3">
                   <div className="mb-3 text-sm font-medium">明細行</div>
                   {[0, 1, 2].map((index) => (
-                    <div key={index} className="mb-3 grid grid-cols-[1fr_64px_96px_86px] gap-2">
+                    <div key={index} className="mb-3 grid gap-2 md:grid-cols-[1fr_64px_96px_86px]">
                       <Input name="itemDescription" placeholder="内容" required={index === 0} />
                       <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
                       <Input name="itemUnitPrice" type="number" placeholder="単価" />

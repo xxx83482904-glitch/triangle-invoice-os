@@ -43,7 +43,7 @@ export function RegisterForm() {
               id="role"
               name="role"
               defaultValue="PROJECT_MANAGER"
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="h-11 w-full rounded-md border border-input bg-background px-3 text-[16px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:h-10 lg:text-sm"
             >
               <option value="PROJECT_MANAGER">担当: 案件・発行請求書</option>
               <option value="MAIL_EDITOR">郵便物担当: 郵便仕分けのみ</option>

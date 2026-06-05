@@ -165,11 +165,11 @@ export default async function ProjectsPage({
                     required
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2"><Label>請求総額</Label><Input name="contractAmount" type="number" min="0" step="1" required /></div>
                   <div className="space-y-2"><Label>請求回数</Label><Input name="billingCount" type="number" min="1" max="12" step="1" defaultValue={1} required /></div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2"><Label>開始日</Label><Input name="startDate" type="date" /></div>
                   <div className="space-y-2"><Label>終了日</Label><Input name="endDate" type="date" /></div>
                 </div>
