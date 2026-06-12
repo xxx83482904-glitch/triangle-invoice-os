@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AlertTriangle, CircleDollarSign, FolderKanban, TrendingUp, type LucideIcon } from "lucide-react";
 import { createProject } from "@/app/actions";
 import { ProjectsTable } from "@/app/projects/projects-table";
 import { CreatableSelect } from "@/components/app/creatable-select";
@@ -11,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
+import { yen } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
@@ -69,6 +71,10 @@ export default async function ProjectsPage({
       updatedAt: project.updatedAt,
     };
   });
+  const totalBilling = rows.reduce((sum, row) => sum + row.billingTotal, 0);
+  const unpaidIncomeTotal = rows.reduce((sum, row) => sum + row.unpaidIncomeAmount, 0);
+  const grossProfitTotal = rows.reduce((sum, row) => sum + row.grossProfit, 0);
+  const attentionCount = rows.filter((row) => row.unpaidIncomeAmount > 0 || row.paidExpenseAmount > 0).length;
 
   return (
     <AppShell>
@@ -77,7 +83,14 @@ export default async function ProjectsPage({
         description={showFinancials ? "請求総額、請求回数、入金、支払い、粗利を案件単位で見ます。" : "案件と発行請求書の作成状況を管理します。"}
       />
 
-      <Card className="mb-6">
+      <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <ProjectMetric icon={FolderKanban} label="Projects" value={`${rows.length}`} tone="blue" helper={`${attentionCount} need attention`} />
+        <ProjectMetric icon={CircleDollarSign} label="Billing" value={showFinancials ? yen.format(totalBilling) : `${rows.length} items`} tone="slate" helper="contract total" />
+        <ProjectMetric icon={AlertTriangle} label="Unpaid income" value={showFinancials ? yen.format(unpaidIncomeTotal) : "-"} tone="amber" helper="follow-up queue" />
+        <ProjectMetric icon={TrendingUp} label="Gross profit" value={showFinancials ? yen.format(grossProfitTotal) : "-"} tone="emerald" helper="current margin" />
+      </div>
+
+      <Card className="mb-6 border-muted-foreground/10 shadow-sm">
         <CardContent className="pt-6">
           <form className="grid gap-3 md:grid-cols-5">
             <input type="hidden" name="company" value={company} />
@@ -181,5 +194,41 @@ export default async function ProjectsPage({
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+function ProjectMetric({
+  helper,
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  helper: string;
+  icon: LucideIcon;
+  label: string;
+  tone: "amber" | "blue" | "emerald" | "slate";
+  value: string;
+}) {
+  const tones = {
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+  }[tone];
+
+  return (
+    <Card className="border-muted-foreground/10 shadow-sm">
+      <CardContent className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
+          <div className="mt-2 truncate text-xl font-semibold">{value}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
+        </div>
+        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${tones}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -36,14 +36,14 @@ export function CompanySwitch() {
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/30 p-1">
       {companyOptions.map((option) => (
         <Button
           key={option.value}
           asChild
           size="xs"
           variant={company === option.value ? "default" : "ghost"}
-          className="h-7 w-full rounded-lg px-2 text-[10px]"
+          className="h-8 w-full rounded-lg px-2 text-xs"
         >
           <Link href={scopedHref(pathname, searchParams, option.value)}>{option.shortLabel}</Link>
         </Button>
@@ -143,7 +143,7 @@ export function AppNav({ role }: { role: UserRole }) {
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <nav className="flex flex-col items-center gap-4">
+    <nav className="flex w-full flex-col gap-1">
       {nav.filter((item) => canRole(role, item.permission)).map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href;
@@ -152,14 +152,14 @@ export function AppNav({ role }: { role: UserRole }) {
             key={item.href}
             href={navHref(item.href, company)}
             title={item.label}
-            className={`grid h-11 w-11 place-items-center rounded-lg transition ${
+            className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm transition ${
               active
-                ? "bg-primary/15 text-sidebar-accent-foreground shadow-sm"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" />
-            <span className="sr-only">{item.label}</span>
+            <span className="min-w-0 truncate">{item.label}</span>
           </Link>
         );
       })}
@@ -172,9 +172,14 @@ export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; 
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <Link href={navHref(defaultPathForRole(role), company)} className={compact ? "font-semibold" : "flex flex-col items-center gap-2"}>
+    <Link href={navHref(defaultPathForRole(role), company)} className={compact ? "font-semibold" : "flex items-center gap-3 rounded-xl px-1"}>
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-sm">T</div>
-      {!compact ? <div className="sr-only">TRIANGLE Invoice OS</div> : null}
+      {!compact ? (
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">TRIANGLE</div>
+          <div className="truncate text-xs text-muted-foreground">Invoice OS</div>
+        </div>
+      ) : null}
     </Link>
   );
 }

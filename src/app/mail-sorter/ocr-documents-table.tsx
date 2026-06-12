@@ -871,11 +871,25 @@ export function OcrDocumentsTable({
         </CardContent>
       </Card>
 
-      <Card className="hidden lg:flex">
-        <CardHeader className="gap-3 px-3 sm:px-4 md:flex-row md:items-center md:justify-between">
+      <Card className="hidden overflow-hidden border-muted-foreground/10 shadow-sm lg:flex">
+        <CardHeader className="gap-3 border-b bg-muted/20 px-3 sm:px-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <CardTitle>郵便物フォルダー</CardTitle>
             <div className="mt-1 text-xs text-muted-foreground">追加・変更・削除と、カラム幅の切り替えができます。</div>
+            <div className="mt-3 grid max-w-md grid-cols-3 gap-2 text-xs">
+              <div className="rounded-lg border bg-background px-3 py-2">
+                <div className="text-muted-foreground">未処理</div>
+                <div className="mt-1 text-base font-semibold tabular-nums">{unprocessedCount}</div>
+              </div>
+              <div className="rounded-lg border bg-background px-3 py-2">
+                <div className="text-muted-foreground">処理済</div>
+                <div className="mt-1 text-base font-semibold tabular-nums">{processedCount}</div>
+              </div>
+              <div className="rounded-lg border bg-background px-3 py-2">
+                <div className="text-muted-foreground">選択中</div>
+                <div className="mt-1 text-base font-semibold tabular-nums">{selectedRows.length}</div>
+              </div>
+            </div>
           </div>
           <div className="flex w-full min-w-0 flex-wrap gap-2 md:w-auto md:justify-end">
             <div className="flex max-w-full items-center overflow-x-auto rounded-md border bg-background p-0.5">
@@ -1020,10 +1034,10 @@ export function OcrDocumentsTable({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="px-3 sm:px-4">
+        <CardContent className="px-3 py-4 sm:px-4">
           {groups.length ? (
-            <div className={`grid min-h-0 overflow-hidden rounded-lg border lg:min-h-[640px] ${folderGridColumns[monthColumn][senderColumn]}`}>
-              <aside className="min-w-0 border-b bg-muted/20 p-3 lg:border-r lg:border-b-0">
+            <div className={`grid min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm lg:min-h-[640px] ${folderGridColumns[monthColumn][senderColumn]}`}>
+              <aside className="min-w-0 border-b bg-slate-50/80 p-3 lg:border-r lg:border-b-0">
                 <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                   <span>{monthColumn === "compact" ? "月" : "月フォルダー"}</span>
                   {isMoving ? <span className="text-primary">移動中</span> : null}
@@ -1072,7 +1086,7 @@ export function OcrDocumentsTable({
                 </div>
               </aside>
 
-              <aside className="min-w-0 border-b p-3 lg:border-r lg:border-b-0">
+              <aside className="min-w-0 border-b bg-background p-3 lg:border-r lg:border-b-0">
                 <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <label className="flex min-w-0 flex-1 items-center gap-1">
                     <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
@@ -1205,10 +1219,10 @@ export function OcrDocumentsTable({
                 </div>
               </aside>
 
-              <section className="min-w-0 p-3 sm:p-4">
+              <section className="min-w-0 bg-muted/10 p-3 sm:p-4">
                 {activeRow ? (
                   <div className="space-y-4">
-                    <div className="flex flex-col gap-3 border-b pb-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="break-words text-base font-medium sm:text-lg">{shippingSenderName(activeRow)}</div>
                         <div className="mt-1 text-sm text-muted-foreground">{activeRow.ocrPreview}</div>
