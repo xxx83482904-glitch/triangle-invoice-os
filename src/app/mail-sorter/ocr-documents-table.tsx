@@ -393,6 +393,7 @@ export function OcrDocumentsTable({
   const [senderColumn, setSenderColumn] = useState<ColumnMode>("normal");
   const [showEditor, setShowEditor] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [lastSelectedRowId, setLastSelectedRowId] = useState<string | null>(null);
   const [selectionDrag, setSelectionDrag] = useState<SelectionDragState | null>(null);
   const selectionDragRef = useRef<SelectionDragState | null>(null);
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
@@ -437,9 +438,25 @@ export function OcrDocumentsTable({
     setActiveRowId(monthRows[0]?.id ?? null);
   };
 
-  const toggleRowSelection = (row: OcrDocumentListItem) => {
+  const toggleRowSelection = (row: OcrDocumentListItem, rangeRows?: OcrDocumentListItem[], extendRange = false) => {
     setSelectedIds((current) => {
       const next = new Set(current);
+      if (extendRange && lastSelectedRowId && rangeRows?.length) {
+        const startIndex = rangeRows.findIndex((item) => item.id === lastSelectedRowId);
+        const endIndex = rangeRows.findIndex((item) => item.id === row.id);
+        if (startIndex >= 0 && endIndex >= 0) {
+          const [from, to] = startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+          const shouldSelect = !current.has(row.id);
+          rangeRows.slice(from, to + 1).forEach((item) => {
+            if (shouldSelect) {
+              next.add(item.id);
+            } else {
+              next.delete(item.id);
+            }
+          });
+          return next;
+        }
+      }
       if (next.has(row.id)) {
         next.delete(row.id);
       } else {
@@ -447,6 +464,7 @@ export function OcrDocumentsTable({
       }
       return next;
     });
+    setLastSelectedRowId(row.id);
   };
 
   const setRowSelected = (row: OcrDocumentListItem, shouldSelect: boolean) => {
@@ -499,6 +517,10 @@ export function OcrDocumentsTable({
 
   const startSelectionDrag = (row: OcrDocumentListItem, event: React.PointerEvent<HTMLElement>) => {
     if (!canEdit || (event.pointerType === "mouse" && event.button !== 0)) return;
+    if (event.shiftKey) {
+      event.stopPropagation();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     const shouldSelect = !selectedIds.has(row.id);
@@ -506,6 +528,7 @@ export function OcrDocumentsTable({
     selectionDragRef.current = dragState;
     setSelectionDrag(dragState);
     setActiveRowId(row.id);
+    setLastSelectedRowId(row.id);
     setRowSelected(row, shouldSelect);
   };
 
@@ -790,13 +813,17 @@ export function OcrDocumentsTable({
                             checked={isSelected}
                             className="mt-1 h-5 w-5 rounded border-muted-foreground/40"
                             aria-label={`${shippingSenderName(row)}を選択`}
-                            onChange={() => toggleRowSelection(row)}
+                            onChange={(event) => toggleRowSelection(row, activeRows, (event.nativeEvent as MouseEvent).shiftKey)}
                           />
                         ) : null}
                         <button
                           type="button"
                           className="min-w-0 flex-1 text-left"
-                          onClick={() => {
+                          onClick={(event) => {
+                            if (canEdit && event.shiftKey) {
+                              toggleRowSelection(row, activeRows, true);
+                              return;
+                            }
                             setActiveRowId(row.id);
                             setDialogRow(row);
                           }}
@@ -1130,7 +1157,13 @@ export function OcrDocumentsTable({
                                 ? "border-amber-400/60 bg-amber-50/60 hover:bg-amber-50"
                                 : "border-transparent hover:bg-muted"
                         } ${draggedRow?.id === row.id ? "cursor-grabbing opacity-60" : selectionDrag ? "cursor-cell" : "cursor-grab"}`}
-                        onClick={() => setActiveRowId(row.id)}
+                        onClick={(event) => {
+                          if (canEdit && event.shiftKey) {
+                            toggleRowSelection(row, activeRows, true);
+                            return;
+                          }
+                          setActiveRowId(row.id);
+                        }}
                         onPointerEnter={() => continueSelectionDrag(row)}
                         onPointerMove={() => continueSelectionDrag(row)}
                         onPointerUp={stopSelectionDrag}
@@ -1155,7 +1188,7 @@ export function OcrDocumentsTable({
                               className="mt-0.5 h-4 w-4 rounded border-muted-foreground/40"
                               aria-label={`${shippingSenderName(row)}を選択`}
                               title="ドラッグで複数選択"
-                              onChange={() => toggleRowSelection(row)}
+                              onChange={(event) => toggleRowSelection(row, activeRows, (event.nativeEvent as MouseEvent).shiftKey)}
                               onPointerDown={(event) => startSelectionDrag(row, event)}
                               onPointerMove={() => continueSelectionDrag(row)}
                               onClick={(event) => event.stopPropagation()}
