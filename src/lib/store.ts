@@ -26,6 +26,8 @@ const now = () => new Date().toISOString();
 
 const releaseAdminEmail = "kure@the-triangle.jp";
 const releaseAdminPassword = "triangle0843";
+const releaseMailEditorEmail = "miyasaka@the-triangle.jp";
+const releaseMailEditorPassword = "triangle0843";
 export const newId = () => crypto.randomUUID();
 
 function active<T extends { deletedAt?: string | null }>(rows: T[]) {
@@ -73,6 +75,15 @@ function seedData(): AppData {
       email: releaseAdminEmail,
       passwordHash,
       role: "ADMIN",
+      createdAt,
+      updatedAt: createdAt,
+    },
+    {
+      id: "usr-mail-miyasaka",
+      name: "Miyasaka",
+      email: releaseMailEditorEmail,
+      passwordHash: hashSync(releaseMailEditorPassword, 10),
+      role: "MAIL_EDITOR",
       createdAt,
       updatedAt: createdAt,
     },
@@ -342,6 +353,46 @@ function normalizeReleaseUsers(data: AppData) {
     changed = true;
   }
   if (changed) admin.updatedAt = timestamp;
+
+  let mailEditor =
+    data.users.find((user) => user.email.toLowerCase() === releaseMailEditorEmail) ??
+    data.users.find((user) => user.id === "usr-mail-miyasaka");
+
+  if (!mailEditor) {
+    mailEditor = {
+      id: "usr-mail-miyasaka",
+      name: "Miyasaka",
+      email: releaseMailEditorEmail,
+      passwordHash: hashSync(releaseMailEditorPassword, 10),
+      role: "MAIL_EDITOR",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    data.users.unshift(mailEditor);
+    changed = true;
+  }
+
+  if (mailEditor.name !== "Miyasaka") {
+    mailEditor.name = "Miyasaka";
+    changed = true;
+  }
+  if (mailEditor.email !== releaseMailEditorEmail) {
+    mailEditor.email = releaseMailEditorEmail;
+    changed = true;
+  }
+  if (mailEditor.role !== "MAIL_EDITOR") {
+    mailEditor.role = "MAIL_EDITOR";
+    changed = true;
+  }
+  if (!compareSync(releaseMailEditorPassword, mailEditor.passwordHash)) {
+    mailEditor.passwordHash = hashSync(releaseMailEditorPassword, 10);
+    changed = true;
+  }
+  if (mailEditor.deletedAt) {
+    mailEditor.deletedAt = null;
+    changed = true;
+  }
+  if (changed) mailEditor.updatedAt = timestamp;
 
   for (const user of data.users) {
     const email = user.email.toLowerCase();
