@@ -21,6 +21,7 @@ const permissions = {
     "manage:receivedInvoices",
     "manage:expensePayments",
     "export:csv",
+    "undo:changes",
     "view:all",
   ],
   ACCOUNTING: [
@@ -41,6 +42,7 @@ const permissions = {
     "manage:receivedInvoices",
     "manage:expensePayments",
     "export:csv",
+    "undo:changes",
     "view:all",
   ],
   CHIEF_DESIGNER: [

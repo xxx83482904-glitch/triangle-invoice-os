@@ -2,15 +2,20 @@ import { redirect } from "next/navigation";
 import { HelpCircle, LogOut, Search } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { AppNav, CompanySwitch, MobileAppNav, MobileCompanySwitch, ScopedBrandLink } from "@/components/app/company-switch";
+import { UndoButton } from "@/components/app/undo-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
-import { roleLabel } from "@/lib/rbac";
+import { can, roleLabel } from "@/lib/rbac";
+import { readData } from "@/lib/store";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role === "GUEST") redirect("/guest-invoices");
+  const canUndoChanges = can(user, "undo:changes");
+  const data = canUndoChanges ? await readData() : null;
+  const canUndo = Boolean(data?.auditLogs.some((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson));
 
   return (
     <div className="min-h-screen bg-background">
@@ -22,24 +27,27 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mt-6 w-full">
           <AppNav role={user.role} />
         </div>
-        <div className="mt-auto flex w-full items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Avatar className="h-10 w-10 ring-4 ring-primary/10">
-              <AvatarFallback>{user.name.slice(0, 2)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">{user.name}</div>
-              <div className="truncate text-xs text-muted-foreground" title={`${user.name} / ${roleLabel(user.role)}`}>
-                {roleLabel(user.role)}
+        <div className="mt-auto w-full space-y-2">
+          {canUndoChanges ? <UndoButton disabled={!canUndo} /> : null}
+          <div className="flex w-full items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar className="h-10 w-10 ring-4 ring-primary/10">
+                <AvatarFallback>{user.name.slice(0, 2)}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">{user.name}</div>
+                <div className="truncate text-xs text-muted-foreground" title={`${user.name} / ${roleLabel(user.role)}`}>
+                  {roleLabel(user.role)}
+                </div>
               </div>
             </div>
+            <form action={logoutAction}>
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="ログアウト">
+                <LogOut className="h-5 w-5" />
+                <span className="sr-only">ログアウト</span>
+              </Button>
+            </form>
           </div>
-          <form action={logoutAction}>
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="ログアウト">
-              <LogOut className="h-5 w-5" />
-              <span className="sr-only">ログアウト</span>
-            </Button>
-          </form>
         </div>
       </aside>
       <div className="lg:pl-[248px]">
@@ -47,6 +55,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <ScopedBrandLink compact role={user.role} />
           <div className="flex min-w-0 items-center gap-2">
             <MobileCompanySwitch />
+            {canUndoChanges ? <UndoButton compact disabled={!canUndo} /> : null}
             <form action={logoutAction}>
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="ログアウト">
                 <LogOut className="h-4 w-4" />

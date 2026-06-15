@@ -42,6 +42,48 @@ function money(formData: FormData, key: string) {
 }
 
 const now = () => new Date().toISOString();
+const undoSnapshotKeys = [
+  "seedVersion",
+  "users",
+  "clients",
+  "vendors",
+  "selectOptions",
+  "projects",
+  "issuedInvoices",
+  "issuedInvoiceItems",
+  "receivedInvoices",
+  "mailFolders",
+  "mailDocuments",
+  "payments",
+  "attachments",
+  "invoiceNumberSettings",
+] as const;
+
+function restoreSnapshot(data: AppData, snapshot: unknown) {
+  if (!snapshot || typeof snapshot !== "object") throw new Error("Undo snapshot is missing.");
+  const source = snapshot as Record<string, unknown>;
+  const target = data as unknown as Record<string, unknown>;
+  for (const key of undoSnapshotKeys) {
+    if (key in source) target[key] = source[key];
+  }
+}
+
+function revalidateWorkspace() {
+  for (const path of [
+    "/",
+    "/dashboard",
+    "/projects",
+    "/issued-invoices",
+    "/received-invoices",
+    "/mail-sorter",
+    "/payments",
+    "/partners",
+    "/reports",
+    "/guest-invoices",
+  ]) {
+    revalidatePath(path);
+  }
+}
 
 function nextSortOrder<T extends { company?: string | null; deletedAt?: string | null; sortOrder?: number }>(
   rows: T[],
@@ -244,6 +286,44 @@ export async function guestLoginAction() {
 export async function logoutAction() {
   await signOut();
   redirect("/login");
+}
+
+export async function undoLastAction(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "undo:changes");
+  const returnPath = value(formData, "returnPath") || defaultPathForRole(user.role);
+  const data = await readData();
+  const targetLog = data.auditLogs.find((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson);
+
+  if (!targetLog) {
+    redirect(returnPath);
+  }
+
+  restoreSnapshot(data, targetLog.beforeStateJson);
+  const timestamp = now();
+  const restoredLog = data.auditLogs.find((log) => log.id === targetLog.id);
+  if (restoredLog) {
+    restoredLog.undoneAt = timestamp;
+    restoredLog.undoneById = user.id;
+  }
+  data.auditLogs.unshift({
+    id: newId(),
+    userId: user.id,
+    action: "UNDO_ACTION",
+    targetType: targetLog.targetType,
+    targetId: targetLog.targetId,
+    undoOfAuditLogId: targetLog.id,
+    afterJson: {
+      action: targetLog.action,
+      targetType: targetLog.targetType,
+      targetId: targetLog.targetId,
+    },
+    createdAt: timestamp,
+  });
+
+  await writeData(data);
+  revalidateWorkspace();
+  redirect(returnPath);
 }
 
 export async function createClient(formData: FormData) {
@@ -1375,16 +1455,8 @@ export async function softDelete(formData: FormData) {
 }
 
 export async function saveReceivedInvoiceMetadata(invoice: ReceivedInvoice) {
-  const data = await readData();
-  data.receivedInvoices.unshift(invoice);
-  data.auditLogs.unshift({
-    id: newId(),
-    userId: invoice.uploadedById,
-    action: "UPLOAD_RECEIVED_INVOICE",
-    targetType: "ReceivedInvoice",
-    targetId: invoice.id,
-    afterJson: invoice,
-    createdAt: now(),
+  await mutateData(invoice.uploadedById, "UPLOAD_RECEIVED_INVOICE", "ReceivedInvoice", invoice.id, (data) => {
+    data.receivedInvoices.unshift(invoice);
+    return invoice;
   });
-  await writeData(data);
 }

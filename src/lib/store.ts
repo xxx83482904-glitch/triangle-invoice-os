@@ -191,6 +191,7 @@ function seedData(): AppData {
 }
 
 type AppDataRow = { value: AppData };
+type AppDataSnapshot = Omit<AppData, "auditLogs">;
 
 let databasePool: Pool | null = null;
 
@@ -421,6 +422,12 @@ export async function writeData(data: AppData) {
   await writeRawData(data);
 }
 
+function snapshotData(data: AppData): AppDataSnapshot {
+  const snapshot = { ...data };
+  delete (snapshot as Partial<AppData>).auditLogs;
+  return JSON.parse(JSON.stringify(snapshot)) as AppDataSnapshot;
+}
+
 export async function mutateData<T>(
   userId: string,
   action: string,
@@ -430,6 +437,7 @@ export async function mutateData<T>(
   beforeJson?: unknown,
 ) {
   const data = await readData();
+  const beforeStateJson = snapshotData(data);
   const result = mutator(data);
   const audit: AuditLog = {
     id: newId(),
@@ -438,6 +446,7 @@ export async function mutateData<T>(
     targetType,
     targetId,
     beforeJson,
+    beforeStateJson,
     afterJson: result,
     createdAt: now(),
   };

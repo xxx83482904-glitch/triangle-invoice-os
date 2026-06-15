@@ -269,8 +269,12 @@ export type AuditLog = {
   targetType: string;
   targetId: string;
   beforeJson?: unknown;
+  beforeStateJson?: unknown;
   afterJson?: unknown;
   createdAt: string;
+  undoneAt?: string;
+  undoneById?: string;
+  undoOfAuditLogId?: string;
 };
 
 export type InvoiceNumberSetting = {
