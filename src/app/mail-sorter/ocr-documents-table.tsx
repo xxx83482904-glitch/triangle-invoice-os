@@ -564,8 +564,6 @@ export function OcrDocumentsTable({
     }
     startMoveTransition(async () => {
       await moveOcrDocumentToMonth(formData);
-      setActiveMonth(targetMonth);
-      setActiveRowId(row.id);
       setSelectedIds((current) => {
         const next = new Set(current);
         movableRows.forEach((item) => next.delete(item.id));
