@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { companyFromParam } from "@/lib/company";
+import { mailSorterCompany } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { analyzeMailDocument, extractDocumentText } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
@@ -223,7 +223,7 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
-  const company = companyFromParam(String(formData.get("company") ?? ""));
+  const company = mailSorterCompany;
   const files = formData.getAll("files").filter((file): file is File => file instanceof File);
   if (!files.length) return NextResponse.json({ error: "ファイルをドロップしてください" }, { status: 400 });
 

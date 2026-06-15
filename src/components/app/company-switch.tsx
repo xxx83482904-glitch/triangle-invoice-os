@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { BarChart3, Building2, Ellipsis, FileText, LayoutGrid, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { companyFromParam, companyOptions, type CompanyScope } from "@/lib/company";
+import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { canRole, defaultPathForRole } from "@/lib/rbac";
 import type { UserRole } from "@/lib/types";
 
@@ -27,17 +27,22 @@ function scopedHref(pathname: string, searchParams: { toString(): string }, comp
 }
 
 function navHref(href: string, company: CompanyScope) {
-  return `${href}?company=${company}`;
+  return `${href}?company=${href === "/mail-sorter" ? mailSorterCompany : company}`;
+}
+
+function optionsForPath(pathname: string) {
+  return pathname === "/mail-sorter" ? companyOptions.filter((option) => option.value === mailSorterCompany) : companyOptions;
 }
 
 export function CompanySwitch() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const company = companyFromParam(searchParams.get("company"));
+  const options = optionsForPath(pathname);
+  const company = pathname === "/mail-sorter" ? mailSorterCompany : companyFromParam(searchParams.get("company"));
 
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/30 p-1">
-      {companyOptions.map((option) => (
+    <div className={`grid ${options.length === 1 ? "grid-cols-1" : "grid-cols-2"} gap-2 rounded-xl border bg-muted/30 p-1`}>
+      {options.map((option) => (
         <Button
           key={option.value}
           asChild
@@ -55,11 +60,12 @@ export function CompanySwitch() {
 export function MobileCompanySwitch() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const company = companyFromParam(searchParams.get("company"));
+  const options = optionsForPath(pathname);
+  const company = pathname === "/mail-sorter" ? mailSorterCompany : companyFromParam(searchParams.get("company"));
 
   return (
     <div className="flex gap-1">
-      {companyOptions.map((option) => (
+      {options.map((option) => (
         <Button
           key={option.value}
           asChild
@@ -170,9 +176,10 @@ export function AppNav({ role }: { role: UserRole }) {
 export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; role: UserRole }) {
   const searchParams = useSearchParams();
   const company = companyFromParam(searchParams.get("company"));
+  const href = defaultPathForRole(role);
 
   return (
-    <Link href={navHref(defaultPathForRole(role), company)} className={compact ? "font-semibold" : "flex items-center gap-3 rounded-xl px-1"}>
+    <Link href={navHref(href, company)} className={compact ? "font-semibold" : "flex items-center gap-3 rounded-xl px-1"}>
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-sm">T</div>
       {!compact ? (
         <div className="min-w-0">

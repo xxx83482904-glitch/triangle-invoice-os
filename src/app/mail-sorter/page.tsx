@@ -5,7 +5,7 @@ import { OcrDocumentsTable, type OcrDocumentListItem } from "@/app/mail-sorter/o
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
-import { companyFromParam, matchesCompany } from "@/lib/company";
+import { companyFromParam, mailSorterCompany, matchesCompany } from "@/lib/company";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readData } from "@/lib/store";
@@ -26,10 +26,11 @@ export default async function MailSorterPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const company = companyFromParam(params.company);
+  const company = mailSorterCompany;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!can(user, "view:mailSorter")) redirect(defaultPathForRole(user.role));
+  if (params.company !== mailSorterCompany) redirect(`/mail-sorter?company=${mailSorterCompany}`);
   const data = await readData();
   const mayUpload = user && (can(user, "manage:mailSorter") || can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices"));
   const mayEdit = Boolean(mayUpload);

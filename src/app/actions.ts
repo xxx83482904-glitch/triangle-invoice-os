@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
 import { signIn, signOut, requireUser } from "@/lib/auth";
-import { companyClientId, companyFromParam, type CompanyScope } from "@/lib/company";
+import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, can, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
@@ -855,7 +855,7 @@ export async function updateOcrDocumentInline(formData: FormData) {
 
   const mailDocumentId = optional(formData, "mailDocumentId");
   const receivedInvoiceId = optional(formData, "receivedInvoiceId");
-  const company = companyFromParam(value(formData, "company"));
+  const company = mailSorterCompany;
   const timestamp = now();
   const data = await readData();
   const before = {
@@ -911,8 +911,8 @@ export async function updateMailDocumentCategory(formData: FormData) {
     throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentId = value(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const category = mailDocumentCategory(value(formData, "category"));
   const timestamp = now();
   const data = await readData();
@@ -937,8 +937,8 @@ export async function updateMailDocumentProcessingStatus(formData: FormData) {
     throw new Error("権限がありません");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentId = optional(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const receivedInvoiceId = optional(formData, "receivedInvoiceId");
   const mailProcessed = value(formData, "processingStatus") === "processed";
   const timestamp = now();
@@ -982,8 +982,8 @@ export async function updateOcrDocumentsBulkProcessingStatus(formData: FormData)
     throw new Error("権限がありません");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
   const mailProcessed = value(formData, "processingStatus") === "processed";
   if (!mailDocumentIds.length && !receivedInvoiceIds.length) throw new Error("書類を選択してください");
@@ -1026,8 +1026,8 @@ export async function updateMailDocumentsBulkCategory(formData: FormData) {
     throw new Error("権限がありません");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const category = mailDocumentCategory(value(formData, "category"));
   if (!mailDocumentIds.length) throw new Error("郵便物を選択してください");
 
@@ -1057,8 +1057,8 @@ export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
     throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentId = value(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const vendorId = value(formData, "vendorId");
   const projectId = value(formData, "projectId");
   const issueDate = value(formData, "issueDate") || now().slice(0, 10);
@@ -1155,7 +1155,7 @@ export async function deleteOcrDocument(formData: FormData) {
 
   const mailDocumentId = optional(formData, "mailDocumentId");
   const receivedInvoiceId = optional(formData, "receivedInvoiceId");
-  const company = companyFromParam(value(formData, "company"));
+  const company = mailSorterCompany;
   const timestamp = now();
   const data = await readData();
   const fileUrls = ocrFileUrlsForTargets(data, mailDocumentId ? [mailDocumentId] : [], receivedInvoiceId ? [receivedInvoiceId] : []);
@@ -1203,8 +1203,8 @@ export async function deleteOcrDocumentsBulk(formData: FormData) {
     throw new Error("Permission denied");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
   if (!mailDocumentIds.length && !receivedInvoiceIds.length) redirect(`/mail-sorter?company=${company}`);
 
@@ -1257,8 +1257,8 @@ export async function createMailFolder(formData: FormData) {
     throw new Error("権限がありません");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const month = validMonth(value(formData, "month"));
+  const company = mailSorterCompany;
   if (!month) throw new Error("月を選択してください");
 
   const timestamp = now();
@@ -1288,8 +1288,8 @@ export async function deleteMailFolder(formData: FormData) {
     throw new Error("権限がありません");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const month = validMonth(value(formData, "month"));
+  const company = mailSorterCompany;
   if (!month) throw new Error("月を選択してください");
 
   const timestamp = now();
@@ -1334,7 +1334,7 @@ export async function moveOcrDocumentToMonth(formData: FormData) {
 
   const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
   const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
-  const company = companyFromParam(value(formData, "company"));
+  const company = mailSorterCompany;
   const targetMonth = validMonth(value(formData, "targetMonth"));
   if (!targetMonth) throw new Error("移動先フォルダーを選択してください");
   if (!mailDocumentIds.length && !receivedInvoiceIds.length) throw new Error("書類を選択してください");
