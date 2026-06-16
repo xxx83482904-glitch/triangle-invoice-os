@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Folder } from "lucide-react";
 import { updateReceivedInvoiceStatus } from "@/app/actions";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -18,6 +19,19 @@ import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { paidForReceived, readData } from "@/lib/store";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
+
+const monthFormatter = new Intl.DateTimeFormat("ja-JP", {
+  month: "long",
+  year: "numeric",
+});
+
+function invoiceMonthKey(issueDate: string) {
+  return issueDate.slice(0, 7);
+}
+
+function monthLabel(month: string) {
+  return monthFormatter.format(new Date(`${month}-01T00:00:00`));
+}
 
 export default async function ReceivedInvoicesPage({
   searchParams,
@@ -38,6 +52,18 @@ export default async function ReceivedInvoicesPage({
     .filter((vendor) => !vendor.deletedAt && partnerMatchesCompany(vendor, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
   const receivedInvoices = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
+  const invoiceGroups = Array.from(
+    receivedInvoices.reduce((groups, invoice) => {
+      const month = invoiceMonthKey(invoice.issueDate);
+      groups.set(month, [...(groups.get(month) ?? []), invoice]);
+      return groups;
+    }, new Map<string, typeof receivedInvoices>()),
+  )
+    .map(([month, invoices]) => [month, [...invoices].sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.createdAt.localeCompare(a.createdAt))] as const)
+    .sort(([a], [b]) => b.localeCompare(a));
+  const activeMonth = params.month && invoiceGroups.some(([month]) => month === params.month) ? params.month : invoiceGroups[0]?.[0] ?? "";
+  const activeInvoices = invoiceGroups.find(([month]) => month === activeMonth)?.[1] ?? [];
+  const activeMonthTotal = activeInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
   const receivedStatusOptions = selectOptionsFor(data, "RECEIVED_INVOICE_STATUS", company);
   const mayUpload = user && (can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices"));
   const mayApprove = user && (can(user, "manage:receivedInvoices") || can(user, "approve:receivedInvoices"));
@@ -55,10 +81,42 @@ export default async function ReceivedInvoicesPage({
           {mayUpload ? <ReceivedInvoiceDropzone company={company} /> : null}
 
           <Card>
-            <CardHeader>
-              <CardTitle>受領請求書一覧</CardTitle>
+            <CardHeader className="gap-3">
+              <CardTitle>受領請求書フォルダー</CardTitle>
             </CardHeader>
             <CardContent>
+              {invoiceGroups.length ? (
+                <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
+                  {invoiceGroups.map(([month, invoices]) => {
+                    const isActive = month === activeMonth;
+                    return (
+                      <Button key={month} asChild variant={isActive ? "default" : "outline"} className="h-auto min-w-[156px] justify-start px-3 py-3">
+                        <Link href={`/received-invoices?company=${company}&month=${month}`} className="flex items-center gap-3">
+                          <Folder className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{monthLabel(month)}</span>
+                            <span className="block text-xs opacity-80">{invoices.length}件</span>
+                          </span>
+                        </Link>
+                      </Button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <div className="mb-4 grid gap-2 text-xs sm:grid-cols-3">
+                <div className="rounded-lg border bg-background px-3 py-2">
+                  <div className="text-muted-foreground">全件</div>
+                  <div className="mt-1 text-base font-semibold tabular-nums">{receivedInvoices.length}</div>
+                </div>
+                <div className="rounded-lg border bg-background px-3 py-2">
+                  <div className="text-muted-foreground">表示中</div>
+                  <div className="mt-1 text-base font-semibold tabular-nums">{activeInvoices.length}</div>
+                </div>
+                <div className="rounded-lg border bg-background px-3 py-2">
+                  <div className="text-muted-foreground">表示月合計</div>
+                  <div className="mt-1 text-base font-semibold tabular-nums">{yen.format(activeMonthTotal)}</div>
+                </div>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -74,7 +132,7 @@ export default async function ReceivedInvoicesPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {receivedInvoices
+                  {activeInvoices
                     .map((invoice) => (
                       <TableRow key={invoice.id}>
                         <TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell>
