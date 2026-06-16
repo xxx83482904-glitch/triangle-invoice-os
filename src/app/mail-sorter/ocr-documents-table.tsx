@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckSquare, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud } from "lucide-react";
+import { CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud } from "lucide-react";
 import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -348,6 +348,7 @@ export function OcrDocumentsTable({
   const [senderColumn, setSenderColumn] = useState<ColumnMode>("normal");
   const [showEditor, setShowEditor] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
   const [pendingCategoryChange, setPendingCategoryChange] = useState<{ row: OcrDocumentListItem; category: MailDocumentCategory } | null>(null);
   const lastClickedIndexRef = useRef<number | null>(null);
   const bulkDeleteFormRef = useRef<HTMLFormElement>(null);
@@ -551,6 +552,18 @@ export function OcrDocumentsTable({
     moveRowsToMonth(draggedIds, targetMonth);
   };
 
+  const toggleCollapsedMonth = (month: string) => {
+    setCollapsedMonths((current) => {
+      const next = new Set(current);
+      if (next.has(month)) {
+        next.delete(month);
+      } else {
+        next.add(month);
+      }
+      return next;
+    });
+  };
+
   const renderProcessingControl = (row: OcrDocumentListItem) => {
     const value = processingValueForRow(row);
     if (!canEdit || (!row.mailDocumentId && !row.receivedInvoiceId)) {
@@ -751,21 +764,41 @@ export function OcrDocumentsTable({
                         </tr>
                       </thead>
                       <tbody>
-                        {listGroups.map(([month, monthRows]) => (
+                        {listGroups.map(([month, monthRows]) => {
+                          const isCollapsed = collapsedMonths.has(month);
+                          const isDocumentDragOver = dragOverMonth === month;
+                          const isFileDragOver = fileDragMonth === month;
+                          return (
                           <Fragment key={month}>
                             <tr
-                              className={`border-t bg-muted/30 ${fileDragMonth === month ? "bg-primary/10" : ""}`}
+                              className={`border-t bg-muted/30 ${isFileDragOver || isDocumentDragOver ? "bg-primary/10" : ""}`}
                               onDragOver={(event) => {
-                                if (!canEdit || !isFileDrag(event)) return;
+                                if (!canEdit) return;
+                                if (isFileDrag(event)) {
+                                  event.preventDefault();
+                                  event.dataTransfer.dropEffect = "copy";
+                                  setFileDragMonth(month);
+                                  return;
+                                }
+                                if (!draggedIds.size) return;
                                 event.preventDefault();
-                                setFileDragMonth(month);
+                                event.dataTransfer.dropEffect = "move";
+                                setDragOverMonth(month);
                               }}
-                              onDragLeave={() => setFileDragMonth(null)}
+                              onDragLeave={() => {
+                                setFileDragMonth(null);
+                                setDragOverMonth(null);
+                              }}
                               onDrop={(event) => {
-                                if (!canEdit || !event.dataTransfer.files.length) return;
+                                if (!canEdit) return;
                                 event.preventDefault();
                                 setFileDragMonth(null);
-                                void uploadFilesToMonth(event.dataTransfer.files, month);
+                                setDragOverMonth(null);
+                                if (event.dataTransfer.files.length) {
+                                  void uploadFilesToMonth(event.dataTransfer.files, month);
+                                  return;
+                                }
+                                handleDrop(month);
                               }}
                             >
                               <td colSpan={9} className="px-3 py-2">
@@ -773,11 +806,10 @@ export function OcrDocumentsTable({
                                   <button
                                     type="button"
                                     className="flex items-center gap-2 text-left text-sm font-medium"
-                                    onClick={() => {
-                                      setActiveMonth(month);
-                                      setActiveRowId(monthRows[0]?.id ?? null);
-                                    }}
+                                    aria-expanded={!isCollapsed}
+                                    onClick={() => toggleCollapsedMonth(month)}
                                   >
+                                    {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                                     <Folder className="h-4 w-4 text-primary" />
                                     <span>{monthLabel(month)}</span>
                                   </button>
@@ -801,20 +833,33 @@ export function OcrDocumentsTable({
                                 </div>
                               </td>
                             </tr>
-                            {monthRows.length ? (
+                            {isCollapsed ? null : monthRows.length ? (
                               monthRows.map((row) => {
                                 const isSelected = selectedIds.has(row.id);
                                 const isActive = row.id === listPreviewRow?.id;
+                                const isDragging = draggedIds.has(row.id);
                                 const rowIndex = filteredRows.findIndex((candidate) => candidate.id === row.id);
                                 return (
                                   <tr
                                     key={row.id}
+                                    draggable={canEdit}
                                     className={`cursor-pointer border-t transition hover:bg-muted/50 ${
                                       isActive ? "bg-primary/5" : ""
-                                    } ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"}`}
+                                    } ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"} ${
+                                      isDragging ? "opacity-50" : ""
+                                    }`}
                                     onClick={() => {
                                       setActiveMonth(month);
                                       setActiveRowId(row.id);
+                                    }}
+                                    onDragStart={(event) => {
+                                      handleDragStart(row);
+                                      event.dataTransfer.effectAllowed = "move";
+                                      event.dataTransfer.setData("text/plain", row.id);
+                                    }}
+                                    onDragEnd={() => {
+                                      setDraggedIds(new Set());
+                                      setDragOverMonth(null);
                                     }}
                                   >
                                     <td className="px-3 py-2">
@@ -859,7 +904,8 @@ export function OcrDocumentsTable({
                               </tr>
                             )}
                           </Fragment>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   ) : (
