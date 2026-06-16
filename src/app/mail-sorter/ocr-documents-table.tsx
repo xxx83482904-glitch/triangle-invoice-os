@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckSquare, Download, ExternalLink, FileText, Folder, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateMailDocumentProcessingStatus, updateOcrDocumentInline } from "@/app/actions";
+import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +55,11 @@ type FolderOption = {
   label?: string;
   month: string;
 };
+
+type CategoryFilter = "all" | "INVOICE" | "RECEIPT";
+type ProcessingFilter = "all" | "unprocessed" | "processed";
+type ProcessingStatusValue = "unprocessed" | "processed";
+type ViewMode = "folder" | "list";
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
   INVOICE: "請求書",
@@ -216,11 +221,6 @@ function isProcessed(row: OcrDocumentListItem) {
   return s === "PAID" || s === "SCHEDULED" || s === "ARCHIVED";
 }
 
-function rowStatusClass(row: OcrDocumentListItem) {
-  if (isProcessed(row)) return "border-l-2 border-l-green-500";
-  return "border-l-2 border-l-amber-400";
-}
-
 function DocumentPreview({ compact = false, row }: { compact?: boolean; row: OcrDocumentListItem }) {
   const frameClass = compact ? "h-[56vh] min-h-[360px]" : "h-[68vh] min-h-96";
   const boxClass = compact ? "min-h-[360px]" : "min-h-80";
@@ -303,9 +303,23 @@ export function OcrDocumentsTable({
   const [isMoving, startMoveTransition] = useTransition();
   const [draggedIds, setDraggedIds] = useState<Set<string>>(new Set());
   const [dragOverMonth, setDragOverMonth] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [processingFilter, setProcessingFilter] = useState<ProcessingFilter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("folder");
+  const [pendingCategories, setPendingCategories] = useState<Partial<Record<string, MailDocumentCategory>>>({});
+  const [pendingProcessing, setPendingProcessing] = useState<Partial<Record<string, ProcessingStatusValue>>>({});
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      const processing = pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
+      const category = pendingCategories[row.id] ?? row.category;
+      if (processingFilter !== "all" && processing !== processingFilter) return false;
+      if (categoryFilter !== "all" && category !== categoryFilter) return false;
+      return true;
+    });
+  }, [categoryFilter, pendingCategories, pendingProcessing, processingFilter, rows]);
   const groups = useMemo(() => {
     const grouped = new Map<string, OcrDocumentListItem[]>();
-    for (const row of rows) {
+    for (const row of filteredRows) {
       const key = row.folderMonth || monthKey(row.createdAt);
       grouped.set(key, [...(grouped.get(key) ?? []), row]);
     }
@@ -313,7 +327,7 @@ export function OcrDocumentsTable({
       if (!grouped.has(folder.month)) grouped.set(folder.month, []);
     }
     return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
-  }, [folders, rows]);
+  }, [filteredRows, folders]);
   const customFolderMonths = useMemo(() => new Set(folders.map((folder) => folder.month)), [folders]);
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
   const activeGroup = groups.find(([month]) => month === activeMonth) ?? groups[0];
@@ -335,6 +349,17 @@ export function OcrDocumentsTable({
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
   const selectedActiveCount = activeRows.filter((row) => selectedIds.has(row.id)).length;
   const allActiveSelected = activeRows.length > 0 && selectedActiveCount === activeRows.length;
+  const pendingEdits = useMemo(() => {
+    return rows
+      .map((row) => ({
+        category: pendingCategories[row.id],
+        mailDocumentId: row.mailDocumentId,
+        processingStatus: pendingProcessing[row.id],
+        receivedInvoiceId: row.receivedInvoiceId,
+      }))
+      .filter((edit) => edit.category || edit.processingStatus);
+  }, [pendingCategories, pendingProcessing, rows]);
+  const pendingEditsJson = JSON.stringify(pendingEdits);
   const exportHref = canExport ? `/api/export/ocr-documents?company=${company}${
     selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
   }` : "#";
@@ -347,7 +372,31 @@ export function OcrDocumentsTable({
   // #1: Shift+click range selection
   // Keep a stable ref updated via effect so toggleRowSelection doesn't need activeRows as dep
   const activeRowsRef = useRef(activeRows);
-  useEffect(() => { activeRowsRef.current = activeRows; });
+  useEffect(() => { activeRowsRef.current = viewMode === "list" ? filteredRows : activeRows; });
+
+  const processingValueForRow = (row: OcrDocumentListItem): ProcessingStatusValue =>
+    pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
+
+  const categoryValueForRow = (row: OcrDocumentListItem) => pendingCategories[row.id] ?? row.category;
+
+  const setProcessingDraft = (row: OcrDocumentListItem, processingStatus: ProcessingStatusValue) => {
+    const original = isProcessed(row) ? "processed" : "unprocessed";
+    setPendingProcessing((current) => {
+      const next = { ...current };
+      if (processingStatus === original) delete next[row.id];
+      else next[row.id] = processingStatus;
+      return next;
+    });
+  };
+
+  const setCategoryDraft = (row: OcrDocumentListItem, category: MailDocumentCategory) => {
+    setPendingCategories((current) => {
+      const next = { ...current };
+      if (category === row.category) delete next[row.id];
+      else next[row.id] = category;
+      return next;
+    });
+  };
 
   const toggleRowSelection = useCallback((row: OcrDocumentListItem, index: number, shiftKey: boolean) => {
     setSelectedIds((current) => {
@@ -419,6 +468,46 @@ export function OcrDocumentsTable({
     moveRowsToMonth(draggedIds, targetMonth);
   };
 
+  const renderProcessingControl = (row: OcrDocumentListItem) => {
+    const value = processingValueForRow(row);
+    if (!canEdit || (!row.mailDocumentId && !row.receivedInvoiceId)) {
+      return <Badge variant="outline" className={processingStatusSelectClass(value === "processed")}>{value === "processed" ? "処理済" : "未処理"}</Badge>;
+    }
+    return (
+      <select
+        value={value}
+        className={processingStatusSelectClass(value === "processed")}
+        aria-label="処理状態"
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => setProcessingDraft(row, event.currentTarget.value as ProcessingStatusValue)}
+      >
+        {processingStatusOptions.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    );
+  };
+
+  const renderCategoryControl = (row: OcrDocumentListItem) => {
+    const value = categoryValueForRow(row);
+    if (!canEdit || !row.mailDocumentId) {
+      return <Badge variant={value === "INVOICE" ? "default" : "secondary"}>{categoryLabels[value]}</Badge>;
+    }
+    return (
+      <select
+        value={value}
+        className={categorySelectClass(value)}
+        aria-label="分類"
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => setCategoryDraft(row, event.currentTarget.value as MailDocumentCategory)}
+      >
+        {categoryOptions.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    );
+  };
+
   return (
     <>
       <Card>
@@ -475,7 +564,123 @@ export function OcrDocumentsTable({
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-2">
+            {(["all", "unprocessed", "processed"] as ProcessingFilter[]).map((filter) => (
+              <Button
+                key={filter}
+                type="button"
+                size="sm"
+                variant={processingFilter === filter ? "default" : "outline"}
+                onClick={() => setProcessingFilter(filter)}
+              >
+                {filter === "all" ? "全件" : filter === "processed" ? "処理済み" : "未処理"}
+              </Button>
+            ))}
+            {(["all", "INVOICE", "RECEIPT"] as CategoryFilter[]).map((filter) => (
+              <Button
+                key={filter}
+                type="button"
+                size="sm"
+                variant={categoryFilter === filter ? "default" : "outline"}
+                onClick={() => setCategoryFilter(filter)}
+              >
+                {filter === "all" ? "全分類" : categoryLabels[filter]}
+              </Button>
+            ))}
+            <Button type="button" size="sm" variant={viewMode === "folder" ? "default" : "outline"} onClick={() => setViewMode("folder")}>
+              フォルダー
+            </Button>
+            <Button type="button" size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => setViewMode("list")}>
+              一覧
+            </Button>
+            <form
+              action={saveMailSorterBulkEdits}
+              className="ml-auto flex items-center gap-2"
+              onSubmit={() => {
+                setPendingCategories({});
+                setPendingProcessing({});
+              }}
+            >
+              <input type="hidden" name="changes" value={pendingEditsJson} readOnly />
+              {pendingEdits.length ? <span className="text-xs text-muted-foreground">{pendingEdits.length}件の変更</span> : null}
+              <Button type="submit" size="sm" disabled={!pendingEdits.length}>
+                すべて保存
+              </Button>
+            </form>
+          </div>
           {groups.length ? (
+            viewMode === "list" ? (
+              <div className="overflow-x-auto rounded-lg border">
+                {filteredRows.length ? (
+                  <table className="w-full min-w-[960px] text-sm">
+                    <thead className="bg-muted/50 text-xs text-muted-foreground">
+                      <tr>
+                        <th className="w-10 px-3 py-2 text-left"></th>
+                        <th className="px-3 py-2 text-left">請求月</th>
+                        <th className="px-3 py-2 text-left">発送元</th>
+                        <th className="px-3 py-2 text-left">処理</th>
+                        <th className="px-3 py-2 text-left">分類</th>
+                        <th className="px-3 py-2 text-left">請求日</th>
+                        <th className="px-3 py-2 text-right">金額</th>
+                        <th className="px-3 py-2 text-left">保存先</th>
+                        <th className="px-3 py-2 text-left">ファイル</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRows.map((row, index) => {
+                        const isSelected = selectedIds.has(row.id);
+                        const month = row.folderMonth || monthKey(row.createdAt);
+                        return (
+                          <tr
+                            key={row.id}
+                            className={`border-t transition hover:bg-muted/50 ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"}`}
+                            onClick={() => {
+                              setActiveMonth(month);
+                              setActiveRowId(row.id);
+                              setViewMode("folder");
+                            }}
+                          >
+                            <td className="px-3 py-2">
+                              {canEdit ? (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  className="h-4 w-4 rounded border-muted-foreground/40"
+                                  aria-label={`${shippingSenderName(row)}を選択`}
+                                  onChange={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleRowSelection(row, index, event.shiftKey);
+                                  }}
+                                />
+                              ) : null}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2">{monthLabel(month)}</td>
+                            <td className="max-w-[240px] truncate px-3 py-2 font-medium">{shippingSenderName(row)}</td>
+                            <td className="px-3 py-2">{renderProcessingControl(row)}</td>
+                            <td className="px-3 py-2">{renderCategoryControl(row)}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
+                            <td className="max-w-[160px] truncate px-3 py-2">{row.savedAs}</td>
+                            <td className="px-3 py-2">
+                              {row.fileUrl ? (
+                                <a className="text-sm underline" href={row.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
+                                  表示
+                                </a>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="py-12 text-center text-sm text-muted-foreground">条件に合う郵便物がありません。</div>
+                )}
+              </div>
+            ) : (
             <div className={`grid min-h-[640px] overflow-hidden rounded-lg border ${folderGridColumns[monthColumn][senderColumn]}`}>
               {/* #11: Column 1 – Month folders */}
               <aside className="border-b bg-muted/20 p-3 md:border-r md:border-b-0">
@@ -562,7 +767,7 @@ export function OcrDocumentsTable({
                         role="button"
                         tabIndex={0}
                         draggable={canEdit}
-                        className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${rowStatusClass(row)} ${
+                        className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"} ${
                           isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"
                         } ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
                         onClick={() => setActiveRowId(row.id)}
@@ -595,38 +800,8 @@ export function OcrDocumentsTable({
                               <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
                               {senderColumn === "normal" ? (
                                 <div className="flex shrink-0 items-center gap-1">
-                                  {canEdit && (row.mailDocumentId || row.receivedInvoiceId) ? (
-                                    <form action={updateMailDocumentProcessingStatus} onClick={(e) => e.stopPropagation()}>
-                                      <input type="hidden" name="company" value={company} />
-                                      {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
-                                      {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
-                                      <select
-                                        name="processingStatus"
-                                        defaultValue={isProcessed(row) ? "processed" : "unprocessed"}
-                                        className={processingStatusSelectClass(isProcessed(row))}
-                                        aria-label="処理状態"
-                                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
-                                      >
-                                        {processingStatusOptions.map((option) => (
-                                          <option key={option.value} value={option.value}>{option.label}</option>
-                                        ))}
-                                      </select>
-                                    </form>
-                                  ) : (
-                                    <Badge variant="outline" className={processingStatusSelectClass(isProcessed(row))}>{isProcessed(row) ? "処理済" : "未処理"}</Badge>
-                                  )}
-                                  {canEdit && row.mailDocumentId ? (
-                                    /* #12: category change now shows confirmation dialog */
-                                    <button
-                                      type="button"
-                                      className={`shrink-0 ${categorySelectClass(row.category)}`}
-                                      onClick={(e) => { e.stopPropagation(); setPendingCategoryChange({ row, category: row.category }); }}
-                                    >
-                                      {categoryLabels[row.category]}
-                                    </button>
-                                  ) : (
-                                    <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
-                                  )}
+                                  {renderProcessingControl(row)}
+                                  {renderCategoryControl(row)}
                                 </div>
                               ) : null}
                             </div>
@@ -965,6 +1140,7 @@ export function OcrDocumentsTable({
                 )}
               </section>
             </div>
+            )
           ) : (
             <div className="flex flex-col items-center justify-center gap-4 py-16 text-center text-sm text-muted-foreground">
               <p>まだOCRした書類はありません。</p>
