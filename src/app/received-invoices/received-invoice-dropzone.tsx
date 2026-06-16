@@ -1,11 +1,12 @@
 "use client";
 
-import { UploadCloud } from "lucide-react";
+import { Loader2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import { yen } from "@/lib/format";
 
@@ -49,11 +50,20 @@ export function ReceivedInvoiceDropzone({ company }: { company: CompanyScope }) 
       const body = await response.json();
       if (!response.ok) {
         setError(body.error ?? "OCR仕分けに失敗しました。");
+        toast({ title: "アップロード失敗", description: body.error ?? "OCR仕分けに失敗しました。", variant: "destructive" });
         return;
       }
 
-      setResults(body.results ?? []);
+      const newResults: DropResult[] = body.results ?? [];
+      setResults(newResults);
       router.refresh();
+      const errorCount = newResults.filter((r) => r.error).length;
+      const okCount = newResults.length - errorCount;
+      if (errorCount > 0) {
+        toast({ title: `${okCount}件完了、${errorCount}件エラー`, variant: "default" });
+      } else {
+        toast({ title: `${okCount}件の受領請求書を登録しました`, variant: "success" });
+      }
     });
   };
 
@@ -82,8 +92,8 @@ export function ReceivedInvoiceDropzone({ company }: { company: CompanyScope }) 
           role="button"
           tabIndex={0}
         >
-          <UploadCloud className="mb-3 h-8 w-8 text-muted-foreground" />
-          <div className="font-medium">受領請求書をここにドロップ</div>
+          {isPending ? <Loader2 className="mb-3 h-8 w-8 animate-spin text-primary" /> : <UploadCloud className="mb-3 h-8 w-8 text-muted-foreground" />}
+          <div className="font-medium">{isPending ? "OCR処理中…" : "受領請求書をここにドロップ"}</div>
           <div className="mt-1 text-sm text-muted-foreground">PDF / JPEG / PNGをOCRして自動仕分けします</div>
           <Button type="button" variant="outline" size="sm" className="mt-4" disabled={isPending}>
             {isPending ? "OCR中..." : "ファイルを選択"}

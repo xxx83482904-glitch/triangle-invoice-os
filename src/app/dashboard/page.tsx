@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { BarChart3, FileCheck2, FolderKanban, ReceiptText } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/app/shell";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
@@ -10,6 +8,22 @@ import { can } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { paidForIssued, projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
 import { DashboardTable } from "./dashboard-table";
+
+const MONTHS_JP = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+
+function buildMonthlyData(
+  invoices: Array<{ issueDate: string; total: number }>,
+  year: number,
+) {
+  const byMonth = Array.from({ length: 12 }, () => 0);
+  for (const inv of invoices) {
+    const d = new Date(inv.issueDate);
+    if (d.getFullYear() === year) {
+      byMonth[d.getMonth()] += inv.total;
+    }
+  }
+  return byMonth;
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -35,7 +49,7 @@ export default async function DashboardPage({
       clientId: project.clientId,
       clientName: data.clients.find((client) => client.id === project.clientId)?.companyName ?? "",
       company: companyFromParam(project.company),
-      stage: project.stage ?? "制作资料",
+      stage: project.stage ?? "",
       billingTotal: project.contractAmount ?? 0,
       billingCount: project.billingCount ?? 1,
       createdRounds: data.issuedInvoices
@@ -44,10 +58,6 @@ export default async function DashboardPage({
         .filter((round) => Number.isFinite(round)),
     }));
 
-  const counts = {
-    CHINA: projects.filter((project) => matchesCompany(project, "CHINA")).length,
-    JAPAN: projects.filter((project) => matchesCompany(project, "JAPAN")).length,
-  };
   const projectIds = new Set(rows.map((row) => row.id));
   const issued = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
   const received = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
@@ -59,46 +69,44 @@ export default async function DashboardPage({
   const expectedInstallments = rows.reduce((sum, row) => sum + row.billingCount, 0);
   const progress = expectedInstallments > 0 ? Math.round((createdInstallments / expectedInstallments) * 100) : 0;
 
+  const thisYear = new Date().getFullYear();
+  const issuedByMonth = buildMonthlyData(issued, thisYear);
+  const receivedByMonth = buildMonthlyData(received, thisYear);
+  const maxMonthly = Math.max(...issuedByMonth, ...receivedByMonth, 1);
+
   return (
     <AppShell>
-      <PageHeader title="Dashboard" description="案件、請求、支払いの状態を一覧で確認できます。">
-        <Button asChild size="sm" variant={company === "CHINA" ? "default" : "outline"}>
-          <Link href="/dashboard?company=CHINA">中国支社 {counts.CHINA}</Link>
-        </Button>
-        <Button asChild size="sm" variant={company === "JAPAN" ? "default" : "outline"}>
-          <Link href="/dashboard?company=JAPAN">日本本社 {counts.JAPAN}</Link>
-        </Button>
-      </PageHeader>
+      <PageHeader title="ダッシュボード" description="案件、請求、支払いの状態を一覧で確認できます。" />
 
       <div className="mb-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard accent="blue" icon={FolderKanban} label="Projects" progress={Math.min(100, rows.length * 6)} value={`${rows.length}件`} />
-        <MetricCard accent="sky" icon={ReceiptText} label="Issued Total" progress={Math.min(100, Math.round(issuedTotal / Math.max(rows.reduce((sum, row) => sum + row.billingTotal, 1), 1) * 100))} value={yen.format(issuedTotal)} />
-        <MetricCard accent="indigo" icon={FileCheck2} label="Paid Income" progress={Math.min(100, Math.round((paidIncome / Math.max(issuedTotal, 1)) * 100))} value={yen.format(paidIncome)} />
-        <MetricCard accent="slate" icon={BarChart3} label="Gross Profit" progress={Math.max(0, Math.min(100, Math.round((grossProfit / Math.max(paidIncome, 1)) * 100)))} value={yen.format(grossProfit)} />
+        <MetricCard accent="blue" icon={FolderKanban} label="案件数" progress={Math.min(100, rows.length * 6)} value={`${rows.length}件`} />
+        <MetricCard accent="sky" icon={ReceiptText} label="発行請求合計" progress={Math.min(100, Math.round(issuedTotal / Math.max(rows.reduce((sum, row) => sum + row.billingTotal, 1), 1) * 100))} value={yen.format(issuedTotal)} />
+        <MetricCard accent="indigo" icon={FileCheck2} label="入金済み" progress={Math.min(100, Math.round((paidIncome / Math.max(issuedTotal, 1)) * 100))} value={yen.format(paidIncome)} />
+        <MetricCard accent="slate" icon={BarChart3} label="粗利" progress={Math.max(0, Math.min(100, Math.round((grossProfit / Math.max(paidIncome, 1)) * 100)))} value={yen.format(grossProfit)} />
       </div>
 
       <div className="mb-7 grid gap-5 xl:grid-cols-[1.45fr_0.75fr]">
         <Card>
           <CardHeader className="flex-row items-start justify-between gap-4">
             <div>
-              <CardTitle>Total Revenue</CardTitle>
+              <CardTitle>月別請求推移（{thisYear}年）</CardTitle>
               <div className="mt-2 text-2xl font-semibold">{yen.format(issuedTotal)}</div>
             </div>
-            <div className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">Progress {progress}%</div>
+            <div className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">進捗 {progress}%</div>
           </CardHeader>
           <CardContent>
             <div className="mb-5 flex gap-5 text-xs">
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-blue-500" />請求</span>
-              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-sky-400" />支払い</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-blue-500" />発行請求</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-sky-400" />受領請求</span>
             </div>
-            <RevenueChart issuedTotal={issuedTotal} receivedTotal={receivedTotal} />
+            <RevenueChart issuedByMonth={issuedByMonth} receivedByMonth={receivedByMonth} maxMonthly={maxMonthly} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Invoice Balance</CardTitle>
-            <div className="text-sm text-muted-foreground">請求と受領請求書のバランス</div>
+            <CardTitle>請求バランス</CardTitle>
+            <div className="text-sm text-muted-foreground">発行・受領・入金の比較</div>
           </CardHeader>
           <CardContent>
             <div className="space-y-5">
@@ -164,25 +172,32 @@ function MetricCard({
   );
 }
 
-function RevenueChart({ issuedTotal, receivedTotal }: { issuedTotal: number; receivedTotal: number }) {
-  const issuedPoints = [0.1, 0.18, 0.12, 0.32, 0.22, 0.5, 0.42, 0.68, 0.54, 0.72, 0.88, 0.76].map((value) => Math.max(6, value * (issuedTotal ? 100 : 40)));
-  const receivedPoints = [0.05, 0.12, 0.2, 0.26, 0.24, 0.35, 0.4, 0.48, 0.45, 0.56, 0.62, 0.66].map((value) => Math.max(6, value * (receivedTotal ? 100 : 35)));
+function RevenueChart({
+  issuedByMonth,
+  receivedByMonth,
+  maxMonthly,
+}: {
+  issuedByMonth: number[];
+  receivedByMonth: number[];
+  maxMonthly: number;
+}) {
+  const toPercent = (v: number) => Math.max(v > 0 ? 4 : 0, Math.round((v / maxMonthly) * 100));
 
   return (
     <div className="relative h-72 overflow-hidden rounded-lg border bg-gradient-to-b from-white to-muted/20 p-5">
       <div className="absolute inset-x-5 top-5 bottom-10 grid grid-rows-5">
         {Array.from({ length: 6 }).map((_, index) => <div key={index} className="border-t" />)}
       </div>
-      <div className="relative flex h-full items-end gap-2 pb-8">
-        {issuedPoints.map((point, index) => (
-          <div key={index} className="flex h-full flex-1 items-end gap-1">
-            <div className="w-full rounded-t bg-blue-500/70" style={{ height: `${point}%` }} />
-            <div className="w-full rounded-t bg-sky-400/70" style={{ height: `${receivedPoints[index]}%` }} />
+      <div className="relative flex h-full items-end gap-1 pb-8">
+        {issuedByMonth.map((issued, index) => (
+          <div key={index} className="group relative flex h-full flex-1 flex-col items-end justify-end gap-0.5" title={`${MONTHS_JP[index]}: 発行 ${yen.format(issued)} / 受領 ${yen.format(receivedByMonth[index])}`}>
+            <div className="w-full rounded-t bg-blue-500/70 transition-all" style={{ height: `${toPercent(issued)}%` }} />
+            <div className="w-full rounded-t bg-sky-400/70 transition-all" style={{ height: `${toPercent(receivedByMonth[index])}%` }} />
           </div>
         ))}
       </div>
-      <div className="absolute inset-x-5 bottom-3 flex justify-between text-xs text-muted-foreground">
-        {["Jan", "Mar", "May", "Jul", "Sep", "Nov"].map((month) => <span key={month}>{month}</span>)}
+      <div className="absolute inset-x-5 bottom-3 flex justify-between text-[10px] text-muted-foreground">
+        {MONTHS_JP.map((m) => <span key={m}>{m}</span>)}
       </div>
     </div>
   );

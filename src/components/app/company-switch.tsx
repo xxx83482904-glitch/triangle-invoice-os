@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { BarChart3, Building2, FileText, LayoutGrid, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { companyFromParam, companyOptions, type CompanyScope } from "@/lib/company";
 
 const nav = [
@@ -71,32 +72,75 @@ export function MobileCompanySwitch() {
   );
 }
 
+// #8: Desktop sidebar nav with tooltips
 export function AppNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const company = companyFromParam(searchParams.get("company"));
 
   return (
-    <nav className="flex flex-col items-center gap-4">
+    <nav className="flex flex-col items-center gap-3">
       {nav.map((item) => {
         const Icon = item.icon;
-        const active = pathname === item.href;
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        return (
+          <Tooltip key={item.href}>
+            <TooltipTrigger asChild>
+              <Link
+                href={navHref(item.href, company)}
+                className={`grid h-11 w-11 place-items-center rounded-lg transition ${
+                  active
+                    ? "bg-primary/15 text-sidebar-accent-foreground shadow-sm"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="sr-only">{item.label}</span>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">{item.label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </nav>
+  );
+}
+
+// #9: Mobile bottom navigation bar
+export function MobileNav() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const company = companyFromParam(searchParams.get("company"));
+
+  // Show only the 5 most important items on mobile
+  const mobileNav = nav.slice(0, 5);
+
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-stretch border-t bg-background/95 backdrop-blur lg:hidden">
+      {mobileNav.map((item) => {
+        const Icon = item.icon;
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}
             href={navHref(item.href, company)}
-            title={item.label}
-            className={`grid h-11 w-11 place-items-center rounded-lg transition ${
-              active
-                ? "bg-primary/15 text-sidebar-accent-foreground shadow-sm"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] transition ${
+              active ? "text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Icon className="h-4 w-4" />
-            <span className="sr-only">{item.label}</span>
+            <Icon className={`h-5 w-5 ${active ? "text-primary" : ""}`} />
+            <span className="leading-none">{item.label.length > 4 ? item.label.slice(0, 4) : item.label}</span>
           </Link>
         );
       })}
+      {/* More menu link */}
+      <Link
+        href={navHref("/partners", company)}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition"
+      >
+        <Users className="h-5 w-5" />
+        <span className="leading-none">その他</span>
+      </Link>
     </nav>
   );
 }

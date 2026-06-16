@@ -1,4 +1,5 @@
 import { createProject } from "@/app/actions";
+import { ProjectFilter } from "@/app/projects/project-filter";
 import { ProjectsTable } from "@/app/projects/projects-table";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -6,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
@@ -48,7 +48,7 @@ export default async function ProjectsPage({
       company: companyFromParam(project.company),
       clientId: project.clientId,
       clientName: data.clients.find((client) => client.id === project.clientId)?.companyName ?? "",
-      stage: project.stage ?? "制作资料",
+      stage: project.stage ?? "",
       status: project.status,
       billingTotal: money.contractAmount,
       billingCount: project.billingCount ?? 1,
@@ -71,39 +71,18 @@ export default async function ProjectsPage({
       <PageHeader title="案件一覧" description="請求総額、請求回数、入金、支払い、粗利を案件単位で見ます。" />
 
       <Card className="mb-6">
-        <CardContent className="pt-6">
-          <form className="grid gap-3 md:grid-cols-5">
-            <input type="hidden" name="company" value={company} />
-            <Select name="clientId" defaultValue={params.clientId ?? "all"}>
-              <SelectTrigger><SelectValue placeholder="クライアント" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全クライアント</SelectItem>
-                {clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select name="status" defaultValue={params.status ?? "all"}>
-              <SelectTrigger><SelectValue placeholder="ステータス" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全ステータス</SelectItem>
-                {projectStatusOptions.map((option) => <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select name="unpaidIncome" defaultValue={params.unpaidIncome ?? "0"}>
-              <SelectTrigger><SelectValue placeholder="未入金" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">未入金条件なし</SelectItem>
-                <SelectItem value="1">未入金あり</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select name="unpaidExpense" defaultValue={params.unpaidExpense ?? "0"}>
-              <SelectTrigger><SelectValue placeholder="未払い" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">未払い条件なし</SelectItem>
-                <SelectItem value="1">未払いあり</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button type="submit">絞り込み</Button>
-          </form>
+        <CardContent className="pt-4">
+          <ProjectFilter
+            company={company}
+            clients={clients.map((c) => ({ id: c.id, companyName: c.companyName }))}
+            statusOptions={projectStatusOptions}
+            current={{
+              clientId: params.clientId,
+              status: params.status,
+              unpaidIncome: params.unpaidIncome,
+              unpaidExpense: params.unpaidExpense,
+            }}
+          />
         </CardContent>
       </Card>
 
