@@ -102,7 +102,7 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
             <div>
               <div className="font-medium">郵便物をまとめてドロップ</div>
               <div className="mt-1 text-sm text-muted-foreground">
-                PDF/JPEG/PNGをOCRし、請求書は受領請求書へ、それ以外は月別フォルダーへ保存します。
+                PDF/JPEG/PNGをOCRし、請求書・領収書は受領請求書へ、それ以外は月別フォルダーへ保存します。
               </div>
             </div>
           </div>

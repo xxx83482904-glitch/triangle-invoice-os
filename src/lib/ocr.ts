@@ -767,7 +767,9 @@ export async function analyzeMailDocument(data: AppData, extracted: ExtractedTex
   }
 
   const classification = classifyFromAnalysis(extracted, aiAnalysis) ?? classifyMailDocument(extracted);
-  const invoice = classification.category === "INVOICE" ? inferReceivedInvoiceFromAnalysis(data, extracted, company, aiAnalysis) : null;
+  const invoice = ["INVOICE", "RECEIPT"].includes(classification.category)
+    ? inferReceivedInvoiceFromAnalysis(data, extracted, company, aiAnalysis)
+    : null;
 
   return { aiAnalysis, classification, invoice };
 }

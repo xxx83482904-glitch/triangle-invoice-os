@@ -1117,7 +1117,9 @@ export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
       updatedAt: timestamp,
     };
 
-    mailDocument.category = "INVOICE";
+    if (mailDocument.category !== "INVOICE" && mailDocument.category !== "RECEIPT") {
+      mailDocument.category = "INVOICE";
+    }
     mailDocument.relatedReceivedInvoiceId = invoiceId;
     mailDocument.memo = memo ?? mailDocument.memo;
     mailDocument.updatedAt = timestamp;

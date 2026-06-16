@@ -33,6 +33,10 @@ const recipientCuePattern = /(御中|様|殿|宛|宛先|請求先|納品先|送�
 const nonCompanyPattern = /(請求書|見積書|納品書|領収書|契約書|通知書|件名|日付|発行日|請求日|支払期限|合計|小計|消費税|税抜|税込|数量|単価|銀行|口座|登録番号|郵便番号|住所|電話|TEL|FAX|Email|メール|http|www\.)/i;
 const placeholderSenderPattern = /^(Unassigned|支払先未設定|支払先確認待ち|発送元確認待ち|OCR未確認支払先|未設定|-)?$/i;
 
+function reflectsToReceivedInvoice(category: MailDocumentCategory) {
+  return category === "INVOICE" || category === "RECEIPT";
+}
+
 function cleanSenderCandidate(value: string) {
   return value
     .replace(/^[\s:：・\-–—|/\\［\]【】()[\]{}]+/, "")
@@ -255,7 +259,7 @@ export async function POST(request: Request) {
     await saveReceivedInvoiceFile(safeName, buffer, file.type);
     const fileUrl = receivedInvoiceFileUrl(safeName);
 
-    if (classification.category === "INVOICE" && inferred) {
+    if (reflectsToReceivedInvoice(classification.category) && inferred) {
       const fallbackWarnings = [...inferred.warnings];
       let invoiceId = id;
       let duplicate = false;
@@ -265,7 +269,7 @@ export async function POST(request: Request) {
       const mailDocument: MailDocument = {
         id: newId(),
         company,
-        category: "INVOICE",
+        category: classification.category,
         title: safeName,
         senderName,
         fileUrl,
@@ -351,7 +355,7 @@ export async function POST(request: Request) {
       });
 
       results.push({
-        category: "INVOICE",
+        category: classification.category,
         confidence: classification.confidence,
         duplicate,
         fileName: safeName,
@@ -363,7 +367,7 @@ export async function POST(request: Request) {
           vendorName,
         },
         reason: classification.reason,
-        savedAs: duplicate ? "other-document" : "received-invoice",
+        savedAs: "received-invoice",
         warnings: fallbackWarnings,
       });
       continue;

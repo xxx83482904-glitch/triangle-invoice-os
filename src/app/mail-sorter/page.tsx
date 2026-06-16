@@ -130,7 +130,7 @@ export default async function MailSorterPage({
     <AppShell>
       <PageHeader
         title="郵便物フォルダー"
-        description="OCRした郵便物を月別フォルダーで管理します。上部にまとめてドロップし、下のフォルダー領域を広く使えます。"
+        description="OCRした郵便物を月別フォルダーで管理します。請求書・領収書は受領請求書にも反映します。"
       >
         {can(user, "view:receivedInvoices") ? (
           <Button asChild variant="outline">
