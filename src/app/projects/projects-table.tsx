@@ -64,11 +64,13 @@ export function ProjectsTable({
   clients,
   rows,
   stageOptions,
+  showFinancials,
 }: {
   canEdit: boolean;
   clients: ProjectClient[];
   rows: ProjectListRow[];
   stageOptions: Choice[];
+  showFinancials: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("updatedAt");
@@ -99,21 +101,21 @@ export function ProjectsTable({
     <Table className="w-full table-fixed">
       <TableHeader>
         <TableRow>
-          <SortableHead className="w-[20%]" label="案件" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[13%]" label="クライアント" sortKey="clientName" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[10%]" label="会社/状態" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className={showFinancials ? "w-[20%]" : "w-[26%]"} label="案件" sortKey="index" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className={showFinancials ? "w-[13%]" : "w-[18%]"} label="クライアント" sortKey="clientName" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          <SortableHead className={showFinancials ? "w-[10%]" : "w-[14%]"} label="会社/状態" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <SortableHead className="w-[12%] text-right" label="請求設定" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[15%]" label="入金状況" sortKey="unpaidIncomeAmount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <SortableHead className="w-[12%]" label="支払い・粗利" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          <TableHead className="w-[10%]">契約書</TableHead>
-          <SortableHead className="w-[6%]" label="更新" sortKey="updatedAt" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
+          {showFinancials ? <SortableHead className="w-[15%]" label="入金状況" sortKey="unpaidIncomeAmount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
+          {showFinancials ? <SortableHead className="w-[12%]" label="支払い・粗利" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
+          <TableHead className={showFinancials ? "w-[10%]" : "w-[16%]"}>契約書</TableHead>
+          <SortableHead className={showFinancials ? "w-[6%]" : "w-[8%]"} label="更新" sortKey="updatedAt" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <TableHead className="w-12 text-right">編集</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {sortedRows.map((row) =>
           editingId === row.id ? (
-            <EditRow key={row.id} clients={clients} row={row} stageOptions={stageOptions} onCancel={() => setEditingId(null)} />
+            <EditRow key={row.id} clients={clients} row={row} stageOptions={stageOptions} showFinancials={showFinancials} onCancel={() => setEditingId(null)} />
           ) : (
             <TableRow key={row.id}>
               <TableCell>
@@ -135,17 +137,17 @@ export function ProjectsTable({
                 <div className="font-mono text-xs">{yen.format(row.billingTotal)}</div>
                 <div className="text-xs text-muted-foreground">{row.billingCount}回請求</div>
               </TableCell>
-              <TableCell>
+              {showFinancials ? <TableCell>
                 <div className="text-xs">請求 {yen.format(row.invoicedAmount)}</div>
                 <div className="text-xs">入金 {yen.format(row.paidIncomeAmount)}</div>
                 <div className={row.unpaidIncomeAmount > 0 ? "text-xs font-medium text-amber-700" : "text-xs text-muted-foreground"}>
                   未入金 {yen.format(row.unpaidIncomeAmount)}
                 </div>
-              </TableCell>
-              <TableCell>
+              </TableCell> : null}
+              {showFinancials ? <TableCell>
                 <div className="text-xs">支払済 {yen.format(row.paidExpenseAmount)}</div>
                 <div className="text-xs font-medium">粗利 {yen.format(row.grossProfit)}</div>
-              </TableCell>
+              </TableCell> : null}
               <TableCell>
                 <ContractUpload canEdit={canEdit} row={row} />
               </TableCell>
@@ -188,16 +190,18 @@ function EditRow({
   onCancel,
   row,
   stageOptions,
+  showFinancials,
 }: {
   clients: ProjectClient[];
   onCancel: () => void;
   row: ProjectListRow;
   stageOptions: Choice[];
+  showFinancials: boolean;
 }) {
   return (
     <TableRow className="bg-muted/40">
-      <TableCell colSpan={9} className="p-2">
-        <form action={updateProjectInline} className="grid items-end gap-2 md:grid-cols-[1fr_170px_110px_120px_140px_90px_auto]">
+      <TableCell colSpan={showFinancials ? 9 : 7} className="p-2">
+        <form action={updateProjectInline} className="grid items-end gap-2 lg:grid-cols-[1fr_170px_110px_120px_140px_90px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <input type="hidden" name="returnPath" value="/projects" />
           <div>

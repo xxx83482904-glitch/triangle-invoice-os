@@ -129,7 +129,7 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
               <div className="mt-1 text-sm text-muted-foreground">
                 {isPending && progress
                   ? `OCR処理中… ${progress.done}/${progress.total}件`
-                  : "PDF/JPEG/PNGをOCRし、請求書は受領請求書へ、それ以外は月別フォルダーへ保存します。"}
+                  : "PDF/JPEG/PNGをOCRし、請求書・領収書は受領請求書へ、それ以外は月別フォルダーへ保存します。"}
               </div>
             </div>
           </div>

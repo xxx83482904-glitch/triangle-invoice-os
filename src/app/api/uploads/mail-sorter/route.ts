@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { companyFromParam } from "@/lib/company";
+import { mailSorterCompany } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { analyzeMailDocument, extractDocumentText } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
@@ -32,6 +32,10 @@ const senderCuePattern = /(発送元|差出人|送信者|発行者|請求者|販
 const recipientCuePattern = /(御中|様|殿|宛|宛先|請求先|納品先|送付先|送付先|送った相手|受取人|收件人|收货方|收貨方|购买方|購買方|客户|客戶|付款方|Bill\s*To|Ship\s*To|To:)/i;
 const nonCompanyPattern = /(請求書|見積書|納品書|領収書|契約書|通知書|件名|日付|発行日|請求日|支払期限|合計|小計|消費税|税抜|税込|数量|単価|銀行|口座|登録番号|郵便番号|住所|電話|TEL|FAX|Email|メール|http|www\.)/i;
 const placeholderSenderPattern = /^(Unassigned|支払先未設定|支払先確認待ち|発送元確認待ち|OCR未確認支払先|未設定|-)?$/i;
+
+function reflectsToReceivedInvoice(category: MailDocumentCategory) {
+  return category === "INVOICE" || category === "RECEIPT";
+}
 
 function cleanSenderCandidate(value: string) {
   return value
@@ -218,12 +222,12 @@ function ensureReviewProject(data: AppData, company: "CHINA" | "JAPAN", timestam
 
 export async function POST(request: Request) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!can(user, "manage:mailSorter") && !can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
     return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   }
 
   const formData = await request.formData();
-  const company = companyFromParam(String(formData.get("company") ?? ""));
+  const company = mailSorterCompany;
   const files = formData.getAll("files").filter((file): file is File => file instanceof File);
   if (!files.length) return NextResponse.json({ error: "ファイルをドロップしてください" }, { status: 400 });
 
@@ -255,7 +259,7 @@ export async function POST(request: Request) {
     await saveReceivedInvoiceFile(safeName, buffer, file.type);
     const fileUrl = receivedInvoiceFileUrl(safeName);
 
-    if (classification.category === "INVOICE" && inferred) {
+    if (reflectsToReceivedInvoice(classification.category) && inferred) {
       const fallbackWarnings = [...inferred.warnings];
       let invoiceId = id;
       let duplicate = false;
@@ -265,7 +269,7 @@ export async function POST(request: Request) {
       const mailDocument: MailDocument = {
         id: newId(),
         company,
-        category: "INVOICE",
+        category: classification.category,
         title: safeName,
         senderName,
         fileUrl,
@@ -274,6 +278,7 @@ export async function POST(request: Request) {
         ocrText: extracted.text,
         confidence: classification.confidence,
         relatedReceivedInvoiceId: invoiceId,
+        mailProcessed: false,
         memo: buildMailSummaryMemo({ classification, invoice: inferred, senderName }),
         uploadedById: user.id,
         createdAt: timestamp,
@@ -325,6 +330,7 @@ export async function POST(request: Request) {
           originalFileName: safeName,
           mimeType: file.type,
           ocrText: extracted.text,
+          mailProcessed: false,
           memo: [buildMailSummaryMemo({ classification, invoice: inferred, senderName: mailDocument.senderName || senderName }), ...fallbackWarnings].filter(Boolean).join("\n"),
           uploadedById: user.id,
           createdAt: timestamp,
@@ -349,7 +355,7 @@ export async function POST(request: Request) {
       });
 
       results.push({
-        category: "INVOICE",
+        category: classification.category,
         confidence: classification.confidence,
         duplicate,
         fileName: safeName,
@@ -361,7 +367,7 @@ export async function POST(request: Request) {
           vendorName,
         },
         reason: classification.reason,
-        savedAs: duplicate ? "other-document" : "received-invoice",
+        savedAs: "received-invoice",
         warnings: fallbackWarnings,
       });
       continue;
@@ -378,6 +384,7 @@ export async function POST(request: Request) {
       mimeType: file.type,
       ocrText: extracted.text,
       confidence: classification.confidence,
+      mailProcessed: false,
       memo: buildMailSummaryMemo({ classification, senderName }),
       uploadedById: user.id,
       createdAt: timestamp,

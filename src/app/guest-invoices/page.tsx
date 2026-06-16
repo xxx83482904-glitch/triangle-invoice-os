@@ -153,7 +153,7 @@ export default async function GuestInvoicesPage({
                 </Select>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid gap-3 md:grid-cols-3">
                 <div className="space-y-2"><Label>発行日</Label><Input name="issueDate" type="date" defaultValue={today} required /></div>
                 <div className="space-y-2"><Label>取引日</Label><Input name="transactionDate" type="date" defaultValue={today} required /></div>
                 <div className="space-y-2"><Label>期限</Label><Input name="dueDate" type="date" defaultValue={addDays(today, 30)} required /></div>
@@ -162,7 +162,7 @@ export default async function GuestInvoicesPage({
               <div className="rounded-md border p-3">
                 <div className="mb-3 text-sm font-medium">明細</div>
                 {[0, 1, 2, 3].map((index) => (
-                  <div key={index} className="mb-3 grid grid-cols-[1fr_58px_92px_82px] gap-2">
+                  <div key={index} className="mb-3 grid gap-2 md:grid-cols-[1fr_58px_92px_82px]">
                     <Input name="itemDescription" placeholder="内容" required={index === 0} />
                     <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
                     <Input name="itemUnitPrice" type="number" min="0" step="1" placeholder="単価" required={index === 0} />

@@ -1,10 +1,13 @@
 import { AppShell, PageHeader } from "@/components/app/shell";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { monthKey, percent, yen } from "@/lib/format";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { paidForIssued, paidForReceived, projectMoney, readData } from "@/lib/store";
 
 export default async function ReportsPage({
@@ -14,6 +17,9 @@ export default async function ReportsPage({
 }) {
   const params = await searchParams;
   const company = companyFromParam(params.company);
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:reports")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));

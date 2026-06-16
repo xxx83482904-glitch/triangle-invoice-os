@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { hash } from "bcryptjs";
 import { signIn, signOut, requireUser } from "@/lib/auth";
-import { companyClientId, companyFromParam, type CompanyScope } from "@/lib/company";
+import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
-import { assertCan, can } from "@/lib/rbac";
+import { assertCan, can, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
 import type {
   AppData,
@@ -18,6 +19,7 @@ import type {
   Project,
   ReceivedInvoice,
   SelectOptionGroup,
+  UserRole,
   Vendor,
 } from "@/lib/types";
 
@@ -30,12 +32,58 @@ function optional(formData: FormData, key: string) {
   return item || undefined;
 }
 
+function canManageMailSorter(user: Parameters<typeof can>[0]) {
+  return can(user, "manage:mailSorter") || can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices");
+}
+
 function money(formData: FormData, key: string) {
   const item = Number(value(formData, key).replaceAll(",", ""));
   return Number.isFinite(item) ? item : 0;
 }
 
 const now = () => new Date().toISOString();
+const undoSnapshotKeys = [
+  "seedVersion",
+  "users",
+  "clients",
+  "vendors",
+  "selectOptions",
+  "projects",
+  "issuedInvoices",
+  "issuedInvoiceItems",
+  "receivedInvoices",
+  "mailFolders",
+  "mailDocuments",
+  "payments",
+  "attachments",
+  "invoiceNumberSettings",
+] as const;
+
+function restoreSnapshot(data: AppData, snapshot: unknown) {
+  if (!snapshot || typeof snapshot !== "object") throw new Error("Undo snapshot is missing.");
+  const source = snapshot as Record<string, unknown>;
+  const target = data as unknown as Record<string, unknown>;
+  for (const key of undoSnapshotKeys) {
+    if (key in source) target[key] = source[key];
+  }
+}
+
+function revalidateWorkspace() {
+  for (const path of [
+    "/",
+    "/dashboard",
+    "/projects",
+    "/issued-invoices",
+    "/received-invoices",
+    "/mail-sorter",
+    "/payments",
+    "/partners",
+    "/reports",
+    "/guest-invoices",
+  ]) {
+    revalidatePath(path);
+  }
+}
 
 function nextSortOrder<T extends { company?: string | null; deletedAt?: string | null; sortOrder?: number }>(
   rows: T[],
@@ -182,12 +230,51 @@ function nextInvoiceNumber(data: AppData, timestamp: string) {
 }
 
 export type LoginState = { error: string };
+export type RegisterState = { error: string };
+
+function registrationRole(item: string): Extract<UserRole, "PROJECT_MANAGER" | "MAIL_EDITOR"> {
+  return item === "MAIL_EDITOR" ? "MAIL_EDITOR" : "PROJECT_MANAGER";
+}
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const user = await signIn(value(formData, "email"), value(formData, "password"));
   if (!user) return { error: "メールアドレスまたはパスワードが違います。" };
-  if (user.role === "GUEST") redirect("/guest-invoices");
-  redirect("/dashboard");
+  redirect(defaultPathForRole(user.role));
+}
+
+export async function registerAction(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  const password = value(formData, "password");
+  const role = registrationRole(value(formData, "role"));
+
+  if (!name || !email || !password) return { error: "名前、メールアドレス、パスワードを入力してください。" };
+  if (password.length < 8) return { error: "パスワードは8文字以上にしてください。" };
+
+  const data = await readData();
+  if (data.users.some((user) => user.email.toLowerCase() === email && !user.deletedAt)) {
+    return { error: "このメールアドレスはすでに登録されています。" };
+  }
+
+  const timestamp = now();
+  const user = {
+    id: newId(),
+    name,
+    email,
+    passwordHash: await hash(password, 10),
+    role,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  await mutateData(user.id, "REGISTER_USER", "User", user.id, (draft) => {
+    draft.users.unshift(user);
+    return user;
+  });
+
+  const signedIn = await signIn(email, password);
+  if (!signedIn) return { error: "登録は完了しました。ログインしてください。" };
+  redirect(defaultPathForRole(signedIn.role));
 }
 
 export async function guestLoginAction() {
@@ -199,6 +286,44 @@ export async function guestLoginAction() {
 export async function logoutAction() {
   await signOut();
   redirect("/login");
+}
+
+export async function undoLastAction(formData: FormData) {
+  const user = await requireUser();
+  assertCan(user, "undo:changes");
+  const returnPath = value(formData, "returnPath") || defaultPathForRole(user.role);
+  const data = await readData();
+  const targetLog = data.auditLogs.find((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson);
+
+  if (!targetLog) {
+    redirect(returnPath);
+  }
+
+  restoreSnapshot(data, targetLog.beforeStateJson);
+  const timestamp = now();
+  const restoredLog = data.auditLogs.find((log) => log.id === targetLog.id);
+  if (restoredLog) {
+    restoredLog.undoneAt = timestamp;
+    restoredLog.undoneById = user.id;
+  }
+  data.auditLogs.unshift({
+    id: newId(),
+    userId: user.id,
+    action: "UNDO_ACTION",
+    targetType: targetLog.targetType,
+    targetId: targetLog.targetId,
+    undoOfAuditLogId: targetLog.id,
+    afterJson: {
+      action: targetLog.action,
+      targetType: targetLog.targetType,
+      targetId: targetLog.targetId,
+    },
+    createdAt: timestamp,
+  });
+
+  await writeData(data);
+  revalidateWorkspace();
+  redirect(returnPath);
 }
 
 export async function createClient(formData: FormData) {
@@ -724,13 +849,13 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
 
 export async function updateOcrDocumentInline(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
   const mailDocumentId = optional(formData, "mailDocumentId");
   const receivedInvoiceId = optional(formData, "receivedInvoiceId");
-  const company = companyFromParam(value(formData, "company"));
+  const company = mailSorterCompany;
   const timestamp = now();
   const data = await readData();
   const before = {
@@ -782,12 +907,12 @@ export async function updateOcrDocumentInline(formData: FormData) {
 
 export async function updateMailDocumentCategory(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentId = value(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const category = mailDocumentCategory(value(formData, "category"));
   const timestamp = now();
   const data = await readData();
@@ -806,14 +931,134 @@ export async function updateMailDocumentCategory(formData: FormData) {
   revalidatePath("/mail-sorter");
 }
 
+export async function updateMailDocumentProcessingStatus(formData: FormData) {
+  const user = await requireUser();
+  if (!canManageMailSorter(user)) {
+    throw new Error("権限がありません");
+  }
+
+  const mailDocumentId = optional(formData, "mailDocumentId");
+  const company = mailSorterCompany;
+  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
+  const mailProcessed = value(formData, "processingStatus") === "processed";
+  const timestamp = now();
+  const data = await readData();
+  const before = {
+    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
+    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
+  };
+  const targetId = mailDocumentId ?? receivedInvoiceId ?? "unknown";
+
+  await mutateData(user.id, "UPDATE_MAIL_DOCUMENT_PROCESSING_STATUS", "OcrDocument", targetId, (draft) => {
+    const mailDocument = mailDocumentId
+      ? draft.mailDocuments.find((item) => item.id === mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company)
+      : undefined;
+
+    if (mailDocument) {
+      mailDocument.mailProcessed = mailProcessed;
+      mailDocument.updatedAt = timestamp;
+      return mailDocument;
+    }
+
+    const receivedInvoice = receivedInvoiceId
+      ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId && !item.deletedAt)
+      : undefined;
+    const project = receivedInvoice ? draft.projects.find((item) => item.id === receivedInvoice.projectId) : undefined;
+    if (!receivedInvoice || companyFromParam(project?.company) !== company) {
+      throw new Error("書類が見つかりません");
+    }
+
+    receivedInvoice.mailProcessed = mailProcessed;
+    receivedInvoice.updatedAt = timestamp;
+    return receivedInvoice;
+  }, before);
+
+  revalidatePath("/mail-sorter");
+}
+
+export async function updateOcrDocumentsBulkProcessingStatus(formData: FormData) {
+  const user = await requireUser();
+  if (!canManageMailSorter(user)) {
+    throw new Error("権限がありません");
+  }
+
+  const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const company = mailSorterCompany;
+  const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
+  const mailProcessed = value(formData, "processingStatus") === "processed";
+  if (!mailDocumentIds.length && !receivedInvoiceIds.length) throw new Error("書類を選択してください");
+
+  const timestamp = now();
+  const data = await readData();
+  const before = {
+    mailDocuments: data.mailDocuments.filter((item) => mailDocumentIds.includes(item.id)),
+    receivedInvoices: data.receivedInvoices.filter((item) => receivedInvoiceIds.includes(item.id)),
+  };
+
+  await mutateData(user.id, "UPDATE_OCR_DOCUMENTS_BULK_PROCESSING_STATUS", "OcrDocument", "bulk", (draft) => {
+    let updated = 0;
+    for (const mailDocument of draft.mailDocuments) {
+      if (!mailDocumentIds.includes(mailDocument.id) || mailDocument.deletedAt || companyFromParam(mailDocument.company) !== company) continue;
+      mailDocument.mailProcessed = mailProcessed;
+      mailDocument.updatedAt = timestamp;
+      updated += 1;
+    }
+
+    for (const receivedInvoice of draft.receivedInvoices) {
+      if (!receivedInvoiceIds.includes(receivedInvoice.id) || receivedInvoice.deletedAt) continue;
+      const project = draft.projects.find((item) => item.id === receivedInvoice.projectId);
+      if (companyFromParam(project?.company) !== company) continue;
+      receivedInvoice.mailProcessed = mailProcessed;
+      receivedInvoice.updatedAt = timestamp;
+      updated += 1;
+    }
+
+    if (!updated) throw new Error("更新できる書類がありません");
+    return { mailProcessed, updated };
+  }, before);
+
+  revalidatePath("/mail-sorter");
+}
+
+export async function updateMailDocumentsBulkCategory(formData: FormData) {
+  const user = await requireUser();
+  if (!canManageMailSorter(user)) {
+    throw new Error("権限がありません");
+  }
+
+  const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const company = mailSorterCompany;
+  const category = mailDocumentCategory(value(formData, "category"));
+  if (!mailDocumentIds.length) throw new Error("郵便物を選択してください");
+
+  const timestamp = now();
+  const data = await readData();
+  const before = data.mailDocuments.filter((item) => mailDocumentIds.includes(item.id));
+
+  await mutateData(user.id, "UPDATE_MAIL_DOCUMENTS_BULK_CATEGORY", "MailDocument", "bulk", (draft) => {
+    let updated = 0;
+    for (const mailDocument of draft.mailDocuments) {
+      if (!mailDocumentIds.includes(mailDocument.id) || mailDocument.deletedAt || companyFromParam(mailDocument.company) !== company) continue;
+      mailDocument.category = category;
+      mailDocument.updatedAt = timestamp;
+      updated += 1;
+    }
+
+    if (!updated) throw new Error("更新できる郵便物がありません");
+    return { category, updated };
+  }, before);
+
+  revalidatePath("/mail-sorter");
+}
+
 export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentId = value(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const vendorId = value(formData, "vendorId");
   const projectId = value(formData, "projectId");
   const issueDate = value(formData, "issueDate") || now().slice(0, 10);
@@ -872,7 +1117,9 @@ export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
       updatedAt: timestamp,
     };
 
-    mailDocument.category = "INVOICE";
+    if (mailDocument.category !== "INVOICE" && mailDocument.category !== "RECEIPT") {
+      mailDocument.category = "INVOICE";
+    }
     mailDocument.relatedReceivedInvoiceId = invoiceId;
     mailDocument.memo = memo ?? mailDocument.memo;
     mailDocument.updatedAt = timestamp;
@@ -904,13 +1151,13 @@ export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
 
 export async function deleteOcrDocument(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
   const mailDocumentId = optional(formData, "mailDocumentId");
   const receivedInvoiceId = optional(formData, "receivedInvoiceId");
-  const company = companyFromParam(value(formData, "company"));
+  const company = mailSorterCompany;
   const timestamp = now();
   const data = await readData();
   const fileUrls = ocrFileUrlsForTargets(data, mailDocumentId ? [mailDocumentId] : [], receivedInvoiceId ? [receivedInvoiceId] : []);
@@ -954,12 +1201,12 @@ export async function deleteOcrDocument(formData: FormData) {
 
 export async function deleteOcrDocumentsBulk(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("Permission denied");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const company = mailSorterCompany;
   const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
   if (!mailDocumentIds.length && !receivedInvoiceIds.length) redirect(`/mail-sorter?company=${company}`);
 
@@ -1008,12 +1255,12 @@ export async function deleteOcrDocumentsBulk(formData: FormData) {
 
 export async function createMailFolder(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const month = validMonth(value(formData, "month"));
+  const company = mailSorterCompany;
   if (!month) throw new Error("月を選択してください");
 
   const timestamp = now();
@@ -1039,12 +1286,12 @@ export async function createMailFolder(formData: FormData) {
 
 export async function deleteMailFolder(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
-  const company = companyFromParam(value(formData, "company"));
   const month = validMonth(value(formData, "month"));
+  const company = mailSorterCompany;
   if (!month) throw new Error("月を選択してください");
 
   const timestamp = now();
@@ -1083,28 +1330,25 @@ export async function deleteMailFolder(formData: FormData) {
 
 export async function moveOcrDocumentToMonth(formData: FormData) {
   const user = await requireUser();
-  if (!can(user, "manage:receivedInvoices") && !can(user, "upload:receivedInvoices")) {
+  if (!canManageMailSorter(user)) {
     throw new Error("権限がありません");
   }
 
-  const mailDocumentId = optional(formData, "mailDocumentId");
-  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
-  const company = companyFromParam(value(formData, "company"));
+  const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
+  const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
+  const company = mailSorterCompany;
   const targetMonth = validMonth(value(formData, "targetMonth"));
   if (!targetMonth) throw new Error("移動先フォルダーを選択してください");
+  if (!mailDocumentIds.length && !receivedInvoiceIds.length) throw new Error("書類を選択してください");
 
   const timestamp = now();
   const data = await readData();
   const before = {
-    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
-    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
+    mailDocuments: data.mailDocuments.filter((item) => mailDocumentIds.includes(item.id)),
+    receivedInvoices: data.receivedInvoices.filter((item) => receivedInvoiceIds.includes(item.id)),
   };
 
-  await mutateData(user.id, "MOVE_OCR_DOCUMENT_TO_MONTH", "OcrDocument", mailDocumentId ?? receivedInvoiceId ?? "unknown", (draft) => {
-    const mailDocument = mailDocumentId ? draft.mailDocuments.find((item) => item.id === mailDocumentId && !item.deletedAt) : undefined;
-    const receivedInvoice = receivedInvoiceId ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId && !item.deletedAt) : undefined;
-    if (!mailDocument && !receivedInvoice) throw new Error("書類が見つかりません");
-
+  await mutateData(user.id, "MOVE_OCR_DOCUMENT_TO_MONTH", "OcrDocument", mailDocumentIds[0] ?? receivedInvoiceIds[0] ?? "unknown", (draft) => {
     const existingFolder = draft.mailFolders.find(
       (folder) => !folder.deletedAt && companyFromParam(folder.company) === company && folder.month === targetMonth,
     );
@@ -1118,15 +1362,26 @@ export async function moveOcrDocumentToMonth(formData: FormData) {
       });
     }
 
-    if (mailDocument) {
+    const movedMailDocuments = [];
+    const movedReceivedInvoices = [];
+    for (const mailDocument of draft.mailDocuments) {
+      if (!mailDocumentIds.includes(mailDocument.id) || mailDocument.deletedAt || companyFromParam(mailDocument.company) !== company) continue;
       mailDocument.folderMonth = targetMonth;
       mailDocument.updatedAt = timestamp;
+      movedMailDocuments.push(mailDocument);
     }
-    if (receivedInvoice) {
+
+    for (const receivedInvoice of draft.receivedInvoices) {
+      if (!receivedInvoiceIds.includes(receivedInvoice.id) || receivedInvoice.deletedAt) continue;
+      const project = draft.projects.find((item) => item.id === receivedInvoice.projectId);
+      if (companyFromParam(project?.company) !== company) continue;
       receivedInvoice.folderMonth = targetMonth;
       receivedInvoice.updatedAt = timestamp;
+      movedReceivedInvoices.push(receivedInvoice);
     }
-    return { mailDocument, receivedInvoice, targetMonth };
+
+    if (!movedMailDocuments.length && !movedReceivedInvoices.length) throw new Error("書類が見つかりません");
+    return { mailDocuments: movedMailDocuments, receivedInvoices: movedReceivedInvoices, targetMonth };
   }, before);
 
   revalidatePath("/mail-sorter");
@@ -1202,16 +1457,8 @@ export async function softDelete(formData: FormData) {
 }
 
 export async function saveReceivedInvoiceMetadata(invoice: ReceivedInvoice) {
-  const data = await readData();
-  data.receivedInvoices.unshift(invoice);
-  data.auditLogs.unshift({
-    id: newId(),
-    userId: invoice.uploadedById,
-    action: "UPLOAD_RECEIVED_INVOICE",
-    targetType: "ReceivedInvoice",
-    targetId: invoice.id,
-    afterJson: invoice,
-    createdAt: now(),
+  await mutateData(invoice.uploadedById, "UPLOAD_RECEIVED_INVOICE", "ReceivedInvoice", invoice.id, (data) => {
+    data.receivedInvoices.unshift(invoice);
+    return invoice;
   });
-  await writeData(data);
 }

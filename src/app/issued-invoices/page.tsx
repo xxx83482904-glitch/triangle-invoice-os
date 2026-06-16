@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createIssuedInvoice } from "@/app/actions";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -13,9 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { paidForIssued, readData } from "@/lib/store";
+import { paidForIssued, readData, scopedProjectsForUser } from "@/lib/store";
 
 export default async function IssuedInvoicesPage({
   searchParams,
@@ -25,10 +26,12 @@ export default async function IssuedInvoicesPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:issuedInvoices")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const setting = data.invoiceNumberSettings[0];
   const defaultNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
-  const projects = data.projects
+  const projects = scopedProjectsForUser(data, user)
     .filter((project) => !project.deletedAt && matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
   const projectIds = new Set(projects.map((project) => project.id));
@@ -81,7 +84,7 @@ export default async function IssuedInvoicesPage({
             <CardHeader><CardTitle>請求書を作成</CardTitle></CardHeader>
             <CardContent>
               <form action={createIssuedInvoice} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2"><Label>請求書番号</Label><Input name="invoiceNumber" defaultValue={defaultNumber} required /></div>
                   <div className="space-y-2">
                     <Label>ステータス</Label>
@@ -94,7 +97,7 @@ export default async function IssuedInvoicesPage({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-3 md:grid-cols-3">
                   <div className="space-y-2"><Label>発行日</Label><Input name="issueDate" type="date" defaultValue={todayIso()} required /></div>
                   <div className="space-y-2"><Label>取引年月日</Label><Input name="transactionDate" type="date" defaultValue={todayIso()} required /></div>
                   <div className="space-y-2"><Label>支払期限</Label><Input name="dueDate" type="date" required /></div>
@@ -116,7 +119,7 @@ export default async function IssuedInvoicesPage({
                 <div className="rounded-md border p-3">
                   <div className="mb-3 text-sm font-medium">明細行</div>
                   {[0, 1, 2].map((index) => (
-                    <div key={index} className="mb-3 grid grid-cols-[1fr_64px_96px_86px] gap-2">
+                    <div key={index} className="mb-3 grid gap-2 md:grid-cols-[1fr_64px_96px_86px]">
                       <Input name="itemDescription" placeholder="内容" required={index === 0} />
                       <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
                       <Input name="itemUnitPrice" type="number" placeholder="単価" />

@@ -3,6 +3,7 @@ export type UserRole =
   | "ACCOUNTING"
   | "CHIEF_DESIGNER"
   | "PROJECT_MANAGER"
+  | "MAIL_EDITOR"
   | "DESIGNER"
   | "GUEST";
 
@@ -192,6 +193,7 @@ export type ReceivedInvoice = {
   originalFileName?: string;
   mimeType?: string;
   ocrText?: string;
+  mailProcessed?: boolean;
   approvedById?: string;
   paidAt?: string;
   paymentMethod?: string;
@@ -215,6 +217,7 @@ export type MailDocument = {
   ocrText?: string;
   confidence?: number;
   relatedReceivedInvoiceId?: string;
+  mailProcessed?: boolean;
   memo?: string;
   uploadedById: string;
   createdAt: string;
@@ -266,8 +269,12 @@ export type AuditLog = {
   targetType: string;
   targetId: string;
   beforeJson?: unknown;
+  beforeStateJson?: unknown;
   afterJson?: unknown;
   createdAt: string;
+  undoneAt?: string;
+  undoneById?: string;
+  undoOfAuditLogId?: string;
 };
 
 export type InvoiceNumberSetting = {

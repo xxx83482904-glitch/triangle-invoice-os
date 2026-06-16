@@ -1,0 +1,98 @@
+name: Deploy Synology
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: synology-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Trigger self deploy
+        env:
+          DEPLOY_URL: ${{ secrets.TRIANGLE_DEPLOY_URL }}
+          DEPLOY_TOKEN: ${{ secrets.TRIANGLE_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$DEPLOY_URL" ] || [ -z "$DEPLOY_TOKEN" ]; then
+            echo "TRIANGLE_DEPLOY_URL and TRIANGLE_DEPLOY_TOKEN secrets are required." >&2
+            exit 1
+          fi
+
+          DEPLOY_URL="${DEPLOY_URL%/}"
+          status="$(curl -skS -o deploy-response.json -w "%{http_code}" \
+            -X POST \
+            -H "x-deploy-token: ${DEPLOY_TOKEN}" \
+            "${DEPLOY_URL}/api/admin/deploy")"
+
+          cat deploy-response.json
+          echo
+
+          if [ "$status" != "200" ] && [ "$status" != "409" ]; then
+            echo "Deploy trigger failed with HTTP ${status}." >&2
+            exit 1
+          fi
+
+          echo "Waiting for self deploy build..."
+          SHORT_SHA="${GITHUB_SHA::7}"
+          for attempt in $(seq 1 120); do
+            deploy_status="$(curl -skS -o deploy-status.json -w "%{http_code}" \
+              -H "x-deploy-token: ${DEPLOY_TOKEN}" \
+              "${DEPLOY_URL}/api/admin/deploy" || true)"
+
+            if [ "$deploy_status" = "200" ]; then
+              log="$(python3 -c 'import json; print((json.load(open("deploy-status.json", encoding="utf-8")).get("log") or ""))')"
+              marker="HEAD is now at ${SHORT_SHA}"
+
+              if printf '%s' "$log" | grep -Fq "$marker"; then
+                tail="${log##*${marker}}"
+                printf '%s\n' "${marker}${tail}"
+
+                if printf '%s' "$tail" | grep -Fq "self deploy child exited: code=1"; then
+                  echo "Self deploy build failed." >&2
+                  exit 1
+                fi
+
+                if printf '%s' "$tail" | grep -Eq "Build finished|self deploy child exited: code=0"; then
+                  echo "Self deploy build finished."
+                  break
+                fi
+              fi
+
+              if [ "$attempt" = "120" ]; then
+                echo "Self deploy build failed." >&2
+                exit 1
+              fi
+            fi
+
+            echo "Attempt ${attempt}: deploy HTTP ${deploy_status}. Waiting..."
+            sleep 10
+
+            if [ "$attempt" = "120" ]; then
+              echo "Self deploy build did not finish in time." >&2
+              exit 1
+            fi
+          done
+
+          echo "Waiting for production to return..."
+          for attempt in $(seq 1 90); do
+            health_status="$(curl -skS -o /dev/null -w "%{http_code}" "${DEPLOY_URL}/login" || true)"
+            if [ "$health_status" = "200" ]; then
+              echo "Production is healthy."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: HTTP ${health_status}. Waiting..."
+            sleep 10
+          done
+
+          echo "Production did not return in time." >&2
+          exit 1

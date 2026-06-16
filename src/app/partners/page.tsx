@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient, createSelectOption, createVendor, moveClientOption, moveSelectOption, moveVendorOption } from "@/app/actions";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
-import { can } from "@/lib/rbac";
+import { can, defaultPathForRole } from "@/lib/rbac";
 import { managedOptionGroups, optionGroupLabels, selectOptionsFor } from "@/lib/select-options";
 import { readData } from "@/lib/store";
 import type { SelectOptionGroup } from "@/lib/types";
@@ -22,6 +23,8 @@ export default async function PartnersPage({
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!can(user, "view:partners")) redirect(defaultPathForRole(user.role));
   const data = await readData();
   const mayEdit = Boolean(user && can(user, "manage:clients"));
   const clients = data.clients

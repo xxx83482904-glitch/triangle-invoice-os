@@ -159,7 +159,7 @@ function EditRow({
   return (
     <TableRow className="bg-muted/40">
       <TableCell colSpan={8} className="p-2">
-        <form action={updateProjectInline} className="grid items-end gap-2 md:grid-cols-[1fr_170px_110px_120px_140px_90px_auto]">
+        <form action={updateProjectInline} className="grid items-end gap-2 lg:grid-cols-[1fr_170px_110px_120px_140px_90px_auto]">
           <input type="hidden" name="projectId" value={row.id} />
           <input type="hidden" name="returnPath" value="/dashboard" />
           <div>

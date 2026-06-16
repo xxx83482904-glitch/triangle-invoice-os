@@ -1,5 +1,7 @@
 export type CompanyScope = "CHINA" | "JAPAN";
 
+export const mailSorterCompany: CompanyScope = "JAPAN";
+
 export const companyOptions: Array<{ label: string; shortLabel: string; value: CompanyScope }> = [
   { label: "中国支社", shortLabel: "中国", value: "CHINA" },
   { label: "日本本社", shortLabel: "日本", value: "JAPAN" },
