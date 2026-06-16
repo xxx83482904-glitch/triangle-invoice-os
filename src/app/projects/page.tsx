@@ -39,6 +39,7 @@ export default async function ProjectsPage({
     return true;
   });
   const canEdit = Boolean(user && can(user, "manage:projects"));
+  const showFinancials = Boolean(user && can(user, "view:dashboard"));
   const rows = filtered.map((project, index) => {
     const money = projectMoney(data, project.id);
     return {
@@ -92,6 +93,7 @@ export default async function ProjectsPage({
           <CardContent>
             <ProjectsTable
               canEdit={canEdit}
+              showFinancials={showFinancials}
               clients={clients.map((client) => ({ id: client.id, companyName: client.companyName }))}
               stageOptions={stageOptions.map((option) => ({ label: option.label, value: option.value }))}
               rows={rows}

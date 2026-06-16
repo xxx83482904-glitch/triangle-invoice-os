@@ -271,6 +271,7 @@ const folderGridColumns: Record<ColumnMode, Record<ColumnMode, string>> = {
 
 export function OcrDocumentsTable({
   canEdit,
+  canExport: _canExport,
   company,
   projects,
   rows,
@@ -279,6 +280,7 @@ export function OcrDocumentsTable({
   folders,
 }: {
   canEdit: boolean;
+  canExport?: boolean;
   company: CompanyScope;
   folders: FolderOption[];
   projects: Option[];
