@@ -174,9 +174,13 @@ function shippingSenderName(row: OcrDocumentListItem) {
 
 function processingStatusSelectClass(processed: boolean) {
   const tone = processed
-    ? "border-border bg-background text-foreground"
-    : "border-secondary bg-secondary text-secondary-foreground";
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-amber-200 bg-amber-50 text-amber-800";
   return `h-7 rounded-full border px-2 text-[16px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-6 sm:text-[11px] ${tone}`;
+}
+
+function processingStatusBadgeClass(processed: boolean) {
+  return processed ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800";
 }
 
 function documentAmount(row: OcrDocumentListItem) {
@@ -857,7 +861,9 @@ export function OcrDocumentsTable({
                             </select>
                           </form>
                         ) : (
-                          <Badge variant={isProcessedRow(row) ? "outline" : "secondary"}>{isProcessedRow(row) ? "処理済" : "未処理"}</Badge>
+                          <Badge variant="outline" className={processingStatusBadgeClass(isProcessedRow(row))}>
+                            {isProcessedRow(row) ? "処理済" : "未処理"}
+                          </Badge>
                         )}
                         {canEdit && row.mailDocumentId ? (
                           <form action={updateMailDocumentCategory} onClick={stopEditClick}>
@@ -902,12 +908,12 @@ export function OcrDocumentsTable({
             <CardTitle>郵便物フォルダー</CardTitle>
             <div className="mt-1 text-xs text-muted-foreground">追加・変更・削除と、カラム幅の切り替えができます。</div>
             <div className="mt-3 grid max-w-md grid-cols-3 gap-2 text-xs">
-              <div className="rounded-lg border bg-background px-3 py-2">
-                <div className="text-muted-foreground">未処理</div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                <div className="text-amber-700">未処理</div>
                 <div className="mt-1 text-base font-semibold tabular-nums">{unprocessedCount}</div>
               </div>
-              <div className="rounded-lg border bg-background px-3 py-2">
-                <div className="text-muted-foreground">処理済</div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">
+                <div className="text-emerald-700">処理済</div>
                 <div className="mt-1 text-base font-semibold tabular-nums">{processedCount}</div>
               </div>
               <div className="rounded-lg border bg-background px-3 py-2">
@@ -1216,7 +1222,9 @@ export function OcrDocumentsTable({
                                       </select>
                                     </form>
                                   ) : (
-                                    <Badge variant={isProcessedRow(row) ? "outline" : "secondary"}>{isProcessedRow(row) ? "\u51e6\u7406\u6e08" : "\u672a\u51e6\u7406"}</Badge>
+                                    <Badge variant="outline" className={processingStatusBadgeClass(isProcessedRow(row))}>
+                                      {isProcessedRow(row) ? "\u51e6\u7406\u6e08" : "\u672a\u51e6\u7406"}
+                                    </Badge>
                                   )}
                                   {canEdit && row.mailDocumentId ? (
                                   <form action={updateMailDocumentCategory} className="shrink-0" onClick={stopEditClick}>
