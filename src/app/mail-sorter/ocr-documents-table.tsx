@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckSquare, Download, ExternalLink, FileText, Folder, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -328,6 +328,7 @@ export function OcrDocumentsTable({
     }
     return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [filteredRows, folders]);
+  const listGroups = useMemo(() => groups.filter(([, monthRows]) => monthRows.length > 0), [groups]);
   const customFolderMonths = useMemo(() => new Set(folders.map((folder) => folder.month)), [folders]);
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
   const activeGroup = groups.find(([month]) => month === activeMonth) ?? groups[0];
@@ -335,6 +336,8 @@ export function OcrDocumentsTable({
   const activeRows = activeGroup?.[1] ?? [];
   const [activeRowId, setActiveRowId] = useState<string | null>(activeRows[0]?.id ?? null);
   const activeRow = activeRows.find((row) => row.id === activeRowId) ?? activeRows[0] ?? null;
+  const listPreviewRow = filteredRows.find((row) => row.id === activeRowId) ?? filteredRows[0] ?? null;
+  const listPreviewMonth = listPreviewRow ? listPreviewRow.folderMonth || monthKey(listPreviewRow.createdAt) : null;
   const [dialogRow, setDialogRow] = useState<OcrDocumentListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OcrDocumentListItem | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -610,75 +613,177 @@ export function OcrDocumentsTable({
           </div>
           {groups.length ? (
             viewMode === "list" ? (
-              <div className="overflow-x-auto rounded-lg border">
-                {filteredRows.length ? (
-                  <table className="w-full min-w-[960px] text-sm">
-                    <thead className="bg-muted/50 text-xs text-muted-foreground">
-                      <tr>
-                        <th className="w-10 px-3 py-2 text-left"></th>
-                        <th className="px-3 py-2 text-left">請求月</th>
-                        <th className="px-3 py-2 text-left">発送元</th>
-                        <th className="px-3 py-2 text-left">処理</th>
-                        <th className="px-3 py-2 text-left">分類</th>
-                        <th className="px-3 py-2 text-left">請求日</th>
-                        <th className="px-3 py-2 text-right">金額</th>
-                        <th className="px-3 py-2 text-left">保存先</th>
-                        <th className="px-3 py-2 text-left">ファイル</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredRows.map((row, index) => {
-                        const isSelected = selectedIds.has(row.id);
-                        const month = row.folderMonth || monthKey(row.createdAt);
-                        return (
-                          <tr
-                            key={row.id}
-                            className={`border-t transition hover:bg-muted/50 ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"}`}
-                            onClick={() => {
-                              setActiveMonth(month);
-                              setActiveRowId(row.id);
-                              setViewMode("folder");
-                            }}
-                          >
-                            <td className="px-3 py-2">
-                              {canEdit ? (
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  className="h-4 w-4 rounded border-muted-foreground/40"
-                                  aria-label={`${shippingSenderName(row)}を選択`}
-                                  onChange={(event) => event.stopPropagation()}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    toggleRowSelection(row, index, event.shiftKey);
-                                  }}
-                                />
-                              ) : null}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2">{monthLabel(month)}</td>
-                            <td className="max-w-[240px] truncate px-3 py-2 font-medium">{shippingSenderName(row)}</td>
-                            <td className="px-3 py-2">{renderProcessingControl(row)}</td>
-                            <td className="px-3 py-2">{renderCategoryControl(row)}</td>
-                            <td className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
-                            <td className="max-w-[160px] truncate px-3 py-2">{row.savedAs}</td>
-                            <td className="px-3 py-2">
-                              {row.fileUrl ? (
-                                <a className="text-sm underline" href={row.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
-                                  表示
-                                </a>
-                              ) : (
-                                "-"
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="py-12 text-center text-sm text-muted-foreground">条件に合う郵便物がありません。</div>
-                )}
+              <div className="grid min-h-[640px] overflow-hidden rounded-lg border xl:grid-cols-[minmax(0,1fr)_420px]">
+                <div className="min-w-0 overflow-x-auto">
+                  {filteredRows.length ? (
+                    <table className="w-full min-w-[960px] text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="w-10 px-3 py-2 text-left"></th>
+                          <th className="px-3 py-2 text-left">月分類</th>
+                          <th className="px-3 py-2 text-left">発送元</th>
+                          <th className="px-3 py-2 text-left">処理</th>
+                          <th className="px-3 py-2 text-left">分類</th>
+                          <th className="px-3 py-2 text-left">請求日</th>
+                          <th className="px-3 py-2 text-right">金額</th>
+                          <th className="px-3 py-2 text-left">保存先</th>
+                          <th className="px-3 py-2 text-left">ファイル</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {listGroups.map(([month, monthRows]) => (
+                          <Fragment key={month}>
+                            <tr className="border-t bg-muted/30">
+                              <td colSpan={9} className="px-3 py-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-2 text-left text-sm font-medium"
+                                    onClick={() => {
+                                      setActiveMonth(month);
+                                      setActiveRowId(monthRows[0]?.id ?? null);
+                                    }}
+                                  >
+                                    <Folder className="h-4 w-4 text-primary" />
+                                    <span>{monthLabel(month)}</span>
+                                  </button>
+                                  <span className="text-xs text-muted-foreground">{monthRows.length}件</span>
+                                </div>
+                              </td>
+                            </tr>
+                            {monthRows.length ? (
+                              monthRows.map((row) => {
+                                const isSelected = selectedIds.has(row.id);
+                                const isActive = row.id === listPreviewRow?.id;
+                                const rowIndex = filteredRows.findIndex((candidate) => candidate.id === row.id);
+                                return (
+                                  <tr
+                                    key={row.id}
+                                    className={`cursor-pointer border-t transition hover:bg-muted/50 ${
+                                      isActive ? "bg-primary/5" : ""
+                                    } ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"}`}
+                                    onClick={() => {
+                                      setActiveMonth(month);
+                                      setActiveRowId(row.id);
+                                    }}
+                                  >
+                                    <td className="px-3 py-2">
+                                      {canEdit ? (
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          className="h-4 w-4 rounded border-muted-foreground/40"
+                                          aria-label={`${shippingSenderName(row)}を選択`}
+                                          onChange={(event) => event.stopPropagation()}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            toggleRowSelection(row, rowIndex, event.shiftKey);
+                                          }}
+                                        />
+                                      ) : null}
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-2">{monthLabel(month)}</td>
+                                    <td className="max-w-[240px] truncate px-3 py-2 font-medium">{shippingSenderName(row)}</td>
+                                    <td className="px-3 py-2">{renderProcessingControl(row)}</td>
+                                    <td className="px-3 py-2">{renderCategoryControl(row)}</td>
+                                    <td className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
+                                    <td className="max-w-[160px] truncate px-3 py-2">{row.savedAs}</td>
+                                    <td className="px-3 py-2">
+                                      {row.fileUrl ? (
+                                        <a className="text-sm underline" href={row.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
+                                          表示
+                                        </a>
+                                      ) : (
+                                        "-"
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr className="border-t">
+                                <td colSpan={9} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                                  この月の郵便物はありません。
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="py-12 text-center text-sm text-muted-foreground">条件に合う郵便物がありません。</div>
+                  )}
+                </div>
+
+                <aside className="border-t bg-background p-4 xl:border-t-0 xl:border-l">
+                  {listPreviewRow && listPreviewMonth ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
+                        <div className="min-w-0">
+                          <div className="line-clamp-2 text-base font-medium">{shippingSenderName(listPreviewRow)}</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                              <Folder className="h-3.5 w-3.5" />
+                              {monthLabel(listPreviewMonth)}
+                            </span>
+                            <span>{formatDate(listPreviewRow.createdAt.slice(0, 10))} 作成</span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-1">
+                          {renderProcessingControl(listPreviewRow)}
+                          {renderCategoryControl(listPreviewRow)}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="rounded-lg border p-3">
+                          <div className="text-xs font-medium text-muted-foreground">月分類</div>
+                          <div className="mt-1 text-sm font-medium">{monthLabel(listPreviewMonth)}</div>
+                          <div className="mt-2 truncate text-xs text-muted-foreground">{listPreviewRow.savedAs}</div>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                          <div className="text-xs font-medium text-muted-foreground">概要</div>
+                          <div className="mt-1 space-y-1 text-sm">
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">請求日</span>
+                              <span>{listPreviewRow.extracted?.issueDate ? formatDate(listPreviewRow.extracted.issueDate) : "-"}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">金額</span>
+                              <span className="font-mono">{listPreviewRow.extracted?.total ? moneyFormatter.format(listPreviewRow.extracted.total) : "-"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 space-y-3 rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            <ImageIcon className="h-4 w-4" />
+                            プレビュー
+                          </div>
+                          <Button type="button" variant="outline" size="sm" onClick={() => setDialogRow(listPreviewRow)}>
+                            拡大表示
+                          </Button>
+                        </div>
+                        <DocumentPreview compact row={listPreviewRow} />
+                      </div>
+
+                      <div className="space-y-2 rounded-lg border p-3">
+                        <div className="text-sm font-medium">OCR本文</div>
+                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
+                          {listPreviewRow.ocrText || "OCR本文はありません。"}
+                        </pre>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-full min-h-80 flex-col items-center justify-center text-sm text-muted-foreground">
+                      郵便物を選択するとプレビューを表示します。
+                    </div>
+                  )}
+                </aside>
               </div>
             ) : (
             <div className={`grid min-h-[640px] overflow-hidden rounded-lg border ${folderGridColumns[monthColumn][senderColumn]}`}>
