@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
 import { signIn, signOut, requireUser } from "@/lib/auth";
-import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
+import { companyClientId, companyFromParam, mailSorterCompany, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, can, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
@@ -459,6 +459,8 @@ export async function updateProjectInline(formData: FormData) {
   const id = value(formData, "projectId");
   const submittedCompany = companyFromParam(value(formData, "company"));
   const returnPath = value(formData, "returnPath") === "/dashboard" ? "/dashboard" : "/projects";
+  const submittedStatus = value(formData, "status") as Project["status"];
+  const validStatuses: Project["status"][] = ["PLANNING", "IN_PROGRESS", "WAITING", "COMPLETED", "ARCHIVED"];
   const data = await readData();
   const before = data.projects.find((item) => item.id === id);
   if (!before || before.deletedAt) throw new Error("案件が見つかりません");
@@ -475,9 +477,18 @@ export async function updateProjectInline(formData: FormData) {
     );
     project.clientId = selectedClient?.id ?? companyClientId(project.company);
     project.stage = value(formData, "stage");
-    project.status = project.stage === "施工中" ? "IN_PROGRESS" : project.stage === "待拍摄" ? "WAITING" : "PLANNING";
+    project.status = validStatuses.includes(submittedStatus)
+      ? submittedStatus
+      : project.stage === "施工中"
+        ? "IN_PROGRESS"
+        : project.stage === "待拍摄"
+          ? "WAITING"
+          : "PLANNING";
     project.contractAmount = money(formData, "contractAmount");
     project.billingCount = Math.max(1, Math.min(12, Number(value(formData, "billingCount")) || 1));
+    project.startDate = optional(formData, "startDate");
+    project.endDate = optional(formData, "endDate");
+    project.memo = optional(formData, "memo");
     project.updatedAt = now();
 
     return project;
@@ -878,6 +889,54 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
   revalidatePath("/received-invoices");
   revalidatePath("/payments");
   revalidatePath("/dashboard");
+}
+
+export async function updateReceivedInvoiceInline(formData: FormData) {
+  const user = await requireUser();
+  if (!can(user, "manage:receivedInvoices")) {
+    throw new Error("権限がありません");
+  }
+
+  const id = value(formData, "receivedInvoiceId");
+  const company = companyFromParam(value(formData, "company"));
+  const vendorId = value(formData, "vendorId");
+  const projectId = value(formData, "projectId");
+  const status = receivedInvoiceStatus(value(formData, "status"));
+  const timestamp = now();
+  const data = await readData();
+  const before = data.receivedInvoices.find((item) => item.id === id);
+
+  await mutateData(user.id, "UPDATE_RECEIVED_INVOICE_INLINE", "ReceivedInvoice", id, (draft) => {
+    const invoice = draft.receivedInvoices.find((item) => item.id === id && !item.deletedAt);
+    if (!invoice) throw new Error("受領請求書が見つかりません");
+
+    const project = draft.projects.find((item) => item.id === projectId && !item.deletedAt);
+    const vendor = draft.vendors.find((item) => item.id === vendorId && !item.deletedAt);
+    if (!project || !matchesCompany(project, company)) throw new Error("案件が見つかりません");
+    if (!vendor || !partnerMatchesCompany(vendor, company)) throw new Error("支払先が見つかりません");
+
+    invoice.vendorId = vendor.id;
+    invoice.projectId = project.id;
+    invoice.issueDate = value(formData, "issueDate") || invoice.issueDate;
+    invoice.dueDate = value(formData, "dueDate") || invoice.dueDate;
+    invoice.subtotal = money(formData, "subtotal");
+    invoice.taxTotal = money(formData, "taxTotal");
+    invoice.total = money(formData, "total");
+    invoice.memo = optional(formData, "memo");
+    if (status === "PAID") {
+      markReceivedInvoicePaid(draft, invoice, user.id, timestamp);
+    } else {
+      invoice.status = status;
+      invoice.updatedAt = timestamp;
+    }
+    invoice.approvedById = status === "SCHEDULED" || status === "PAID" ? user.id : invoice.approvedById;
+    return invoice;
+  }, before);
+
+  revalidatePath("/received-invoices");
+  revalidatePath("/payments");
+  revalidatePath("/dashboard");
+  revalidatePath("/projects");
 }
 
 export async function updateOcrDocumentInline(formData: FormData) {

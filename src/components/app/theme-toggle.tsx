@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Monitor, Moon, Sun } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,7 +19,13 @@ const options: Array<{ icon: typeof Sun; label: string; value: ThemePreference }
 
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const { resolvedTheme, setTheme, theme } = useTheme();
-  const Icon = resolvedTheme === "dark" ? Moon : Sun;
+  const [mounted, setMounted] = useState(false);
+  const Icon = mounted && resolvedTheme === "dark" ? Moon : Sun;
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMounted(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <DropdownMenu>
@@ -37,7 +44,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       <DropdownMenuContent align="end" className="w-36">
         {options.map((option) => {
           const OptionIcon = option.icon;
-          const active = theme === option.value;
+          const active = mounted && theme === option.value;
           return (
             <DropdownMenuItem key={option.value} onClick={() => setTheme(option.value)} className="gap-2">
               <OptionIcon className="h-4 w-4" />
