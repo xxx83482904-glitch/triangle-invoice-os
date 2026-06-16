@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "@/components/app/toaster";
+import { ThemeProvider, themeInitScript } from "@/components/app/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -20,12 +21,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja" className="h-full antialiased">
+    <html lang="ja" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>
-          {children}
-          <Toaster />
-        </TooltipProvider>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <ThemeProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

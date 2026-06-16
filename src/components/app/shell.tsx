@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { AppNav, CompanySwitch, MobileAppNav, MobileCompanySwitch, ScopedBrandLink } from "@/components/app/company-switch";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import { UndoButton } from "@/components/app/undo-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <AppNav role={user.role} />
         </div>
         <div className="mt-auto w-full space-y-2">
+          <ThemeToggle />
           {canUndoChanges ? <UndoButton disabled={!canUndo} /> : null}
           <div className="flex w-full items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -55,6 +57,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <ScopedBrandLink compact role={user.role} />
           <div className="flex min-w-0 items-center gap-2">
             <MobileCompanySwitch />
+            <ThemeToggle compact />
             {canUndoChanges ? <UndoButton compact disabled={!canUndo} /> : null}
             <form action={logoutAction}>
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="ログアウト">
