@@ -228,6 +228,11 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const company = mailSorterCompany;
+  const targetMonthValue = formData.get("targetMonth");
+  const targetMonth = typeof targetMonthValue === "string" && targetMonthValue.trim() ? targetMonthValue.trim() : undefined;
+  if (targetMonth && !/^\d{4}-\d{2}$/.test(targetMonth)) {
+    return NextResponse.json({ error: "収納先の月が正しくありません" }, { status: 400 });
+  }
   const files = formData.getAll("files").filter((file): file is File => file instanceof File);
   if (!files.length) return NextResponse.json({ error: "ファイルをドロップしてください" }, { status: 400 });
 
@@ -278,6 +283,7 @@ export async function POST(request: Request) {
         ocrText: extracted.text,
         confidence: classification.confidence,
         relatedReceivedInvoiceId: invoiceId,
+        folderMonth: targetMonth,
         mailProcessed: false,
         memo: buildMailSummaryMemo({ classification, invoice: inferred, senderName }),
         uploadedById: user.id,
@@ -312,6 +318,10 @@ export async function POST(request: Request) {
         );
         duplicate = Boolean(existing);
         invoiceId = existing?.id ?? invoiceId;
+        if (existing && targetMonth) {
+          existing.folderMonth = targetMonth;
+          existing.updatedAt = timestamp;
+        }
         mailDocument.relatedReceivedInvoiceId = invoiceId;
         mailDocument.memo = buildMailSummaryMemo({ classification, duplicate, invoice: inferred, senderName: mailDocument.senderName || senderName });
 
@@ -327,6 +337,7 @@ export async function POST(request: Request) {
           total: inferred.total,
           status: "REVIEWING",
           fileUrl,
+          folderMonth: targetMonth,
           originalFileName: safeName,
           mimeType: file.type,
           ocrText: extracted.text,
@@ -384,6 +395,7 @@ export async function POST(request: Request) {
       mimeType: file.type,
       ocrText: extracted.text,
       confidence: classification.confidence,
+      folderMonth: targetMonth,
       mailProcessed: false,
       memo: buildMailSummaryMemo({ classification, senderName }),
       uploadedById: user.id,

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckSquare, Download, ExternalLink, FileText, Folder, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { CheckSquare, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud } from "lucide-react";
+import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { MailDocumentCategory, ReceivedInvoiceStatus } from "@/lib/types";
 
@@ -269,16 +270,11 @@ function stopEditClick(event: React.MouseEvent<HTMLElement>) {
 
 type ColumnMode = "compact" | "normal";
 
-const folderGridColumns: Record<ColumnMode, Record<ColumnMode, string>> = {
-  compact: {
-    compact: "md:grid-cols-[76px_140px_minmax(0,1fr)]",
-    normal: "md:grid-cols-[76px_220px_minmax(0,1fr)]",
-  },
-  normal: {
-    compact: "md:grid-cols-[180px_140px_minmax(0,1fr)]",
-    normal: "md:grid-cols-[180px_220px_minmax(0,1fr)]",
-  },
-};
+type ResizeTarget = "folderMonth" | "folderSender" | "listPreview";
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 export function OcrDocumentsTable({
   canEdit,
@@ -301,11 +297,18 @@ export function OcrDocumentsTable({
 }) {
   const router = useRouter();
   const [isMoving, startMoveTransition] = useTransition();
+  const folderUploadInputRef = useRef<HTMLInputElement>(null);
   const [draggedIds, setDraggedIds] = useState<Set<string>>(new Set());
   const [dragOverMonth, setDragOverMonth] = useState<string | null>(null);
+  const [fileDragMonth, setFileDragMonth] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [processingFilter, setProcessingFilter] = useState<ProcessingFilter>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("folder");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [uploadTargetMonth, setUploadTargetMonth] = useState<string | null>(null);
+  const [uploadingMonth, setUploadingMonth] = useState<string | null>(null);
+  const [folderMonthWidth, setFolderMonthWidth] = useState(180);
+  const [folderSenderWidth, setFolderSenderWidth] = useState(220);
+  const [listPreviewWidth, setListPreviewWidth] = useState(420);
   const [pendingCategories, setPendingCategories] = useState<Partial<Record<string, MailDocumentCategory>>>({});
   const [pendingProcessing, setPendingProcessing] = useState<Partial<Record<string, ProcessingStatusValue>>>({});
   const filteredRows = useMemo(() => {
@@ -440,6 +443,83 @@ export function OcrDocumentsTable({
     document.getElementById("mail-dropzone")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const uploadFilesToMonth = useCallback(async (files: FileList | File[], targetMonth: string) => {
+    const selected = Array.from(files);
+    if (!canEdit || !selected.length) return;
+    setUploadingMonth(targetMonth);
+    try {
+      const formData = new FormData();
+      formData.set("company", company);
+      formData.set("targetMonth", targetMonth);
+      for (const file of selected) formData.append("files", file);
+
+      const response = await fetch("/api/uploads/mail-sorter", {
+        method: "POST",
+        body: formData,
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.error ?? "郵便物の収納に失敗しました");
+      }
+
+      const results = Array.isArray(body.results) ? body.results : [];
+      const errorCount = results.filter((result: { error?: string }) => result.error).length;
+      const okCount = Math.max(0, results.length - errorCount);
+      setActiveMonth(targetMonth);
+      setActiveRowId(null);
+      setViewMode("list");
+      router.refresh();
+      toast({
+        title: errorCount ? `${okCount}件収納、${errorCount}件エラー` : `${okCount || selected.length}件を${monthLabel(targetMonth)}へ収納しました`,
+        variant: errorCount ? "default" : "success",
+      });
+    } catch (error) {
+      toast({
+        title: "収納に失敗しました",
+        description: error instanceof Error ? error.message : "郵便物の収納に失敗しました",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingMonth(null);
+      setUploadTargetMonth(null);
+    }
+  }, [canEdit, company, router]);
+
+  const openFolderUpload = (month: string) => {
+    if (!canEdit) return;
+    setUploadTargetMonth(month);
+    folderUploadInputRef.current?.click();
+  };
+
+  const isFileDrag = (event: React.DragEvent<HTMLElement>) => Array.from(event.dataTransfer.types).includes("Files");
+
+  const startColumnResize = useCallback((event: React.PointerEvent<HTMLElement>, target: ResizeTarget) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startMonthWidth = folderMonthWidth;
+    const startSenderWidth = folderSenderWidth;
+    const startPreviewWidth = listPreviewWidth;
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      if (target === "folderMonth") setFolderMonthWidth(clamp(startMonthWidth + delta, 72, 300));
+      if (target === "folderSender") setFolderSenderWidth(clamp(startSenderWidth + delta, 130, 460));
+      if (target === "listPreview") setListPreviewWidth(clamp(startPreviewWidth - delta, 320, 720));
+    };
+
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+  }, [folderMonthWidth, folderSenderWidth, listPreviewWidth]);
+
   // #2: multi-row drag support
   const moveRowsToMonth = (ids: Set<string>, targetMonth: string) => {
     if (!ids.size || !canEdit) return;
@@ -511,14 +591,31 @@ export function OcrDocumentsTable({
     );
   };
 
+  const listGridStyle = { "--mail-list-preview-width": `${listPreviewWidth}px` } as CSSProperties;
+  const folderGridStyle = {
+    "--mail-folder-month-width": `${folderMonthWidth}px`,
+    "--mail-folder-sender-width": `${folderSenderWidth}px`,
+  } as CSSProperties;
+
   return (
     <>
+      <input
+        ref={folderUploadInputRef}
+        className="sr-only"
+        type="file"
+        accept="application/pdf,image/jpeg,image/png"
+        multiple
+        onChange={(event) => {
+          if (event.target.files && uploadTargetMonth) void uploadFilesToMonth(event.target.files, uploadTargetMonth);
+          event.target.value = "";
+        }}
+      />
       <Card>
         <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle>郵便物フォルダー</CardTitle>
             <div className="mt-1 text-xs text-muted-foreground">
-              月フォルダー → 発送元 → 詳細 の3カラム構成です。発送元行はドラッグで月を移動できます。
+              一覧を中心に月分類・プレビューを確認できます。月見出しへファイルを収納し、境界線ドラッグで幅を調整できます。
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -556,11 +653,31 @@ export function OcrDocumentsTable({
               <Plus className="h-3.5 w-3.5" />
               追加
             </Button>
-            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setMonthColumn((value) => (value === "normal" ? "compact" : "normal"))}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1"
+              onClick={() => {
+                const next = monthColumn === "normal" ? "compact" : "normal";
+                setMonthColumn(next);
+                setFolderMonthWidth(next === "normal" ? 180 : 84);
+              }}
+            >
               {monthColumn === "normal" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               月{monthColumn === "normal" ? "小" : "広"}
             </Button>
-            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setSenderColumn((value) => (value === "normal" ? "compact" : "normal"))}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1"
+              onClick={() => {
+                const next = senderColumn === "normal" ? "compact" : "normal";
+                setSenderColumn(next);
+                setFolderSenderWidth(next === "normal" ? 220 : 150);
+              }}
+            >
               {senderColumn === "normal" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               発送元{senderColumn === "normal" ? "小" : "広"}
             </Button>
@@ -613,7 +730,10 @@ export function OcrDocumentsTable({
           </div>
           {groups.length ? (
             viewMode === "list" ? (
-              <div className="grid min-h-[640px] overflow-hidden rounded-lg border xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div
+                className="grid min-h-[640px] overflow-hidden rounded-lg border xl:grid-cols-[minmax(0,1fr)_8px_var(--mail-list-preview-width)]"
+                style={listGridStyle}
+              >
                 <div className="min-w-0 overflow-x-auto">
                   {filteredRows.length ? (
                     <table className="w-full min-w-[960px] text-sm">
@@ -633,7 +753,21 @@ export function OcrDocumentsTable({
                       <tbody>
                         {listGroups.map(([month, monthRows]) => (
                           <Fragment key={month}>
-                            <tr className="border-t bg-muted/30">
+                            <tr
+                              className={`border-t bg-muted/30 ${fileDragMonth === month ? "bg-primary/10" : ""}`}
+                              onDragOver={(event) => {
+                                if (!canEdit || !isFileDrag(event)) return;
+                                event.preventDefault();
+                                setFileDragMonth(month);
+                              }}
+                              onDragLeave={() => setFileDragMonth(null)}
+                              onDrop={(event) => {
+                                if (!canEdit || !event.dataTransfer.files.length) return;
+                                event.preventDefault();
+                                setFileDragMonth(null);
+                                void uploadFilesToMonth(event.dataTransfer.files, month);
+                              }}
+                            >
                               <td colSpan={9} className="px-3 py-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <button
@@ -647,7 +781,23 @@ export function OcrDocumentsTable({
                                     <Folder className="h-4 w-4 text-primary" />
                                     <span>{monthLabel(month)}</span>
                                   </button>
-                                  <span className="text-xs text-muted-foreground">{monthRows.length}件</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">{monthRows.length}件</span>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 gap-1 px-2 text-xs"
+                                      disabled={!canEdit || uploadingMonth === month}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openFolderUpload(month);
+                                      }}
+                                    >
+                                      <UploadCloud className="h-3.5 w-3.5" />
+                                      {uploadingMonth === month ? "収納中" : "収納"}
+                                    </Button>
+                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -715,6 +865,16 @@ export function OcrDocumentsTable({
                   ) : (
                     <div className="py-12 text-center text-sm text-muted-foreground">条件に合う郵便物がありません。</div>
                   )}
+                </div>
+
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="一覧とプレビューの幅を調整"
+                  className="hidden cursor-col-resize items-center justify-center border-x bg-muted/40 text-muted-foreground hover:bg-muted xl:flex"
+                  onPointerDown={(event) => startColumnResize(event, "listPreview")}
+                >
+                  <GripVertical className="h-4 w-4" />
                 </div>
 
                 <aside className="border-t bg-background p-4 xl:border-t-0 xl:border-l">
@@ -786,9 +946,12 @@ export function OcrDocumentsTable({
                 </aside>
               </div>
             ) : (
-            <div className={`grid min-h-[640px] overflow-hidden rounded-lg border ${folderGridColumns[monthColumn][senderColumn]}`}>
+            <div
+              className="grid min-h-[640px] overflow-hidden rounded-lg border md:grid-cols-[var(--mail-folder-month-width)_8px_var(--mail-folder-sender-width)_8px_minmax(0,1fr)]"
+              style={folderGridStyle}
+            >
               {/* #11: Column 1 – Month folders */}
-              <aside className="border-b bg-muted/20 p-3 md:border-r md:border-b-0">
+              <aside className="border-b bg-muted/20 p-3 md:border-b-0">
                 <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                   <span className="flex items-center gap-1">
                     {monthColumn === "compact" ? "月" : "月フォルダー"}
@@ -805,23 +968,38 @@ export function OcrDocumentsTable({
                   {groups.map(([month, monthRows]) => {
                     const isActive = month === selectedMonth;
                     const isDragOver = dragOverMonth === month;
+                    const isFileDragOver = fileDragMonth === month;
                     const canDeleteFolder = canEdit && customFolderMonths.has(month) && monthRows.length === 0;
                     return (
                       <div key={month} className="group relative">
                         <button
                           type="button"
-                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left transition ${
+                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-2.5 pr-16 text-left transition ${
                             isActive ? "bg-background shadow-sm ring-1 ring-primary/30" : "hover:bg-background"
-                          } ${isDragOver ? "ring-2 ring-primary ring-dashed" : ""}`}
+                          } ${isDragOver || isFileDragOver ? "ring-2 ring-primary ring-dashed" : ""}`}
                           onClick={() => chooseMonth(month, monthRows)}
                           onDragOver={(event) => {
-                            if (!canEdit || !draggedIds.size) return;
+                            if (!canEdit) return;
+                            if (isFileDrag(event)) {
+                              event.preventDefault();
+                              setFileDragMonth(month);
+                              return;
+                            }
+                            if (!draggedIds.size) return;
                             event.preventDefault();
                             setDragOverMonth(month);
                           }}
-                          onDragLeave={() => setDragOverMonth(null)}
+                          onDragLeave={() => {
+                            setDragOverMonth(null);
+                            setFileDragMonth(null);
+                          }}
                           onDrop={(event) => {
                             event.preventDefault();
+                            if (event.dataTransfer.files.length) {
+                              setFileDragMonth(null);
+                              void uploadFilesToMonth(event.dataTransfer.files, month);
+                              return;
+                            }
                             handleDrop(month);
                           }}
                         >
@@ -831,6 +1009,17 @@ export function OcrDocumentsTable({
                             <div className="mt-0.5 text-xs text-muted-foreground">{monthRows.length}件</div>
                           </div>
                         </button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="absolute top-1.5 right-8 h-7 w-7 text-muted-foreground opacity-100 md:opacity-0 md:transition md:group-hover:opacity-100"
+                          title={`${monthLabel(month)}へファイルを収納`}
+                          disabled={!canEdit || uploadingMonth === month}
+                          onClick={() => openFolderUpload(month)}
+                        >
+                          <UploadCloud className="h-3.5 w-3.5" />
+                        </Button>
                         {/* #14: folder delete always visible on group hover, not opacity-0 */}
                         {canDeleteFolder ? (
                           <form action={deleteMailFolder} className="absolute top-1.5 right-1 hidden group-hover:block">
@@ -847,8 +1036,18 @@ export function OcrDocumentsTable({
                 </div>
               </aside>
 
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="月フォルダー欄の幅を調整"
+                className="hidden cursor-col-resize items-center justify-center border-x bg-muted/40 text-muted-foreground hover:bg-muted md:flex"
+                onPointerDown={(event) => startColumnResize(event, "folderMonth")}
+              >
+                <GripVertical className="h-4 w-4" />
+              </div>
+
               {/* #11: Column 2 – Sender list */}
-              <aside className="border-b p-3 md:border-r md:border-b-0">
+              <aside className="border-b p-3 md:border-b-0">
                 <div className="mb-3 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                   <span className="flex items-center gap-1">
                     発送元
@@ -923,6 +1122,16 @@ export function OcrDocumentsTable({
                   ) : null}
                 </div>
               </aside>
+
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="発送元欄の幅を調整"
+                className="hidden cursor-col-resize items-center justify-center border-x bg-muted/40 text-muted-foreground hover:bg-muted md:flex"
+                onPointerDown={(event) => startColumnResize(event, "folderSender")}
+              >
+                <GripVertical className="h-4 w-4" />
+              </div>
 
               {/* Column 3 – Detail */}
               <section className="min-w-0 p-4">

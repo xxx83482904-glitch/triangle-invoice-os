@@ -140,7 +140,6 @@ export default async function MailSorterPage({
       </PageHeader>
 
       <div className="space-y-6">
-        {mayUpload ? <MailSorterDropzone company={company} /> : null}
         <OcrDocumentsTable
           canEdit={mayEdit}
           canExport={can(user, "export:csv")}
@@ -153,6 +152,7 @@ export default async function MailSorterPage({
           statusOptions={statusOptions}
           vendors={vendors.map((vendor) => ({ label: vendor.companyName, value: vendor.id }))}
         />
+        {mayUpload ? <MailSorterDropzone company={company} /> : null}
       </div>
     </AppShell>
   );
