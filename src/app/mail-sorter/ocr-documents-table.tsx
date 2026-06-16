@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckSquare, Download, ExternalLink, FileText, Folder, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
+import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, updateMailDocumentCategory, updateMailDocumentProcessingStatus, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,7 @@ export type OcrDocumentListItem = {
   fileUrl?: string;
   folderMonth?: string;
   id: string;
+  mailProcessed?: boolean;
   mailDocumentId?: string;
   memo?: string;
   mimeType?: string;
@@ -73,6 +74,11 @@ const categoryOptions: Array<{ label: string; value: MailDocumentCategory }> = [
   { label: "領収書", value: "RECEIPT" },
   { label: "通知", value: "NOTICE" },
   { label: "その他", value: "OTHER" },
+];
+
+const processingStatusOptions = [
+  { label: "未処理", value: "unprocessed" },
+  { label: "処理済", value: "processed" },
 ];
 
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
@@ -127,6 +133,11 @@ function categorySelectClass(category: MailDocumentCategory) {
       ? "border-primary bg-primary text-primary-foreground"
       : "border-border bg-secondary text-secondary-foreground";
   return `h-6 max-w-[104px] rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
+}
+
+function processingStatusSelectClass(processed: boolean) {
+  const tone = processed ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800";
+  return `h-6 max-w-[92px] rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
 }
 
 function shippingSenderName(row: OcrDocumentListItem) {
@@ -200,12 +211,12 @@ function summaryLines(row: OcrDocumentListItem) {
 }
 
 function isProcessed(row: OcrDocumentListItem) {
+  if (typeof row.mailProcessed === "boolean") return row.mailProcessed;
   const s = row.extracted?.status;
   return s === "PAID" || s === "SCHEDULED" || s === "ARCHIVED";
 }
 
 function rowStatusClass(row: OcrDocumentListItem) {
-  if (!row.extracted) return "";
   if (isProcessed(row)) return "border-l-2 border-l-green-500";
   return "border-l-2 border-l-amber-400";
 }
@@ -271,7 +282,7 @@ const folderGridColumns: Record<ColumnMode, Record<ColumnMode, string>> = {
 
 export function OcrDocumentsTable({
   canEdit,
-  canExport: _canExport,
+  canExport = false,
   company,
   projects,
   rows,
@@ -324,9 +335,9 @@ export function OcrDocumentsTable({
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
   const selectedActiveCount = activeRows.filter((row) => selectedIds.has(row.id)).length;
   const allActiveSelected = activeRows.length > 0 && selectedActiveCount === activeRows.length;
-  const exportHref = `/api/export/ocr-documents?company=${company}${
+  const exportHref = canExport ? `/api/export/ocr-documents?company=${company}${
     selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
-  }`;
+  }` : "#";
 
   const chooseMonth = (month: string, monthRows: OcrDocumentListItem[]) => {
     setActiveMonth(month);
@@ -380,18 +391,17 @@ export function OcrDocumentsTable({
   // #2: multi-row drag support
   const moveRowsToMonth = (ids: Set<string>, targetMonth: string) => {
     if (!ids.size || !canEdit) return;
-    const rowsToMove = rows.filter((r) => ids.has(r.id));
+    const rowsToMove = rows.filter((r) => ids.has(r.id) && (r.folderMonth || monthKey(r.createdAt)) !== targetMonth);
+    if (!rowsToMove.length) return;
     startMoveTransition(async () => {
+      const formData = new FormData();
+      formData.set("company", company);
+      formData.set("targetMonth", targetMonth);
       for (const row of rowsToMove) {
-        const sourceMonth = row.folderMonth || monthKey(row.createdAt);
-        if (sourceMonth === targetMonth) continue;
-        const formData = new FormData();
-        formData.set("company", company);
-        formData.set("targetMonth", targetMonth);
-        if (row.mailDocumentId) formData.set("mailDocumentId", row.mailDocumentId);
-        if (row.receivedInvoiceId) formData.set("receivedInvoiceId", row.receivedInvoiceId);
-        await moveOcrDocumentToMonth(formData);
+        if (row.mailDocumentId) formData.append("mailDocumentId", row.mailDocumentId);
+        if (row.receivedInvoiceId) formData.append("receivedInvoiceId", row.receivedInvoiceId);
       }
+      await moveOcrDocumentToMonth(formData);
       setDraggedIds(new Set());
       setDragOverMonth(null);
       router.refresh();
@@ -576,7 +586,7 @@ export function OcrDocumentsTable({
                               checked={isSelected}
                               className="mt-0.5 h-4 w-4 shrink-0 rounded border-muted-foreground/40"
                               aria-label={`${shippingSenderName(row)}を選択`}
-                              onChange={(e) => { e.stopPropagation(); toggleRowSelection(row, index, false); }}
+                              onChange={(e) => { e.stopPropagation(); }}
                               onClick={(e) => { e.stopPropagation(); toggleRowSelection(row, index, e.shiftKey); }}
                             />
                           ) : null}
@@ -584,18 +594,40 @@ export function OcrDocumentsTable({
                             <div className="flex items-center justify-between gap-2">
                               <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
                               {senderColumn === "normal" ? (
-                                canEdit && row.mailDocumentId ? (
-                                  /* #12: category change now shows confirmation dialog */
-                                  <button
-                                    type="button"
-                                    className={`shrink-0 ${categorySelectClass(row.category)}`}
-                                    onClick={(e) => { e.stopPropagation(); setPendingCategoryChange({ row, category: row.category }); }}
-                                  >
-                                    {categoryLabels[row.category]}
-                                  </button>
-                                ) : (
-                                  <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
-                                )
+                                <div className="flex shrink-0 items-center gap-1">
+                                  {canEdit && (row.mailDocumentId || row.receivedInvoiceId) ? (
+                                    <form action={updateMailDocumentProcessingStatus} onClick={(e) => e.stopPropagation()}>
+                                      <input type="hidden" name="company" value={company} />
+                                      {row.mailDocumentId ? <input type="hidden" name="mailDocumentId" value={row.mailDocumentId} /> : null}
+                                      {row.receivedInvoiceId ? <input type="hidden" name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+                                      <select
+                                        name="processingStatus"
+                                        defaultValue={isProcessed(row) ? "processed" : "unprocessed"}
+                                        className={processingStatusSelectClass(isProcessed(row))}
+                                        aria-label="処理状態"
+                                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                                      >
+                                        {processingStatusOptions.map((option) => (
+                                          <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                      </select>
+                                    </form>
+                                  ) : (
+                                    <Badge variant="outline" className={processingStatusSelectClass(isProcessed(row))}>{isProcessed(row) ? "処理済" : "未処理"}</Badge>
+                                  )}
+                                  {canEdit && row.mailDocumentId ? (
+                                    /* #12: category change now shows confirmation dialog */
+                                    <button
+                                      type="button"
+                                      className={`shrink-0 ${categorySelectClass(row.category)}`}
+                                      onClick={(e) => { e.stopPropagation(); setPendingCategoryChange({ row, category: row.category }); }}
+                                    >
+                                      {categoryLabels[row.category]}
+                                    </button>
+                                  ) : (
+                                    <Badge variant={row.category === "INVOICE" ? "default" : "secondary"}>{categoryLabels[row.category]}</Badge>
+                                  )}
+                                </div>
                               ) : null}
                             </div>
                             {senderColumn === "normal" ? <div className="mt-0.5 truncate text-xs text-muted-foreground">{formatDate(row.createdAt.slice(0, 10))}</div> : null}
