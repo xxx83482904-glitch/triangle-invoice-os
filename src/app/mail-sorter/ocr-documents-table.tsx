@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud } from "lucide-react";
 import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,11 @@ export type OcrDocumentListItem = {
   category: MailDocumentCategory;
   confidence?: number;
   createdAt: string;
+  duplicateOfMailDocumentId?: string;
+  duplicateOfReceivedInvoiceId?: string;
+  duplicateReason?: string;
+  duplicateScore?: number;
+  duplicateTitle?: string;
   extracted?: {
     dueDate: string;
     issueDate: string;
@@ -58,6 +63,7 @@ type FolderOption = {
 };
 
 type CategoryFilter = "all" | "INVOICE" | "RECEIPT";
+type DuplicateFilter = "all" | "duplicates";
 type ProcessingFilter = "all" | "unprocessed" | "processed";
 type ProcessingStatusValue = "unprocessed" | "processed";
 type ViewMode = "folder" | "list";
@@ -166,7 +172,7 @@ function memoField(row: OcrDocumentListItem, label: string) {
 }
 
 function memoRemainder(row: OcrDocumentListItem) {
-  const structuredLabels = new Set(["発送元", "内容", "金額", "振込先", "請求日", "支払期限", "判定"]);
+  const structuredLabels = new Set(["発送元", "内容", "金額", "振込先", "請求日", "支払期限", "重複", "判定"]);
   return (
     row.memo
       ?.split("\n")
@@ -211,9 +217,20 @@ function summaryLines(row: OcrDocumentListItem) {
     lines.push(`合計: ${moneyFormatter.format(row.extracted.total)}`);
   }
   if (row.confidence) lines.push(`信頼度: ${row.confidence}%`);
+  if (isDuplicate(row)) lines.push(`重複: ${duplicateDescription(row)}`);
   const remainder = memoRemainder(row);
   if (remainder) lines.push(`メモ: ${remainder}`);
   return lines;
+}
+
+function isDuplicate(row: OcrDocumentListItem) {
+  return Boolean(row.duplicateOfMailDocumentId || row.duplicateOfReceivedInvoiceId || row.duplicateReason);
+}
+
+function duplicateDescription(row: OcrDocumentListItem) {
+  const title = row.duplicateTitle ? ` / 既存: ${row.duplicateTitle}` : "";
+  const score = row.duplicateScore ? ` / 類似度 ${row.duplicateScore}%` : "";
+  return `${row.duplicateReason ?? "重複候補"}${title}${score}`;
 }
 
 function isProcessed(row: OcrDocumentListItem) {
@@ -302,6 +319,7 @@ export function OcrDocumentsTable({
   const [dragOverMonth, setDragOverMonth] = useState<string | null>(null);
   const [fileDragMonth, setFileDragMonth] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [duplicateFilter, setDuplicateFilter] = useState<DuplicateFilter>("all");
   const [processingFilter, setProcessingFilter] = useState<ProcessingFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [uploadTargetMonth, setUploadTargetMonth] = useState<string | null>(null);
@@ -317,9 +335,10 @@ export function OcrDocumentsTable({
       const category = pendingCategories[row.id] ?? row.category;
       if (processingFilter !== "all" && processing !== processingFilter) return false;
       if (categoryFilter !== "all" && category !== categoryFilter) return false;
+      if (duplicateFilter === "duplicates" && !isDuplicate(row)) return false;
       return true;
     });
-  }, [categoryFilter, pendingCategories, pendingProcessing, processingFilter, rows]);
+  }, [categoryFilter, duplicateFilter, pendingCategories, pendingProcessing, processingFilter, rows]);
   const groups = useMemo(() => {
     const grouped = new Map<string, OcrDocumentListItem[]>();
     for (const row of filteredRows) {
@@ -354,6 +373,7 @@ export function OcrDocumentsTable({
   const bulkDeleteFormRef = useRef<HTMLFormElement>(null);
 
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
+  const duplicateRows = useMemo(() => rows.filter(isDuplicate), [rows]);
   const selectedActiveCount = activeRows.filter((row) => selectedIds.has(row.id)).length;
   const allActiveSelected = activeRows.length > 0 && selectedActiveCount === activeRows.length;
   const pendingEdits = useMemo(() => {
@@ -604,6 +624,16 @@ export function OcrDocumentsTable({
     );
   };
 
+  const renderDuplicateBadge = (row: OcrDocumentListItem) => {
+    if (!isDuplicate(row)) return null;
+    return (
+      <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-amber-800" title={duplicateDescription(row)}>
+        <AlertTriangle className="h-3 w-3" />
+        重複
+      </Badge>
+    );
+  };
+
   const listGridStyle = { "--mail-list-preview-width": `${listPreviewWidth}px` } as CSSProperties;
   const folderGridStyle = {
     "--mail-folder-month-width": `${folderMonthWidth}px`,
@@ -720,6 +750,24 @@ export function OcrDocumentsTable({
                 {filter === "all" ? "全分類" : categoryLabels[filter]}
               </Button>
             ))}
+            <Button
+              type="button"
+              size="sm"
+              variant={duplicateFilter === "duplicates" ? "default" : "outline"}
+              onClick={() => setDuplicateFilter((current) => (current === "duplicates" ? "all" : "duplicates"))}
+              disabled={!duplicateRows.length}
+            >
+              重複候補{duplicateRows.length ? ` ${duplicateRows.length}` : ""}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!duplicateRows.length}
+              onClick={() => setSelectedIds(new Set(duplicateRows.map((row) => row.id)))}
+            >
+              重複を選択
+            </Button>
             <Button type="button" size="sm" variant={viewMode === "folder" ? "default" : "outline"} onClick={() => setViewMode("folder")}>
               フォルダー
             </Button>
@@ -749,7 +797,7 @@ export function OcrDocumentsTable({
               >
                 <div className="min-w-0 overflow-x-auto">
                   {filteredRows.length ? (
-                    <table className="w-full min-w-[960px] text-sm">
+                    <table className="w-full min-w-[1040px] text-sm">
                       <thead className="bg-muted/50 text-xs text-muted-foreground">
                         <tr>
                           <th className="w-10 px-3 py-2 text-left"></th>
@@ -757,6 +805,7 @@ export function OcrDocumentsTable({
                           <th className="px-3 py-2 text-left">発送元</th>
                           <th className="px-3 py-2 text-left">処理</th>
                           <th className="px-3 py-2 text-left">分類</th>
+                          <th className="px-3 py-2 text-left">重複</th>
                           <th className="px-3 py-2 text-left">請求日</th>
                           <th className="px-3 py-2 text-right">金額</th>
                           <th className="px-3 py-2 text-left">保存先</th>
@@ -801,7 +850,7 @@ export function OcrDocumentsTable({
                                 handleDrop(month);
                               }}
                             >
-                              <td colSpan={9} className="px-3 py-2">
+                              <td colSpan={10} className="px-3 py-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <button
                                     type="button"
@@ -881,6 +930,7 @@ export function OcrDocumentsTable({
                                     <td className="max-w-[240px] truncate px-3 py-2 font-medium">{shippingSenderName(row)}</td>
                                     <td className="px-3 py-2">{renderProcessingControl(row)}</td>
                                     <td className="px-3 py-2">{renderCategoryControl(row)}</td>
+                                    <td className="px-3 py-2">{renderDuplicateBadge(row) ?? <span className="text-xs text-muted-foreground">-</span>}</td>
                                     <td className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
                                     <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
                                     <td className="max-w-[160px] truncate px-3 py-2">{row.savedAs}</td>
@@ -898,7 +948,7 @@ export function OcrDocumentsTable({
                               })
                             ) : (
                               <tr className="border-t">
-                                <td colSpan={9} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                                <td colSpan={10} className="px-3 py-6 text-center text-xs text-muted-foreground">
                                   この月の郵便物はありません。
                                 </td>
                               </tr>
@@ -940,8 +990,19 @@ export function OcrDocumentsTable({
                         <div className="flex shrink-0 flex-wrap gap-1">
                           {renderProcessingControl(listPreviewRow)}
                           {renderCategoryControl(listPreviewRow)}
+                          {renderDuplicateBadge(listPreviewRow)}
                         </div>
                       </div>
+
+                      {isDuplicate(listPreviewRow) ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                          <div className="flex items-center gap-2 font-medium">
+                            <AlertTriangle className="h-4 w-4" />
+                            重複候補
+                          </div>
+                          <div className="mt-1 text-xs">{duplicateDescription(listPreviewRow)}</div>
+                        </div>
+                      ) : null}
 
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                         <div className="rounded-lg border p-3">
@@ -1146,8 +1207,11 @@ export function OcrDocumentsTable({
                             />
                           ) : null}
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
+                              <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
+                                {senderColumn === "normal" ? renderDuplicateBadge(row) : null}
+                              </div>
                               {senderColumn === "normal" ? (
                                 <div className="flex shrink-0 items-center gap-1">
                                   {renderProcessingControl(row)}
@@ -1189,6 +1253,7 @@ export function OcrDocumentsTable({
                         <div className="mt-1 text-sm text-muted-foreground line-clamp-2">{activeRow.ocrPreview}</div>
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
+                        {renderDuplicateBadge(activeRow)}
                         <Button type="button" variant="outline" size="sm" onClick={() => setDialogRow(activeRow)}>
                           拡大表示
                         </Button>
@@ -1223,6 +1288,15 @@ export function OcrDocumentsTable({
                     ) : null}
 
                     <div className="space-y-4">
+                      {isDuplicate(activeRow) ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                          <div className="flex items-center gap-2 font-medium">
+                            <AlertTriangle className="h-4 w-4" />
+                            重複候補
+                          </div>
+                          <div className="mt-1 text-xs">{duplicateDescription(activeRow)}</div>
+                        </div>
+                      ) : null}
                       <div className="space-y-4 rounded-lg border p-4">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <FileText className="h-4 w-4" />

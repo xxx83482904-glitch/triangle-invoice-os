@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { mailSorterCompany } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
+import { combineDuplicateInfo, findMailDocumentDuplicate, mailFileHash, type MailDuplicateInfo } from "@/lib/mail-duplicates";
 import { analyzeMailDocument, extractDocumentText } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
 import { mutateData, newId, readData } from "@/lib/store";
@@ -12,6 +13,9 @@ type SortResult = {
   category?: MailDocumentCategory;
   confidence?: number;
   duplicate?: boolean;
+  duplicateReason?: string;
+  duplicateScore?: number;
+  duplicateTitle?: string;
   error?: string;
   fileName: string;
   invoice?: {
@@ -90,11 +94,13 @@ function inferSenderName(text: string) {
 function buildMailSummaryMemo({
   classification,
   duplicate,
+  duplicateReason,
   invoice,
   senderName,
 }: {
   classification: MailDocumentClassification;
   duplicate?: boolean;
+  duplicateReason?: string;
   invoice?: {
     dueDate?: string;
     issueDate?: string;
@@ -123,7 +129,8 @@ function buildMailSummaryMemo({
     classification.paymentDestination ? `振込先: ${classification.paymentDestination}` : "",
     invoice?.issueDate ? `請求日: ${invoice.issueDate}` : "",
     invoice?.dueDate ? `支払期限: ${invoice.dueDate}` : "",
-    duplicate ? "判定: 重複候補のため既存の受領請求書に紐づけました" : `判定: ${classification.reason}`,
+    duplicate ? `重複: ${duplicateReason ?? "重複候補"}` : "",
+    duplicate ? "判定: 重複候補として保存しました" : `判定: ${classification.reason}`,
     invoice?.memo,
   ]
     .filter(Boolean)
@@ -250,6 +257,7 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    const fileHash = mailFileHash(buffer);
     const data = await readData();
     const extracted = await extractDocumentText(file.name, file.type, buffer);
     const { classification, invoice: inferred } = await analyzeMailDocument(data, extracted, company);
@@ -260,6 +268,17 @@ export async function POST(request: Request) {
         : inferSenderName(extracted.text);
     const id = newId();
     const timestamp = new Date().toISOString();
+    let duplicateInfo = findMailDocumentDuplicate({
+      beforeCreatedAt: timestamp,
+      candidate: {
+        category: classification.category,
+        fileHash,
+        ocrText: extracted.text,
+        senderName,
+      },
+      company,
+      data,
+    });
     const safeName = readableUploadFileName({ date: timestamp.slice(0, 10), extension, id, senderName });
     await saveReceivedInvoiceFile(safeName, buffer, file.type);
     const fileUrl = receivedInvoiceFileUrl(safeName);
@@ -282,10 +301,14 @@ export async function POST(request: Request) {
         mimeType: file.type,
         ocrText: extracted.text,
         confidence: classification.confidence,
+        fileHash,
+        duplicateOfMailDocumentId: duplicateInfo?.duplicateOfMailDocumentId,
+        duplicateReason: duplicateInfo?.duplicateReason,
+        duplicateScore: duplicateInfo?.duplicateScore,
         relatedReceivedInvoiceId: invoiceId,
         folderMonth: targetMonth,
         mailProcessed: false,
-        memo: buildMailSummaryMemo({ classification, invoice: inferred, senderName }),
+        memo: buildMailSummaryMemo({ classification, duplicate: Boolean(duplicateInfo), duplicateReason: duplicateInfo?.duplicateReason, invoice: inferred, senderName }),
         uploadedById: user.id,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -316,14 +339,33 @@ export async function POST(request: Request) {
             invoice.total === inferred.total &&
             inferred.total > 0,
         );
-        duplicate = Boolean(existing);
+        const invoiceDuplicateInfo: MailDuplicateInfo | null = existing
+          ? {
+              duplicateOfReceivedInvoiceId: existing.id,
+              duplicateReason: "同じ支払先・請求日・金額の受領請求書",
+              duplicateScore: 98,
+              duplicateTitle: existing.originalFileName,
+            }
+          : null;
+        duplicateInfo = combineDuplicateInfo(duplicateInfo, invoiceDuplicateInfo);
+        duplicate = Boolean(duplicateInfo);
         invoiceId = existing?.id ?? invoiceId;
         if (existing && targetMonth) {
           existing.folderMonth = targetMonth;
           existing.updatedAt = timestamp;
         }
         mailDocument.relatedReceivedInvoiceId = invoiceId;
-        mailDocument.memo = buildMailSummaryMemo({ classification, duplicate, invoice: inferred, senderName: mailDocument.senderName || senderName });
+        mailDocument.duplicateOfMailDocumentId = duplicateInfo?.duplicateOfMailDocumentId;
+        mailDocument.duplicateOfReceivedInvoiceId = duplicateInfo?.duplicateOfReceivedInvoiceId;
+        mailDocument.duplicateReason = duplicateInfo?.duplicateReason;
+        mailDocument.duplicateScore = duplicateInfo?.duplicateScore;
+        mailDocument.memo = buildMailSummaryMemo({
+          classification,
+          duplicate,
+          duplicateReason: duplicateInfo?.duplicateReason,
+          invoice: inferred,
+          senderName: mailDocument.senderName || senderName,
+        });
 
         const invoice: ReceivedInvoice = {
           id: invoiceId,
@@ -369,6 +411,9 @@ export async function POST(request: Request) {
         category: classification.category,
         confidence: classification.confidence,
         duplicate,
+        duplicateReason: duplicateInfo?.duplicateReason,
+        duplicateScore: duplicateInfo?.duplicateScore,
+        duplicateTitle: duplicateInfo?.duplicateTitle,
         fileName: safeName,
         invoice: {
           dueDate: inferred.dueDate,
@@ -395,9 +440,13 @@ export async function POST(request: Request) {
       mimeType: file.type,
       ocrText: extracted.text,
       confidence: classification.confidence,
+      fileHash,
+      duplicateOfMailDocumentId: duplicateInfo?.duplicateOfMailDocumentId,
+      duplicateReason: duplicateInfo?.duplicateReason,
+      duplicateScore: duplicateInfo?.duplicateScore,
       folderMonth: targetMonth,
       mailProcessed: false,
-      memo: buildMailSummaryMemo({ classification, senderName }),
+      memo: buildMailSummaryMemo({ classification, duplicate: Boolean(duplicateInfo), duplicateReason: duplicateInfo?.duplicateReason, senderName }),
       uploadedById: user.id,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -421,6 +470,10 @@ export async function POST(request: Request) {
     results.push({
       category: mailDocument.category,
       confidence: classification.confidence,
+      duplicate: Boolean(duplicateInfo),
+      duplicateReason: duplicateInfo?.duplicateReason,
+      duplicateScore: duplicateInfo?.duplicateScore,
+      duplicateTitle: duplicateInfo?.duplicateTitle,
       fileName: safeName,
       reason: classification.reason,
       savedAs: "other-document",

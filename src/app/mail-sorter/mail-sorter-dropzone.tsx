@@ -1,6 +1,6 @@
 "use client";
 
-import { FileCheck2, FolderArchive, Loader2, UploadCloud } from "lucide-react";
+import { AlertTriangle, FileCheck2, FolderArchive, Loader2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -16,6 +16,9 @@ type SortResult = {
   category?: MailDocumentCategory;
   confidence?: number;
   duplicate?: boolean;
+  duplicateReason?: string;
+  duplicateScore?: number;
+  duplicateTitle?: string;
   error?: string;
   fileName: string;
   invoice?: {
@@ -79,9 +82,12 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
       router.refresh();
 
       const errorCount = newResults.filter((r) => r.error).length;
+      const duplicateCount = newResults.filter((r) => r.duplicate).length;
       const okCount = newResults.length - errorCount;
       if (errorCount > 0) {
         toast({ title: `${okCount}件完了、${errorCount}件エラー`, variant: "default" });
+      } else if (duplicateCount > 0) {
+        toast({ title: `${okCount}件完了、${duplicateCount}件が重複候補です`, variant: "default" });
       } else {
         toast({ title: `${okCount}件の郵便物を仕分けしました`, variant: "success" });
       }
@@ -176,6 +182,12 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
                   <span className="min-w-0 truncate font-medium">{result.fileName}</span>
                   <div className="flex shrink-0 items-center gap-2">
                     {result.category ? <Badge variant="secondary">{categoryLabels[result.category]}</Badge> : null}
+                    {result.duplicate ? (
+                      <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-amber-800">
+                        <AlertTriangle className="h-3 w-3" />
+                        重複候補
+                      </Badge>
+                    ) : null}
                     {result.savedAs === "received-invoice" ? (
                       <Badge className="gap-1">
                         <FileCheck2 className="h-3 w-3" />
@@ -192,6 +204,13 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
                 <div className="mt-2 text-muted-foreground">
                   {result.error ?? `${result.reason ?? "仕分け完了"} / 信頼度 ${result.confidence ?? 0}%`}
                 </div>
+                {result.duplicate ? (
+                  <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    {result.duplicateReason ?? "重複候補として保存しました"}
+                    {result.duplicateTitle ? ` / 既存: ${result.duplicateTitle}` : ""}
+                    {result.duplicateScore ? ` / 類似度 ${result.duplicateScore}%` : ""}
+                  </div>
+                ) : null}
                 {result.invoice ? (
                   <div className="mt-2 grid gap-1 text-muted-foreground md:grid-cols-2">
                     <div>支払先: {result.invoice.vendorName}</div>
@@ -199,7 +218,6 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
                     <div>請求日: {result.invoice.issueDate}</div>
                     <div>支払期限: {result.invoice.dueDate}</div>
                     <div>金額: {yen.format(result.invoice.total)}</div>
-                    {result.duplicate ? <div className="text-amber-700">重複候補: 既存請求書に紐づけ</div> : null}
                   </div>
                 ) : null}
                 {result.warnings?.length ? (

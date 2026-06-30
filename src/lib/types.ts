@@ -216,6 +216,11 @@ export type MailDocument = {
   mimeType: string;
   ocrText?: string;
   confidence?: number;
+  fileHash?: string;
+  duplicateOfMailDocumentId?: string;
+  duplicateOfReceivedInvoiceId?: string;
+  duplicateReason?: string;
+  duplicateScore?: number;
   relatedReceivedInvoiceId?: string;
   mailProcessed?: boolean;
   memo?: string;

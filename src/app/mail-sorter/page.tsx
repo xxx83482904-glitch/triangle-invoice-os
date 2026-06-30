@@ -6,6 +6,7 @@ import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, mailSorterCompany, matchesCompany } from "@/lib/company";
+import { findMailDocumentDuplicate } from "@/lib/mail-duplicates";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readData } from "@/lib/store";
@@ -50,11 +51,40 @@ export default async function MailSorterPage({
         : undefined;
       const vendor = invoice ? data.vendors.find((item) => item.id === invoice.vendorId) : undefined;
       const project = invoice ? data.projects.find((item) => item.id === invoice.projectId) : undefined;
+      const duplicateMailDocument = document.duplicateOfMailDocumentId
+        ? data.mailDocuments.find((item) => item.id === document.duplicateOfMailDocumentId && !item.deletedAt)
+        : undefined;
+      const duplicateReceivedInvoice = document.duplicateOfReceivedInvoiceId
+        ? data.receivedInvoices.find((item) => item.id === document.duplicateOfReceivedInvoiceId && !item.deletedAt)
+        : undefined;
+      const detectedDuplicate = document.duplicateReason
+        ? undefined
+        : findMailDocumentDuplicate({
+            beforeCreatedAt: document.createdAt,
+            candidate: {
+              category: document.category,
+              fileHash: document.fileHash,
+              ocrText: document.ocrText,
+              senderName: document.senderName || vendor?.companyName,
+            },
+            company,
+            data,
+            excludeMailDocumentId: document.id,
+          });
 
       return {
         category: document.category,
         confidence: document.confidence,
         createdAt: document.createdAt,
+        duplicateOfMailDocumentId: document.duplicateOfMailDocumentId ?? detectedDuplicate?.duplicateOfMailDocumentId,
+        duplicateOfReceivedInvoiceId: document.duplicateOfReceivedInvoiceId ?? detectedDuplicate?.duplicateOfReceivedInvoiceId,
+        duplicateReason: document.duplicateReason ?? detectedDuplicate?.duplicateReason,
+        duplicateScore: document.duplicateScore ?? detectedDuplicate?.duplicateScore,
+        duplicateTitle:
+          duplicateMailDocument?.originalFileName ??
+          duplicateMailDocument?.title ??
+          duplicateReceivedInvoice?.originalFileName ??
+          detectedDuplicate?.duplicateTitle,
         extracted: invoice
           ? {
               dueDate: invoice.dueDate,
