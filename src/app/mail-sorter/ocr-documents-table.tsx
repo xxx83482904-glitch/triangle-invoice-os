@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud, X } from "lucide-react";
 import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +67,8 @@ type DuplicateFilter = "all" | "duplicates";
 type ProcessingFilter = "all" | "unprocessed" | "processed";
 type ProcessingStatusValue = "unprocessed" | "processed";
 type ViewMode = "folder" | "list";
+
+const EMPTY_ROWS: OcrDocumentListItem[] = [];
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
   INVOICE: "請求書",
@@ -355,7 +357,7 @@ export function OcrDocumentsTable({
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
   const activeGroup = groups.find(([month]) => month === activeMonth) ?? groups[0];
   const selectedMonth = activeGroup?.[0] ?? null;
-  const activeRows = activeGroup?.[1] ?? [];
+  const activeRows = activeGroup?.[1] ?? EMPTY_ROWS;
   const [activeRowId, setActiveRowId] = useState<string | null>(activeRows[0]?.id ?? null);
   const activeRow = activeRows.find((row) => row.id === activeRowId) ?? activeRows[0] ?? null;
   const listPreviewRow = filteredRows.find((row) => row.id === activeRowId) ?? filteredRows[0] ?? null;
@@ -369,13 +371,24 @@ export function OcrDocumentsTable({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
   const [pendingCategoryChange, setPendingCategoryChange] = useState<{ row: OcrDocumentListItem; category: MailDocumentCategory } | null>(null);
-  const lastClickedIndexRef = useRef<number | null>(null);
+  const lastSelectionAnchorIdRef = useRef<string | null>(null);
   const bulkDeleteFormRef = useRef<HTMLFormElement>(null);
 
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
   const duplicateRows = useMemo(() => rows.filter(isDuplicate), [rows]);
-  const selectedActiveCount = activeRows.filter((row) => selectedIds.has(row.id)).length;
-  const allActiveSelected = activeRows.length > 0 && selectedActiveCount === activeRows.length;
+  const listVisibleRows = useMemo(
+    () => listGroups.flatMap(([month, monthRows]) => (collapsedMonths.has(month) ? [] : monthRows)),
+    [collapsedMonths, listGroups],
+  );
+  const selectionScopeRows = viewMode === "list" ? listVisibleRows : activeRows;
+  const selectedScopeCount = selectionScopeRows.filter((row) => selectedIds.has(row.id)).length;
+  const allScopeSelected = selectionScopeRows.length > 0 && selectedScopeCount === selectionScopeRows.length;
+  const monthOptions = useMemo(() => {
+    const months = new Set<string>();
+    folders.forEach((folder) => months.add(folder.month));
+    rows.forEach((row) => months.add(row.folderMonth || monthKey(row.createdAt)));
+    return Array.from(months).sort((a, b) => b.localeCompare(a));
+  }, [folders, rows]);
   const pendingEdits = useMemo(() => {
     return rows
       .map((row) => ({
@@ -396,48 +409,62 @@ export function OcrDocumentsTable({
     setActiveRowId(monthRows[0]?.id ?? null);
   };
 
-  // #1: Shift+click range selection
-  // Keep a stable ref updated via effect so toggleRowSelection doesn't need activeRows as dep
-  const activeRowsRef = useRef(activeRows);
-  useEffect(() => { activeRowsRef.current = viewMode === "list" ? filteredRows : activeRows; });
+  const selectionScopeRowsRef = useRef(selectionScopeRows);
+  useEffect(() => {
+    selectionScopeRowsRef.current = viewMode === "list" ? listVisibleRows : activeRows;
+  }, [activeRows, listVisibleRows, viewMode]);
 
   const processingValueForRow = (row: OcrDocumentListItem): ProcessingStatusValue =>
     pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
 
   const categoryValueForRow = (row: OcrDocumentListItem) => pendingCategories[row.id] ?? row.category;
 
-  const setProcessingDraft = (row: OcrDocumentListItem, processingStatus: ProcessingStatusValue) => {
-    const original = isProcessed(row) ? "processed" : "unprocessed";
+  const applyProcessingDraft = (targetRows: OcrDocumentListItem[], processingStatus: ProcessingStatusValue) => {
+    const editableRows = targetRows.filter((row) => row.mailDocumentId || row.receivedInvoiceId);
+    if (!editableRows.length) return;
     setPendingProcessing((current) => {
       const next = { ...current };
-      if (processingStatus === original) delete next[row.id];
-      else next[row.id] = processingStatus;
+      for (const row of editableRows) {
+        const original = isProcessed(row) ? "processed" : "unprocessed";
+        if (processingStatus === original) delete next[row.id];
+        else next[row.id] = processingStatus;
+      }
       return next;
     });
   };
 
-  const setCategoryDraft = (row: OcrDocumentListItem, category: MailDocumentCategory) => {
+  const applyCategoryDraft = (targetRows: OcrDocumentListItem[], category: MailDocumentCategory) => {
+    const editableRows = targetRows.filter((row) => row.mailDocumentId);
+    if (!editableRows.length) return;
     setPendingCategories((current) => {
       const next = { ...current };
-      if (category === row.category) delete next[row.id];
-      else next[row.id] = category;
+      for (const row of editableRows) {
+        if (category === row.category) delete next[row.id];
+        else next[row.id] = category;
+      }
       return next;
     });
   };
 
-  const toggleRowSelection = useCallback((row: OcrDocumentListItem, index: number, shiftKey: boolean) => {
+  const selectedOrSingleRow = (row: OcrDocumentListItem) => (
+    selectedIds.has(row.id) && selectedRows.length > 1 ? selectedRows : [row]
+  );
+
+  const toggleRowSelection = useCallback((row: OcrDocumentListItem, shiftKey: boolean) => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (shiftKey && lastClickedIndexRef.current !== null) {
-        const from = Math.min(lastClickedIndexRef.current, index);
-        const to = Math.max(lastClickedIndexRef.current, index);
-        const shouldSelect = !current.has(row.id);
+      const scope = selectionScopeRowsRef.current;
+      const anchorIndex = lastSelectionAnchorIdRef.current
+        ? scope.findIndex((candidate) => candidate.id === lastSelectionAnchorIdRef.current)
+        : -1;
+      const targetIndex = scope.findIndex((candidate) => candidate.id === row.id);
+
+      if (shiftKey && anchorIndex >= 0 && targetIndex >= 0) {
+        const from = Math.min(anchorIndex, targetIndex);
+        const to = Math.max(anchorIndex, targetIndex);
         for (let i = from; i <= to; i++) {
-          const r = activeRowsRef.current[i];
-          if (r) {
-            if (shouldSelect) next.add(r.id);
-            else next.delete(r.id);
-          }
+          const r = scope[i];
+          if (r) next.add(r.id);
         }
       } else {
         if (next.has(row.id)) next.delete(row.id);
@@ -445,16 +472,16 @@ export function OcrDocumentsTable({
       }
       return next;
     });
-    lastClickedIndexRef.current = index;
+    lastSelectionAnchorIdRef.current = row.id;
   }, []);
 
-  const toggleActiveMonthSelection = () => {
+  const toggleVisibleSelection = () => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (allActiveSelected) {
-        activeRows.forEach((row) => next.delete(row.id));
+      if (allScopeSelected) {
+        selectionScopeRows.forEach((row) => next.delete(row.id));
       } else {
-        activeRows.forEach((row) => next.add(row.id));
+        selectionScopeRows.forEach((row) => next.add(row.id));
       }
       return next;
     });
@@ -547,23 +574,42 @@ export function OcrDocumentsTable({
     const rowsToMove = rows.filter((r) => ids.has(r.id) && (r.folderMonth || monthKey(r.createdAt)) !== targetMonth);
     if (!rowsToMove.length) return;
     startMoveTransition(async () => {
-      const formData = new FormData();
-      formData.set("company", company);
-      formData.set("targetMonth", targetMonth);
-      for (const row of rowsToMove) {
-        if (row.mailDocumentId) formData.append("mailDocumentId", row.mailDocumentId);
-        if (row.receivedInvoiceId) formData.append("receivedInvoiceId", row.receivedInvoiceId);
+      try {
+        const formData = new FormData();
+        formData.set("company", company);
+        formData.set("targetMonth", targetMonth);
+        for (const row of rowsToMove) {
+          if (row.mailDocumentId) formData.append("mailDocumentId", row.mailDocumentId);
+          if (row.receivedInvoiceId) formData.append("receivedInvoiceId", row.receivedInvoiceId);
+        }
+        await moveOcrDocumentToMonth(formData);
+        setSelectedIds((current) => {
+          const next = new Set(current);
+          rowsToMove.forEach((row) => next.delete(row.id));
+          return next;
+        });
+        toast({ title: `${rowsToMove.length}件を${monthLabel(targetMonth)}へ移動しました`, variant: "success" });
+        router.refresh();
+      } catch (error) {
+        toast({
+          title: "移動に失敗しました",
+          description: error instanceof Error ? error.message : "郵便物を移動できませんでした",
+          variant: "destructive",
+        });
+      } finally {
+        setDraggedIds(new Set());
+        setDragOverMonth(null);
       }
-      await moveOcrDocumentToMonth(formData);
-      setDraggedIds(new Set());
-      setDragOverMonth(null);
-      router.refresh();
     });
   };
 
   const handleDragStart = (row: OcrDocumentListItem) => {
     if (!canEdit) return;
     const idsToMove = selectedIds.has(row.id) && selectedIds.size > 1 ? new Set(selectedIds) : new Set([row.id]);
+    if (!selectedIds.has(row.id) || selectedIds.size <= 1) {
+      setSelectedIds(new Set([row.id]));
+    }
+    setActiveRowId(row.id);
     setDraggedIds(idsToMove);
   };
 
@@ -595,7 +641,7 @@ export function OcrDocumentsTable({
         className={processingStatusSelectClass(value === "processed")}
         aria-label="処理状態"
         onClick={(event) => event.stopPropagation()}
-        onChange={(event) => setProcessingDraft(row, event.currentTarget.value as ProcessingStatusValue)}
+        onChange={(event) => applyProcessingDraft(selectedOrSingleRow(row), event.currentTarget.value as ProcessingStatusValue)}
       >
         {processingStatusOptions.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -615,7 +661,7 @@ export function OcrDocumentsTable({
         className={categorySelectClass(value)}
         aria-label="分類"
         onClick={(event) => event.stopPropagation()}
-        onChange={(event) => setCategoryDraft(row, event.currentTarget.value as MailDocumentCategory)}
+        onChange={(event) => applyCategoryDraft(selectedOrSingleRow(row), event.currentTarget.value as MailDocumentCategory)}
       >
         {categoryOptions.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -662,9 +708,9 @@ export function OcrDocumentsTable({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleActiveMonthSelection} disabled={!activeRows.length}>
-              {allActiveSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-              {allActiveSelected ? "解除" : "表示中を選択"}
+            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleVisibleSelection} disabled={!selectionScopeRows.length}>
+              {allScopeSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+              {allScopeSelected ? "表示中を解除" : "表示中を選択"}
             </Button>
             <Button asChild size="sm" variant="outline" className="gap-1">
               <a href={exportHref}>
@@ -727,6 +773,87 @@ export function OcrDocumentsTable({
           </div>
         </CardHeader>
         <CardContent>
+          {selectedRows.length || pendingEdits.length ? (
+            <div className="sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur">
+              <Badge variant={selectedRows.length ? "default" : "secondary"}>
+                {selectedRows.length ? `${selectedRows.length}件選択` : "未保存あり"}
+              </Badge>
+              {pendingEdits.length ? <Badge variant="outline">{pendingEdits.length}件の変更</Badge> : null}
+              <select
+                aria-label="選択した書類の処理状態"
+                className="h-9 min-w-32 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                disabled={!canEdit || !selectedRows.length}
+                value=""
+                onChange={(event) => {
+                  const value = event.currentTarget.value as ProcessingStatusValue;
+                  if (value) applyProcessingDraft(selectedRows, value);
+                }}
+              >
+                <option value="">処理状態</option>
+                {processingStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <select
+                aria-label="選択した書類の分類"
+                className="h-9 min-w-32 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                disabled={!canEdit || !selectedRows.some((row) => row.mailDocumentId)}
+                value=""
+                onChange={(event) => {
+                  const value = event.currentTarget.value as MailDocumentCategory;
+                  if (value) applyCategoryDraft(selectedRows, value);
+                }}
+              >
+                <option value="">分類</option>
+                {categoryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <select
+                aria-label="選択した書類の移動先"
+                className="h-9 min-w-36 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                disabled={!canEdit || !selectedRows.length || isMoving}
+                value=""
+                onChange={(event) => {
+                  const targetMonth = event.currentTarget.value;
+                  if (targetMonth) moveRowsToMonth(new Set(selectedRows.map((row) => row.id)), targetMonth);
+                }}
+              >
+                <option value="">月へ移動</option>
+                {monthOptions.map((month) => (
+                  <option key={month} value={month}>{monthLabel(month)}</option>
+                ))}
+              </select>
+              <form
+                action={saveMailSorterBulkEdits}
+                className="ml-auto flex items-center gap-2"
+                onSubmit={() => {
+                  setPendingCategories({});
+                  setPendingProcessing({});
+                }}
+              >
+                <input type="hidden" name="changes" value={pendingEditsJson} readOnly />
+                <Button type="submit" size="sm" className="h-9 gap-1" disabled={!pendingEdits.length}>
+                  <Save className="h-3.5 w-3.5" />
+                  すべて保存
+                </Button>
+              </form>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 gap-1"
+                disabled={!selectedRows.length}
+                onClick={() => {
+                  setSelectedIds(new Set());
+                  lastSelectionAnchorIdRef.current = null;
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+                選択解除
+              </Button>
+            </div>
+          ) : null}
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-2">
             {(["all", "unprocessed", "processed"] as ProcessingFilter[]).map((filter) => (
               <Button
@@ -774,20 +901,6 @@ export function OcrDocumentsTable({
             <Button type="button" size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => setViewMode("list")}>
               一覧
             </Button>
-            <form
-              action={saveMailSorterBulkEdits}
-              className="ml-auto flex items-center gap-2"
-              onSubmit={() => {
-                setPendingCategories({});
-                setPendingProcessing({});
-              }}
-            >
-              <input type="hidden" name="changes" value={pendingEditsJson} readOnly />
-              {pendingEdits.length ? <span className="text-xs text-muted-foreground">{pendingEdits.length}件の変更</span> : null}
-              <Button type="submit" size="sm" disabled={!pendingEdits.length}>
-                すべて保存
-              </Button>
-            </form>
           </div>
           {groups.length ? (
             viewMode === "list" ? (
@@ -887,19 +1000,23 @@ export function OcrDocumentsTable({
                                 const isSelected = selectedIds.has(row.id);
                                 const isActive = row.id === listPreviewRow?.id;
                                 const isDragging = draggedIds.has(row.id);
-                                const rowIndex = filteredRows.findIndex((candidate) => candidate.id === row.id);
                                 return (
                                   <tr
                                     key={row.id}
                                     draggable={canEdit}
                                     className={`cursor-pointer border-t transition hover:bg-muted/50 ${
                                       isActive ? "bg-primary/5" : ""
-                                    } ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"} ${
+                                    } ${isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""} ${
+                                      processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"
+                                    } ${
                                       isDragging ? "opacity-50" : ""
                                     }`}
-                                    onClick={() => {
+                                    onClick={(event) => {
                                       setActiveMonth(month);
                                       setActiveRowId(row.id);
+                                      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+                                        toggleRowSelection(row, event.shiftKey);
+                                      }
                                     }}
                                     onDragStart={(event) => {
                                       handleDragStart(row);
@@ -916,12 +1033,12 @@ export function OcrDocumentsTable({
                                         <input
                                           type="checkbox"
                                           checked={isSelected}
-                                          className="h-4 w-4 rounded border-muted-foreground/40"
+                                          className="h-5 w-5 rounded border-muted-foreground/40"
                                           aria-label={`${shippingSenderName(row)}を選択`}
                                           onChange={(event) => event.stopPropagation()}
                                           onClick={(event) => {
                                             event.stopPropagation();
-                                            toggleRowSelection(row, rowIndex, event.shiftKey);
+                                            toggleRowSelection(row, event.shiftKey);
                                           }}
                                         />
                                       ) : null}
@@ -1168,7 +1285,7 @@ export function OcrDocumentsTable({
                   {selectedRows.length ? <span className="text-primary">{selectedRows.length}件選択</span> : null}
                 </div>
                 <div className="space-y-1">
-                  {activeRows.map((row, index) => {
+                  {activeRows.map((row) => {
                     const isActive = row.id === activeRow?.id;
                     const isSelected = selectedIds.has(row.id);
                     const isDragging = draggedIds.has(row.id);
@@ -1180,12 +1297,20 @@ export function OcrDocumentsTable({
                         draggable={canEdit}
                         className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"} ${
                           isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"
-                        } ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
-                        onClick={() => setActiveRowId(row.id)}
+                        } ${isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""} ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
+                        onClick={(event) => {
+                          setActiveRowId(row.id);
+                          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+                            toggleRowSelection(row, event.shiftKey);
+                          }
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
                             setActiveRowId(row.id);
+                            if (event.shiftKey || event.metaKey || event.ctrlKey) {
+                              toggleRowSelection(row, event.shiftKey);
+                            }
                           }
                         }}
                         onDragStart={(event) => {
@@ -1200,14 +1325,14 @@ export function OcrDocumentsTable({
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-muted-foreground/40"
+                              className="mt-0.5 h-5 w-5 shrink-0 rounded border-muted-foreground/40"
                               aria-label={`${shippingSenderName(row)}を選択`}
                               onChange={(e) => { e.stopPropagation(); }}
-                              onClick={(e) => { e.stopPropagation(); toggleRowSelection(row, index, e.shiftKey); }}
+                              onClick={(e) => { e.stopPropagation(); toggleRowSelection(row, e.shiftKey); }}
                             />
                           ) : null}
                           <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center justify-between gap-2">
                               <div className="flex min-w-0 items-center gap-2">
                                 <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
                                 {senderColumn === "normal" ? renderDuplicateBadge(row) : null}
