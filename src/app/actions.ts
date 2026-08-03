@@ -947,7 +947,6 @@ export async function updateOcrDocumentInline(formData: FormData) {
 
   const mailDocumentId = optional(formData, "mailDocumentId");
   const receivedInvoiceId = optional(formData, "receivedInvoiceId");
-  const company = mailSorterCompany;
   const timestamp = now();
   const data = await readData();
   const before = {
@@ -994,7 +993,6 @@ export async function updateOcrDocumentInline(formData: FormData) {
   revalidatePath("/mail-sorter");
   revalidatePath("/received-invoices");
   revalidatePath("/dashboard");
-  redirect(`/mail-sorter?company=${company}`);
 }
 
 export async function updateMailDocumentCategory(formData: FormData) {

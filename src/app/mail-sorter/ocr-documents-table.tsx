@@ -287,6 +287,211 @@ function stopEditClick(event: React.MouseEvent<HTMLElement>) {
   event.stopPropagation();
 }
 
+function DocumentEditor({
+  canEdit,
+  company,
+  compact = false,
+  projects,
+  row,
+  statusOptions,
+  surface,
+  vendors,
+}: {
+  canEdit: boolean;
+  company: CompanyScope;
+  compact?: boolean;
+  projects: Option[];
+  row: OcrDocumentListItem;
+  statusOptions: Option[];
+  surface: "folder" | "list";
+  vendors: Option[];
+}) {
+  const editFormId = `ocr-edit-${surface}-${row.id}`;
+  const reflectFormId = `ocr-reflect-${surface}-${row.id}`;
+
+  return (
+    <div className="space-y-4" onClick={stopEditClick}>
+      <form id={editFormId} action={updateOcrDocumentInline} />
+      <input type="hidden" form={editFormId} name="company" value={company} />
+      {row.mailDocumentId ? <input type="hidden" form={editFormId} name="mailDocumentId" value={row.mailDocumentId} /> : null}
+      {row.receivedInvoiceId ? <input type="hidden" form={editFormId} name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
+      <input form={editFormId} type="hidden" name="fileName" value={row.fileName} />
+
+      {row.mailDocumentId && !row.receivedInvoiceId ? (
+        <>
+          <form id={reflectFormId} action={reflectMailDocumentToReceivedInvoice} />
+          <input type="hidden" form={reflectFormId} name="company" value={company} />
+          <input type="hidden" form={reflectFormId} name="mailDocumentId" value={row.mailDocumentId} />
+        </>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Pencil className="h-4 w-4" />
+          この郵便物を編集
+        </div>
+        <Button type="submit" form={editFormId} disabled={!canEdit} size="sm" className="gap-1">
+          <Save className="h-4 w-4" />
+          保存
+        </Button>
+      </div>
+
+      <div className={`grid gap-4 ${compact ? "" : "xl:grid-cols-2"}`}>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">発送元</label>
+            <Input
+              form={editFormId}
+              name="senderName"
+              defaultValue={shippingSenderName(row)}
+              disabled={!canEdit || !row.mailDocumentId}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">分類</label>
+            {row.mailDocumentId ? (
+              <select form={editFormId} name="category" defaultValue={row.category} className={selectClass()} disabled={!canEdit}>
+                {categoryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <input form={editFormId} type="hidden" name="category" value={row.category} />
+                <Badge>{categoryLabels[row.category]}</Badge>
+              </>
+            )}
+          </div>
+          {row.extracted ? (
+            <>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">支払先</label>
+                <select form={editFormId} name="vendorId" defaultValue={row.extracted.vendorId} className={selectClass()} disabled={!canEdit}>
+                  {vendors.map((vendor) => (
+                    <option key={vendor.value} value={vendor.value}>{vendor.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">案件</label>
+                <select form={editFormId} name="projectId" defaultValue={row.extracted.projectId} className={selectClass()} disabled={!canEdit}>
+                  {projects.map((project) => (
+                    <option key={project.value} value={project.value}>{project.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">状態</label>
+                <select form={editFormId} name="status" defaultValue={row.extracted.status ?? "REVIEWING"} className={selectClass()} disabled={!canEdit}>
+                  {statusOptions.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        <div className="space-y-3">
+          {row.extracted ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">請求日</label>
+                <Input form={editFormId} name="issueDate" type="date" defaultValue={row.extracted.issueDate} disabled={!canEdit} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">支払期限</label>
+                <Input form={editFormId} name="dueDate" type="date" defaultValue={row.extracted.dueDate} disabled={!canEdit} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">税抜</label>
+                <Input form={editFormId} name="subtotal" type="number" defaultValue={row.extracted.subtotal} disabled={!canEdit} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">消費税</label>
+                <Input form={editFormId} name="taxTotal" type="number" defaultValue={row.extracted.taxTotal} disabled={!canEdit} />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">合計</label>
+                <Input form={editFormId} name="total" type="number" defaultValue={row.extracted.total} disabled={!canEdit} className="font-mono" />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium">受領請求書へ反映</div>
+                  <div className="mt-1 text-xs text-muted-foreground">この郵便物を受領請求書として登録します。</div>
+                </div>
+                <Button
+                  type="submit"
+                  form={reflectFormId}
+                  disabled={!canEdit || !row.mailDocumentId || !vendors.length || !projects.length}
+                  size="sm"
+                  className="gap-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  反映
+                </Button>
+              </div>
+              <div className={`grid gap-3 ${compact ? "" : "md:grid-cols-2"}`}>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">支払先</label>
+                  <select form={reflectFormId} name="vendorId" defaultValue={vendors[0]?.value} className={selectClass()} disabled={!canEdit || !vendors.length} required>
+                    {vendors.map((vendor) => (
+                      <option key={vendor.value} value={vendor.value}>{vendor.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">案件</label>
+                  <select form={reflectFormId} name="projectId" defaultValue={projects[0]?.value} className={selectClass()} disabled={!canEdit || !projects.length} required>
+                    {projects.map((project) => (
+                      <option key={project.value} value={project.value}>{project.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">状態</label>
+                  <select form={reflectFormId} name="status" defaultValue="REVIEWING" className={selectClass()} disabled={!canEdit}>
+                    {statusOptions.map((status) => (
+                      <option key={status.value} value={status.value}>{status.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">請求日</label>
+                  <Input form={reflectFormId} name="issueDate" type="date" defaultValue={row.createdAt.slice(0, 10)} disabled={!canEdit} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">支払期限</label>
+                  <Input form={reflectFormId} name="dueDate" type="date" defaultValue={addDaysIso(row.createdAt.slice(0, 10), 30)} disabled={!canEdit} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">小計</label>
+                  <Input form={reflectFormId} name="subtotal" type="number" defaultValue={0} disabled={!canEdit} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">消費税</label>
+                  <Input form={reflectFormId} name="taxTotal" type="number" defaultValue={0} disabled={!canEdit} />
+                </div>
+                <div className={`space-y-2 ${compact ? "" : "md:col-span-2"}`}>
+                  <label className="text-xs font-medium text-muted-foreground">合計</label>
+                  <Input form={reflectFormId} name="total" type="number" defaultValue={0} disabled={!canEdit} className="font-mono" />
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">メモ</label>
+            <Textarea form={editFormId} name="memo" defaultValue={row.memo ?? ""} disabled={!canEdit} className="min-h-28" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ColumnMode = "compact" | "normal";
 
 type ResizeTarget = "folderMonth" | "folderSender" | "listPreview";
@@ -1016,6 +1221,8 @@ export function OcrDocumentsTable({
                                       setActiveRowId(row.id);
                                       if (event.shiftKey || event.metaKey || event.ctrlKey) {
                                         toggleRowSelection(row, event.shiftKey);
+                                      } else {
+                                        setShowEditor(true);
                                       }
                                     }}
                                     onDragStart={(event) => {
@@ -1118,6 +1325,38 @@ export function OcrDocumentsTable({
                             重複候補
                           </div>
                           <div className="mt-1 text-xs">{duplicateDescription(listPreviewRow)}</div>
+                        </div>
+                      ) : null}
+
+                      {canEdit ? (
+                        <div className="rounded-lg border">
+                          <button
+                            type="button"
+                            className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium"
+                            onClick={() => setShowEditor((current) => !current)}
+                            aria-expanded={showEditor}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Pencil className="h-4 w-4" />
+                              編集
+                            </span>
+                            {showEditor ? <Minimize2 className="h-4 w-4 text-muted-foreground" /> : <Maximize2 className="h-4 w-4 text-muted-foreground" />}
+                          </button>
+                          {showEditor ? (
+                            <div className="border-t p-3">
+                              <DocumentEditor
+                                key={listPreviewRow.id}
+                                canEdit={canEdit}
+                                company={company}
+                                compact
+                                projects={projects}
+                                row={listPreviewRow}
+                                statusOptions={statusOptions}
+                                surface="list"
+                                vendors={vendors}
+                              />
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
 
@@ -1302,6 +1541,8 @@ export function OcrDocumentsTable({
                           setActiveRowId(row.id);
                           if (event.shiftKey || event.metaKey || event.ctrlKey) {
                             toggleRowSelection(row, event.shiftKey);
+                          } else {
+                            setShowEditor(true);
                           }
                         }}
                         onKeyDown={(event) => {
@@ -1310,6 +1551,8 @@ export function OcrDocumentsTable({
                             setActiveRowId(row.id);
                             if (event.shiftKey || event.metaKey || event.ctrlKey) {
                               toggleRowSelection(row, event.shiftKey);
+                            } else {
+                              setShowEditor(true);
                             }
                           }
                         }}
