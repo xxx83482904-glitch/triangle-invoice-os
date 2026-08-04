@@ -105,23 +105,13 @@ function buildMailSummaryMemo({
     dueDate?: string;
     issueDate?: string;
     memo?: string;
-    subtotal?: number;
-    taxTotal?: number;
     total?: number;
   } | null;
   senderName: string;
 }) {
-  const amountSummary =
-    classification.amountSummary ||
-    (invoice?.total
-      ? [
-          `合計 ${invoice.total.toLocaleString("ja-JP")}円`,
-          invoice.subtotal ? `税抜 ${invoice.subtotal.toLocaleString("ja-JP")}円` : "",
-          invoice.taxTotal ? `消費税 ${invoice.taxTotal.toLocaleString("ja-JP")}円` : "",
-        ]
-          .filter(Boolean)
-          .join(" / ")
-      : "");
+  const amountSummary = invoice?.total
+    ? `合計 ${invoice.total.toLocaleString("ja-JP")}円`
+    : classification.amountSummary;
   return [
     `発送元: ${senderName}`,
     classification.contentSummary ? `内容: ${classification.contentSummary}` : "",
@@ -374,8 +364,8 @@ export async function POST(request: Request) {
           receivedDate: timestamp.slice(0, 10),
           issueDate: inferred.issueDate,
           dueDate: inferred.dueDate,
-          subtotal: inferred.subtotal,
-          taxTotal: inferred.taxTotal,
+          subtotal: 0,
+          taxTotal: 0,
           total: inferred.total,
           status: "REVIEWING",
           fileUrl,

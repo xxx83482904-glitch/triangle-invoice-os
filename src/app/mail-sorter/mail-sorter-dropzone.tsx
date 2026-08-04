@@ -121,8 +121,6 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
             setDragging(false);
             upload(event.dataTransfer.files);
           }}
-          role="button"
-          tabIndex={0}
         >
           <div className="flex items-center gap-3">
             {isPending ? (
@@ -159,6 +157,7 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
             ref={inputRef}
             className="sr-only"
             type="file"
+            aria-label="仕分けする郵便物ファイル"
             accept="application/pdf,image/jpeg,image/png"
             multiple
             onChange={(event) => {

@@ -103,7 +103,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
             href={navHref(item.href, company)}
             title={item.label}
             className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 transition ${
-              active ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" />
@@ -117,7 +117,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
             <button
               type="button"
               className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 transition ${
-                moreActive ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                moreActive ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               <Ellipsis className="h-4 w-4" />

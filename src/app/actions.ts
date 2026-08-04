@@ -974,8 +974,8 @@ export async function updateOcrDocumentInline(formData: FormData) {
       if (draft.projects.some((project) => project.id === projectId && !project.deletedAt)) receivedInvoice.projectId = projectId;
       receivedInvoice.issueDate = value(formData, "issueDate") || receivedInvoice.issueDate;
       receivedInvoice.dueDate = value(formData, "dueDate") || receivedInvoice.dueDate;
-      receivedInvoice.subtotal = money(formData, "subtotal");
-      receivedInvoice.taxTotal = money(formData, "taxTotal");
+      if (formData.has("subtotal")) receivedInvoice.subtotal = money(formData, "subtotal");
+      if (formData.has("taxTotal")) receivedInvoice.taxTotal = money(formData, "taxTotal");
       receivedInvoice.total = money(formData, "total");
       const status = receivedInvoiceStatus(value(formData, "status"));
       receivedInvoice.memo = optional(formData, "memo");
@@ -1222,10 +1222,9 @@ export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
   const projectId = value(formData, "projectId");
   const issueDate = value(formData, "issueDate") || now().slice(0, 10);
   const dueDate = value(formData, "dueDate") || addDays(issueDate, 30);
-  const subtotal = money(formData, "subtotal");
-  const taxTotal = money(formData, "taxTotal");
-  const totalInput = money(formData, "total");
-  const total = totalInput || subtotal + taxTotal;
+  const subtotal = 0;
+  const taxTotal = 0;
+  const total = money(formData, "total");
   const status = receivedInvoiceStatus(value(formData, "status"));
   const memo = optional(formData, "memo");
   const timestamp = now();

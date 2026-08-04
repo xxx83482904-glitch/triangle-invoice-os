@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud, X } from "lucide-react";
+import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud, X } from "lucide-react";
 import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -189,16 +189,9 @@ function memoRemainder(row: OcrDocumentListItem) {
   );
 }
 
-function hasConsistentTaxBreakdown(row: OcrDocumentListItem) {
-  const extracted = row.extracted;
-  if (!extracted?.total) return false;
-  const breakdownTotal = extracted.subtotal + extracted.taxTotal;
-  return breakdownTotal > 0 && Math.abs(breakdownTotal - extracted.total) <= Math.max(10, Math.round(extracted.total * 0.05));
-}
-
 function summaryLines(row: OcrDocumentListItem) {
   const content = memoField(row, "内容") || row.ocrPreview || "内容確認待ち";
-  const amount = memoField(row, "金額") || (row.extracted ? moneyFormatter.format(row.extracted.total) : "");
+  const amount = row.extracted ? moneyFormatter.format(row.extracted.total) : memoField(row, "金額");
   const paymentDestination = memoField(row, "振込先") || "記載なし / 未検出";
   const lines = [
     `発送元: ${memoField(row, "発送元") || shippingSenderName(row)}`,
@@ -212,10 +205,6 @@ function summaryLines(row: OcrDocumentListItem) {
     lines.push(`案件: ${row.extracted.projectName}`);
     lines.push(`請求日: ${formatDate(row.extracted.issueDate)}`);
     lines.push(`支払期限: ${formatDate(row.extracted.dueDate)}`);
-    if (hasConsistentTaxBreakdown(row)) {
-      lines.push(`税抜: ${moneyFormatter.format(row.extracted.subtotal)}`);
-      lines.push(`消費税: ${moneyFormatter.format(row.extracted.taxTotal)}`);
-    }
     lines.push(`合計: ${moneyFormatter.format(row.extracted.total)}`);
   }
   if (row.confidence) lines.push(`信頼度: ${row.confidence}%`);
@@ -403,14 +392,6 @@ function DocumentEditor({
                 <label className="text-xs font-medium text-muted-foreground">支払期限</label>
                 <Input form={editFormId} name="dueDate" type="date" defaultValue={row.extracted.dueDate} disabled={!canEdit} />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">税抜</label>
-                <Input form={editFormId} name="subtotal" type="number" defaultValue={row.extracted.subtotal} disabled={!canEdit} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">消費税</label>
-                <Input form={editFormId} name="taxTotal" type="number" defaultValue={row.extracted.taxTotal} disabled={!canEdit} />
-              </div>
               <div className="col-span-2 space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">合計</label>
                 <Input form={editFormId} name="total" type="number" defaultValue={row.extracted.total} disabled={!canEdit} className="font-mono" />
@@ -466,14 +447,6 @@ function DocumentEditor({
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">支払期限</label>
                   <Input form={reflectFormId} name="dueDate" type="date" defaultValue={addDaysIso(row.createdAt.slice(0, 10), 30)} disabled={!canEdit} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">小計</label>
-                  <Input form={reflectFormId} name="subtotal" type="number" defaultValue={0} disabled={!canEdit} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">消費税</label>
-                  <Input form={reflectFormId} name="taxTotal" type="number" defaultValue={0} disabled={!canEdit} />
                 </div>
                 <div className={`space-y-2 ${compact ? "" : "md:col-span-2"}`}>
                   <label className="text-xs font-medium text-muted-foreground">合計</label>
@@ -557,7 +530,7 @@ export function OcrDocumentsTable({
     }
     return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [filteredRows, folders]);
-  const listGroups = useMemo(() => groups.filter(([, monthRows]) => monthRows.length > 0), [groups]);
+  const listGroups = groups;
   const customFolderMonths = useMemo(() => new Set(folders.map((folder) => folder.month)), [folders]);
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
   const activeGroup = groups.find(([month]) => month === activeMonth) ?? groups[0];
@@ -897,6 +870,7 @@ export function OcrDocumentsTable({
         ref={folderUploadInputRef}
         className="sr-only"
         type="file"
+        aria-label="月フォルダーへ収納する郵便物"
         accept="application/pdf,image/jpeg,image/png"
         multiple
         onChange={(event) => {
@@ -937,10 +911,10 @@ export function OcrDocumentsTable({
             </Button>
             <form action={createMailFolder} className="flex items-center gap-2">
               <input type="hidden" name="company" value={company} />
-              <Input name="month" type="month" className="h-8 w-32 text-xs" disabled={!canEdit} />
+              <Input name="month" type="month" aria-label="作成する月" className="h-9 w-36 text-sm" disabled={!canEdit} required />
               <Button type="submit" size="sm" variant="outline" className="gap-1" disabled={!canEdit}>
-                <Folder className="h-3.5 w-3.5" />
-                フォルダー
+                <FolderPlus className="h-3.5 w-3.5" />
+                フォルダー作成
               </Button>
             </form>
             <Button type="button" size="sm" variant="outline" className="gap-1" onClick={openDropzone}>
@@ -1110,16 +1084,15 @@ export function OcrDocumentsTable({
           {groups.length ? (
             viewMode === "list" ? (
               <div
-                className="grid min-h-[640px] overflow-hidden rounded-lg border xl:grid-cols-[minmax(0,1fr)_8px_var(--mail-list-preview-width)]"
+                className="grid min-h-0 overflow-hidden rounded-lg border xl:min-h-[640px] xl:grid-cols-[minmax(0,1fr)_8px_var(--mail-list-preview-width)]"
                 style={listGridStyle}
               >
                 <div className="min-w-0 overflow-x-auto">
-                  {filteredRows.length ? (
-                    <table className="w-full min-w-[1040px] text-sm">
+                  {listGroups.length ? (
+                    <table className="w-full min-w-[920px] text-sm">
                       <thead className="bg-muted/50 text-xs text-muted-foreground">
                         <tr>
                           <th className="w-10 px-3 py-2 text-left"></th>
-                          <th className="px-3 py-2 text-left">月分類</th>
                           <th className="px-3 py-2 text-left">発送元</th>
                           <th className="px-3 py-2 text-left">処理</th>
                           <th className="px-3 py-2 text-left">分類</th>
@@ -1168,11 +1141,11 @@ export function OcrDocumentsTable({
                                 handleDrop(month);
                               }}
                             >
-                              <td colSpan={10} className="px-3 py-2">
+                              <td colSpan={9} className="px-3 py-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <button
                                     type="button"
-                                    className="flex items-center gap-2 text-left text-sm font-medium"
+                                    className="sticky left-3 z-10 flex items-center gap-2 bg-muted/30 pr-2 text-left text-sm font-medium"
                                     aria-expanded={!isCollapsed}
                                     onClick={() => toggleCollapsedMonth(month)}
                                   >
@@ -1180,7 +1153,7 @@ export function OcrDocumentsTable({
                                     <Folder className="h-4 w-4 text-primary" />
                                     <span>{monthLabel(month)}</span>
                                   </button>
-                                  <div className="flex items-center gap-2">
+                                  <div className="sticky right-3 z-10 ml-auto flex items-center gap-2 bg-muted/30 pl-2">
                                     <span className="text-xs text-muted-foreground">{monthRows.length}件</span>
                                     <Button
                                       type="button"
@@ -1250,7 +1223,6 @@ export function OcrDocumentsTable({
                                         />
                                       ) : null}
                                     </td>
-                                    <td className="whitespace-nowrap px-3 py-2">{monthLabel(month)}</td>
                                     <td className="max-w-[240px] truncate px-3 py-2 font-medium">{shippingSenderName(row)}</td>
                                     <td className="px-3 py-2">{renderProcessingControl(row)}</td>
                                     <td className="px-3 py-2">{renderCategoryControl(row)}</td>
@@ -1272,8 +1244,8 @@ export function OcrDocumentsTable({
                               })
                             ) : (
                               <tr className="border-t">
-                                <td colSpan={10} className="px-3 py-6 text-center text-xs text-muted-foreground">
-                                  この月の郵便物はありません。
+                                <td colSpan={9} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                                  <span className="sticky left-3 inline-block">この月の郵便物はありません。</span>
                                 </td>
                               </tr>
                             )}
@@ -1360,12 +1332,7 @@ export function OcrDocumentsTable({
                         </div>
                       ) : null}
 
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                        <div className="rounded-lg border p-3">
-                          <div className="text-xs font-medium text-muted-foreground">月分類</div>
-                          <div className="mt-1 text-sm font-medium">{monthLabel(listPreviewMonth)}</div>
-                          <div className="mt-2 truncate text-xs text-muted-foreground">{listPreviewRow.savedAs}</div>
-                        </div>
+                      <div className="grid gap-3">
                         <div className="rounded-lg border p-3">
                           <div className="text-xs font-medium text-muted-foreground">概要</div>
                           <div className="mt-1 space-y-1 text-sm">
@@ -1402,7 +1369,7 @@ export function OcrDocumentsTable({
                       </div>
                     </div>
                   ) : (
-                    <div className="flex h-full min-h-80 flex-col items-center justify-center text-sm text-muted-foreground">
+                    <div className="flex min-h-40 flex-col items-center justify-center text-sm text-muted-foreground xl:min-h-80">
                       郵便物を選択するとプレビューを表示します。
                     </div>
                   )}
@@ -1805,14 +1772,6 @@ export function OcrDocumentsTable({
                                 <label className="text-xs font-medium text-muted-foreground">支払期限</label>
                                 <Input form={`ocr-edit-${activeRow.id}`} name="dueDate" type="date" defaultValue={activeRow.extracted.dueDate} disabled={!canEdit} />
                               </div>
-                              <div className="space-y-2">
-                                <label className="text-xs font-medium text-muted-foreground">税抜</label>
-                                <Input form={`ocr-edit-${activeRow.id}`} name="subtotal" type="number" defaultValue={activeRow.extracted.subtotal} disabled={!canEdit} />
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-xs font-medium text-muted-foreground">消費税</label>
-                                <Input form={`ocr-edit-${activeRow.id}`} name="taxTotal" type="number" defaultValue={activeRow.extracted.taxTotal} disabled={!canEdit} />
-                              </div>
                               <div className="col-span-2 space-y-2">
                                 <label className="text-xs font-medium text-muted-foreground">合計</label>
                                 <Input form={`ocr-edit-${activeRow.id}`} name="total" type="number" defaultValue={activeRow.extracted.total} disabled={!canEdit} className="font-mono" />
@@ -1903,14 +1862,6 @@ export function OcrDocumentsTable({
                                     defaultValue={addDaysIso(activeRow.createdAt.slice(0, 10), 30)}
                                     disabled={!canEdit}
                                   />
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs font-medium text-muted-foreground">小計</label>
-                                  <Input form={`ocr-reflect-${activeRow.id}`} name="subtotal" type="number" defaultValue={0} disabled={!canEdit} />
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs font-medium text-muted-foreground">消費税</label>
-                                  <Input form={`ocr-reflect-${activeRow.id}`} name="taxTotal" type="number" defaultValue={0} disabled={!canEdit} />
                                 </div>
                                 <div className="space-y-2 md:col-span-2">
                                   <label className="text-xs font-medium text-muted-foreground">合計</label>
