@@ -6,10 +6,9 @@ import { AppShell, PageHeader } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, mailSorterCompany, matchesCompany } from "@/lib/company";
-import { findMailDocumentDuplicate } from "@/lib/mail-duplicates";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { readData } from "@/lib/store";
+import { readDataForRequest as readData } from "@/lib/store";
 
 function cleanText(value?: string) {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -57,34 +56,18 @@ export default async function MailSorterPage({
       const duplicateReceivedInvoice = document.duplicateOfReceivedInvoiceId
         ? data.receivedInvoices.find((item) => item.id === document.duplicateOfReceivedInvoiceId && !item.deletedAt)
         : undefined;
-      const detectedDuplicate = document.duplicateReason
-        ? undefined
-        : findMailDocumentDuplicate({
-            beforeCreatedAt: document.createdAt,
-            candidate: {
-              category: document.category,
-              fileHash: document.fileHash,
-              ocrText: document.ocrText,
-              senderName: document.senderName || vendor?.companyName,
-            },
-            company,
-            data,
-            excludeMailDocumentId: document.id,
-          });
-
       return {
         category: document.category,
         confidence: document.confidence,
         createdAt: document.createdAt,
-        duplicateOfMailDocumentId: document.duplicateOfMailDocumentId ?? detectedDuplicate?.duplicateOfMailDocumentId,
-        duplicateOfReceivedInvoiceId: document.duplicateOfReceivedInvoiceId ?? detectedDuplicate?.duplicateOfReceivedInvoiceId,
-        duplicateReason: document.duplicateReason ?? detectedDuplicate?.duplicateReason,
-        duplicateScore: document.duplicateScore ?? detectedDuplicate?.duplicateScore,
+        duplicateOfMailDocumentId: document.duplicateOfMailDocumentId,
+        duplicateOfReceivedInvoiceId: document.duplicateOfReceivedInvoiceId,
+        duplicateReason: document.duplicateReason,
+        duplicateScore: document.duplicateScore,
         duplicateTitle:
           duplicateMailDocument?.originalFileName ??
           duplicateMailDocument?.title ??
-          duplicateReceivedInvoice?.originalFileName ??
-          detectedDuplicate?.duplicateTitle,
+          duplicateReceivedInvoice?.originalFileName,
         extracted: invoice
           ? {
               dueDate: invoice.dueDate,
@@ -108,7 +91,6 @@ export default async function MailSorterPage({
         memo: document.memo,
         mimeType: document.mimeType,
         ocrPreview: previewText(document.ocrText),
-        ocrText: document.ocrText,
         receivedInvoiceId: invoice?.id,
         savedAs: invoice ? "受領請求書" : "その他書類",
         senderName: document.senderName || vendor?.companyName,
@@ -147,7 +129,6 @@ export default async function MailSorterPage({
         memo: invoice.memo,
         mimeType: invoice.mimeType,
         ocrPreview: previewText(invoice.ocrText),
-        ocrText: invoice.ocrText,
         receivedInvoiceId: invoice.id,
         savedAs: "受領請求書",
         senderName: vendor?.companyName,
@@ -164,7 +145,7 @@ export default async function MailSorterPage({
       >
         {can(user, "view:receivedInvoices") ? (
           <Button asChild variant="outline">
-            <Link href={`/received-invoices?company=${company}`}>受領請求書を見る</Link>
+            <Link href={`/received-invoices?company=${company}`} prefetch={false}>受領請求書を見る</Link>
           </Button>
         ) : null}
       </PageHeader>

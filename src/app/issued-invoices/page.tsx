@@ -16,7 +16,7 @@ import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/c
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { paidForIssued, readData, scopedProjectsForUser } from "@/lib/store";
+import { paidForIssued, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 
 export default async function IssuedInvoicesPage({
   searchParams,
@@ -45,7 +45,7 @@ export default async function IssuedInvoicesPage({
   return (
     <AppShell>
       <PageHeader title="発行請求書" description="自社が発行する請求書の作成、PDF出力、入金状況を管理します。">
-        <Button asChild variant="outline"><Link href={`/api/export/issued-invoices?company=${company}`}>CSVエクスポート</Link></Button>
+        <Button asChild variant="outline"><Link href={`/api/export/issued-invoices?company=${company}`} prefetch={false}>CSVエクスポート</Link></Button>
       </PageHeader>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_440px]">
@@ -65,7 +65,7 @@ export default async function IssuedInvoicesPage({
                     <TableCell>{formatDate(invoice.issueDate)}</TableCell>
                     <TableCell>{formatDate(invoice.dueDate)}</TableCell>
                     <TableCell>{data.clients.find((client) => client.id === invoice.clientId)?.companyName}</TableCell>
-                    <TableCell><Link href={`/projects/${invoice.projectId}?company=${company}`} className="hover:underline">{data.projects.find((project) => project.id === invoice.projectId)?.name}</Link></TableCell>
+                    <TableCell><Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline">{data.projects.find((project) => project.id === invoice.projectId)?.name}</Link></TableCell>
                     <TableCell>{yen.format(invoice.subtotal)}</TableCell>
                     <TableCell>{yen.format(invoice.taxTotal)}</TableCell>
                     <TableCell>{yen.format(invoice.total)}</TableCell>

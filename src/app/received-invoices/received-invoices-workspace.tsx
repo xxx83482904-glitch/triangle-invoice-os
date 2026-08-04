@@ -329,7 +329,7 @@ export function ReceivedInvoicesWorkspace({
                             >
                               <td className="max-w-[220px] truncate px-3 py-2 font-medium">{invoice.vendorName}</td>
                               <td className="max-w-[220px] truncate px-3 py-2">
-                                <Link href={`/projects/${invoice.projectId}?company=${company}`} className="hover:underline" onClick={(event) => event.stopPropagation()}>
+                                <Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline" onClick={(event) => event.stopPropagation()}>
                                   {invoice.projectName}
                                 </Link>
                               </td>

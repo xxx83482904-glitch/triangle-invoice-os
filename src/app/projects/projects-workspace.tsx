@@ -430,7 +430,7 @@ function ProjectDetailPanel({
             <p className="mt-1 text-sm text-muted-foreground">{row.clientName || "クライアント未設定"}</p>
           </div>
           <Button asChild size="icon" variant="outline" aria-label="案件詳細を開く">
-            <Link href={`/projects/${row.id}?company=${company}`}>
+            <Link href={`/projects/${row.id}?company=${company}`} prefetch={false}>
               <ExternalLink className="h-4 w-4" />
             </Link>
           </Button>
@@ -438,13 +438,13 @@ function ProjectDetailPanel({
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Button asChild variant="outline" className="justify-start">
-            <Link href={`/guest-invoices?company=${company}`}>
+            <Link href={`/guest-invoices?company=${company}`} prefetch={false}>
               <ReceiptText className="h-4 w-4" />
               請求作成
             </Link>
           </Button>
           <Button asChild variant="outline" className="justify-start">
-            <Link href={`/received-invoices?company=${company}`}>
+            <Link href={`/received-invoices?company=${company}`} prefetch={false}>
               <WalletCards className="h-4 w-4" />
               支払い確認
             </Link>

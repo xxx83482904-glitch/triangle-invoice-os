@@ -7,7 +7,7 @@ import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, mailSorterCompany, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, can, defaultPathForRole } from "@/lib/rbac";
-import { mutateData, newId, paidForIssued, paidForReceived, readData, writeData } from "@/lib/store";
+import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, writeData } from "@/lib/store";
 import type {
   AppData,
   Client,
@@ -42,32 +42,6 @@ function money(formData: FormData, key: string) {
 }
 
 const now = () => new Date().toISOString();
-const undoSnapshotKeys = [
-  "seedVersion",
-  "users",
-  "clients",
-  "vendors",
-  "selectOptions",
-  "projects",
-  "issuedInvoices",
-  "issuedInvoiceItems",
-  "receivedInvoices",
-  "mailFolders",
-  "mailDocuments",
-  "payments",
-  "attachments",
-  "invoiceNumberSettings",
-] as const;
-
-function restoreSnapshot(data: AppData, snapshot: unknown) {
-  if (!snapshot || typeof snapshot !== "object") throw new Error("Undo snapshot is missing.");
-  const source = snapshot as Record<string, unknown>;
-  const target = data as unknown as Record<string, unknown>;
-  for (const key of undoSnapshotKeys) {
-    if (key in source) target[key] = source[key];
-  }
-}
-
 function revalidateWorkspace() {
   for (const path of [
     "/",
@@ -332,7 +306,7 @@ export async function undoLastAction(formData: FormData) {
     redirect(returnPath);
   }
 
-  restoreSnapshot(data, targetLog.beforeStateJson);
+  restoreUndoState(data, targetLog.beforeStateJson);
   const timestamp = now();
   const restoredLog = data.auditLogs.find((log) => log.id === targetLog.id);
   if (restoredLog) {

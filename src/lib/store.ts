@@ -4,6 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileS
 import path from "node:path";
 import { compareSync, hashSync } from "bcryptjs";
 import { Pool } from "pg";
+import { cache } from "react";
 import { runtimeDataDir } from "@/lib/runtime-paths";
 import { defaultSelectOptions } from "@/lib/select-options";
 import type {
@@ -203,6 +204,35 @@ function seedData(): AppData {
 
 type AppDataRow = { value: AppData };
 type AppDataSnapshot = Omit<AppData, "auditLogs">;
+const undoCollectionKeys = [
+  "users",
+  "clients",
+  "vendors",
+  "selectOptions",
+  "projects",
+  "issuedInvoices",
+  "issuedInvoiceItems",
+  "receivedInvoices",
+  "mailFolders",
+  "mailDocuments",
+  "payments",
+  "attachments",
+  "invoiceNumberSettings",
+] as const;
+type UndoCollectionKey = (typeof undoCollectionKeys)[number];
+type UndoEntity = { id: string; [key: string]: unknown };
+type UndoPatch = {
+  format: "triangle-undo-patch-v1";
+  changes: Array<{
+    collection: UndoCollectionKey;
+    id: string;
+    index: number;
+    before: UndoEntity | null;
+  }>;
+};
+
+const MAX_AUDIT_LOGS = 1000;
+const MAX_UNDO_PATCHES = 50;
 
 let databasePool: Pool | null = null;
 
@@ -213,6 +243,113 @@ function isLocalDatabaseUrl(url: string) {
 function shouldUseDatabaseStore() {
   const url = process.env.DATABASE_URL;
   return Boolean(url && !isLocalDatabaseUrl(url));
+}
+
+function isUndoEntity(value: unknown): value is UndoEntity {
+  return Boolean(value && typeof value === "object" && typeof (value as { id?: unknown }).id === "string");
+}
+
+function isUndoPatch(value: unknown): value is UndoPatch {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as { format?: unknown }).format === "triangle-undo-patch-v1" &&
+      Array.isArray((value as { changes?: unknown }).changes),
+  );
+}
+
+function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
+  const changes: UndoPatch["changes"] = [];
+  for (const collection of undoCollectionKeys) {
+    const beforeRows = before[collection] as unknown[];
+    const afterRows = after[collection] as unknown[];
+    const beforeById = new Map(
+      beforeRows.filter(isUndoEntity).map((row, index) => [row.id, { index, row }] as const),
+    );
+    const afterById = new Map(afterRows.filter(isUndoEntity).map((row) => [row.id, row] as const));
+    const ids = new Set([...beforeById.keys(), ...afterById.keys()]);
+
+    for (const id of ids) {
+      const beforeItem = beforeById.get(id);
+      const afterItem = afterById.get(id);
+      if (JSON.stringify(beforeItem?.row) === JSON.stringify(afterItem)) continue;
+      changes.push({
+        collection,
+        id,
+        index: beforeItem?.index ?? 0,
+        before: beforeItem?.row ?? null,
+      });
+    }
+  }
+  return { format: "triangle-undo-patch-v1", changes };
+}
+
+function isLegacySnapshot(value: unknown): value is AppDataSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const source = value as Record<string, unknown>;
+  return undoCollectionKeys.every((key) => Array.isArray(source[key]));
+}
+
+export function restoreUndoState(data: AppData, snapshot: unknown) {
+  if (isUndoPatch(snapshot)) {
+    const target = data as unknown as Record<UndoCollectionKey, UndoEntity[]>;
+    for (const change of snapshot.changes) {
+      const rows = target[change.collection];
+      if (!Array.isArray(rows)) continue;
+      const currentIndex = rows.findIndex((row) => row.id === change.id);
+      if (change.before === null) {
+        if (currentIndex >= 0) rows.splice(currentIndex, 1);
+        continue;
+      }
+      if (currentIndex >= 0) {
+        rows[currentIndex] = change.before;
+      } else {
+        rows.splice(Math.min(change.index, rows.length), 0, change.before);
+      }
+    }
+    return;
+  }
+
+  if (!isLegacySnapshot(snapshot)) throw new Error("Undo snapshot is missing.");
+  const source = snapshot as unknown as Record<string, unknown>;
+  const target = data as unknown as Record<string, unknown>;
+  for (const key of undoCollectionKeys) target[key] = source[key];
+}
+
+function normalizeAuditHistory(data: AppData) {
+  let changed = false;
+  if (data.auditLogs.length > MAX_AUDIT_LOGS) {
+    data.auditLogs.splice(MAX_AUDIT_LOGS);
+    changed = true;
+  }
+
+  let retainedPatches = 0;
+  for (const log of data.auditLogs) {
+    if (!log.beforeStateJson) continue;
+    if (log.action === "UNDO_ACTION" || log.undoneAt || retainedPatches >= MAX_UNDO_PATCHES) {
+      delete log.beforeStateJson;
+      changed = true;
+      continue;
+    }
+    if (isUndoPatch(log.beforeStateJson)) {
+      retainedPatches += 1;
+      continue;
+    }
+    if (retainedPatches === 0 && isLegacySnapshot(log.beforeStateJson)) {
+      const patch = buildUndoPatch(log.beforeStateJson, data);
+      if (patch.changes.length) {
+        log.beforeStateJson = patch;
+        retainedPatches += 1;
+      } else {
+        delete log.beforeStateJson;
+      }
+      changed = true;
+      continue;
+    }
+    delete log.beforeStateJson;
+    changed = true;
+  }
+  return changed;
 }
 
 function databasePoolConfig() {
@@ -460,6 +597,7 @@ async function normalizeData(data: AppData) {
       changed = true;
     }
   }
+  if (normalizeAuditHistory(data)) changed = true;
   if (changed) await writeData(data);
   return data;
 }
@@ -468,6 +606,8 @@ export async function readData(): Promise<AppData> {
   const data = await readRawData();
   return normalizeData(data);
 }
+
+export const readDataForRequest = cache(readData);
 
 export async function writeData(data: AppData) {
   await writeRawData(data);
@@ -488,8 +628,9 @@ export async function mutateData<T>(
   beforeJson?: unknown,
 ) {
   const data = await readData();
-  const beforeStateJson = snapshotData(data);
+  const beforeState = snapshotData(data);
   const result = mutator(data);
+  const beforeStateJson = buildUndoPatch(beforeState, data);
   const audit: AuditLog = {
     id: newId(),
     userId,
@@ -497,11 +638,12 @@ export async function mutateData<T>(
     targetType,
     targetId,
     beforeJson,
-    beforeStateJson,
+    beforeStateJson: beforeStateJson.changes.length ? beforeStateJson : undefined,
     afterJson: result,
     createdAt: now(),
   };
   data.auditLogs.unshift(audit);
+  normalizeAuditHistory(data);
   await writeData(data);
   return result;
 }

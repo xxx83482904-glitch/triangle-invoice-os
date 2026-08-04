@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { can } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
+import { projectMoney, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 
 export default async function ProjectsPage({
   searchParams,

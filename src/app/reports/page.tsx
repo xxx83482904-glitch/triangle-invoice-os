@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { monthKey, percent, yen } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
-import { paidForIssued, paidForReceived, projectMoney, readData } from "@/lib/store";
+import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData } from "@/lib/store";
 
 export default async function ReportsPage({
   searchParams,
@@ -46,7 +46,7 @@ export default async function ReportsPage({
   return (
     <AppShell>
       <PageHeader title="レポート" description="月別、案件別、クライアント別、支払先別の数字をCSVに落とせる形で確認します。">
-        <Button asChild variant="outline"><Link href={`/api/export/projects?company=${company}`}>案件別CSV</Link></Button>
+        <Button asChild variant="outline"><Link href={`/api/export/projects?company=${company}`} prefetch={false}>案件別CSV</Link></Button>
       </PageHeader>
 
       <section className="grid gap-6 xl:grid-cols-2">

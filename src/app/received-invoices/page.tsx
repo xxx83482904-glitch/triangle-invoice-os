@@ -13,7 +13,7 @@ import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/c
 import { todayIso } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { paidForReceived, readData } from "@/lib/store";
+import { paidForReceived, readDataForRequest as readData } from "@/lib/store";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
 import { ReceivedInvoicesWorkspace, type ReceivedInvoiceWorkspaceItem } from "./received-invoices-workspace";
 
@@ -80,7 +80,7 @@ export default async function ReceivedInvoicesPage({
     <AppShell>
       <PageHeader title="受領請求書" description="請求書ファイルを直接ドロップすると、OCRで支払先・案件・日付・金額を仮仕分けします。">
         <Button asChild variant="outline">
-          <Link href={`/api/export/received-invoices?company=${company}`}>CSVエクスポート</Link>
+          <Link href={`/api/export/received-invoices?company=${company}`} prefetch={false}>CSVエクスポート</Link>
         </Button>
       </PageHeader>
 

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, Ellipsis, FileText, LayoutGrid, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ellipsis, FileText, LayoutGrid, LoaderCircle, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
@@ -34,6 +34,16 @@ function optionsForPath(pathname: string) {
   return pathname === "/mail-sorter" ? companyOptions.filter((option) => option.value === mailSorterCompany) : companyOptions;
 }
 
+function NavLinkPending({ className = "" }: { className?: string }) {
+  const { pending } = useLinkStatus();
+  return (
+    <LoaderCircle
+      aria-hidden
+      className={`h-3.5 w-3.5 shrink-0 animate-spin transition-opacity ${pending ? "opacity-100" : "opacity-0"} ${className}`}
+    />
+  );
+}
+
 export function CompanySwitch() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -50,7 +60,7 @@ export function CompanySwitch() {
           variant={company === option.value ? "default" : "ghost"}
           className="h-8 w-full rounded-lg px-2 text-xs"
         >
-          <Link href={scopedHref(pathname, searchParams, option.value)}>{option.shortLabel}</Link>
+          <Link href={scopedHref(pathname, searchParams, option.value)} prefetch={false}>{option.shortLabel}</Link>
         </Button>
       ))}
     </div>
@@ -73,7 +83,7 @@ export function MobileCompanySwitch() {
           variant={company === option.value ? "default" : "outline"}
           className="px-2"
         >
-          <Link href={scopedHref(pathname, searchParams, option.value)}>{option.shortLabel}</Link>
+          <Link href={scopedHref(pathname, searchParams, option.value)} prefetch={false}>{option.shortLabel}</Link>
         </Button>
       ))}
     </div>
@@ -101,13 +111,15 @@ export function MobileAppNav({ role }: { role: UserRole }) {
           <Link
             key={item.href}
             href={navHref(item.href, company)}
+            prefetch={false}
             title={item.label}
-            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 transition ${
+            className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 transition ${
               active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" />
             <span className="max-w-full truncate text-[10px] leading-tight">{item.label}</span>
+            <NavLinkPending className="absolute right-1 top-1" />
           </Link>
         );
       })}
@@ -129,9 +141,10 @@ export function MobileAppNav({ role }: { role: UserRole }) {
               const Icon = item.icon;
               return (
                 <DropdownMenuItem key={item.href} asChild>
-                  <Link href={navHref(item.href, company)} className="flex items-center gap-2">
+                  <Link href={navHref(item.href, company)} prefetch={false} className="flex items-center gap-2">
                     <Icon className="h-4 w-4" />
-                    {item.label}
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    <NavLinkPending />
                   </Link>
                 </DropdownMenuItem>
               );
@@ -157,6 +170,7 @@ export function AppNav({ role }: { role: UserRole }) {
           <Link
             key={item.href}
             href={navHref(item.href, company)}
+            prefetch={false}
             title={item.label}
             className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm transition ${
               active
@@ -166,6 +180,7 @@ export function AppNav({ role }: { role: UserRole }) {
           >
             <Icon className="h-4 w-4" />
             <span className="min-w-0 truncate">{item.label}</span>
+            <NavLinkPending className="ml-auto" />
           </Link>
         );
       })}
@@ -179,7 +194,7 @@ export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; 
   const href = defaultPathForRole(role);
 
   return (
-    <Link href={navHref(href, company)} className={compact ? "font-semibold" : "flex items-center gap-3 rounded-xl px-1"}>
+    <Link href={navHref(href, company)} prefetch={false} className={compact ? "font-semibold" : "flex items-center gap-3 rounded-xl px-1"}>
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-sm">T</div>
       {!compact ? (
         <div className="min-w-0">

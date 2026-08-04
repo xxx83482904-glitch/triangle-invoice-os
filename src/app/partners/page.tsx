@@ -12,7 +12,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { managedOptionGroups, optionGroupLabels, selectOptionsFor } from "@/lib/select-options";
-import { readData } from "@/lib/store";
+import { readDataForRequest as readData } from "@/lib/store";
 import type { SelectOptionGroup } from "@/lib/types";
 
 export default async function PartnersPage({

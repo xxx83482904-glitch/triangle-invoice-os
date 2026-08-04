@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { companyFromParam } from "@/lib/company";
 import { formatDate, percent, yen } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
-import { paidForIssued, paidForReceived, projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
+import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,7 +32,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     <AppShell>
       <PageHeader title={project.name} description={client?.companyName ?? ""}>
         <StatusBadge status={project.status} />
-        <Button asChild variant="outline"><Link href={`/projects?company=${company}`}>一覧へ</Link></Button>
+        <Button asChild variant="outline"><Link href={`/projects?company=${company}`} prefetch={false}>一覧へ</Link></Button>
       </PageHeader>
 
       {showTotals ? (

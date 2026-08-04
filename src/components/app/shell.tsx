@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { can, roleLabel } from "@/lib/rbac";
-import { readData } from "@/lib/store";
+import { readDataForRequest as readData } from "@/lib/store";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();

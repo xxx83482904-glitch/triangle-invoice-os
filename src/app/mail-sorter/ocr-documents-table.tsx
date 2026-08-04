@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud, X } from "lucide-react";
+import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud, X } from "lucide-react";
 import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +69,7 @@ type ProcessingStatusValue = "unprocessed" | "processed";
 type ViewMode = "folder" | "list";
 
 const EMPTY_ROWS: OcrDocumentListItem[] = [];
+const LIST_BATCH_SIZE = 40;
 
 const categoryLabels: Record<MailDocumentCategory, string> = {
   INVOICE: "請求書",
@@ -157,8 +158,53 @@ function processingStatusSelectClass(processed: boolean) {
 function shippingSenderName(row: OcrDocumentListItem) {
   if (row.senderName?.trim()) return row.senderName.trim();
   if (row.extracted?.vendorName && row.extracted.vendorName !== "支払先未設定") return row.extracted.vendorName;
-  const firstLine = row.ocrText?.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length >= 2 && line.length <= 40);
+  const firstLine = (row.ocrText || row.ocrPreview)?.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length >= 2 && line.length <= 40);
   return firstLine || row.fileName.replace(/\.[^.]+$/, "");
+}
+
+const ocrTextCache = new Map<string, string>();
+
+function OcrTextPanel({ row, className }: { row: OcrDocumentListItem; className: string }) {
+  const query = row.mailDocumentId
+    ? `mailDocumentId=${encodeURIComponent(row.mailDocumentId)}`
+    : row.receivedInvoiceId
+      ? `receivedInvoiceId=${encodeURIComponent(row.receivedInvoiceId)}`
+      : "";
+  const cacheKey = query || row.id;
+  const cachedText = ocrTextCache.get(cacheKey);
+  const [text, setText] = useState(row.ocrText ?? cachedText ?? row.ocrPreview ?? "");
+  const [loading, setLoading] = useState(Boolean(query && row.ocrText === undefined && cachedText === undefined));
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (row.ocrText !== undefined || cachedText !== undefined || !query) return;
+
+    const controller = new AbortController();
+    void fetch(`/api/mail-sorter/ocr-text?${query}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("OCR text request failed");
+        return response.json() as Promise<{ ocrText?: string }>;
+      })
+      .then((body) => {
+        const nextText = body.ocrText ?? "";
+        ocrTextCache.set(cacheKey, nextText);
+        setText(nextText);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setFailed(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [cacheKey, cachedText, query, row.ocrText]);
+
+  return (
+    <pre className={className}>
+      {failed ? "OCR本文を読み込めませんでした。" : text || (loading ? "OCR本文を読み込み中..." : "OCR本文はありません。")}
+    </pre>
+  );
 }
 
 function memoField(row: OcrDocumentListItem, label: string) {
@@ -494,6 +540,7 @@ export function OcrDocumentsTable({
 }) {
   const router = useRouter();
   const [isMoving, startMoveTransition] = useTransition();
+  const [isFiltering, startFilterTransition] = useTransition();
   const folderUploadInputRef = useRef<HTMLInputElement>(null);
   const [draggedIds, setDraggedIds] = useState<Set<string>>(new Set());
   const [dragOverMonth, setDragOverMonth] = useState<string | null>(null);
@@ -502,6 +549,7 @@ export function OcrDocumentsTable({
   const [duplicateFilter, setDuplicateFilter] = useState<DuplicateFilter>("all");
   const [processingFilter, setProcessingFilter] = useState<ProcessingFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [visibleListCount, setVisibleListCount] = useState(LIST_BATCH_SIZE);
   const [uploadTargetMonth, setUploadTargetMonth] = useState<string | null>(null);
   const [uploadingMonth, setUploadingMonth] = useState<string | null>(null);
   const [folderMonthWidth, setFolderMonthWidth] = useState(180);
@@ -531,6 +579,28 @@ export function OcrDocumentsTable({
     return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [filteredRows, folders]);
   const listGroups = groups;
+  const renderedListGroups = useMemo(() => {
+    return listGroups.reduce<{
+      groups: Array<[string, OcrDocumentListItem[]]>;
+      remaining: number;
+    }>((state, [month, monthRows]) => {
+      if (!monthRows.length) {
+        return { ...state, groups: [...state.groups, [month, monthRows]] };
+      }
+      if (state.remaining <= 0) return state;
+      const visibleRows = monthRows.slice(0, state.remaining);
+      return {
+        groups: [...state.groups, [month, visibleRows]],
+        remaining: state.remaining - visibleRows.length,
+      };
+    }, { groups: [], remaining: visibleListCount }).groups;
+  }, [listGroups, visibleListCount]);
+  const listMonthCounts = useMemo(
+    () => new Map(listGroups.map(([month, monthRows]) => [month, monthRows.length])),
+    [listGroups],
+  );
+  const renderedListRowCount = renderedListGroups.reduce((count, [, monthRows]) => count + monthRows.length, 0);
+  const hasMoreListRows = renderedListRowCount < filteredRows.length;
   const customFolderMonths = useMemo(() => new Set(folders.map((folder) => folder.month)), [folders]);
   const [activeMonth, setActiveMonth] = useState<string | null>(groups[0]?.[0] ?? null);
   const activeGroup = groups.find(([month]) => month === activeMonth) ?? groups[0];
@@ -1040,7 +1110,10 @@ export function OcrDocumentsTable({
                 type="button"
                 size="sm"
                 variant={processingFilter === filter ? "default" : "outline"}
-                onClick={() => setProcessingFilter(filter)}
+                onClick={() => startFilterTransition(() => {
+                  setProcessingFilter(filter);
+                  setVisibleListCount(LIST_BATCH_SIZE);
+                })}
               >
                 {filter === "all" ? "全件" : filter === "processed" ? "処理済み" : "未処理"}
               </Button>
@@ -1051,7 +1124,10 @@ export function OcrDocumentsTable({
                 type="button"
                 size="sm"
                 variant={categoryFilter === filter ? "default" : "outline"}
-                onClick={() => setCategoryFilter(filter)}
+                onClick={() => startFilterTransition(() => {
+                  setCategoryFilter(filter);
+                  setVisibleListCount(LIST_BATCH_SIZE);
+                })}
               >
                 {filter === "all" ? "全分類" : categoryLabels[filter]}
               </Button>
@@ -1060,7 +1136,10 @@ export function OcrDocumentsTable({
               type="button"
               size="sm"
               variant={duplicateFilter === "duplicates" ? "default" : "outline"}
-              onClick={() => setDuplicateFilter((current) => (current === "duplicates" ? "all" : "duplicates"))}
+              onClick={() => startFilterTransition(() => {
+                setDuplicateFilter((current) => (current === "duplicates" ? "all" : "duplicates"));
+                setVisibleListCount(LIST_BATCH_SIZE);
+              })}
               disabled={!duplicateRows.length}
             >
               重複候補{duplicateRows.length ? ` ${duplicateRows.length}` : ""}
@@ -1074,12 +1153,13 @@ export function OcrDocumentsTable({
             >
               重複を選択
             </Button>
-            <Button type="button" size="sm" variant={viewMode === "folder" ? "default" : "outline"} onClick={() => setViewMode("folder")}>
+            <Button type="button" size="sm" variant={viewMode === "folder" ? "default" : "outline"} onClick={() => startFilterTransition(() => setViewMode("folder"))}>
               フォルダー
             </Button>
-            <Button type="button" size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => setViewMode("list")}>
+            <Button type="button" size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => startFilterTransition(() => setViewMode("list"))}>
               一覧
             </Button>
+            <LoaderCircle aria-hidden className={`h-4 w-4 animate-spin transition-opacity ${isFiltering ? "opacity-100" : "opacity-0"}`} />
           </div>
           {groups.length ? (
             viewMode === "list" ? (
@@ -1104,7 +1184,7 @@ export function OcrDocumentsTable({
                         </tr>
                       </thead>
                       <tbody>
-                        {listGroups.map(([month, monthRows]) => {
+                        {renderedListGroups.map(([month, monthRows]) => {
                           const isCollapsed = collapsedMonths.has(month);
                           const isDocumentDragOver = dragOverMonth === month;
                           const isFileDragOver = fileDragMonth === month;
@@ -1154,7 +1234,7 @@ export function OcrDocumentsTable({
                                     <span>{monthLabel(month)}</span>
                                   </button>
                                   <div className="sticky right-3 z-10 ml-auto flex items-center gap-2 bg-muted/30 pl-2">
-                                    <span className="text-xs text-muted-foreground">{monthRows.length}件</span>
+                                    <span className="text-xs text-muted-foreground">{listMonthCounts.get(month) ?? monthRows.length}件</span>
                                     <Button
                                       type="button"
                                       size="sm"
@@ -1257,6 +1337,18 @@ export function OcrDocumentsTable({
                   ) : (
                     <div className="py-12 text-center text-sm text-muted-foreground">条件に合う郵便物がありません。</div>
                   )}
+                  {hasMoreListRows ? (
+                    <div className="sticky left-0 flex w-full justify-center border-t bg-background p-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startFilterTransition(() => setVisibleListCount((count) => count + LIST_BATCH_SIZE))}
+                      >
+                        さらに表示（残り{filteredRows.length - renderedListRowCount}件）
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div
@@ -1363,9 +1455,11 @@ export function OcrDocumentsTable({
 
                       <div className="space-y-2 rounded-lg border p-3">
                         <div className="text-sm font-medium">OCR本文</div>
-                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
-                          {listPreviewRow.ocrText || "OCR本文はありません。"}
-                        </pre>
+                        <OcrTextPanel
+                          key={listPreviewRow.id}
+                          row={listPreviewRow}
+                          className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5"
+                        />
                       </div>
                     </div>
                   ) : (
@@ -1650,14 +1744,16 @@ export function OcrDocumentsTable({
                         </dl>
                         {activeRow.extracted?.projectId ? (
                           <Button asChild variant="outline" size="sm">
-                            <Link href={`/projects/${activeRow.extracted.projectId}?company=${company}`}>案件を開く</Link>
+                            <Link href={`/projects/${activeRow.extracted.projectId}?company=${company}`} prefetch={false}>案件を開く</Link>
                           </Button>
                         ) : null}
                         <div className="space-y-2">
                           <div className="text-sm font-medium">OCR本文</div>
-                          <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
-                            {activeRow.ocrText || "OCR本文はありません。"}
-                          </pre>
+                          <OcrTextPanel
+                            key={activeRow.id}
+                            row={activeRow}
+                            className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5"
+                          />
                         </div>
                       </div>
 
@@ -1939,14 +2035,16 @@ export function OcrDocumentsTable({
                   </dl>
                   {dialogRow.extracted?.projectId ? (
                     <Button asChild variant="outline" size="sm">
-                      <Link href={`/projects/${dialogRow.extracted.projectId}?company=${company}`}>案件を開く</Link>
+                      <Link href={`/projects/${dialogRow.extracted.projectId}?company=${company}`} prefetch={false}>案件を開く</Link>
                     </Button>
                   ) : null}
                   <div className="space-y-2">
                     <div className="text-sm font-medium">OCR本文</div>
-                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
-                      {dialogRow.ocrText || "OCR本文はありません。"}
-                    </pre>
+                    <OcrTextPanel
+                      key={dialogRow.id}
+                      row={dialogRow}
+                      className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5"
+                    />
                   </div>
                 </div>
                 <div className="min-h-0 space-y-3 overflow-hidden rounded-md border p-4">

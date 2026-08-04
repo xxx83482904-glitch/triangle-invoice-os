@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { compare } from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
-import { readData } from "@/lib/store";
+import { cache } from "react";
+import { readData, readDataForRequest } from "@/lib/store";
 import type { User } from "@/lib/types";
 
 const cookieName = "triangle-session";
@@ -58,7 +59,7 @@ export async function signOut() {
   cookieStore.delete(cookieName);
 }
 
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(cookieName)?.value;
   if (!token) return null;
@@ -66,7 +67,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   try {
     const verified = await jwtVerify(token, secretKey());
     const payload = verified.payload as SessionUser;
-    const user = (await readData()).users.find((item) => item.id === payload.id && !item.deletedAt);
+    const user = (await readDataForRequest()).users.find((item) => item.id === payload.id && !item.deletedAt);
     if (!user) return null;
     return {
       id: user.id,
@@ -77,7 +78,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
-}
+});
 
 export async function requireUser() {
   const user = await getCurrentUser();

@@ -7,7 +7,7 @@ import { companyFromParam, matchesCompany, partnerMatchesCompany, type CompanySc
 import { yen } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { paidForIssued, projectMoney, readData, scopedProjectsForUser } from "@/lib/store";
+import { paidForIssued, projectMoney, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 import { DashboardTable } from "./dashboard-table";
 
 const MONTHS_JP = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];

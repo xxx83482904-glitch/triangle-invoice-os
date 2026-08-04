@@ -15,7 +15,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { selectOptionsFor } from "@/lib/select-options";
-import { readData } from "@/lib/store";
+import { readDataForRequest as readData } from "@/lib/store";
 
 function addDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00`);

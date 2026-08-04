@@ -13,7 +13,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate, todayIso, yen } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
-import { paidForIssued, paidForReceived, readData } from "@/lib/store";
+import { paidForIssued, paidForReceived, readDataForRequest as readData } from "@/lib/store";
 
 export default async function PaymentsPage({
   searchParams,

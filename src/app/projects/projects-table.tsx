@@ -178,7 +178,7 @@ function ProjectIdentity({ row }: { row: ProjectListRow }) {
   return (
     <div className="min-w-0">
       <div className="text-xs font-medium text-muted-foreground">No. {row.index}</div>
-      <Link href={`/projects/${row.id}`} className="block truncate text-xs font-medium hover:underline">
+      <Link href={`/projects/${row.id}`} prefetch={false} className="block truncate text-xs font-medium hover:underline">
         {row.name}
       </Link>
     </div>
