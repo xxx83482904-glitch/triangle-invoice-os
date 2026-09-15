@@ -36,8 +36,8 @@ function StateBadge({ row }: { row: DocumentRow }) {
 function editedRow(row: DocumentRow, edit?: IssuedEdit): DocumentRow {
   if (!edit) return row;
   return { ...row, title: edit.invoiceNumber, date: edit.issueDate, total: edit.total, status: edit.status,
-    statusLabel: edit.needsReview ? "OCR要確認" : issuedStatusLabels[edit.status],
-    state: edit.needsReview || edit.status === "DRAFT" ? "review" : ["PAID", "CANCELED"].includes(edit.status) ? "done" : "open" };
+    statusLabel: issuedStatusLabels[edit.status],
+    state: ["PAID", "CANCELED"].includes(edit.status) ? "done" : edit.needsReview || edit.status === "DRAFT" ? "review" : "open" };
 }
 
 function DocumentStatusControl({ row, edit, onEdit, company, disabled }: { row: DocumentRow; edit?: IssuedEdit; onEdit: (edit: IssuedEdit) => void; company: CompanyScope; disabled: boolean }) {
@@ -72,6 +72,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled }: {
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center gap-2">
       <StateBadge row={editedRow(row, edit)} />
+      {(edit?.needsReview ?? row.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
       <span className="text-xs text-muted-foreground">{documentKindLabels[row.kind]}</span>
       {fileUrl ? <Button asChild variant="outline" size="sm"><a href={fileUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />{generated ? "PDFを開く" : "原本を開く"}</a></Button> : null}
       <Button asChild variant="ghost" size="sm"><Link prefetch={false} href={row.sourceHref}>管理画面</Link></Button>
@@ -91,7 +92,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled }: {
       <label className="space-y-1 text-xs">請求金額<Input aria-label="請求金額" type="number" min="0" step="0.01" readOnly={!row.imported} value={current.total} onChange={(e) => update({ total: Number(e.target.value) })} /></label>
       <label className="grid gap-1 text-xs">状態<DocumentStatusControl row={row} edit={edit} onEdit={onEdit} company={company} disabled={disabled} /></label>
       <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums"><span>入金額 {number.format(row.paidAmount || 0)}</span><span>未入金額 {number.format(Math.max(0, (row.total || 0) - (row.paidAmount || 0)))}</span></div>
-      {row.imported ? <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-5" checked={!current.needsReview} onChange={(e) => update({ needsReview: !e.target.checked })} />原本と内容を確認済み</label> : null}
+      {row.imported ? <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-5" checked={!current.needsReview} onChange={(e) => update({ needsReview: !e.target.checked })} />原本と内容を確認済み（任意）</label> : null}
     </fieldset> : <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2 text-sm">
       <dt className="text-muted-foreground">取引先</dt><dd className="break-words">{row.counterpart || "未設定"}</dd>
       <dt className="text-muted-foreground">案件</dt><dd className="break-words">{row.projectName || "未設定"}</dd>
@@ -147,7 +148,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
   const filtered = useMemo(() => {
     const q = deferredQuery.normalize("NFKC").toLocaleLowerCase();
     return rows.filter((r) => (kind === "all" || r.kind === kind) && (category === "all" || r.category === category) && (state === "all" || r.state === state) &&
-      (paymentFilter === "all" || (!issuedOnly && kind !== "issued") || (r.kind === "issued" && !r.needsReview && (paymentFilter === "paid" ? r.status === "PAID" : !["PAID", "DRAFT", "CANCELED"].includes(r.status)))) &&
+      (paymentFilter === "all" || (!issuedOnly && kind !== "issued") || (r.kind === "issued" && (paymentFilter === "paid" ? r.status === "PAID" : !["PAID", "DRAFT", "CANCELED"].includes(r.status)))) &&
       (month === "all" || r.month === month) && [r.title, r.counterpart, r.projectName, r.fileName || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q))
       .sort((a, b) => sort === "amount-desc" ? (b.total || 0) - (a.total || 0) : sort === "name" ? a.counterpart.localeCompare(b.counterpart, "ja") : sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
   }, [rows, deferredQuery, kind, category, state, month, sort, paymentFilter, issuedOnly]);

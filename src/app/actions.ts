@@ -847,7 +847,7 @@ export async function recordIncomePayment(formData: FormData) {
 
   await mutateData(user.id, "RECORD_INCOME_PAYMENT", "Payment", payment.id, (data) => {
     const invoice = data.issuedInvoices.find((item) => item.id === invoiceId);
-    if (!invoice || !isBillableIssuedInvoice(invoice)) throw new Error("確認済みの発行請求書を選択してください");
+    if (!invoice || !isBillableIssuedInvoice(invoice)) throw new Error("金額のある発行済みの請求書を選択してください");
     if (!visibleProjects(data, user).some((p) => p.id === invoice.projectId)) throw new Error("この請求書に入金を登録する権限がありません");
     if (payment.amount <= 0 || payment.amount > invoice.total - paidForIssued(data, invoiceId)) throw new Error("未入金額の範囲で入力してください");
     data.payments.unshift(payment);

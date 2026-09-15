@@ -51,7 +51,7 @@ export function visibleProjects(data: AppData, user: Pick<User, "id" | "role">) 
 }
 
 export function isBillableIssuedInvoice(invoice: IssuedInvoice) {
-  return !invoice.deletedAt && !invoice.needsReview && invoice.status !== "DRAFT" && invoice.status !== "CANCELED";
+  return !invoice.deletedAt && invoice.total > 0 && invoice.status !== "DRAFT" && invoice.status !== "CANCELED";
 }
 
 export function documentRows(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope): DocumentRow[] {
@@ -79,8 +79,8 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
     rows.push({ id: `issued:${i.id}`, sourceId: i.id, kind: "issued", title: i.invoiceNumber, category: "INVOICE",
       counterpart: clients.get(i.clientId) ?? "請求先未設定", projectId: i.projectId, projectName: projectMap.get(i.projectId)!.name,
       month: month(i.issueDate), date: i.issueDate, dueDate: i.dueDate, total: i.total, status: payment.status, paidAmount: payment.paid, statusPaymentAmount: payment.statusPaid,
-      statusLabel: i.needsReview ? "OCR要確認" : issuedStatusLabels[payment.status],
-      state: i.needsReview || payment.status === "DRAFT" ? "review" : ["PAID", "CANCELED"].includes(payment.status) ? "done" : "open",
+      statusLabel: issuedStatusLabels[payment.status],
+      state: ["PAID", "CANCELED"].includes(payment.status) ? "done" : i.needsReview || payment.status === "DRAFT" ? "review" : "open",
       fileUrl: i.fileUrl || i.pdfUrl || `/api/issued-invoices/${i.id}/pdf`, fileName: i.originalFileName || `${i.invoiceNumber}.pdf`, mimeType: i.mimeType || "application/pdf",
       sourceHref: `/issued-invoices?company=${company}&document=${encodeURIComponent(`issued:${i.id}`)}`,
       needsReview: i.needsReview, imported: Boolean(i.fileUrl), editable: can(user, "manage:issuedInvoices"), updatedAt: i.updatedAt });

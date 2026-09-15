@@ -101,3 +101,33 @@ test("estimate status updates propagate without altering amounts or converted in
   assert.throws(() => updateEstimateStatus(data, billing, "JAPAN", { ...e, status: "DRAFT" }));
   assert.equal(e.status, "CONVERTED");
 });
+
+test("incomplete unreviewed invoices save without inventing dates or confirming OCR", () => {
+  const data = fixture();
+  for (const status of ["ISSUED", "SENT", "WAITING_PAYMENT"] as const) {
+    applyIssuedInvoiceEdits(data, billing, "JAPAN", [{ ...edit(data, status), needsReview: true, issueDate: "", dueDate: "", total: 0 }]);
+    const invoice = data.issuedInvoices[0];
+    assert.equal(invoice.status, status); assert.equal(invoice.needsReview, true);
+    assert.equal(invoice.issueDate, ""); assert.equal(invoice.dueDate, ""); assert.equal(invoice.total, 0);
+    assert.equal(documentRows(data, billing, "JAPAN").find((r) => r.sourceId === invoice.id)?.month, "undated");
+    assert.equal(projectMoney(data, "japan").invoicedAmount, 0); assert.equal(data.payments.length, 0);
+  }
+  const before = JSON.stringify(data);
+  assert.throws(() => applyIssuedInvoiceEdits(data, billing, "JAPAN", [{ ...edit(data, "PAID"), needsReview: true, paymentDate: "2026-09-15" }]), /金額/);
+  assert.equal(JSON.stringify(data), before);
+});
+
+test("unreviewed paid invoices reconcile totals and stay visible as paid with no document dates", () => {
+  const data = fixture();
+  const change = { ...edit(data, "PAID"), needsReview: true, issueDate: "", dueDate: "", paymentDate: "2026-09-15" };
+  applyIssuedInvoiceEdits(data, billing, "JAPAN", [change]);
+  const invoice = data.issuedInvoices[0];
+  assert.equal(invoice.needsReview, true); assert.equal(invoice.issueDate, ""); assert.equal(invoice.dueDate, "");
+  assert.equal(invoice.status, "PAID"); assert.equal(projectMoney(data, "japan").paidIncomeAmount, 12000);
+  const row = documentRows(data, billing, "JAPAN").find((r) => r.sourceId === invoice.id)!;
+  assert.equal(row.statusLabel, "入金完了"); assert.equal(row.state, "done"); assert.equal(row.needsReview, true);
+  applyIssuedInvoiceEdits(data, billing, "JAPAN", [{ ...edit(data, "WAITING_PAYMENT"), needsReview: true }]);
+  assert.equal(projectMoney(data, "japan").paidIncomeAmount, 0);
+  assert.equal(projectMoney(data, "japan").unpaidIncomeAmount, 12000);
+  assert.equal(data.issuedInvoices[0].needsReview, true);
+});

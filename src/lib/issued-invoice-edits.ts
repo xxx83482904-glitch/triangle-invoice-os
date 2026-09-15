@@ -33,9 +33,7 @@ export function applyIssuedInvoiceEdits(data: AppData, user: Pick<User, "id" | "
     const project = projects.get(edit.projectId);
     if (!invoice || !project) throw new Error("編集できない案件が含まれています");
     if (invoice.updatedAt !== edit.updatedAt) throw new Error("他の操作で更新されています。画面を再読込して確認してください");
-    if (edit.status !== "DRAFT" && edit.status !== "CANCELED" && (!edit.issueDate || !edit.dueDate || !edit.total || edit.needsReview)) {
-      throw new Error("原本確認・発行日・入金期限・金額を入力してから発行済みにしてください");
-    }
+    if (edit.status === "PAID" && edit.total <= 0) throw new Error("入金完了にする場合は金額を入力してください");
     if (edit.issueDate && edit.dueDate && edit.dueDate < edit.issueDate) throw new Error("入金期限は発行日以降にしてください");
     if (!invoice.fileUrl && invoice.total !== edit.total) throw new Error("手作成の請求書は明細と金額が一致する必要があります");
     const originalPayment = invoicePaymentSummary(draft, invoice);

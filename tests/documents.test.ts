@@ -75,10 +75,9 @@ test("OCR drafts and canceled invoices are excluded from financial totals", () =
   data.issuedInvoices[0].status = "CANCELED";
   assert.equal(isBillableIssuedInvoice(data.issuedInvoices[0]), false);
 });
-test("edits reject stale versions, inaccessible projects, missing review and bad dates", () => {
+test("edits reject stale versions, inaccessible projects and bad dates", () => {
   assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), updatedAt: "stale" }]));
   assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), projectId: "other" }]));
-  assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), needsReview: true }]));
   assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), issueDate: "2026-02-30" }]));
   assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), dueDate: "2026-01-01" }]));
 });

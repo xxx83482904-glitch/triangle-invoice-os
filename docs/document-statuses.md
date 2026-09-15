@@ -11,6 +11,10 @@ Updated: 2026-09-15
   in All Documents when the issued-invoice kind is selected.
 - Marking paid requires a payment date. A confirmation shows the remaining
   amount before creating an INCOME payment tagged `source: INVOICE_STATUS`.
+- Original-document confirmation is optional when saving edits. Issue date,
+  due date and amount can remain empty; entered dates must still be valid.
+  Paid status requires a positive amount and a date for any new income record.
+  Saving never silently checks the OCR confirmation box or invents document dates.
 - Repeating paid never adds the same amount twice. Stale versions are rejected.
 - Returning to unpaid soft-deletes only active payments with that source tag.
   Separately recorded income is retained; remaining partial income yields
@@ -25,13 +29,16 @@ Updated: 2026-09-15
 
 - Invoice lists, All Documents, project details, payment management, guest
   invoice views and invoice CSV exports derive payment status from active income.
-- Existing financial calculations use those same payment records. Draft/OCR
-  review and canceled invoices remain excluded from billable totals.
+- Existing financial calculations use those same payment records. Draft,
+  canceled and zero-amount invoices remain excluded from billable totals.
+  OCR warnings are informational: an explicitly selected issued/payment status
+  is included even without OCR confirmation. Paid filters and labels likewise
+  keep such invoices visible; their OCR warning remains separately displayed.
 - Historical status fields are not mass-rewritten on deployment. A conflicting
   displayed status is resolved from actual payment records at read time.
 - Received-invoice PAID still means payment made, not income received.
   Mail processing and received-invoice payment behavior are unchanged.
-- Status updates retain company, assignment, role, version and OCR-review checks.
+- Status updates retain company, assignment, role and version checks.
   Japan billing staff can update their permitted issued invoices; this does not
   grant access to dashboards, payment management, China, or other document kinds.
 - Audited updates participate in existing Undo, including their payment changes.
@@ -46,10 +53,10 @@ Updated: 2026-09-15
 
 ## Verification
 
-- `npm run test:statuses`: seven focused tests covering payment reconciliation,
+- `npm run test:statuses`: nine focused tests covering payment reconciliation,
   reversal protection, duplicate/stale requests, atomic batches, scope, historical
-  status consistency and estimate status restrictions.
-- Document, estimate and PDF suites: 41 tests total including status tests.
+  status consistency, incomplete/unreviewed saves and estimate status restrictions.
+- Document, estimate and PDF suites: 43 tests total including status tests.
 - Isolated local browser checks: paid confirmation/cancel, unpaid reversal,
   paid/unpaid filters, paid-on-create, SHIFT bulk update, Undo of income,
   estimate preview/list/All Documents synchronization, and converted locks.
