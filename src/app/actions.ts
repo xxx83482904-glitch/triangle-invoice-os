@@ -11,6 +11,7 @@ import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUnd
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
+import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
 import type {
   AppData,
   Client,
@@ -683,34 +684,10 @@ export async function createGuestIssuedInvoice(formData: FormData) {
   if (!project) throw new Error("案件が見つかりません");
   const company = companyFromParam(project.company);
 
-  const descriptions = formData.getAll("itemDescription").map(String);
-  const quantities = formData.getAll("itemQuantity").map(Number);
-  const unitPrices = formData.getAll("itemUnitPrice").map(Number);
-  const taxRates = formData.getAll("itemTaxRate").map(Number);
   const invoiceId = newId();
-
-  const items: IssuedInvoiceItem[] = descriptions
-    .map((description, index) => ({
-      id: newId(),
-      invoiceId,
-      description: description.trim(),
-      quantity: Number.isFinite(quantities[index]) ? quantities[index] : 0,
-      unitPrice: Number.isFinite(unitPrices[index]) ? unitPrices[index] : 0,
-      taxRate: taxRates[index] as IssuedInvoiceItem["taxRate"],
-      amount: 0,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }))
-    .filter((item) => item.description && item.quantity > 0);
-
-  if (!items.length) throw new Error("明細を1行以上入力してください");
-
-  for (const item of items) item.amount = Math.round(item.quantity * item.unitPrice);
-  const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-  const taxTotal = items.reduce((sum, item) => {
-    if (item.taxRate === 10 || item.taxRate === 8) return sum + Math.round(item.amount * (item.taxRate / 100));
-    return sum;
-  }, 0);
+  const items: IssuedInvoiceItem[] = documentItemsFromFormData(formData).map((item) => ({ ...item,
+    id: newId(), invoiceId, amount: Math.round(item.quantity * item.unitPrice), createdAt: timestamp, updatedAt: timestamp }));
+  const { subtotal, taxTotal } = documentItemTotals(items);
 
   const invoice: IssuedInvoice = {
     id: invoiceId,
@@ -752,33 +729,11 @@ export async function createIssuedInvoice(formData: FormData) {
     throw new Error("請求書番号が重複しています");
   }
 
-  const descriptions = formData.getAll("itemDescription").map(String);
-  const quantities = formData.getAll("itemQuantity").map(Number);
-  const unitPrices = formData.getAll("itemUnitPrice").map(Number);
-  const taxRates = formData.getAll("itemTaxRate").map(Number);
-
-  const invoiceId = newId();
   const timestamp = now();
-  const items: IssuedInvoiceItem[] = descriptions
-    .map((description, index) => ({
-      id: newId(),
-      invoiceId,
-      description: description.trim(),
-      quantity: Number.isFinite(quantities[index]) ? quantities[index] : 0,
-      unitPrice: Number.isFinite(unitPrices[index]) ? unitPrices[index] : 0,
-      taxRate: taxRates[index] as IssuedInvoiceItem["taxRate"],
-      amount: 0,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }))
-    .filter((item) => item.description && item.quantity > 0);
-
-  for (const item of items) item.amount = Math.round(item.quantity * item.unitPrice);
-  const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-  const taxTotal = items.reduce((sum, item) => {
-    if (item.taxRate === 10 || item.taxRate === 8) return sum + Math.round(item.amount * (item.taxRate / 100));
-    return sum;
-  }, 0);
+  const invoiceId = newId();
+  const items: IssuedInvoiceItem[] = documentItemsFromFormData(formData).map((item) => ({ ...item,
+    id: newId(), invoiceId, amount: Math.round(item.quantity * item.unitPrice), createdAt: timestamp, updatedAt: timestamp }));
+  const { subtotal, taxTotal } = documentItemTotals(items);
 
   const invoice: IssuedInvoice = {
     id: invoiceId,

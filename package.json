@@ -12,6 +12,7 @@
     "test:invoice-pdf": "node --import tsx --test tests/issued-invoice-pdf.test.ts",
     "test:estimates": "node --conditions=react-server --import tsx --test tests/estimates.test.ts",
     "test:statuses": "node --conditions=react-server --import tsx --test tests/status-consistency.test.ts",
+    "test:editing": "node --conditions=react-server --import tsx --test tests/document-editing.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

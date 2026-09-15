@@ -6,11 +6,12 @@ import { AppShell, PageHeader } from "@/components/app/shell";
 import { DocumentsWorkspace } from "@/components/app/documents-workspace";
 import { InvoiceDropzone } from "@/components/app/invoice-dropzone";
 import { InvoiceCreateDialog, InvoiceCreateSubmit } from "@/components/app/invoice-create-dialog";
+import { DocumentItemsEditor } from "@/components/app/document-items-editor";
+import { InvoiceProjectFields } from "@/components/app/editable-project-select";
 import { documentRows, issuedStatusLabels } from "@/lib/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { matchesCompany, partnerMatchesCompany } from "@/lib/company";
@@ -72,37 +73,8 @@ export default async function IssuedInvoicesPage({
                   <div className="space-y-2"><Label htmlFor="new-due-date">支払期限</Label><Input id="new-due-date" name="dueDate" type="date" required /></div>
                   <div className="space-y-2"><Label htmlFor="new-payment-date">入金日（入金完了の場合）</Label><Input id="new-payment-date" name="paymentDate" type="date" defaultValue={todayIso()} /></div>
                 </div>
-                <div className="space-y-2">
-                  <Label>案件名</Label>
-                  <Select name="projectId" required><SelectTrigger aria-label="案件名" className="w-full"><SelectValue placeholder="案件を選択" /></SelectTrigger><SelectContent>{projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent></Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>請求先会社名</Label>
-                  <CreatableSelect
-                    name="clientId"
-                    options={clients.map((client) => ({ label: client.companyName, value: client.id }))}
-                    placeholder="請求先を選択"
-                    create={{ kind: "client", company }}
-                    required
-                  />
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="mb-3 text-sm font-medium">明細行</div>
-                  {[0, 1, 2].map((index) => (
-                    <div key={index} className="mb-3 grid gap-2 md:grid-cols-[1fr_64px_96px_86px]">
-                      <Input name="itemDescription" aria-label={`明細${index + 1} 内容`} placeholder="内容" required={index === 0} />
-                      <Input name="itemQuantity" aria-label={`明細${index + 1} 数量`} type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
-                      <Input name="itemUnitPrice" aria-label={`明細${index + 1} 単価`} type="number" placeholder="単価" />
-                      <CreatableSelect
-                        name="itemTaxRate"
-                        defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}
-                        options={taxRateOptions.map((option) => ({ label: option.label, value: option.value }))}
-                        create={{ kind: "select-option", company, group: "TAX_RATE" }}
-                        required={index === 0}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <InvoiceProjectFields company={company} projects={projects.map((p) => ({ id: p.id, name: p.name, clientId: p.clientId, updatedAt: p.updatedAt }))} clients={clients.map((c) => ({ id: c.id, name: c.companyName }))} />
+                <DocumentItemsEditor company={company} taxOptions={taxRateOptions.map((option) => ({ label: option.label, value: option.value }))} />
                 <div className="space-y-2"><Label htmlFor="new-notes">備考</Label><Textarea id="new-notes" name="notes" /></div>
                 <div className="space-y-2"><Label htmlFor="new-internal-memo">社内メモ</Label><Textarea id="new-internal-memo" name="internalMemo" /></div>
                 <InvoiceCreateSubmit />

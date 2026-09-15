@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createSelectOption, createVendor, moveClientOption, moveSelectOption, moveVendorOption } from "@/app/actions";
 import { AppShell, PageHeader } from "@/components/app/shell";
+import { ClientDeleteButton } from "@/components/app/client-delete-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,7 +51,7 @@ export default async function PartnersPage({
             <CardHeader><CardTitle>クライアント</CardTitle></CardHeader>
             <CardContent>
               <Table>
-                <TableHeader><TableRow><TableHead className="w-20">順番</TableHead><TableHead>会社名</TableHead><TableHead>担当者</TableHead><TableHead>メール</TableHead><TableHead>登録番号</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="w-20">順番</TableHead><TableHead>会社名</TableHead><TableHead>担当者</TableHead><TableHead>メール</TableHead><TableHead>登録番号</TableHead>{mayEdit ? <TableHead className="w-12"><span className="sr-only">操作</span></TableHead> : null}</TableRow></TableHeader>
                 <TableBody>
                   {clients.map((client, index) => (
                     <TableRow key={client.id}>
@@ -59,6 +60,7 @@ export default async function PartnersPage({
                       <TableCell>{client.contactName}</TableCell>
                       <TableCell>{client.email}</TableCell>
                       <TableCell>{client.invoiceRegistrationNumber}</TableCell>
+                      {mayEdit ? <TableCell><ClientDeleteButton company={company} client={{ id: client.id, companyName: client.companyName, updatedAt: client.updatedAt }} /></TableCell> : null}
                     </TableRow>
                   ))}
                 </TableBody>

@@ -1,5 +1,5 @@
 import test, { before, after } from "node:test";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import assert from "node:assert/strict";
@@ -83,4 +83,34 @@ test("long descriptions and many items paginate without losing rows or transfer 
     assert.equal(result.text.split("0683879").length, 2);
     for (const page of result.pages) assert.ok(page.text.includes(`${page.num} / ${result.total}`));
   } finally { await parser.destroy(); }
+});
+
+test("invoice and estimate PDFs keep multiline details under each item, including page continuations", async () => {
+  for (const long of [false, true]) {
+    const data = invoicePdfFixture();
+    data.issuedInvoiceItems[0].details = long ? Array.from({ length: 75 }, (_, i) => `内訳行${String(i + 1).padStart(3, "0")} 基本設計と仕様の確認`).join("\n") : "基本設計一式\n修正2回・納品データを含む";
+    data.issuedInvoiceItems[1].details = "色調整・最終確認";
+    const estimate: Estimate = { ...data.issuedInvoices[0], estimateNumber: "EST-DETAILS", validUntil: "2026-03-31", status: "DRAFT", items: data.issuedInvoiceItems };
+    for (const kind of ["invoice", "estimate"] as const) {
+      const pdf = await (kind === "invoice" ? createIssuedInvoicePdf(data.issuedInvoices[0], data) : createEstimatePdf(estimate, data));
+      const parser = new PDFParse({ data: pdf });
+      try {
+        const result = await parser.getText();
+        assert.equal(result.text.split("色調整・最終確認").length, 2);
+        assert.ok(result.text.indexOf(data.issuedInvoiceItems[0].description) < result.text.indexOf(long ? "内訳行001" : "基本設計一式"));
+        if (long) {
+          assert.ok(result.total >= 3);
+          for (let i = 1; i <= 75; i++) assert.equal(result.text.split(`内訳行${String(i).padStart(3, "0")}`).length, 2);
+        } else { assert.equal(result.total, 1); assert.ok(result.text.includes("修正2回・納品データを含む")); }
+        assert.equal(result.text.split("30,000").length, 3, "Unit price and amount appear only once each");
+        if (process.env.PDF_ARTIFACT_DIR) {
+          await mkdir(process.env.PDF_ARTIFACT_DIR, { recursive: true });
+          const prefix = path.join(process.env.PDF_ARTIFACT_DIR, `${kind}-${long ? "long" : "details"}`);
+          await writeFile(`${prefix}.pdf`, pdf);
+          const screenshots = await parser.getScreenshot({ desiredWidth: 882 });
+          for (const page of screenshots.pages) await writeFile(`${prefix}-${page.pageNumber}.png`, page.data);
+        }
+      } finally { await parser.destroy(); }
+    }
+  }
 });

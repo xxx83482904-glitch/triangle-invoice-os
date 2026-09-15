@@ -74,6 +74,7 @@ const permissions = {
 } satisfies Record<UserRole, string[]>;
 
 export function canRole(role: UserRole, permission: string) {
+  if (permission === "manage:invoiceProjects") return permissions[role].includes("manage:projects") || permissions[role].includes("create:invoiceProjects");
   if (permission === "view:estimates") return permissions[role].includes("view:issuedInvoices");
   if (permission === "manage:estimates") return permissions[role].includes("manage:issuedInvoices");
   return permissions[role].includes(permission);

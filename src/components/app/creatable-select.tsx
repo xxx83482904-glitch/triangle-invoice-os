@@ -22,16 +22,24 @@ export function CreatableSelect({
   className,
   create,
   defaultValue,
+  value: controlledValue,
   name,
   options,
+  onValueChange,
+  ariaLabel,
+  clearable = true,
   placeholder = "選択",
   searchPlaceholder = "検索または作成",
 }: {
   className?: string;
   create?: CreateConfig;
   defaultValue?: string;
+  value?: string;
   name: string;
   options: Option[];
+  onValueChange?: (value: string) => void;
+  ariaLabel?: string;
+  clearable?: boolean;
   placeholder?: string;
   required?: boolean;
   searchPlaceholder?: string;
@@ -39,7 +47,8 @@ export function CreatableSelect({
   const [items, setItems] = useState(options);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [value, setValue] = useState(defaultValue ?? "");
+  const [internalValue, setValue] = useState(defaultValue ?? "");
+  const value = controlledValue ?? internalValue;
   const [isPending, startTransition] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +62,7 @@ export function CreatableSelect({
 
   function selectItem(next: Option) {
     setValue(next.value);
+    onValueChange?.(next.value);
     setQuery("");
     setOpen(false);
   }
@@ -80,6 +90,7 @@ export function CreatableSelect({
       <input name={name} value={value} readOnly type="hidden" />
       <button
         type="button"
+        aria-label={ariaLabel}
         className="flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-[16px] outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50 lg:h-8 lg:px-2.5 lg:text-sm"
         onClick={() => setOpen((current) => !current)}
       >
@@ -87,13 +98,14 @@ export function CreatableSelect({
           {selected ? (
             <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
               <span className="truncate">{selected.label}</span>
-              <X
+              {clearable ? <X
                 className="h-3 w-3"
                 onClick={(event) => {
                   event.stopPropagation();
                   setValue("");
+                  onValueChange?.("");
                 }}
-              />
+              /> : null}
             </span>
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>

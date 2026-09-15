@@ -16,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { todayIso } from "@/lib/format";
 import { EstimateStatusSelect } from "@/components/app/estimate-status-select";
 import type { Estimate } from "@/lib/types";
+import { groupDocuments, orderDocuments } from "@/lib/document-order";
 
 const selectClass = "h-10 max-w-full rounded-md border bg-background px-3 text-sm";
 const pageSize = 50;
@@ -31,6 +32,21 @@ function editFrom(row: DocumentRow): IssuedEdit {
 function StateBadge({ row }: { row: DocumentRow }) {
   const tone = row.state === "done" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : row.state === "review" ? "bg-amber-500/10 text-amber-800 dark:text-amber-300" : "bg-sky-500/10 text-sky-700 dark:text-sky-300";
   return <span className={"inline-flex max-w-full whitespace-nowrap rounded px-2 py-1 text-xs " + tone}>{row.statusLabel}</span>;
+}
+
+function DocumentProjectControl({ row, edit, projects, disabled, onEdit }: {
+  row: DocumentRow; edit?: IssuedEdit; projects: ProjectOption[]; disabled: boolean; onEdit: (edit: IssuedEdit) => void;
+}) {
+  const value = edit?.projectId ?? row.projectId ?? "";
+  const name = projects.find((p) => p.value === value)?.label || row.projectName || "案件未設定";
+  if (row.kind !== "issued" || !row.editable) return <span className="block break-words font-medium">{name}</span>;
+  const paid = (row.paidAmount || 0) > 0;
+  return <select aria-label={`${row.title}の案件`} title={paid ? `${name}（入金記録あり・案件変更不可）` : name} value={value} disabled={disabled || paid}
+    className="h-11 w-full min-w-0 max-w-full rounded-md border border-transparent bg-transparent px-1 text-sm font-medium hover:border-input focus:border-ring disabled:opacity-70"
+    onChange={(e) => onEdit({ ...(edit || editFrom(row)), projectId: e.target.value })}>
+    {!projects.some((p) => p.value === value) ? <option value={value}>{name}</option> : null}
+    {projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+  </select>;
 }
 
 function editedRow(row: DocumentRow, edit?: IssuedEdit): DocumentRow {
@@ -147,16 +163,12 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
 
   const filtered = useMemo(() => {
     const q = deferredQuery.normalize("NFKC").toLocaleLowerCase();
-    return rows.filter((r) => (kind === "all" || r.kind === kind) && (category === "all" || r.category === category) && (state === "all" || r.state === state) &&
+    return orderDocuments(rows.filter((r) => (kind === "all" || r.kind === kind) && (category === "all" || r.category === category) && (state === "all" || r.state === state) &&
       (paymentFilter === "all" || (!issuedOnly && kind !== "issued") || (r.kind === "issued" && (paymentFilter === "paid" ? r.status === "PAID" : !["PAID", "DRAFT", "CANCELED"].includes(r.status)))) &&
-      (month === "all" || r.month === month) && [r.title, r.counterpart, r.projectName, r.fileName || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q))
-      .sort((a, b) => sort === "amount-desc" ? (b.total || 0) - (a.total || 0) : sort === "name" ? a.counterpart.localeCompare(b.counterpart, "ja") : sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+      (month === "all" || r.month === month) && [r.title, r.counterpart, r.projectName, r.fileName || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q)), sort);
   }, [rows, deferredQuery, kind, category, state, month, sort, paymentFilter, issuedOnly]);
-  const groups = useMemo(() => {
-    const map = new Map<string, DocumentRow[]>();
-    for (const r of filtered.slice(0, limit)) map.set(r.month, [...(map.get(r.month) || []), r]);
-    return [...map];
-  }, [filtered, limit]);
+  const groups = useMemo(() => groupDocuments(filtered, sort, limit), [filtered, sort, limit]);
+  const groupLabel = (key: string, list: DocumentRow[]) => sort === "project" ? list[0]?.projectName || "案件未設定" : monthLabel(key);
   const active = rows.find((r) => r.id === activeId);
   const months = [...new Set(rows.map((r) => r.month))].sort().reverse();
   const allSelected = Boolean(filtered.length && filtered.every((r) => selected.has(r.id)));
@@ -228,7 +240,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       <select aria-label="月で絞り込み" className={selectClass} value={month} onChange={(e) => { setMonth(e.target.value); setLimit(pageSize); }}><option value="all">すべての月</option>{months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
       {!issuedOnly ? <select aria-label="書類種別" className={selectClass} value={kind} onChange={(e) => { setKind(e.target.value); setLimit(pageSize); }}><option value="all">すべての書類</option>{Object.entries(documentKindLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}
       {!issuedOnly ? <select aria-label="書類分類" className={selectClass} value={category} onChange={(e) => { setCategory(e.target.value); setLimit(pageSize); }}><option value="all">すべての分類</option>{Object.entries(documentCategoryLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}
-      <select aria-label="並び順" className={selectClass} value={sort} onChange={(e) => setSort(e.target.value)}><option value="date-desc">日付が新しい順</option><option value="date-asc">日付が古い順</option><option value="amount-desc">金額が大きい順</option><option value="name">取引先名順</option></select>
+      <select aria-label="並び順" className={selectClass} value={sort} onChange={(e) => setSort(e.target.value)}><option value="date-desc">日付が新しい順</option><option value="date-asc">日付が古い順</option><option value="amount-desc">金額が大きい順</option><option value="name">取引先名順</option><option value="project">案件ごと</option></select>
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <div role="group" aria-label="確認状態" className="flex flex-wrap gap-1">
@@ -254,12 +266,12 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
           <div className="md:hidden">
             <label className="flex min-h-11 items-center gap-3 border-b px-3 text-sm"><input className="size-5" type="checkbox" aria-label="表示結果をすべて選択" checked={allSelected} disabled={!filtered.length} onChange={() => setSelected(allSelected ? new Set() : new Set(filtered.map((r) => r.id)))} />すべて選択</label>
             {groups.map(([m, list]) => <Fragment key={m}>
-              <button className="flex min-h-11 w-full items-center gap-2 bg-muted/60 px-3 text-sm font-medium" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}{monthLabel(m)}</button>
+              <button className="flex min-h-11 w-full items-center gap-2 bg-muted/60 px-3 text-sm font-medium" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button>
               {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div className={"flex min-w-0 items-start gap-3 border-b p-3 " + (selected.has(r.id) || activeId === r.id ? "bg-primary/10" : "")}>
                 <input className="mt-3 size-5 shrink-0" type="checkbox" aria-label={r.title + "を選択"} checked={selected.has(r.id)} onChange={() => {}} onClick={(e) => toggle(r, e.shiftKey)} />
                 <div className="grid min-w-0 flex-1 gap-1 text-left text-sm">
-                  <button onClick={() => open(r)} className="min-h-11 break-words text-left font-medium">{edits[r.id]?.invoiceNumber || r.title}</button>
-                  <span className="break-words text-xs text-muted-foreground">{r.counterpart} / {r.projectName || documentKindLabels[r.kind]}</span>
+                  <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button onClick={() => open(r)} className="min-h-11 break-words text-left text-xs text-muted-foreground hover:underline">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}</button>
+                  <span className="break-words text-xs text-muted-foreground">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart}</span>
                   <DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />
                   {r.needsReview ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
                   <span className="flex flex-wrap items-center gap-2 text-xs"><span>{edits[r.id]?.issueDate || r.date}</span><span className="ml-auto tabular-nums">{r.total === undefined ? "" : number.format(edits[r.id]?.total ?? r.total)}</span></span>
@@ -272,14 +284,14 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
           <table className="hidden w-full min-w-[680px] table-fixed text-left text-sm md:table">
             <thead className="sticky top-0 z-10 bg-background text-xs text-muted-foreground"><tr>
               <th className="w-11 p-2"><input className="size-4" type="checkbox" aria-label="検索結果をすべて選択" checked={allSelected} disabled={!filtered.length} onChange={() => setSelected((old) => { const next = new Set(old); for (const r of filtered) { if (allSelected) next.delete(r.id); else next.add(r.id); } return next; })} /></th>
-              <th className="w-[28%] p-2">書類</th><th className="w-[21%] p-2">取引先 / 案件</th><th className="w-24 p-2">日付</th><th className="w-24 p-2 text-right">金額</th><th className="w-40 p-2">状態</th><th className="w-11"><span className="sr-only">操作</span></th>
+              <th className="w-[28%] p-2">案件名 / 書類</th><th className="w-[21%] p-2">取引先</th><th className="w-24 p-2">日付</th><th className="w-24 p-2 text-right">金額</th><th className="w-40 p-2">状態</th><th className="w-11"><span className="sr-only">操作</span></th>
             </tr></thead>
             <tbody>{groups.map(([m, list]) => <Fragment key={m}>
-              <tr className="border-t bg-muted/60"><td colSpan={7} className="p-0"><button className="sticky left-0 flex min-h-10 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}{monthLabel(m)}</button></td></tr>
+              <tr className="border-t bg-muted/60"><td colSpan={7} className="p-0"><button className="sticky left-0 flex min-h-10 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button></td></tr>
               {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><tr data-document-id={r.id} className={"border-t align-top " + (activeId === r.id ? "bg-primary/10" : selected.has(r.id) ? "bg-accent/50" : "hover:bg-muted/30")}>
                 <td className="p-3"><input className="size-4" type="checkbox" aria-label={r.title + "を選択"} checked={selected.has(r.id)} onChange={() => {}} onClick={(e) => toggle(r, e.shiftKey)} /></td>
-                <td className="px-2 py-3"><button className="min-h-8 w-full text-left hover:underline" onClick={() => open(r)}><span className="block break-words font-medium">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button></td>
-                <td className="px-2 py-3"><span className="block truncate" title={r.counterpart}>{r.counterpart || "—"}</span><span className="block truncate text-xs text-muted-foreground" title={r.projectName}>{r.projectName}</span></td>
+                <td className="px-2 py-3"><DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button className="min-h-11 w-full text-left text-xs text-muted-foreground hover:underline" onClick={() => open(r)}><span className="block break-words">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button></td>
+                <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span></td>
                 <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</td><td className="px-2 py-3 text-right tabular-nums">{r.total === undefined ? "—" : number.format(edits[r.id]?.total ?? r.total)}</td>
                 <td className="px-2 py-3"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />{r.needsReview ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}</td>
                 <td className="py-2"><DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} /></td>

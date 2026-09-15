@@ -19,7 +19,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
   const estimates = data.estimates.filter((e) => !e.deletedAt && ids.has(e.projectId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return <AppShell><PageHeader title="見積書" /><EstimatesWorkspace key={company} company={company} estimates={estimates}
     initialId={params.document} canEdit={can(user, "manage:estimates")}
-    projects={projects.map((p) => ({ id: p.id, name: p.name, clientId: p.clientId }))}
+    projects={projects.map((p) => ({ id: p.id, name: p.name, clientId: p.clientId, updatedAt: p.updatedAt }))}
     clients={data.clients.filter((c) => !c.deletedAt && partnerMatchesCompany(c, company)).map((c) => ({ id: c.id, name: c.companyName }))} />
   </AppShell>;
 }

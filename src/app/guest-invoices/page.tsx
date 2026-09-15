@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { FileText, LogOut } from "lucide-react";
 import { createGuestIssuedInvoice, logoutAction } from "@/app/actions";
 import { CompanySwitch } from "@/components/app/company-switch";
-import { CreatableSelect } from "@/components/app/creatable-select";
+import { DocumentItemsEditor } from "@/components/app/document-items-editor";
 import { StatusBadge } from "@/components/app/status-badge";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { Button } from "@/components/ui/button";
@@ -160,22 +160,7 @@ export default async function GuestInvoicesPage({
                 <div className="space-y-2"><Label>期限</Label><Input name="dueDate" type="date" defaultValue={addDays(today, 30)} required /></div>
               </div>
 
-              <div className="rounded-md border p-3">
-                <div className="mb-3 text-sm font-medium">明細</div>
-                {[0, 1, 2, 3].map((index) => (
-                  <div key={index} className="mb-3 grid gap-2 md:grid-cols-[1fr_58px_92px_82px]">
-                    <Input name="itemDescription" placeholder="内容" required={index === 0} />
-                    <Input name="itemQuantity" type="number" step="0.01" placeholder="数量" defaultValue={index === 0 ? 1 : undefined} />
-                    <Input name="itemUnitPrice" type="number" min="0" step="1" placeholder="単価" required={index === 0} />
-                    <CreatableSelect
-                      name="itemTaxRate"
-                      defaultValue={taxRateOptions.find((option) => option.value === "10")?.value ?? taxRateOptions[0]?.value ?? "10"}
-                      options={taxRateOptions.map((option) => ({ label: option.label, value: option.value }))}
-                      required={index === 0}
-                    />
-                  </div>
-                ))}
-              </div>
+              <DocumentItemsEditor taxOptions={taxRateOptions.map((option) => ({ label: option.label, value: option.value }))} />
 
               <div className="space-y-2">
                 <Label>備考</Label>

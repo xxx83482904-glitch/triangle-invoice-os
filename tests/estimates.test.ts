@@ -8,7 +8,7 @@ import type { EstimateInput } from "../src/lib/estimate-values";
 
 const billing = { id: "billing", role: "BILLING_EDITOR" as const };
 const input = (): EstimateInput => ({ projectId: "japan", clientId: "client", issueDate: "2026-09-15", validUntil: "2026-10-15", status: "DRAFT", notes: "Customer note", internalMemo: "Private memo",
-  items: [{ description: "Design", quantity: 1.5, unitPrice: 20000, taxRate: 10 }, { description: "Materials", quantity: 2, unitPrice: 500, taxRate: 8 }, { description: "Other", quantity: 1, unitPrice: 100, taxRate: 0 }] });
+  items: [{ description: "Design", details: "基本設計\n修正2回を含む", quantity: 1.5, unitPrice: 20000, taxRate: 10 }, { description: "Materials", quantity: 2, unitPrice: 500, taxRate: 8 }, { description: "Other", quantity: 1, unitPrice: 100, taxRate: 0 }] });
 const dates = { issueDate: "2026-09-15", transactionDate: "2026-09-16", dueDate: "2026-10-31" };
 
 test("estimates have independent numbers and totals and do not enter financial totals", () => {
@@ -31,7 +31,7 @@ test("conversion copies all fields into a draft and is idempotent on a stale ret
   assert.equal(invoice.status, "DRAFT"); assert.ok(!isBillableIssuedInvoice(invoice));
   const items = data.issuedInvoiceItems.filter((i) => i.invoiceId === invoice.id);
   assert.equal(items.length, e.items.length);
-  items.forEach((item, index) => { for (const key of ["description", "quantity", "unitPrice", "amount", "taxRate"] as const) assert.equal(item[key], e.items[index][key]); });
+  items.forEach((item, index) => { for (const key of ["description", "details", "quantity", "unitPrice", "amount", "taxRate"] as const) assert.equal(item[key], e.items[index][key]); });
   assert.equal(convertEstimate(data, billing, "JAPAN", request).id, invoice.id);
   assert.equal(data.issuedInvoices.filter((i) => i.estimateId === e.id).length, 1);
   assert.throws(() => saveEstimate(data, billing, "JAPAN", { ...input(), id: e.id, updatedAt: e.updatedAt }));

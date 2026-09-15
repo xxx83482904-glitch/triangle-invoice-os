@@ -48,8 +48,8 @@ function createBusinessDocumentPdf(invoice: IssuedInvoice, data: AppData, validU
       const items = data.issuedInvoiceItems.filter((i) => i.invoiceId === invoice.id);
       let page = 1;
       const line = (y: number, x = left, end = right) => doc.lineWidth(0.7).strokeColor("#777777").moveTo(x, y).lineTo(end, y).stroke();
-      const text = (value: string, x: number, y: number, w: number, size = 10, align: "left" | "right" | "center" = "left") => {
-        doc.fillColor("#111111").fontSize(size).text(value, x, y, { width: w, align, lineBreak: false });
+      const text = (value: string, x: number, y: number, w: number, size = 10, align: "left" | "right" | "center" = "left", color = "#111111") => {
+        doc.fillColor(color).fontSize(size).text(value, x, y, { width: w, align, lineBreak: false });
       };
       const wrap = (value: string, w: number, size = 10) => {
         doc.fontSize(size);
@@ -108,13 +108,16 @@ function createBusinessDocumentPdf(invoice: IssuedInvoice, data: AppData, validU
       };
       tableHeader();
       for (const item of items) {
-        const lines = wrap(item.description, 305, 10);
+        const lines = [
+          ...wrap(item.description, 305, 10).map((value) => ({ value, size: 10, offset: 3, width: 305, color: "#111111" })),
+          ...(item.details ? wrap(item.details, 297, 9).map((value) => ({ value, size: 9, offset: 11, width: 297, color: "#444444" })) : []),
+        ];
         let first = true;
         while (lines.length) {
-          if (y + 22 > 662) { nextPage(); y = 100; tableHeader(); }
+          if (y + (first && lines.length > 1 ? 36 : 22) > 662) { nextPage(); y = 100; tableHeader(); }
           const capacity = Math.max(1, Math.floor((662 - y - 8) / 14));
           const part = lines.splice(0, capacity);
-          part.forEach((v, i) => text(v, left + 3, y + 5 + i * 14, 305));
+          part.forEach((v, i) => text(v.value, left + v.offset, y + 5 + i * 14, v.width, v.size, "left", v.color));
           if (first) {
             fitted(amount.format(item.quantity), 344, y + 5, 47, 10, "right");
             fitted(amount.format(item.unitPrice), 398, y + 5, 72, 10, "right");

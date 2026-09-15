@@ -148,6 +148,7 @@ export type IssuedInvoiceItem = {
   id: string;
   invoiceId: string;
   description: string;
+  details?: string;
   quantity: number;
   unitPrice: number;
   taxRate: TaxRate;
@@ -188,7 +189,7 @@ export type IssuedInvoice = {
   deletedAt?: string | null;
 };
 
-export type EstimateItem = Pick<IssuedInvoiceItem, "id" | "description" | "quantity" | "unitPrice" | "taxRate" | "amount">;
+export type EstimateItem = Pick<IssuedInvoiceItem, "id" | "description" | "details" | "quantity" | "unitPrice" | "taxRate" | "amount">;
 export type Estimate = {
   id: string;
   estimateNumber: string;
