@@ -24,6 +24,8 @@
 .DS_Store
 *.pem
 /data/*.json
+/assets/invoice/triangle-seal.png
+/data/company-seal.png
 /public/uploads/*
 !/public/uploads/.gitkeep
 

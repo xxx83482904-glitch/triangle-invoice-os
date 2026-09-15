@@ -17,5 +17,5 @@ export function fixture(): AppData {
     mailFolders: [], mailDocuments: [{ ...base, id: "mail-1", company: "JAPAN", category: "RECEIPT", title: "Receipt", senderName: "Test supplier", fileUrl: "/api/files/received.pdf", originalFileName: "received.pdf", mimeType: "application/pdf", relatedReceivedInvoiceId: "received-1", mailProcessed: true, uploadedById: "admin" }],
     attachments: [{ id: "attachment-1", relatedType: "MailDocument", relatedId: "mail-1", fileName: "received.pdf", fileUrl: "/api/files/received.pdf", mimeType: "application/pdf", uploadedById: "admin", createdAt: timestamp },
       { id: "old-contract", relatedType: "ProjectContract", relatedId: "japan", fileName: "old.pdf", fileUrl: "/api/files/old.pdf", mimeType: "application/pdf", uploadedById: "admin", createdAt: timestamp }],
-    payments: [], auditLogs: [], invoiceNumberSettings: [] };
+    estimates: [], payments: [], auditLogs: [], invoiceNumberSettings: [] };
 }

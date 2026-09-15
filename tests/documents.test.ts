@@ -8,11 +8,37 @@ import { projectMoney } from "../src/lib/store";
 import { fixture, admin, manager } from "./document-fixture";
 import { resolveIssuedImportProject } from "../src/lib/issued-import-project";
 import { can, canAccessCompany, canEditOptionGroup, companyForUser, defaultPathForRole } from "../src/lib/rbac";
+import { applyIssuedInvoiceDeletion } from "../src/lib/issued-invoice-delete";
 
 function edit(data = fixture()): IssuedEdit {
   const i = data.issuedInvoices[0];
   return { id: i.id, updatedAt: i.updatedAt, invoiceNumber: i.invoiceNumber, projectId: i.projectId, issueDate: i.issueDate, dueDate: i.dueDate, total: i.total, status: "ISSUED", needsReview: false };
 }
+
+test("invoice deletion is soft, scoped, and hides original documents and attachments", () => {
+  const data = fixture();
+  data.attachments.push({ ...data.attachments[0], id: "issued-attachment", relatedType: "IssuedInvoice", relatedId: "issued-1", fileUrl: "/api/files/invoice-extra.pdf" });
+  const target = { id: "issued-1", updatedAt: data.issuedInvoices[0].updatedAt };
+  applyIssuedInvoiceDeletion(data, { id: "billing", role: "BILLING_EDITOR" }, "JAPAN", [target]);
+  assert.ok(data.issuedInvoices[0].deletedAt);
+  assert.equal(data.issuedInvoices[0].fileUrl, "/api/files/issued.pdf");
+  assert.ok(!documentRows(data, admin, "JAPAN").some((r) => r.sourceId === target.id || r.sourceId === "issued-attachment"));
+  assert.ok(!data.issuedInvoices[1].deletedAt); assert.ok(!data.issuedInvoices[2].deletedAt);
+});
+
+test("invoice deletion refuses China, unrelated roles, stale versions and payments atomically", () => {
+  const billing = { id: "billing", role: "BILLING_EDITOR" as const };
+  const data = fixture();
+  const targets = data.issuedInvoices.map((i) => ({ id: i.id, updatedAt: i.updatedAt }));
+  assert.throws(() => applyIssuedInvoiceDeletion(data, billing, "CHINA", [targets[2]]));
+  assert.throws(() => applyIssuedInvoiceDeletion(data, billing, "JAPAN", [targets[0], targets[2]]));
+  assert.throws(() => applyIssuedInvoiceDeletion(data, { id: "mail", role: "MAIL_EDITOR" }, "JAPAN", [targets[0]]));
+  assert.throws(() => applyIssuedInvoiceDeletion(data, manager, "JAPAN", [targets[1]]));
+  assert.throws(() => applyIssuedInvoiceDeletion(data, billing, "JAPAN", [{ ...targets[0], updatedAt: "stale" }]));
+  data.payments.push({ id: "payment", type: "INCOME", issuedInvoiceId: "issued-2", amount: 1, paymentDate: "2026-09-15", createdAt: targets[0].updatedAt, updatedAt: targets[0].updatedAt, createdById: "admin" });
+  assert.throws(() => applyIssuedInvoiceDeletion(data, billing, "JAPAN", targets.slice(0, 2)));
+  assert.ok(data.issuedInvoices.every((i) => !i.deletedAt));
+});
 test("canonical list deduplicates linked mail and receipt, keeps older contracts", () => {
   const rows = documentRows(fixture(), admin, "JAPAN");
   assert.equal(rows.filter((r) => r.fileUrl === "/api/files/received.pdf").length, 1);

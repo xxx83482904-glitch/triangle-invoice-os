@@ -158,6 +158,7 @@ export type IssuedInvoiceItem = {
 
 export type IssuedInvoice = {
   id: string;
+  estimateId?: string;
   invoiceNumber: string;
   projectId: string;
   clientId: string;
@@ -182,6 +183,28 @@ export type IssuedInvoice = {
   internalMemo?: string;
   createdById: string;
   paidAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+};
+
+export type EstimateItem = Pick<IssuedInvoiceItem, "id" | "description" | "quantity" | "unitPrice" | "taxRate" | "amount">;
+export type Estimate = {
+  id: string;
+  estimateNumber: string;
+  projectId: string;
+  clientId: string;
+  issueDate: string;
+  validUntil: string;
+  status: "DRAFT" | "SENT" | "ACCEPTED" | "DECLINED" | "CONVERTED";
+  items: EstimateItem[];
+  subtotal: number;
+  taxTotal: number;
+  total: number;
+  notes?: string;
+  internalMemo?: string;
+  invoiceId?: string;
+  createdById: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -308,6 +331,7 @@ export type AppData = {
   vendors: Vendor[];
   selectOptions: SelectOption[];
   projects: Project[];
+  estimates: Estimate[];
   issuedInvoices: IssuedInvoice[];
   issuedInvoiceItems: IssuedInvoiceItem[];
   receivedInvoices: ReceivedInvoice[];

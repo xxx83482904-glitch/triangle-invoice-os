@@ -9,6 +9,8 @@
     "start": "node .next/standalone/server.js",
     "lint": "eslint",
     "test:documents": "node --conditions=react-server --import tsx --test tests/documents.test.ts",
+    "test:invoice-pdf": "node --import tsx --test tests/issued-invoice-pdf.test.ts",
+    "test:estimates": "node --conditions=react-server --import tsx --test tests/estimates.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

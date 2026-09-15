@@ -182,6 +182,7 @@ function seedData(): AppData {
     vendors,
     selectOptions: defaultSelectOptions(createdAt),
     projects,
+    estimates: [],
     issuedInvoices: [],
     issuedInvoiceItems: [],
     receivedInvoices: [],
@@ -211,6 +212,7 @@ const undoCollectionKeys = [
   "vendors",
   "selectOptions",
   "projects",
+  "estimates",
   "issuedInvoices",
   "issuedInvoiceItems",
   "receivedInvoices",
@@ -288,7 +290,7 @@ function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
 function isLegacySnapshot(value: unknown): value is AppDataSnapshot {
   if (!value || typeof value !== "object") return false;
   const source = value as Record<string, unknown>;
-  return undoCollectionKeys.every((key) => Array.isArray(source[key]));
+  return undoCollectionKeys.every((key) => (key === "estimates" && source[key] === undefined) || Array.isArray(source[key]));
 }
 
 export function restoreUndoState(data: AppData, snapshot: unknown) {
@@ -314,7 +316,7 @@ export function restoreUndoState(data: AppData, snapshot: unknown) {
   if (!isLegacySnapshot(snapshot)) throw new Error("Undo snapshot is missing.");
   const source = snapshot as unknown as Record<string, unknown>;
   const target = data as unknown as Record<string, unknown>;
-  for (const key of undoCollectionKeys) target[key] = source[key];
+  for (const key of undoCollectionKeys) if (Array.isArray(source[key])) target[key] = source[key];
 }
 
 function normalizeAuditHistory(data: AppData) {
@@ -553,6 +555,7 @@ async function normalizeData(data: AppData) {
   if (!Array.isArray(data.clients)) { data.clients = seedData().clients; changed = true; }
   if (!Array.isArray(data.vendors)) { data.vendors = seedData().vendors; changed = true; }
   if (!Array.isArray(data.projects)) { data.projects = seedData().projects; changed = true; }
+  if (!Array.isArray(data.estimates)) { data.estimates = []; changed = true; }
   if (!Array.isArray(data.issuedInvoices)) { data.issuedInvoices = []; changed = true; }
   if (!Array.isArray(data.issuedInvoiceItems)) { data.issuedInvoiceItems = []; changed = true; }
   if (!Array.isArray(data.receivedInvoices)) { data.receivedInvoices = []; changed = true; }
@@ -664,6 +667,7 @@ export async function getActiveData() {
     clients: active(data.clients),
     vendors: active(data.vendors),
     projects: active(data.projects),
+    estimates: active(data.estimates),
     issuedInvoices: active(data.issuedInvoices),
     receivedInvoices: active(data.receivedInvoices),
     mailFolders: active(data.mailFolders),

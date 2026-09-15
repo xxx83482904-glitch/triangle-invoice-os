@@ -816,7 +816,8 @@ export async function createIssuedInvoice(formData: FormData) {
   revalidatePath("/issued-invoices");
   revalidatePath(`/projects/${invoice.projectId}`);
   const project = (await readData()).projects.find((item) => item.id === invoice.projectId);
-  redirect(`/issued-invoices?company=${companyFromParam(project?.company)}&created=${invoice.id}`);
+  revalidatePath("/documents");
+  redirect(`/issued-invoices?company=${companyFromParam(project?.company)}&created=${invoice.id}&document=${encodeURIComponent(`issued:${invoice.id}`)}`);
 }
 
 export async function recordIncomePayment(formData: FormData) {

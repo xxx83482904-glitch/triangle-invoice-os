@@ -15,6 +15,7 @@ const nav = [
   { href: "/projects", label: "案件", icon: Building2, permission: "view:projects" },
   { href: "/mail-sorter", label: "郵便仕分け", icon: Mail, permission: "view:mailSorter" },
   { href: "/issued-invoices", label: "発行請求書", icon: FileText, permission: "view:issuedInvoices" },
+  { href: "/estimates", label: "見積書", icon: ReceiptText, permission: "view:estimates" },
   { href: "/received-invoices", label: "受領請求書", icon: ReceiptText, permission: "view:receivedInvoices" },
   { href: "/payments", label: "入金・支払い", icon: WalletCards, permission: "view:payments" },
   { href: "/partners", label: "取引先", icon: Users, permission: "view:partners" },
@@ -96,7 +97,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
   const searchParams = useSearchParams();
   const company = companyForUser({ role }, searchParams.get("company"));
   const allowedNav = nav.filter((item) => canRole(role, item.permission));
-  const primaryHrefs = role === "BILLING_EDITOR" ? ["/issued-invoices", "/partners"] : ["/documents", "/projects", "/mail-sorter", "/issued-invoices"];
+  const primaryHrefs = role === "BILLING_EDITOR" ? ["/issued-invoices", "/estimates", "/partners"] : ["/documents", "/projects", "/mail-sorter", "/issued-invoices"];
   const primaryItems = primaryHrefs
     .map((href) => allowedNav.find((item) => item.href === href))
     .filter((item): item is (typeof nav)[number] => Boolean(item));

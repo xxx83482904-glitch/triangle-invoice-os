@@ -4,12 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Download, ExternalLink, FileText, LoaderCircle, RotateCcw, Save, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, ExternalLink, FileText, LoaderCircle, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { documentCategoryLabels, documentKindLabels, issuedStatusLabels, type DocumentRow } from "@/lib/documents";
 import type { CompanyScope } from "@/lib/company";
-import { saveIssuedInvoiceEdits, type IssuedEdit } from "@/app/issued-invoices/actions";
+import { deleteIssuedInvoices, saveIssuedInvoiceEdits, type IssuedEdit } from "@/app/issued-invoices/actions";
+import { DocumentContextMenu, DocumentMenuButton } from "@/components/app/document-row-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 
 const selectClass = "h-10 max-w-full rounded-md border bg-background px-3 text-sm";
@@ -53,16 +55,18 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled }: {
   const current = edit || editFrom(row);
   const update = (patch: Partial<IssuedEdit>) => onEdit({ ...current, ...patch });
   const editable = row.kind === "issued" && row.editable;
+  const generated = row.kind === "estimate" || (row.kind === "issued" && !row.imported);
+  const fileUrl = generated && row.fileUrl?.startsWith("/api/") ? `${row.fileUrl}?v=${encodeURIComponent(row.updatedAt)}` : row.fileUrl;
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center gap-2">
       <StateBadge row={editedRow(row, edit)} />
       <span className="text-xs text-muted-foreground">{documentKindLabels[row.kind]}</span>
-      {row.fileUrl ? <Button asChild variant="outline" size="sm"><a href={row.fileUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />原本を開く</a></Button> : null}
+      {fileUrl ? <Button asChild variant="outline" size="sm"><a href={fileUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />{generated ? "PDFを開く" : "原本を開く"}</a></Button> : null}
       <Button asChild variant="ghost" size="sm"><Link prefetch={false} href={row.sourceHref}>管理画面</Link></Button>
     </div>
-    {row.fileUrl ? (
-      row.mimeType?.startsWith("image/") ? <div className="relative h-72 bg-muted/30 sm:h-96"><Image unoptimized src={row.fileUrl} alt={row.fileName || row.title} fill sizes="(max-width: 1279px) 100vw, 420px" className="object-contain" /></div>
-        : <iframe title={"原本: " + row.title} src={row.fileUrl} loading="lazy" className="h-80 w-full rounded border bg-white sm:h-[440px]" />
+    {fileUrl ? (
+      row.mimeType?.startsWith("image/") ? <div className="relative h-72 bg-muted/30 sm:h-96"><Image unoptimized src={fileUrl} alt={row.fileName || row.title} fill sizes="(max-width: 1279px) 100vw, 420px" className="object-contain" /></div>
+        : <iframe title={(generated ? `${documentKindLabels[row.kind]}PDF: ` : "原本: ") + row.title} src={fileUrl} loading="lazy" className="h-80 w-full rounded border bg-white sm:h-[440px]" />
     ) : <div className="flex h-32 items-center justify-center bg-muted/30 text-sm text-muted-foreground">原本ファイルなし</div>}
     {editable ? <fieldset disabled={disabled} className="grid min-w-0 gap-3">
       <label className="space-y-1 text-xs">請求書番号<Input aria-label="請求書番号" value={current.invoiceNumber} onChange={(e) => update({ invoiceNumber: e.target.value })} /></label>
@@ -110,6 +114,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
   const [activeId, setActiveId] = useState(initialId || "");
   const [edits, setEdits] = useState<Record<string, IssuedEdit>>({});
   const [saving, startSave] = useTransition();
+  const [deleting, startDelete] = useTransition();
+  const [deleteTargets, setDeleteTargets] = useState<DocumentRow[]>([]);
   const preview = useRef<HTMLElement>(null);
   const changes = Object.keys(edits).length;
   useEffect(() => {
@@ -168,6 +174,23 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       } catch { toast({ title: "保存に失敗しました。変更内容を保持しています", variant: "destructive" }); }
     });
   }
+  function askDelete(targets: DocumentRow[]) {
+    if (changes) { toast({ title: "未保存の変更があります。保存または元に戻してから削除してください" }); return; }
+    setDeleteTargets(targets);
+  }
+  function confirmDelete() {
+    startDelete(async () => {
+      try {
+        const result = await deleteIssuedInvoices(company, deleteTargets.map((r) => ({ id: r.sourceId, updatedAt: r.updatedAt })));
+        if (result.error) { toast({ title: result.error, variant: "destructive" }); return; }
+        const ids = new Set(deleteTargets.map((r) => r.id));
+        setSelected((old) => new Set([...old].filter((id) => !ids.has(id))));
+        if (ids.has(activeId)) setActiveId("");
+        setDeleteTargets([]); router.refresh();
+        toast({ title: deleteTargets.length + "件の請求書を削除しました", variant: "success" });
+      } catch { toast({ title: "削除に失敗しました。再度お試しください", variant: "destructive" }); }
+    });
+  }
   function exportCsv() {
     const csv = (v: unknown) => '"' + String(v ?? "").replace(/^[=+@\-\t\r]/, "'$&").replaceAll('"', '""') + '"';
     const data = (selectedRows.length ? selectedRows : filtered).map((r) => [r.title, documentKindLabels[r.kind], documentCategoryLabels[r.category], r.counterpart, r.projectName, r.date, r.total, r.statusLabel]);
@@ -190,6 +213,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       <span className="text-xs text-muted-foreground">{filtered.length}件{selectedRows.length ? " / " + selectedRows.length + "件選択" : ""}</span>
       {canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="ml-auto" onClick={exportCsv}><Download className="size-4" /></Button> : null}
       {selectedRows.length ? <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>選択解除</Button> : null}
+      {selectedRows.length > 0 && selectedRows.every((r) => r.kind === "issued" && r.editable) ? <Button variant="outline" size="sm" disabled={saving || deleting} className="text-destructive" onClick={() => askDelete(selectedRows)}><Trash2 className="size-4" />選択した{selectedRows.length}件を削除</Button> : null}
       {editableSelected.length ? <select aria-label="選択した発行請求書の状態を一括変更" disabled={saving} className={selectClass} value="" onChange={(e) => { const status = e.target.value as IssuedEdit["status"]; if (!status) return; setEdits((old) => { const next = { ...old }; for (const r of editableSelected) next[r.id] = { ...(old[r.id] || editFrom(r)), status }; return next; }); }}>
         <option value="">発行 {editableSelected.length}件を一括変更</option>{["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT"].map((s) => <option key={s} value={s}>{issuedStatusLabels[s]}</option>)}
       </select> : null}
@@ -206,7 +230,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
             <label className="flex min-h-11 items-center gap-3 border-b px-3 text-sm"><input className="size-5" type="checkbox" aria-label="表示結果をすべて選択" checked={allSelected} disabled={!filtered.length} onChange={() => setSelected(allSelected ? new Set() : new Set(filtered.map((r) => r.id)))} />すべて選択</label>
             {groups.map(([m, list]) => <Fragment key={m}>
               <button className="flex min-h-11 w-full items-center gap-2 bg-muted/60 px-3 text-sm font-medium" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}{monthLabel(m)}</button>
-              {!collapsed.has(m) ? list.map((r) => <div key={r.id} className={"flex min-w-0 items-start gap-3 border-b p-3 " + (selected.has(r.id) || activeId === r.id ? "bg-primary/10" : "")}>
+              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div className={"flex min-w-0 items-start gap-3 border-b p-3 " + (selected.has(r.id) || activeId === r.id ? "bg-primary/10" : "")}>
                 <input className="mt-3 size-5 shrink-0" type="checkbox" aria-label={r.title + "を選択"} checked={selected.has(r.id)} onChange={() => {}} onClick={(e) => toggle(r, e.shiftKey)} />
                 <button onClick={() => open(r)} className="grid min-w-0 flex-1 gap-1 text-left text-sm">
                   <span className="break-words font-medium">{edits[r.id]?.invoiceNumber || r.title}</span>
@@ -214,23 +238,25 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                   <span className="flex flex-wrap items-center gap-2 text-xs"><StateBadge row={editedRow(r, edits[r.id])} /><span>{edits[r.id]?.issueDate || r.date}</span><span className="ml-auto tabular-nums">{r.total === undefined ? "" : number.format(edits[r.id]?.total ?? r.total)}</span></span>
                   {edits[r.id] ? <span className="text-xs text-amber-700 dark:text-amber-300">未保存</span> : null}
                 </button>
-              </div>) : null}
+                <DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} />
+              </div></DocumentContextMenu>) : null}
             </Fragment>)}
           </div>
           <table className="hidden w-full min-w-[680px] table-fixed text-left text-sm md:table">
             <thead className="sticky top-0 z-10 bg-background text-xs text-muted-foreground"><tr>
               <th className="w-11 p-2"><input className="size-4" type="checkbox" aria-label="検索結果をすべて選択" checked={allSelected} disabled={!filtered.length} onChange={() => setSelected((old) => { const next = new Set(old); for (const r of filtered) { if (allSelected) next.delete(r.id); else next.add(r.id); } return next; })} /></th>
-              <th className="w-[28%] p-2">書類</th><th className="w-[21%] p-2">取引先 / 案件</th><th className="w-24 p-2">日付</th><th className="w-24 p-2 text-right">金額</th><th className="w-28 p-2">状態</th>
+              <th className="w-[28%] p-2">書類</th><th className="w-[21%] p-2">取引先 / 案件</th><th className="w-24 p-2">日付</th><th className="w-24 p-2 text-right">金額</th><th className="w-28 p-2">状態</th><th className="w-11"><span className="sr-only">操作</span></th>
             </tr></thead>
             <tbody>{groups.map(([m, list]) => <Fragment key={m}>
-              <tr className="border-t bg-muted/60"><td colSpan={6} className="p-0"><button className="sticky left-0 flex min-h-10 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}{monthLabel(m)}</button></td></tr>
-              {!collapsed.has(m) ? list.map((r) => <tr key={r.id} data-document-id={r.id} className={"border-t align-top " + (activeId === r.id ? "bg-primary/10" : selected.has(r.id) ? "bg-accent/50" : "hover:bg-muted/30")}>
+              <tr className="border-t bg-muted/60"><td colSpan={7} className="p-0"><button className="sticky left-0 flex min-h-10 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}{monthLabel(m)}</button></td></tr>
+              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><tr data-document-id={r.id} className={"border-t align-top " + (activeId === r.id ? "bg-primary/10" : selected.has(r.id) ? "bg-accent/50" : "hover:bg-muted/30")}>
                 <td className="p-3"><input className="size-4" type="checkbox" aria-label={r.title + "を選択"} checked={selected.has(r.id)} onChange={() => {}} onClick={(e) => toggle(r, e.shiftKey)} /></td>
                 <td className="px-2 py-3"><button className="min-h-8 w-full text-left hover:underline" onClick={() => open(r)}><span className="block break-words font-medium">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button></td>
                 <td className="px-2 py-3"><span className="block truncate" title={r.counterpart}>{r.counterpart || "—"}</span><span className="block truncate text-xs text-muted-foreground" title={r.projectName}>{r.projectName}</span></td>
                 <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</td><td className="px-2 py-3 text-right tabular-nums">{r.total === undefined ? "—" : number.format(edits[r.id]?.total ?? r.total)}</td>
                 <td className="px-2 py-3"><StateBadge row={editedRow(r, edits[r.id])} /></td>
-              </tr>) : null}
+                <td className="py-2"><DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} /></td>
+              </tr></DocumentContextMenu>) : null}
             </Fragment>)}</tbody>
           </table>
           {!filtered.length ? <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"><FileText className="size-8" />{rows.length ? "条件に合う書類がありません" : "書類はまだありません"}{rows.length ? <Button variant="outline" onClick={() => { setQuery(""); setKind("all"); setCategory("all"); setMonth("all"); setState("all"); }}>絞り込みを解除</Button> : null}</div> : null}
@@ -239,8 +265,15 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       </div>
       {active ? <aside ref={preview} className="min-w-0 scroll-mt-28 border-t pt-3 xl:sticky xl:top-3 xl:max-h-[80vh] xl:overflow-auto xl:border-l xl:border-t-0 xl:pl-4">
         <div className="mb-3 flex items-start justify-between gap-2"><h2 className="break-all font-semibold">{active.title}</h2><Button variant="ghost" size="icon" className="shrink-0" title="プレビューを閉じる" aria-label="プレビューを閉じる" onClick={() => setActiveId("")}><X className="size-4" /></Button></div>
-        <DocumentDetails key={active.id} row={active} company={company} projects={projects} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving} />
+        <DocumentDetails key={active.id} row={active} company={company} projects={projects} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} />
       </aside> : null}
     </div>
+    <Dialog open={deleteTargets.length > 0} onOpenChange={(open) => { if (!open && !deleting) setDeleteTargets([]); }}>
+      <DialogContent showCloseButton={!deleting}>
+        <DialogHeader><DialogTitle>請求書を削除しますか？</DialogTitle><DialogDescription>{deleteTargets.length}件を一覧から削除します。履歴と原本は保持されます。</DialogDescription></DialogHeader>
+        <ul className="max-h-40 space-y-1 overflow-auto break-all text-sm">{deleteTargets.map((r) => <li key={r.id}>{r.title}</li>)}</ul>
+        <DialogFooter><Button variant="outline" disabled={deleting} onClick={() => setDeleteTargets([])}>キャンセル</Button><Button variant="destructive" disabled={deleting} onClick={confirmDelete}>{deleting ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}{deleting ? "削除中..." : "削除する"}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>;
 }

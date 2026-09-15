@@ -1,8 +1,9 @@
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { can, canAccessCompany } from "@/lib/rbac";
+import { estimateStatusLabels } from "@/lib/estimate-values";
 import type { AppData, IssuedInvoice, User } from "@/lib/types";
 
-export type DocumentKind = "issued" | "received" | "mail" | "contract" | "attachment";
+export type DocumentKind = "issued" | "estimate" | "received" | "mail" | "contract" | "attachment";
 export type DocumentRow = {
   id: string;
   sourceId: string;
@@ -30,7 +31,7 @@ export type DocumentRow = {
 };
 
 export const documentKindLabels: Record<DocumentKind, string> = {
-  issued: "発行請求書", received: "受領請求書", mail: "郵便物", contract: "契約書", attachment: "添付書類",
+  issued: "発行請求書", estimate: "見積書", received: "受領請求書", mail: "郵便物", contract: "契約書", attachment: "添付書類",
 };
 export const documentCategoryLabels: Record<string, string> = {
   INVOICE: "請求書", RECEIPT: "領収書", CONTRACT: "契約書", ESTIMATE: "見積書", DELIVERY_NOTE: "納品書", NOTICE: "通知書", OTHER: "その他",
@@ -63,6 +64,15 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
   const linkedReceived = new Map(data.mailDocuments.filter((m) => !m.deletedAt && m.relatedReceivedInvoiceId).map((m) => [m.relatedReceivedInvoiceId!, m]));
   const receivedIds = new Set<string>();
   const month = (date: string) => /^\d{4}-\d{2}/.test(date) ? date.slice(0, 7) : "undated";
+  if (can(user, "view:estimates")) for (const e of data.estimates) {
+    if (e.deletedAt || !projectMap.has(e.projectId)) continue;
+    rows.push({ id: `estimate:${e.id}`, sourceId: e.id, kind: "estimate", title: e.estimateNumber, category: "ESTIMATE",
+      counterpart: clients.get(e.clientId) || "取引先未設定", projectId: e.projectId, projectName: projectMap.get(e.projectId)!.name,
+      month: month(e.issueDate), date: e.issueDate, dueDate: e.validUntil, total: e.total, status: e.status, statusLabel: estimateStatusLabels[e.status],
+      state: e.status === "DRAFT" ? "review" : ["CONVERTED", "DECLINED"].includes(e.status) ? "done" : "open",
+      fileUrl: `/api/estimates/${e.id}/pdf`, fileName: `${e.estimateNumber}.pdf`, mimeType: "application/pdf",
+      sourceHref: `/estimates?company=${company}&document=${e.id}`, updatedAt: e.updatedAt });
+  }
   if (can(user, "view:issuedInvoices")) for (const i of data.issuedInvoices) {
     if (i.deletedAt || !projectMap.has(i.projectId)) continue;
     rows.push({ id: `issued:${i.id}`, sourceId: i.id, kind: "issued", title: i.invoiceNumber, category: "INVOICE",
