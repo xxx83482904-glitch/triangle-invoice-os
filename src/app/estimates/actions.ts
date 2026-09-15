@@ -5,7 +5,7 @@ import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
 import type { EstimateInput } from "@/lib/estimate-values";
-import { convertEstimate, deleteEstimate, saveEstimate, type EstimateConversion, type EstimateTarget } from "@/lib/estimates";
+import { convertEstimate, deleteEstimate, saveEstimate, updateEstimateStatus, type EstimateStatusUpdate, type EstimateConversion, type EstimateTarget } from "@/lib/estimates";
 import { mutateData } from "@/lib/store";
 
 function refresh() {
@@ -33,5 +33,13 @@ export async function deleteEstimateAction(company: CompanyScope, input: Estimat
   try {
     await mutateData(user.id, "DELETE_ESTIMATE", "Estimate", input.id, (data) => deleteEstimate(data, user, company, input));
     refresh(); return { success: true };
+  } catch (error) { return { error: message(error) }; }
+}
+
+export async function updateEstimateStatusAction(company: CompanyScope, input: EstimateStatusUpdate) {
+  const user = await requireUser();
+  try {
+    const estimate = await mutateData(user.id, "UPDATE_ESTIMATE_STATUS", "Estimate", input.id, (data) => updateEstimateStatus(data, user, company, input));
+    refresh(); return { estimate };
   } catch (error) { return { error: message(error) }; }
 }

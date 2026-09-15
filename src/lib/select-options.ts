@@ -1,5 +1,6 @@
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import type { AppData, SelectOption, SelectOptionGroup } from "@/lib/types";
+import { issuedStatusLabels } from "@/lib/invoice-status";
 
 export const optionGroupLabels: Record<SelectOptionGroup, string> = {
   PROJECT_STAGE: "案件段階",
@@ -28,9 +29,9 @@ const defaults: Array<{ group: SelectOptionGroup; value: string; label: string }
   { group: "ISSUED_INVOICE_STATUS", value: "DRAFT", label: "下書き" },
   { group: "ISSUED_INVOICE_STATUS", value: "ISSUED", label: "発行済み" },
   { group: "ISSUED_INVOICE_STATUS", value: "SENT", label: "送付済み" },
-  { group: "ISSUED_INVOICE_STATUS", value: "WAITING_PAYMENT", label: "入金待ち" },
+  { group: "ISSUED_INVOICE_STATUS", value: "WAITING_PAYMENT", label: "入金未完了" },
   { group: "ISSUED_INVOICE_STATUS", value: "PARTIALLY_PAID", label: "一部入金" },
-  { group: "ISSUED_INVOICE_STATUS", value: "PAID", label: "入金済み" },
+  { group: "ISSUED_INVOICE_STATUS", value: "PAID", label: "入金完了" },
   { group: "ISSUED_INVOICE_STATUS", value: "OVERDUE", label: "期限超過" },
   { group: "ISSUED_INVOICE_STATUS", value: "CANCELED", label: "キャンセル" },
   { group: "ISSUED_INVOICE_STATUS", value: "REISSUED", label: "再発行済み" },
@@ -74,7 +75,8 @@ export function selectOptionsFor(data: AppData, group: SelectOptionGroup, compan
       if (!scope) return true;
       return !option.company || companyFromParam(option.company) === scope;
     })
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "ja"));
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "ja"))
+    .map((option) => group === "ISSUED_INVOICE_STATUS" && option.value in issuedStatusLabels ? { ...option, label: issuedStatusLabels[option.value as keyof typeof issuedStatusLabels] } : option);
 }
 
 export function optionLabel(data: AppData, group: SelectOptionGroup, value: string) {

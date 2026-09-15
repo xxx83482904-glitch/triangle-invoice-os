@@ -9,6 +9,8 @@ import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files"
 import { assertCan, assertCompanyAccess, can, canEditOptionGroup, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, writeData } from "@/lib/store";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
+import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
+import { invoicePaymentSummary } from "@/lib/invoice-status";
 import type {
   AppData,
   Client,
@@ -49,6 +51,7 @@ function revalidateWorkspace() {
     "/dashboard",
     "/projects",
     "/issued-invoices",
+    "/estimates",
     "/documents",
     "/received-invoices",
     "/mail-sorter",
@@ -803,9 +806,12 @@ export async function createIssuedInvoice(formData: FormData) {
     const client = draft.clients.find((c) => c.id === invoice.clientId && !c.deletedAt);
     if (!client) throw new Error("請求先が見つかりません");
     assertCompanyAccess(user, companyFromParam(client.company));
-    if (user.role === "BILLING_EDITOR" && !["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT"].includes(invoice.status)) throw new Error("請求書の作成時には下書き・発行済み・送付済み・入金待ちを選択してください");
+    if (user.role === "BILLING_EDITOR" && !["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT", "PAID"].includes(invoice.status)) throw new Error("請求書の作成時に選べない状態です");
     draft.issuedInvoices.unshift(invoice);
     draft.issuedInvoiceItems.push(...items);
+    applyIssuedInvoiceEdits(draft, user, companyFromParam(project.company), [{ id: invoice.id, updatedAt: invoice.updatedAt,
+      invoiceNumber: invoice.invoiceNumber, projectId: invoice.projectId, issueDate: invoice.issueDate, dueDate: invoice.dueDate,
+      total: invoice.total, status: invoice.status, needsReview: false, paymentDate: optional(formData, "paymentDate") }]);
     const setting = draft.invoiceNumberSettings[0];
     if (setting && invoice.invoiceNumber.endsWith(String(setting.nextNumber).padStart(4, "0"))) {
       setting.nextNumber += 1;
@@ -817,6 +823,7 @@ export async function createIssuedInvoice(formData: FormData) {
   revalidatePath(`/projects/${invoice.projectId}`);
   const project = (await readData()).projects.find((item) => item.id === invoice.projectId);
   revalidatePath("/documents");
+  for (const path of ["/dashboard", "/payments", "/projects", "/reports"]) revalidatePath(path);
   redirect(`/issued-invoices?company=${companyFromParam(project?.company)}&created=${invoice.id}&document=${encodeURIComponent(`issued:${invoice.id}`)}`);
 }
 
@@ -841,12 +848,13 @@ export async function recordIncomePayment(formData: FormData) {
   await mutateData(user.id, "RECORD_INCOME_PAYMENT", "Payment", payment.id, (data) => {
     const invoice = data.issuedInvoices.find((item) => item.id === invoiceId);
     if (!invoice || !isBillableIssuedInvoice(invoice)) throw new Error("確認済みの発行請求書を選択してください");
+    if (!visibleProjects(data, user).some((p) => p.id === invoice.projectId)) throw new Error("この請求書に入金を登録する権限がありません");
     if (payment.amount <= 0 || payment.amount > invoice.total - paidForIssued(data, invoiceId)) throw new Error("未入金額の範囲で入力してください");
     data.payments.unshift(payment);
     if (invoice) {
-      const paid = paidForIssued(data, invoiceId);
-      invoice.status = paid >= invoice.total ? "PAID" : paid > 0 ? "PARTIALLY_PAID" : "WAITING_PAYMENT";
-      invoice.paidAt = paid >= invoice.total ? payment.paymentDate : undefined;
+      const paymentState = invoicePaymentSummary(data, invoice);
+      invoice.status = paymentState.status;
+      invoice.paidAt = paymentState.paidAt;
       invoice.updatedAt = timestamp;
     }
     return payment;
@@ -855,6 +863,9 @@ export async function recordIncomePayment(formData: FormData) {
   revalidatePath("/issued-invoices");
   revalidatePath("/dashboard");
   revalidatePath("/documents");
+  revalidatePath("/projects/[id]", "page");
+  revalidatePath("/projects");
+  revalidatePath("/reports");
 }
 
 export async function updateReceivedInvoiceStatus(formData: FormData) {

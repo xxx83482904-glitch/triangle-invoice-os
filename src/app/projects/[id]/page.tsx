@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { StatusBadge } from "@/components/app/status-badge";
+import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -66,7 +67,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardContent>
               <Table>
                 <TableHeader><TableRow><TableHead>番号</TableHead><TableHead>発行日</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>入金</TableHead><TableHead>状態</TableHead><TableHead>PDF</TableHead></TableRow></TableHeader>
-                <TableBody>{issued.map((invoice) => <TableRow key={invoice.id}><TableCell>{invoice.invoiceNumber}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell><StatusBadge status={invoice.status} /></TableCell><TableCell><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell></TableRow>)}</TableBody>
+                <TableBody>{issued.map((invoice) => <TableRow key={invoice.id}><TableCell>{invoice.invoiceNumber}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell><TableCell><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
           </Card>
@@ -75,7 +76,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardContent>
               <Table>
                 <TableHeader><TableRow><TableHead>請求元</TableHead><TableHead>請求日</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>支払済み</TableHead><TableHead>状態</TableHead><TableHead>ファイル</TableHead></TableRow></TableHeader>
-                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell><StatusBadge status={invoice.status} /></TableCell><TableCell>{invoice.fileUrl ? <a className="text-sm underline" href={invoice.fileUrl} target="_blank">表示</a> : "-"}</TableCell></TableRow>)}</TableBody>
+                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="received" status={invoice.status} /></TableCell><TableCell>{invoice.fileUrl ? <a className="text-sm underline" href={invoice.fileUrl} target="_blank">表示</a> : "-"}</TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
           </Card> : null}

@@ -6,7 +6,7 @@ import { AppShell, PageHeader } from "@/components/app/shell";
 import { DocumentsWorkspace } from "@/components/app/documents-workspace";
 import { InvoiceDropzone } from "@/components/app/invoice-dropzone";
 import { InvoiceCreateDialog, InvoiceCreateSubmit } from "@/components/app/invoice-create-dialog";
-import { documentRows } from "@/lib/documents";
+import { documentRows, issuedStatusLabels } from "@/lib/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,9 +40,9 @@ export default async function IssuedInvoicesPage({
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
   const documents = documentRows(data, user, company).filter((row) => row.kind === "issued");
   const fallbackOptions = defaultSelectOptions(todayIso());
-  const statuses = selectOptionsFor(data, "ISSUED_INVOICE_STATUS", company);
-  const issuedStatusOptions = (statuses.length ? statuses : fallbackOptions.filter((o) => o.group === "ISSUED_INVOICE_STATUS"))
-    .filter((option) => user.role !== "BILLING_EDITOR" || ["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT"].includes(option.value));
+  const issuedStatusOptions = Object.entries(issuedStatusLabels).map(([value, label]) => ({ value, label }))
+    .filter((option) => option.value !== "PARTIALLY_PAID")
+    .filter((option) => user.role !== "BILLING_EDITOR" || ["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT", "PAID"].includes(option.value));
   const taxes = selectOptionsFor(data, "TAX_RATE", company);
   const taxRateOptions = taxes.length ? taxes : fallbackOptions.filter((o) => o.group === "TAX_RATE");
 
@@ -62,7 +62,6 @@ export default async function IssuedInvoicesPage({
                       name="status"
                       defaultValue={issuedStatusOptions.find((option) => option.value === "ISSUED")?.value ?? issuedStatusOptions[0]?.value ?? "ISSUED"}
                       options={issuedStatusOptions.map((option) => ({ label: option.label, value: option.value }))}
-                      create={{ kind: "select-option", company, group: "ISSUED_INVOICE_STATUS" }}
                       required
                     />
                   </div>
@@ -71,6 +70,7 @@ export default async function IssuedInvoicesPage({
                   <div className="space-y-2"><Label htmlFor="new-issue-date">発行日</Label><Input id="new-issue-date" name="issueDate" type="date" defaultValue={todayIso()} required /></div>
                   <div className="space-y-2"><Label htmlFor="new-transaction-date">取引年月日</Label><Input id="new-transaction-date" name="transactionDate" type="date" defaultValue={todayIso()} required /></div>
                   <div className="space-y-2"><Label htmlFor="new-due-date">支払期限</Label><Input id="new-due-date" name="dueDate" type="date" required /></div>
+                  <div className="space-y-2"><Label htmlFor="new-payment-date">入金日（入金完了の場合）</Label><Input id="new-payment-date" name="paymentDate" type="date" defaultValue={todayIso()} /></div>
                 </div>
                 <div className="space-y-2">
                   <Label>案件名</Label>

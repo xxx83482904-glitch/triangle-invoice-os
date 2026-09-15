@@ -275,6 +275,7 @@ export type MailFolder = {
 
 export type Payment = {
   id: string;
+  source?: "INVOICE_STATUS";
   type: PaymentType;
   issuedInvoiceId?: string;
   receivedInvoiceId?: string;

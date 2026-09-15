@@ -361,7 +361,7 @@ export function ReceivedInvoicesWorkspace({
                                     </select>
                                   </form>
                                 ) : (
-                                  <StatusBadge status={invoice.status} />
+                                  <StatusBadge kind="received" status={invoice.status} />
                                 )}
                               </td>
                               <td className="px-3 py-2">

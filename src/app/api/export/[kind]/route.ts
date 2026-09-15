@@ -4,6 +4,7 @@ import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate } from "@/lib/format";
 import { can, canAccessCompany } from "@/lib/rbac";
 import { projectMoney, readData } from "@/lib/store";
+import { invoicePaymentSummary } from "@/lib/invoice-status";
 
 function csvEscape(value: unknown) {
   const text = String(value ?? "");
@@ -53,7 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
           invoice.subtotal,
           invoice.taxTotal,
           invoice.total,
-          invoice.status,
+          invoicePaymentSummary(data, invoice).status,
         ]),
     ]);
   } else if (kind === "received-invoices") {

@@ -8,6 +8,7 @@ import type { AppData, Estimate, IssuedInvoice, User } from "@/lib/types";
 
 type Actor = Pick<User, "id" | "role">;
 export type EstimateTarget = { id: string; updatedAt: string };
+export type EstimateStatusUpdate = EstimateTarget & { status: Exclude<Estimate["status"], "CONVERTED"> };
 export type EstimateConversion = EstimateTarget & { issueDate: string; dueDate: string; transactionDate: string };
 const targetSchema = z.object({ id: z.string().min(1), updatedAt: z.string().min(1) });
 const conversionSchema = targetSchema.extend({ issueDate: documentDateSchema, dueDate: documentDateSchema, transactionDate: documentDateSchema })
@@ -28,6 +29,15 @@ function assertVersion(estimate: Estimate, version?: string) {
 }
 function timestampAfter(previous?: string) {
   return new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
+}
+export function updateEstimateStatus(data: AppData, user: Actor, company: CompanyScope, input: EstimateStatusUpdate) {
+  const ids = projectScope(data, user, company);
+  const parsed = targetSchema.extend({ status: z.enum(["DRAFT", "SENT", "ACCEPTED", "DECLINED"]) }).parse(input);
+  const estimate = findEstimate(data, ids, parsed.id);
+  assertVersion(estimate, parsed.updatedAt);
+  if (estimate.invoiceId || estimate.status === "CONVERTED") throw new Error("請求書作成済みの見積書は状態を変更できません");
+  estimate.status = parsed.status; estimate.updatedAt = timestampAfter(estimate.updatedAt);
+  return estimate;
 }
 export function saveEstimate(data: AppData, user: Actor, company: CompanyScope, input: EstimateInput) {
   const ids = projectScope(data, user, company);

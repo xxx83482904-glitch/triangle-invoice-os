@@ -4,6 +4,7 @@ import { createGuestIssuedInvoice, logoutAction } from "@/app/actions";
 import { CompanySwitch } from "@/components/app/company-switch";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { StatusBadge } from "@/components/app/status-badge";
+import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -104,7 +105,7 @@ export default async function GuestInvoicesPage({
                       <TableCell>{formatDate(invoice.issueDate)}</TableCell>
                       <TableCell>{formatDate(invoice.dueDate)}</TableCell>
                       <TableCell className="text-right">{yen.format(invoice.total)}</TableCell>
-                      <TableCell><StatusBadge status={invoice.status} /></TableCell>
+                      <TableCell><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell>
                       <TableCell>
                         <Button asChild size="sm" variant="outline">
                           <a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">

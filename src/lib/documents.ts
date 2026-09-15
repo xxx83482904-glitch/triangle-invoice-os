@@ -1,6 +1,8 @@
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { can, canAccessCompany } from "@/lib/rbac";
 import { estimateStatusLabels } from "@/lib/estimate-values";
+import { invoicePaymentSummary, issuedStatusLabels } from "@/lib/invoice-status";
+export { issuedStatusLabels } from "@/lib/invoice-status";
 import type { AppData, IssuedInvoice, User } from "@/lib/types";
 
 export type DocumentKind = "issued" | "estimate" | "received" | "mail" | "contract" | "attachment";
@@ -17,6 +19,8 @@ export type DocumentRow = {
   date: string;
   dueDate?: string;
   total?: number;
+  paidAmount?: number;
+  statusPaymentAmount?: number;
   status: string;
   statusLabel: string;
   state: "review" | "open" | "done";
@@ -35,10 +39,6 @@ export const documentKindLabels: Record<DocumentKind, string> = {
 };
 export const documentCategoryLabels: Record<string, string> = {
   INVOICE: "請求書", RECEIPT: "領収書", CONTRACT: "契約書", ESTIMATE: "見積書", DELIVERY_NOTE: "納品書", NOTICE: "通知書", OTHER: "その他",
-};
-export const issuedStatusLabels: Record<string, string> = {
-  DRAFT: "下書き", ISSUED: "発行済み", SENT: "送付済み", WAITING_PAYMENT: "入金待ち", PARTIALLY_PAID: "一部入金",
-  PAID: "入金済み", OVERDUE: "期限超過", CANCELED: "キャンセル", REISSUED: "再発行済み",
 };
 export const receivedStatusLabels: Record<string, string> = {
   RECEIVED: "受領済み", OCR_PENDING: "読み取り待ち", REVIEWING: "確認中", APPROVAL_PENDING: "承認待ち", SCHEDULED: "支払予定",
@@ -71,15 +71,16 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
       month: month(e.issueDate), date: e.issueDate, dueDate: e.validUntil, total: e.total, status: e.status, statusLabel: estimateStatusLabels[e.status],
       state: e.status === "DRAFT" ? "review" : ["CONVERTED", "DECLINED"].includes(e.status) ? "done" : "open",
       fileUrl: `/api/estimates/${e.id}/pdf`, fileName: `${e.estimateNumber}.pdf`, mimeType: "application/pdf",
-      sourceHref: `/estimates?company=${company}&document=${e.id}`, updatedAt: e.updatedAt });
+      sourceHref: `/estimates?company=${company}&document=${e.id}`, editable: can(user, "manage:estimates") && !e.invoiceId && e.status !== "CONVERTED", updatedAt: e.updatedAt });
   }
   if (can(user, "view:issuedInvoices")) for (const i of data.issuedInvoices) {
     if (i.deletedAt || !projectMap.has(i.projectId)) continue;
+    const payment = invoicePaymentSummary(data, i);
     rows.push({ id: `issued:${i.id}`, sourceId: i.id, kind: "issued", title: i.invoiceNumber, category: "INVOICE",
       counterpart: clients.get(i.clientId) ?? "請求先未設定", projectId: i.projectId, projectName: projectMap.get(i.projectId)!.name,
-      month: month(i.issueDate), date: i.issueDate, dueDate: i.dueDate, total: i.total, status: i.status,
-      statusLabel: i.needsReview ? "OCR要確認" : issuedStatusLabels[i.status] ?? i.status,
-      state: i.needsReview || i.status === "DRAFT" ? "review" : ["PAID", "CANCELED"].includes(i.status) ? "done" : "open",
+      month: month(i.issueDate), date: i.issueDate, dueDate: i.dueDate, total: i.total, status: payment.status, paidAmount: payment.paid, statusPaymentAmount: payment.statusPaid,
+      statusLabel: i.needsReview ? "OCR要確認" : issuedStatusLabels[payment.status],
+      state: i.needsReview || payment.status === "DRAFT" ? "review" : ["PAID", "CANCELED"].includes(payment.status) ? "done" : "open",
       fileUrl: i.fileUrl || i.pdfUrl || `/api/issued-invoices/${i.id}/pdf`, fileName: i.originalFileName || `${i.invoiceNumber}.pdf`, mimeType: i.mimeType || "application/pdf",
       sourceHref: `/issued-invoices?company=${company}&document=${encodeURIComponent(`issued:${i.id}`)}`,
       needsReview: i.needsReview, imported: Boolean(i.fileUrl), editable: can(user, "manage:issuedInvoices"), updatedAt: i.updatedAt });

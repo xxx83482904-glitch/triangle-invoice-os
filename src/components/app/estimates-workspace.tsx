@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { EstimateStatusSelect } from "@/components/app/estimate-status-select";
 import type { CompanyScope } from "@/lib/company";
 import { estimateStatusLabels, estimateTotals, type EstimateInput } from "@/lib/estimate-values";
 import { todayIso } from "@/lib/format";
@@ -134,7 +135,7 @@ export function EstimatesWorkspace({ company, estimates, projects, clients, canE
           <button type="button" onClick={() => setPreview(e)} className="min-h-11 min-w-0 text-left"><span className="block break-words font-medium hover:underline">{e.estimateNumber}</span><span className="block break-words text-xs text-muted-foreground">{projectMap.get(e.projectId)}</span></button>
           <span className="col-start-1 break-words text-sm md:col-start-auto">{clientMap.get(e.clientId)}</span>
           <span className="col-start-1 text-xs text-muted-foreground md:col-start-auto">{e.issueDate}<br /><span>{e.validUntil}</span></span>
-          <div className="col-start-1 min-w-0 space-y-1 md:col-start-auto md:text-right"><span className="block break-words font-medium tabular-nums">{money(e.total)}</span><span className={`inline-block rounded px-2 py-1 text-xs ${e.status === "CONVERTED" || e.status === "ACCEPTED" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : "bg-muted text-muted-foreground"}`}>{estimateStatusLabels[e.status]}</span></div>
+          <div className="col-start-1 min-w-0 space-y-1 md:col-start-auto md:text-right"><span className="block break-words font-medium tabular-nums">{money(e.total)}</span><EstimateStatusSelect id={e.id} updatedAt={e.updatedAt} status={e.status} label={e.estimateNumber} company={company} disabled={!editable(e) || pending} onSaved={(next) => { if (preview?.id === next.id) setPreview(next); }} /></div>
           <div className="col-start-2 row-start-1 md:col-start-auto md:row-start-auto"><DropdownMenu><DropdownMenuTrigger asChild><Button className="size-11" variant="ghost" size="icon" aria-label={`${e.estimateNumber}の操作`} title="見積書の操作"><Ellipsis className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{actions(e).map((action) => <DropdownMenuItem key={action.label} className="min-h-11" disabled={pending} onSelect={action.action}><action.icon className="size-4" />{action.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div>
         </div>
       </ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">{actions(e).map((action) => <ContextMenu.Item key={action.label} className={menuClass} disabled={pending} onSelect={action.action}><action.icon />{action.label}</ContextMenu.Item>)}</ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}
@@ -148,6 +149,7 @@ export function EstimatesWorkspace({ company, estimates, projects, clients, canE
     <Dialog open={preview !== null} onOpenChange={(open) => { if (!open) setPreview(null); }}><DialogContent aria-describedby={undefined} className="max-h-[92dvh] min-w-0 overflow-y-auto rounded-lg sm:max-w-4xl">
       <DialogHeader><DialogTitle className="break-words pr-8">{preview?.estimateNumber}</DialogTitle></DialogHeader>
       {preview ? <><div className="flex flex-wrap gap-2">
+        <div className="w-44"><EstimateStatusSelect id={preview.id} updatedAt={preview.updatedAt} status={preview.status} label={preview.estimateNumber} company={company} disabled={!editable(preview) || pending} onSaved={setPreview} /></div>
         <Button asChild variant="outline"><a href={pdfUrl(preview)} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />PDFを開く</a></Button>
         {editable(preview) ? <Button variant="outline" onClick={() => edit(preview)}><Pencil className="size-4" />編集</Button> : null}
         {preview.invoiceId ? <Button asChild><Link href={invoiceHref(company, preview.invoiceId)}><FileText className="size-4" />請求書を開く</Link></Button> : editable(preview) && preview.status !== "DECLINED" ? <Button onClick={() => { setError(""); setConvertTarget(preview); }}><ArrowRightLeft className="size-4" />請求書に変換</Button> : null}

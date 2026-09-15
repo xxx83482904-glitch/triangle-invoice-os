@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import type { IssuedInvoiceStatus, ProjectStatus, ReceivedInvoiceStatus } from "@/lib/types";
+import { issuedStatusLabels } from "@/lib/invoice-status";
 
 const labels = {
   PLANNING: "計画中",
@@ -10,9 +11,9 @@ const labels = {
   DRAFT: "下書き",
   ISSUED: "発行済み",
   SENT: "送付済み",
-  WAITING_PAYMENT: "入金待ち",
+  WAITING_PAYMENT: "入金未完了",
   PARTIALLY_PAID: "一部入金",
-  PAID: "入金/支払済み",
+  PAID: "入金完了",
   OVERDUE: "期限超過",
   CANCELED: "キャンセル",
   REISSUED: "再発行済み",
@@ -27,8 +28,10 @@ const labels = {
 
 export function StatusBadge({
   status,
+  kind,
 }: {
   status: ProjectStatus | IssuedInvoiceStatus | ReceivedInvoiceStatus | string;
+  kind?: "issued" | "received";
 }) {
   const tone =
     status === "OVERDUE" || status === "REJECTED"
@@ -41,7 +44,7 @@ export function StatusBadge({
 
   return (
     <Badge variant="outline" className={tone}>
-      {labels[status as keyof typeof labels] ?? status}
+      {kind === "received" && status === "PAID" ? "支払い済み" : kind === "issued" ? issuedStatusLabels[status as IssuedInvoiceStatus] || status : labels[status as keyof typeof labels] ?? status}
     </Badge>
   );
 }
