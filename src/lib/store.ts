@@ -1,5 +1,5 @@
 import "server-only";
-import { isBillableIssuedInvoice } from "@/lib/documents";
+import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -711,6 +711,7 @@ export function projectMoney(data: AppData, projectId: string): ProjectMoney {
 }
 
 export function scopedProjectsForUser(data: AppData, user: Pick<User, "id" | "role">) {
+  if (user.role === "BILLING_EDITOR") return visibleProjects(data, user);
   if (user.role === "ADMIN" || user.role === "ACCOUNTING") return active(data.projects);
   if (user.role === "GUEST") return [];
   return active(data.projects).filter(

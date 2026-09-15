@@ -6,7 +6,7 @@ import { companyFromParam } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
 import { allowedUploadTypes, deleteReceivedInvoiceFile, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { extractDocumentText, inferIssuedInvoiceWithAi } from "@/lib/ocr";
-import { can } from "@/lib/rbac";
+import { can, canAccessCompany } from "@/lib/rbac";
 import { resolveIssuedImportProject } from "@/lib/issued-import-project";
 import { mutateData, newId, readData } from "@/lib/store";
 import type { IssuedInvoice } from "@/lib/types";
@@ -20,6 +20,7 @@ export async function POST(request: Request) {
   const form = await request.formData();
   if (!["JAPAN", "CHINA"].includes(String(form.get("company")))) return NextResponse.json({ error: "取込先の会社を指定してください" }, { status: 400 });
   const company = companyFromParam(String(form.get("company") || ""));
+  if (!canAccessCompany(user, company)) return NextResponse.json({ error: "日本の請求書のみ取り込めます" }, { status: 403 });
   const projectId = String(form.get("projectId") || "");
   const data = await readData();
   const project = visibleProjects(data, user).find((p) => p.id === projectId && companyFromParam(p.company) === company);

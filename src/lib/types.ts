@@ -4,6 +4,7 @@ export type UserRole =
   | "CHIEF_DESIGNER"
   | "PROJECT_MANAGER"
   | "MAIL_EDITOR"
+  | "BILLING_EDITOR"
   | "DESIGNER"
   | "GUEST";
 

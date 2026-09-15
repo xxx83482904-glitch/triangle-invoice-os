@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
-import { assertCan } from "@/lib/rbac";
+import { can, canAccessCompany, canEditOptionGroup } from "@/lib/rbac";
 import { mutateData, newId } from "@/lib/store";
 import type { AppData, SelectOptionGroup } from "@/lib/types";
 
@@ -53,10 +53,11 @@ export async function POST(request: Request) {
   const label = String(body.label ?? "").trim();
   if (!label) return NextResponse.json({ error: "名前を入力してください" }, { status: 400 });
   const company = companyFromParam(body.company);
+  if (!canAccessCompany(user, company)) return NextResponse.json({ error: "日本の取引先・請求書設定のみ変更できます" }, { status: 403 });
   const timestamp = now();
 
   if (body.kind === "client") {
-    assertCan(user, "manage:clients");
+    if (!can(user, "manage:clients")) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
     const client = await mutateData(user.id, "QUICK_CREATE_CLIENT", "Client", label, (data) => {
       const item = {
         id: newId(),
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
   }
 
   if (body.kind === "vendor") {
-    assertCan(user, "manage:vendors");
+    if (!can(user, "manage:vendors")) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
     const vendor = await mutateData(user.id, "QUICK_CREATE_VENDOR", "Vendor", label, (data) => {
       const item = {
         id: newId(),
@@ -90,7 +91,8 @@ export async function POST(request: Request) {
   }
 
   if (body.kind === "select-option" && body.group) {
-    assertCan(user, "manage:clients");
+    if (!can(user, "manage:clients")) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
+    if (!canEditOptionGroup(user, body.group)) return NextResponse.json({ error: "発行請求書に関係する選択肢のみ変更できます" }, { status: 403 });
     const option = await mutateData(user.id, "QUICK_CREATE_SELECT_OPTION", "SelectOption", body.group, (data) => {
       const item = {
         id: newId(),

@@ -1,5 +1,5 @@
 import { companyFromParam, type CompanyScope } from "@/lib/company";
-import { can } from "@/lib/rbac";
+import { can, canAccessCompany } from "@/lib/rbac";
 import type { AppData, IssuedInvoice, User } from "@/lib/types";
 
 export type DocumentKind = "issued" | "received" | "mail" | "contract" | "attachment";
@@ -45,6 +45,7 @@ export const receivedStatusLabels: Record<string, string> = {
 };
 
 export function visibleProjects(data: AppData, user: Pick<User, "id" | "role">) {
+  if (user.role === "BILLING_EDITOR") return data.projects.filter((p) => !p.deletedAt && p.company === "JAPAN");
   return data.projects.filter((p) => !p.deletedAt && (can(user, "view:all") || p.managerId === user.id || p.memberIds.includes(user.id)));
 }
 
@@ -53,6 +54,7 @@ export function isBillableIssuedInvoice(invoice: IssuedInvoice) {
 }
 
 export function documentRows(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope): DocumentRow[] {
+  if (!canAccessCompany(user, company)) return [];
   const projects = visibleProjects(data, user).filter((p) => companyFromParam(p.company) === company);
   const projectMap = new Map(projects.map((p) => [p.id, p]));
   const clients = new Map(data.clients.filter((p) => !p.deletedAt).map((p) => [p.id, p.companyName]));

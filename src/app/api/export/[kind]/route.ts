@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate } from "@/lib/format";
-import { can } from "@/lib/rbac";
+import { can, canAccessCompany } from "@/lib/rbac";
 import { projectMoney, readData } from "@/lib/store";
 
 function csvEscape(value: unknown) {
@@ -28,12 +28,13 @@ function memoValue(memo: string | undefined, label: string) {
 
 export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const user = await requireUser();
-  if (!can(user, "export:csv")) {
+  const { kind } = await params;
+  if (!can(user, "export:csv") && !(kind === "issued-invoices" && can(user, "export:issuedInvoices"))) {
     return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   }
-  const { kind } = await params;
-  const data = await readData();
   const company = companyFromParam(new URL(request.url).searchParams.get("company"));
+  if (!canAccessCompany(user, company)) return NextResponse.json({ error: "日本の発行請求書のみ出力できます" }, { status: 403 });
+  const data = await readData();
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));
 
@@ -173,6 +174,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   return new NextResponse(`\uFEFF${body}`, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
+      "Cache-Control": "private, no-store",
       "Content-Disposition": `attachment; filename="${kind}.csv"`,
     },
   });

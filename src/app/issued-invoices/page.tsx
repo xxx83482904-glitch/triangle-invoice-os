@@ -12,9 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
-import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
+import { matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { todayIso } from "@/lib/format";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can, companyForUser, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 
@@ -24,10 +24,10 @@ export default async function IssuedInvoicesPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!can(user, "view:issuedInvoices")) redirect(defaultPathForRole(user.role));
+  const company = companyForUser(user, params.company);
   const data = await readData();
   const setting = data.invoiceNumberSettings[0] ?? { prefix: "TRI", fiscalYear: new Date().getFullYear(), nextNumber: data.issuedInvoices.length + 1 };
   const defaultNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
@@ -38,18 +38,19 @@ export default async function IssuedInvoicesPage({
     .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
   const documents = documentRows(data, user, company).filter((row) => row.kind === "issued");
-  const issuedStatusOptions = selectOptionsFor(data, "ISSUED_INVOICE_STATUS", company);
+  const issuedStatusOptions = selectOptionsFor(data, "ISSUED_INVOICE_STATUS", company)
+    .filter((option) => user.role !== "BILLING_EDITOR" || ["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT"].includes(option.value));
   const taxRateOptions = selectOptionsFor(data, "TAX_RATE", company);
 
   return (
     <AppShell>
       <PageHeader title="発行請求書">
-        <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button>
+        {can(user, "view:documents") ? <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button> : null}
       </PageHeader>
 
       <div className="space-y-5">
         {can(user, "manage:issuedInvoices") ? <InvoiceDropzone key={`drop:${company}`} company={company} kind="issued" projects={projects.map((p) => ({ value: p.id, label: p.name }))} /> : null}
-        <DocumentsWorkspace key={company} company={company} rows={documents} issuedOnly initialId={params.document} canExport={can(user, "export:csv")} projects={projects.map((p) => ({ value: p.id, label: p.name, clientName: clients.find((c) => c.id === p.clientId)?.companyName }))} />
+        <DocumentsWorkspace key={company} company={company} rows={documents} issuedOnly initialId={params.document} canExport={can(user, "export:csv") || can(user, "export:issuedInvoices")} projects={projects.map((p) => ({ value: p.id, label: p.name, clientName: clients.find((c) => c.id === p.clientId)?.companyName }))} />
 
         {user && can(user, "manage:issuedInvoices") ? (
           <details className="border-y py-4">

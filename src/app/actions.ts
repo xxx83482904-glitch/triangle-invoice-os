@@ -6,7 +6,7 @@ import { hash } from "bcryptjs";
 import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, mailSorterCompany, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
-import { assertCan, can, defaultPathForRole } from "@/lib/rbac";
+import { assertCan, assertCompanyAccess, can, canEditOptionGroup, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, writeData } from "@/lib/store";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import type {
@@ -340,6 +340,7 @@ export async function createClient(formData: FormData) {
   assertCan(user, "manage:clients");
   const timestamp = now();
   const company = companyFromParam(value(formData, "company"));
+  assertCompanyAccess(user, company);
   const client: Client = {
     id: newId(),
     company,
@@ -482,6 +483,8 @@ export async function createSelectOption(formData: FormData) {
   const timestamp = now();
   const company = companyFromParam(value(formData, "company"));
   const group = value(formData, "group") as SelectOptionGroup;
+  assertCompanyAccess(user, company);
+  if (!canEditOptionGroup(user, group)) throw new Error("発行請求書に関係する選択肢のみ編集できます");
   const label = value(formData, "label");
   if (!label) throw new Error("選択肢名を入力してください");
 
@@ -517,6 +520,7 @@ export async function moveClientOption(formData: FormData) {
   await mutateData(user.id, "MOVE_CLIENT_OPTION", "Client", id, (data) => {
     const current = data.clients.find((client) => client.id === id && !client.deletedAt);
     if (!current) throw new Error("クライアントが見つかりません");
+    assertCompanyAccess(user, companyFromParam(current.company));
     const list = data.clients
       .filter((client) => !client.deletedAt && companyFromParam(client.company) === companyFromParam(current.company))
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
@@ -568,6 +572,8 @@ export async function moveSelectOption(formData: FormData) {
   await mutateData(user.id, "MOVE_SELECT_OPTION", "SelectOption", id, (data) => {
     const current = data.selectOptions.find((option) => option.id === id && !option.deletedAt);
     if (!current) throw new Error("選択肢が見つかりません");
+    assertCompanyAccess(user, companyFromParam(current.company));
+    if (!canEditOptionGroup(user, current.group)) throw new Error("発行請求書に関係する選択肢のみ編集できます");
     const list = data.selectOptions
       .filter(
         (option) =>
@@ -603,7 +609,8 @@ export async function createInstallmentInvoice(formData: FormData) {
   const today = timestamp.slice(0, 10);
 
   await mutateData(user.id, "CREATE_INSTALLMENT_INVOICE", "IssuedInvoice", projectId, (data) => {
-    const project = data.projects.find((item) => item.id === projectId && !item.deletedAt);
+    if (user.role === "BILLING_EDITOR") throw new Error("契約金額からの一括請求作成は担当範囲外です");
+    const project = visibleProjects(data, user).find((item) => item.id === projectId);
     if (!project) throw new Error("案件が見つかりません");
 
     const billingCount = Math.max(1, project.billingCount ?? 1);
@@ -790,6 +797,13 @@ export async function createIssuedInvoice(formData: FormData) {
   };
 
   await mutateData(user.id, "CREATE_ISSUED_INVOICE", "IssuedInvoice", invoice.id, (draft) => {
+    const project = visibleProjects(draft, user).find((p) => p.id === invoice.projectId);
+    if (!project) throw new Error("この案件に請求書を作成する権限がありません");
+    assertCompanyAccess(user, companyFromParam(project.company));
+    const client = draft.clients.find((c) => c.id === invoice.clientId && !c.deletedAt);
+    if (!client) throw new Error("請求先が見つかりません");
+    assertCompanyAccess(user, companyFromParam(client.company));
+    if (user.role === "BILLING_EDITOR" && !["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT"].includes(invoice.status)) throw new Error("請求書の作成時には下書き・発行済み・送付済み・入金待ちを選択してください");
     draft.issuedInvoices.unshift(invoice);
     draft.issuedInvoiceItems.push(...items);
     const setting = draft.invoiceNumberSettings[0];

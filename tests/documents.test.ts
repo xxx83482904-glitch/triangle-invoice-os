@@ -7,6 +7,7 @@ import { applyIssuedInvoiceEdits, type IssuedEdit } from "../src/lib/issued-invo
 import { projectMoney } from "../src/lib/store";
 import { fixture, admin, manager } from "./document-fixture";
 import { resolveIssuedImportProject } from "../src/lib/issued-import-project";
+import { can, canAccessCompany, canEditOptionGroup, companyForUser, defaultPathForRole } from "../src/lib/rbac";
 
 function edit(data = fixture()): IssuedEdit {
   const i = data.issuedInvoices[0];
@@ -158,4 +159,33 @@ test("unreadable documents stay provisional and unrelated files are not merged",
   assert.match(one.project.name, /要確認/); assert.notEqual(one.project.id, two.project.id);
   assert.equal(data.clients.find((c) => c.id === one.project.clientId)?.companyName, "請求先未確認");
   assert.equal(one.project.clientId, two.project.clientId);
+});
+
+const billing = { id: "billing", role: "BILLING_EDITOR" as const };
+test("Japan billing staff see all Japan issued invoices, not receipts, contracts, or China", () => {
+  assert.deepEqual(documentRows(fixture(), billing, "JAPAN").map((r) => r.id).sort(), ["issued:issued-1", "issued:issued-2"]);
+  assert.deepEqual(documentRows(fixture(), billing, "CHINA"), []);
+  assert.equal(companyForUser(billing, "CHINA"), "JAPAN");
+  assert.equal(defaultPathForRole(billing.role), "/issued-invoices");
+  for (const permission of ["view:documents", "view:projects", "view:dashboard", "view:payments", "view:reports", "view:mailSorter", "view:receivedInvoices", "manage:users", "manage:vendors", "manage:projects", "view:all", "export:csv"]) assert.equal(can(billing, permission), false, permission);
+  assert.ok(can(billing, "manage:issuedInvoices")); assert.ok(can(billing, "manage:clients"));
+});
+test("billing staff can import and edit Japan invoices but cannot cross company boundaries", () => {
+  const data = fixture();
+  applyIssuedInvoiceEdits(data, billing, "JAPAN", [edit(data)]);
+  assert.equal(data.issuedInvoices[0].needsReview, false);
+  assert.throws(() => applyIssuedInvoiceEdits(fixture(), billing, "CHINA", [edit()]));
+  assert.throws(() => applyIssuedInvoiceEdits(fixture(), billing, "JAPAN", [{ ...edit(), projectId: "china" }]));
+  const result = resolveIssuedImportProject(data, billing, "JAPAN", "", hints("Billing shop"));
+  assert.equal(result.projectCreated, true); assert.equal(result.project.company, "JAPAN");
+  assert.throws(() => resolveIssuedImportProject(data, billing, "CHINA", "", hints("Forbidden")));
+  assert.throws(() => resolveIssuedImportProject(data, billing, "JAPAN", "china", hints()));
+});
+test("billing settings are limited to Japan invoice status and tax options", () => {
+  assert.equal(canAccessCompany(billing, "CHINA"), false);
+  assert.equal(canEditOptionGroup(billing, "PROJECT_STAGE"), false);
+  assert.equal(canEditOptionGroup(billing, "RECEIVED_INVOICE_STATUS"), false);
+  assert.equal(canEditOptionGroup(billing, "ISSUED_INVOICE_STATUS"), true);
+  assert.equal(canEditOptionGroup(billing, "TAX_RATE"), true);
+  assert.equal(canAccessCompany(admin, "CHINA"), true);
 });

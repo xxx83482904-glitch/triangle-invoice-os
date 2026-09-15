@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
+import { assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 
 const date = z.string().refine((s) => s === "" || (/^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s), "日付を確認してください");
@@ -14,6 +15,7 @@ export type IssuedEdit = z.infer<typeof editSchema>;
 
 
 export function applyIssuedInvoiceEdits(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, input: IssuedEdit[]) {
+  assertCompanyAccess(user, company);
   const edits = z.array(editSchema).min(1).max(500).parse(input);
   const projects = new Map(visibleProjects(data, user).filter((p) => companyFromParam(p.company) === company).map((p) => [p.id, p]));
   const timestamp = new Date().toISOString();

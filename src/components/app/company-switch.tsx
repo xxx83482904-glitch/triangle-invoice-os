@@ -6,7 +6,7 @@ import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCirc
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
-import { canRole, defaultPathForRole } from "@/lib/rbac";
+import { canRole, companyForUser, defaultPathForRole } from "@/lib/rbac";
 import type { UserRole } from "@/lib/types";
 
 const nav = [
@@ -32,7 +32,7 @@ function navHref(href: string, company: CompanyScope) {
 }
 
 function optionsForPath(pathname: string, role?: UserRole) {
-  return pathname === "/mail-sorter" || role === "MAIL_EDITOR" ? companyOptions.filter((option) => option.value === mailSorterCompany) : companyOptions;
+  return pathname === "/mail-sorter" || role === "MAIL_EDITOR" || role === "BILLING_EDITOR" ? companyOptions.filter((option) => option.value === mailSorterCompany) : companyOptions;
 }
 
 function NavLinkPending({ className = "" }: { className?: string }) {
@@ -49,7 +49,7 @@ export function CompanySwitch({ role }: { role?: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const options = optionsForPath(pathname, role);
-  const company = pathname === "/mail-sorter" ? mailSorterCompany : companyFromParam(searchParams.get("company"));
+  const company = pathname === "/mail-sorter" ? mailSorterCompany : role ? companyForUser({ role }, searchParams.get("company")) : companyFromParam(searchParams.get("company"));
 
   return (
     <div className={`grid ${options.length === 1 ? "grid-cols-1" : "grid-cols-2"} gap-2 rounded-xl border bg-muted/30 p-1`}>
@@ -72,7 +72,7 @@ export function MobileCompanySwitch({ role }: { role?: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const options = optionsForPath(pathname, role);
-  const company = pathname === "/mail-sorter" ? mailSorterCompany : companyFromParam(searchParams.get("company"));
+  const company = pathname === "/mail-sorter" ? mailSorterCompany : role ? companyForUser({ role }, searchParams.get("company")) : companyFromParam(searchParams.get("company"));
 
   return (
     <div className="flex gap-1">
@@ -94,9 +94,9 @@ export function MobileCompanySwitch({ role }: { role?: UserRole }) {
 export function MobileAppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const company = companyFromParam(searchParams.get("company"));
+  const company = companyForUser({ role }, searchParams.get("company"));
   const allowedNav = nav.filter((item) => canRole(role, item.permission));
-  const primaryHrefs = ["/documents", "/projects", "/mail-sorter", "/issued-invoices"];
+  const primaryHrefs = role === "BILLING_EDITOR" ? ["/issued-invoices", "/partners"] : ["/documents", "/projects", "/mail-sorter", "/issued-invoices"];
   const primaryItems = primaryHrefs
     .map((href) => allowedNav.find((item) => item.href === href))
     .filter((item): item is (typeof nav)[number] => Boolean(item));
@@ -160,7 +160,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
 export function AppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const company = companyFromParam(searchParams.get("company"));
+  const company = companyForUser({ role }, searchParams.get("company"));
 
   return (
     <nav className="flex w-full flex-col gap-1">
@@ -191,7 +191,7 @@ export function AppNav({ role }: { role: UserRole }) {
 
 export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; role: UserRole }) {
   const searchParams = useSearchParams();
-  const company = companyFromParam(searchParams.get("company"));
+  const company = companyForUser({ role }, searchParams.get("company"));
   const href = defaultPathForRole(role);
 
   return (

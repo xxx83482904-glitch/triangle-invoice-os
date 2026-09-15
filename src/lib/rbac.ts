@@ -1,4 +1,5 @@
 import type { User, UserRole } from "@/lib/types";
+import { companyFromParam, type CompanyScope } from "@/lib/company";
 
 const permissions = {
   ADMIN: [
@@ -67,6 +68,7 @@ const permissions = {
     "comment:project",
   ],
   MAIL_EDITOR: ["view:documents", "view:mailSorter", "manage:mailSorter"],
+  BILLING_EDITOR: ["view:issuedInvoices", "manage:issuedInvoices", "view:partners", "manage:clients", "create:invoiceProjects", "export:issuedInvoices"],
   DESIGNER: ["view:assigned", "upload:receivedInvoices", "comment:project"],
   GUEST: ["guest:createIssuedInvoices"],
 } satisfies Record<UserRole, string[]>;
@@ -87,6 +89,7 @@ export function defaultPathForRole(role: UserRole) {
     CHIEF_DESIGNER: "/projects",
     PROJECT_MANAGER: "/projects",
     MAIL_EDITOR: "/mail-sorter",
+    BILLING_EDITOR: "/issued-invoices",
     DESIGNER: "/projects",
     GUEST: "/guest-invoices",
   }[role];
@@ -99,6 +102,7 @@ export function roleLabel(role: UserRole) {
     CHIEF_DESIGNER: "主任",
     PROJECT_MANAGER: "担当",
     MAIL_EDITOR: "郵便物担当",
+    BILLING_EDITOR: "請求書担当（日本）",
     DESIGNER: "担当補助",
     GUEST: "ゲスト",
   }[role];
@@ -106,4 +110,20 @@ export function roleLabel(role: UserRole) {
 
 export function assertCan(user: Pick<User, "role"> | null, permission: string) {
   if (!can(user, permission)) throw new Error("権限がありません");
+}
+
+export function canAccessCompany(user: Pick<User, "role">, company: CompanyScope) {
+  return user.role !== "BILLING_EDITOR" || company === "JAPAN";
+}
+
+export function companyForUser(user: Pick<User, "role">, value?: string | null): CompanyScope {
+  return user.role === "BILLING_EDITOR" ? "JAPAN" : companyFromParam(value);
+}
+
+export function assertCompanyAccess(user: Pick<User, "role">, company: CompanyScope) {
+  if (!canAccessCompany(user, company)) throw new Error("日本の発行請求書と関連取引先のみ操作できます");
+}
+
+export function canEditOptionGroup(user: Pick<User, "role">, group: string) {
+  return can(user, "manage:clients") && (user.role !== "BILLING_EDITOR" || ["ISSUED_INVOICE_STATUS", "TAX_RATE"].includes(group));
 }

@@ -9,8 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
-import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { partnerMatchesCompany, type CompanyScope } from "@/lib/company";
+import { can, canEditOptionGroup, companyForUser, defaultPathForRole } from "@/lib/rbac";
 import { managedOptionGroups, optionGroupLabels, selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
 import type { SelectOptionGroup } from "@/lib/types";
@@ -21,10 +21,11 @@ export default async function PartnersPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!can(user, "view:partners")) redirect(defaultPathForRole(user.role));
+  const company = companyForUser(user, params.company);
+  const billingOnly = user.role === "BILLING_EDITOR";
   const data = await readData();
   const mayEdit = Boolean(user && can(user, "manage:clients"));
   const clients = data.clients
@@ -36,11 +37,11 @@ export default async function PartnersPage({
 
   return (
     <AppShell>
-      <PageHeader title="取引先・プルダウン管理" description="クライアント、支払先、各プルダウンの追加と表示順を管理します。" />
+      <PageHeader title={billingOnly ? "請求先・請求書設定" : "取引先・プルダウン管理"} />
       <Tabs defaultValue="clients">
         <TabsList>
           <TabsTrigger value="clients">クライアント</TabsTrigger>
-          <TabsTrigger value="vendors">支払先</TabsTrigger>
+          {!billingOnly ? <TabsTrigger value="vendors">支払先</TabsTrigger> : null}
           <TabsTrigger value="options">プルダウン</TabsTrigger>
         </TabsList>
 
@@ -72,7 +73,7 @@ export default async function PartnersPage({
           ) : null}
         </TabsContent>
 
-        <TabsContent value="vendors" className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
+        {!billingOnly ? <TabsContent value="vendors" className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
           <Card>
             <CardHeader><CardTitle>支払先</CardTitle></CardHeader>
             <CardContent>
@@ -98,10 +99,10 @@ export default async function PartnersPage({
               <CardContent><VendorForm company={company} /></CardContent>
             </Card>
           ) : null}
-        </TabsContent>
+        </TabsContent> : null}
 
         <TabsContent value="options" className="mt-6 space-y-6">
-          {managedOptionGroups.map((group) => (
+          {managedOptionGroups.filter((group) => !billingOnly || canEditOptionGroup(user, group)).map((group) => (
             <OptionGroupCard key={group} company={company} disabled={!mayEdit} group={group} options={selectOptionsFor(data, group, company)} />
           ))}
         </TabsContent>

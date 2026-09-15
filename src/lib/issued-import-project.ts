@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
-import { can } from "@/lib/rbac";
+import { assertCompanyAccess, can } from "@/lib/rbac";
 import type { AppData, Project, User } from "@/lib/types";
 
 type ImportHints = { projectName: string; clientName: string; text: string; fileName: string };
@@ -24,6 +24,7 @@ export function resolveIssuedImportProject(
   requestedId: string, hints: ImportHints,
 ) {
   if (!can(user, "manage:issuedInvoices")) throw new Error("権限がありません");
+  assertCompanyAccess(user, company);
   const projects = visibleProjects(data, user).filter((p) => companyFromParam(p.company) === company);
   if (requestedId) {
     const project = projects.find((p) => p.id === requestedId);
@@ -51,7 +52,7 @@ export function resolveIssuedImportProject(
         warnings: ["請求先から案件を自動判定しました。案件名を確認してください。"] };
     }
   }
-  if (!can(user, "manage:projects")) throw new Error("案件を特定できません。新規案件を作成する権限が必要です");
+  if (!can(user, "manage:projects") && !can(user, "create:invoiceProjects")) throw new Error("案件を特定できません。新規案件を作成する権限が必要です");
   if (!can(user, "manage:clients") && matchedClients.length !== 1) throw new Error("請求先を登録する権限が必要です");
   const warnings = ["案件を自動作成しました。案件名と請求先を確認してください。"];
   if (named.length > 1 || matchedClients.length > 1) warnings.push("同名の候補が複数あるため、既存案件への自動登録を保留しました。");
