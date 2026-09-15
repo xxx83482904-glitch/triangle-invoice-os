@@ -6,6 +6,7 @@ import PDFDocument from "pdfkit";
 import { applyIssuedInvoiceEdits, type IssuedEdit } from "../src/lib/issued-invoice-edits";
 import { projectMoney } from "../src/lib/store";
 import { fixture, admin, manager } from "./document-fixture";
+import { resolveIssuedImportProject } from "../src/lib/issued-import-project";
 
 function edit(data = fixture()): IssuedEdit {
   const i = data.issuedInvoices[0];
@@ -82,4 +83,79 @@ test("installed PDF parser reads an actual PDF file", async () => {
   assert.equal(extracted.engine, "pdf-text");
   assert.equal(inferIssuedInvoice(extracted).invoiceNumber, "PDF-001");
   assert.equal(inferIssuedInvoice(extracted).total, 12000);
+});
+
+const hints = (projectName = "", clientName = "Test customer", text = "") => ({ projectName, clientName, text, fileName: "test-invoice.pdf" });
+
+test("issued OCR extracts project and recipient labels without an AI key", () => {
+  for (const text of ["Project name: New shop\nBill to: Example customer", "案件名：New shop\n請求先：Example customer", "项目名称：New shop\n购买方名称：Example customer"]) {
+    const result = inferIssuedInvoice({ text, engine: "test", warnings: [] });
+    assert.equal(result.projectName, "New shop"); assert.equal(result.clientName, "Example customer");
+  }
+  assert.equal(inferIssuedInvoice({ text: "株式会社テスト 御中\n請求書", engine: "test", warnings: [] }).clientName, "株式会社テスト");
+  const missing = inferIssuedInvoice({ text: "Invoice number: ONE", engine: "test", warnings: [] });
+  assert.equal(missing.clientName, ""); assert.equal(missing.projectName, "");
+});
+
+test("automatic project resolution matches names and respects manual override", () => {
+  const data = fixture();
+  assert.equal(resolveIssuedImportProject(data, manager, "JAPAN", "", hints("Ｊａｐａｎ project")).project.id, "japan");
+  assert.equal(resolveIssuedImportProject(data, manager, "JAPAN", "", hints("", "", "Invoice\nJapan project\nTotal 12000")).project.id, "japan");
+  assert.equal(resolveIssuedImportProject(data, manager, "JAPAN", "japan", hints("Another shop")).projectMatch, "manual");
+  assert.equal(data.projects.length, 3); assert.equal(data.clients.length, 1);
+});
+
+test("client alone resolves only a unique active project, never an arbitrary visible candidate", () => {
+  const data = fixture(); data.projects = [data.projects[0]];
+  assert.equal(resolveIssuedImportProject(data, manager, "JAPAN", "", hints()).project.id, "japan");
+  const ambiguous = resolveIssuedImportProject(fixture(), manager, "JAPAN", "", hints());
+  assert.equal(ambiguous.projectCreated, true); assert.notEqual(ambiguous.project.id, "japan");
+});
+
+test("new explicit project names create separate projects for an existing client and then reuse them", () => {
+  const data = fixture(); data.projects = [data.projects[0]];
+  const first = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("New shop"));
+  assert.equal(first.projectCreated, true); assert.equal(first.project.clientId, "client");
+  assert.equal(first.project.contractAmount, 0); assert.equal(first.project.managerId, manager.id);
+  assert.deepEqual(first.project.memberIds, [manager.id]);
+  const second = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("New shop"));
+  assert.equal(second.projectCreated, false); assert.equal(first.project.id, second.project.id);
+  assert.equal(data.projects.length, 2); assert.equal(data.clients.length, 1);
+});
+
+test("unknown recipients create company-scoped clients and projects without changing existing data", () => {
+  const data = fixture(); const before = structuredClone(data.projects);
+  const result = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("New shop", "New customer 御中"));
+  assert.equal(result.projectCreated, true);
+  const client = data.clients.find((c) => c.id === result.project.clientId)!;
+  assert.equal(client.companyName, "New customer"); assert.equal(client.company, "JAPAN");
+  assert.deepEqual(data.projects.slice(1), before);
+});
+
+test("automatic matching never exposes or attaches other companies or unassigned projects", () => {
+  const data = fixture();
+  const result = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("Other project"));
+  assert.notEqual(result.project.id, "other"); assert.equal(result.project.managerId, manager.id);
+  const china = resolveIssuedImportProject(data, manager, "CHINA", "", hints("Japan project"));
+  assert.equal(china.project.company, "CHINA"); assert.notEqual(china.project.clientId, "client");
+  assert.throws(() => resolveIssuedImportProject(fixture(), manager, "JAPAN", "other", hints()));
+  assert.throws(() => resolveIssuedImportProject(fixture(), manager, "JAPAN", "china", hints()));
+  assert.throws(() => resolveIssuedImportProject(fixture(), { id: "mail", role: "MAIL_EDITOR" }, "JAPAN", "", hints()));
+});
+
+test("ambiguous names and conflicting recipients do not select a wrong existing project", () => {
+  const data = fixture(); data.projects[1].name = "Japan project";
+  assert.equal(resolveIssuedImportProject(data, admin, "JAPAN", "", hints("Japan project")).projectCreated, true);
+  assert.equal(resolveIssuedImportProject(fixture(), admin, "JAPAN", "", hints("Japan project", "Different customer")).projectCreated, true);
+  const deleted = fixture(); deleted.projects[0].deletedAt = "2026-09-15";
+  assert.equal(resolveIssuedImportProject(deleted, manager, "JAPAN", "", hints("Japan project")).projectCreated, true);
+});
+
+test("unreadable documents stay provisional and unrelated files are not merged", () => {
+  const data = fixture();
+  const one = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("", ""));
+  const two = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("", ""));
+  assert.match(one.project.name, /要確認/); assert.notEqual(one.project.id, two.project.id);
+  assert.equal(data.clients.find((c) => c.id === one.project.clientId)?.companyName, "請求先未確認");
+  assert.equal(one.project.clientId, two.project.clientId);
 });

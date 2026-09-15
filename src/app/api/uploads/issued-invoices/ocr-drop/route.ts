@@ -7,6 +7,7 @@ import { visibleProjects } from "@/lib/documents";
 import { allowedUploadTypes, deleteReceivedInvoiceFile, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { extractDocumentText, inferIssuedInvoiceWithAi } from "@/lib/ocr";
 import { can } from "@/lib/rbac";
+import { resolveIssuedImportProject } from "@/lib/issued-import-project";
 import { mutateData, newId, readData } from "@/lib/store";
 import type { IssuedInvoice } from "@/lib/types";
 
@@ -17,11 +18,12 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "ログインしてください" }, { status: 401 });
   if (!can(user, "manage:issuedInvoices")) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   const form = await request.formData();
+  if (!["JAPAN", "CHINA"].includes(String(form.get("company")))) return NextResponse.json({ error: "取込先の会社を指定してください" }, { status: 400 });
   const company = companyFromParam(String(form.get("company") || ""));
   const projectId = String(form.get("projectId") || "");
   const data = await readData();
   const project = visibleProjects(data, user).find((p) => p.id === projectId && companyFromParam(p.company) === company);
-  if (!project) return NextResponse.json({ error: "取込先の案件を選択してください" }, { status: 400 });
+  if (projectId && !project) return NextResponse.json({ error: "指定した案件に取り込む権限がありません" }, { status: 400 });
   const files = form.getAll("files").filter((f): f is File => f instanceof File);
   if (!files.length || files.length > 20) return NextResponse.json({ error: "1回に1〜20件を選択してください" }, { status: 400 });
   const results = [];
@@ -45,28 +47,31 @@ export async function POST(request: Request) {
       savedName = readableUploadFileName({ date: inferred.issueDate, extension, id, senderName: "issued" });
       await saveReceivedInvoiceFile(savedName, buffer, file.type);
       const invoice: IssuedInvoice = {
-        id, projectId, clientId: project.clientId, invoiceNumber: inferred.invoiceNumber || `OCR-${id.slice(0, 8)}`,
+        id, projectId, clientId: "", invoiceNumber: inferred.invoiceNumber || `OCR-${id.slice(0, 8)}`,
         issueDate: inferred.issueDate, dueDate: inferred.dueDate, transactionDate: inferred.issueDate,
         subtotal: inferred.total, taxTotal: 0, total: inferred.total, status: "DRAFT", needsReview: true,
         fileUrl: receivedInvoiceFileUrl(savedName), fileHash, originalFileName: file.name, mimeType: file.type,
         ocrText: extracted.text, ocrConfidence: inferred.confidence, ocrWarnings: inferred.warnings, ocrClientName: inferred.clientName,
         createdById: user.id, createdAt: timestamp, updatedAt: timestamp,
       };
-      await mutateData(user.id, "OCR_DROP_ISSUED_INVOICE", "IssuedInvoice", id, (draft) => {
-        const allowed = visibleProjects(draft, user).find((p) => p.id === projectId && companyFromParam(p.company) === company);
-        if (!allowed) throw new Error("案件の権限が変更されました");
-        invoice.clientId = allowed.clientId;
+      const result = await mutateData(user.id, "OCR_DROP_ISSUED_INVOICE", "IssuedInvoice", id, (draft) => {
         const draftCompanyIds = new Set(draft.projects.filter((p) => companyFromParam(p.company) === company).map((p) => p.id));
         if (draft.issuedInvoices.some((i) => !i.deletedAt && draftCompanyIds.has(i.projectId) && (i.fileHash === fileHash || i.invoiceNumber === invoice.invoiceNumber))) {
           throw new Error("同じファイルまたは請求書番号が登録済みです");
         }
+        const resolved = resolveIssuedImportProject(draft, user, company, projectId,
+          { projectName: inferred.projectName, clientName: inferred.clientName, text: extracted.text, fileName: file.name });
+        invoice.projectId = resolved.project.id;
+        invoice.clientId = resolved.project.clientId;
+        invoice.ocrWarnings = [...inferred.warnings, ...resolved.warnings];
         draft.issuedInvoices.unshift(invoice);
         draft.attachments.unshift({ id: newId(), relatedType: "IssuedInvoice", relatedId: id, fileUrl: invoice.fileUrl!, fileName: file.name,
           mimeType: file.type, uploadedById: user.id, createdAt: timestamp });
-        return { id, invoiceNumber: invoice.invoiceNumber };
+        return { id, invoiceNumber: invoice.invoiceNumber, projectId: resolved.project.id, projectName: resolved.project.name,
+          projectCreated: resolved.projectCreated, projectMatch: resolved.projectMatch, warnings: invoice.ocrWarnings };
       });
       savedName = undefined;
-      results.push({ fileName: file.name, id, confidence: inferred.confidence, warnings: inferred.warnings });
+      results.push({ fileName: file.name, ...result, confidence: inferred.confidence });
     } catch (error) {
       if (savedName) await deleteReceivedInvoiceFile(savedName).catch(() => undefined);
       results.push({ fileName: file.name, error: error instanceof Error ? error.message : "取込に失敗しました" });
@@ -74,5 +79,8 @@ export async function POST(request: Request) {
   }
   revalidatePath("/issued-invoices");
   revalidatePath("/documents");
+  revalidatePath("/projects");
+  revalidatePath("/partners");
+  revalidatePath("/dashboard");
   return NextResponse.json({ results });
 }

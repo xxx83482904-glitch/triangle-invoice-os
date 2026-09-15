@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 
-type Result = { fileName: string; id?: string; error?: string; duplicate?: boolean; warnings?: string[] };
+type Result = { fileName: string; id?: string; error?: string; duplicate?: boolean; warnings?: string[]; projectId?: string; projectName?: string; projectCreated?: boolean; projectMatch?: string };
 type Props = { company: CompanyScope; kind: "issued" | "received"; projects?: Array<{ value: string; label: string }> };
 
 export function InvoiceDropzone({ company, kind, projects = [] }: Props) {
@@ -25,7 +25,6 @@ export function InvoiceDropzone({ company, kind, projects = [] }: Props) {
     if (busy.current) return;
     const selected = Array.from(files);
     if (!selected.length) return;
-    if (kind === "issued" && !projectId) { setError("取込先の案件を選択してください"); return; }
     if (selected.length > 20) { setError("1回に20件まで選択できます"); return; }
     busy.current = true;
     setError("");
@@ -60,7 +59,7 @@ export function InvoiceDropzone({ company, kind, projects = [] }: Props) {
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <h2 className="shrink-0 font-semibold">{label}を取り込む</h2>
       {kind === "issued" ? <select aria-label="取込先の案件" className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm sm:max-w-md" value={projectId} disabled={Boolean(progress)} onChange={(e) => { setProjectId(e.target.value); setError(""); }}>
-        <option value="">取込先の案件を選択</option>
+        <option value="">自動判定・なければ新規案件</option>
         {projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
       </select> : null}
     </div>
@@ -81,9 +80,10 @@ export function InvoiceDropzone({ company, kind, projects = [] }: Props) {
       <div className="flex items-center justify-between"><span className="text-xs text-muted-foreground">取込結果 {results.length}件</span><Button size="icon" variant="ghost" aria-label="取込結果を閉じる" title="取込結果を閉じる" disabled={Boolean(progress)} onClick={() => setResults([])}><X className="size-4" /></Button></div>
       {results.map((r, i) => <div key={r.fileName + i} className="flex items-start gap-2 text-sm">
         {r.error ? <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0 text-amber-600" /> : <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
-        <div className="min-w-0"><span className="break-all">{r.fileName}</span><p className="text-xs text-muted-foreground">{r.error || (kind === "issued" ? "OCR要確認の下書きに保存しました" : "確認中として保存しました")}</p></div>
+        <div className="min-w-0"><span className="break-all">{r.fileName}</span><p className="text-xs text-muted-foreground">{r.error || (kind === "issued" ? "OCR要確認の下書きに保存しました" : "確認中として保存しました")}</p>
+          {!r.error && r.projectName ? <p className="break-words text-xs">{r.projectCreated ? "新規案件: " : r.projectMatch === "manual" ? "指定案件: " : "自動判定: "}{r.projectName}</p> : null}
+        </div>
       </div>)}
     </div> : null}
   </section>;
 }
-
