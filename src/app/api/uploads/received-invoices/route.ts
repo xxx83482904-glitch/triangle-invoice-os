@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { visibleProjects } from "@/lib/documents";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
   }
 
   const data = await readData();
+  if (!visibleProjects(data, user).some((p) => p.id === field(formData, "projectId") && companyFromParam(p.company) === company)) {
+    return NextResponse.json({ error: "登録できる案件を選択してください" }, { status: 403 });
+  }
   const duplicate = data.receivedInvoices.find(
     (invoice) =>
       !invoice.deletedAt &&

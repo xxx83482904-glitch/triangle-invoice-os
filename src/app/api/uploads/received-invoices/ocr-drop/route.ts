@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { visibleProjects } from "@/lib/documents";
 import { requireUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, readableUploadFileName, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
@@ -32,6 +34,7 @@ export async function POST(request: Request) {
   const company = companyFromParam(String(formData.get("company") ?? ""));
   const files = formData.getAll("files").filter((file): file is File => file instanceof File);
   if (!files.length) return NextResponse.json({ error: "ファイルをドロップしてください" }, { status: 400 });
+  if (files.length > 20) return NextResponse.json({ error: "1回20件までです" }, { status: 400 });
 
   const results: ImportResult[] = [];
 
@@ -49,7 +52,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const extracted = await extractDocumentText(file.name, file.type, buffer);
     const data = await readData();
-    const inferred = await inferReceivedInvoiceWithAi(data, extracted, company);
+    const inferred = await inferReceivedInvoiceWithAi({ ...data, projects: visibleProjects(data, user) }, extracted, company);
 
     if (!inferred.vendorId || !inferred.projectId) {
       results.push({
@@ -97,7 +100,7 @@ export async function POST(request: Request) {
       total: inferred.total,
       status: "REVIEWING",
       fileUrl: receivedInvoiceFileUrl(safeName),
-      originalFileName: safeName,
+      originalFileName: file.name,
       mimeType: file.type,
       ocrText: extracted.text,
       memo: [inferred.memo, ...inferred.warnings].join("\n"),
@@ -113,7 +116,7 @@ export async function POST(request: Request) {
         relatedType: "ReceivedInvoice",
         relatedId: id,
         fileUrl: invoice.fileUrl ?? "",
-        fileName: safeName,
+        fileName: file.name,
         mimeType: file.type,
         uploadedById: user.id,
         createdAt: timestamp,
@@ -123,7 +126,7 @@ export async function POST(request: Request) {
 
     results.push({
       confidence: inferred.confidence,
-      fileName: safeName,
+      fileName: file.name,
       invoice: {
         dueDate: inferred.dueDate,
         issueDate: inferred.issueDate,
@@ -135,5 +138,6 @@ export async function POST(request: Request) {
     });
   }
 
+  for (const path of ["/documents", "/received-invoices", "/mail-sorter"]) revalidatePath(path);
   return NextResponse.json({ results });
 }

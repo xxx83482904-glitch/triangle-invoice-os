@@ -8,6 +8,7 @@ import { companyClientId, companyFromParam, mailSorterCompany, matchesCompany, p
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, can, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, writeData } from "@/lib/store";
+import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import type {
   AppData,
   Client,
@@ -48,6 +49,7 @@ function revalidateWorkspace() {
     "/dashboard",
     "/projects",
     "/issued-invoices",
+    "/documents",
     "/received-invoices",
     "/mail-sorter",
     "/payments",
@@ -822,8 +824,10 @@ export async function recordIncomePayment(formData: FormData) {
   };
 
   await mutateData(user.id, "RECORD_INCOME_PAYMENT", "Payment", payment.id, (data) => {
-    data.payments.unshift(payment);
     const invoice = data.issuedInvoices.find((item) => item.id === invoiceId);
+    if (!invoice || !isBillableIssuedInvoice(invoice)) throw new Error("確認済みの発行請求書を選択してください");
+    if (payment.amount <= 0 || payment.amount > invoice.total - paidForIssued(data, invoiceId)) throw new Error("未入金額の範囲で入力してください");
+    data.payments.unshift(payment);
     if (invoice) {
       const paid = paidForIssued(data, invoiceId);
       invoice.status = paid >= invoice.total ? "PAID" : paid > 0 ? "PARTIALLY_PAID" : "WAITING_PAYMENT";
@@ -835,6 +839,7 @@ export async function recordIncomePayment(formData: FormData) {
   revalidatePath("/payments");
   revalidatePath("/issued-invoices");
   revalidatePath("/dashboard");
+  revalidatePath("/documents");
 }
 
 export async function updateReceivedInvoiceStatus(formData: FormData) {
@@ -849,7 +854,8 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
   const timestamp = now();
 
   await mutateData(user.id, "UPDATE_RECEIVED_INVOICE_STATUS", "ReceivedInvoice", id, (draft) => {
-    const invoice = draft.receivedInvoices.find((item) => item.id === id);
+    const projectIds = new Set(visibleProjects(draft, user).map((p) => p.id));
+    const invoice = draft.receivedInvoices.find((item) => item.id === id && !item.deletedAt && projectIds.has(item.projectId));
     if (!invoice) throw new Error("受領請求書が見つかりません");
     if (status === "PAID") {
       markReceivedInvoicePaid(draft, invoice, user.id, timestamp);
@@ -863,6 +869,8 @@ export async function updateReceivedInvoiceStatus(formData: FormData) {
   revalidatePath("/received-invoices");
   revalidatePath("/payments");
   revalidatePath("/dashboard");
+  revalidatePath("/documents");
+  revalidatePath("/mail-sorter");
 }
 
 export async function updateReceivedInvoiceInline(formData: FormData) {
@@ -911,6 +919,8 @@ export async function updateReceivedInvoiceInline(formData: FormData) {
   revalidatePath("/payments");
   revalidatePath("/dashboard");
   revalidatePath("/projects");
+  revalidatePath("/documents");
+  revalidatePath("/mail-sorter");
 }
 
 export async function updateOcrDocumentInline(formData: FormData) {

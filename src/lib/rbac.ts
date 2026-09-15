@@ -2,6 +2,7 @@ import type { User, UserRole } from "@/lib/types";
 
 const permissions = {
   ADMIN: [
+    "view:documents",
     "view:dashboard",
     "view:projects",
     "view:mailSorter",
@@ -25,6 +26,7 @@ const permissions = {
     "view:all",
   ],
   ACCOUNTING: [
+    "view:documents",
     "view:dashboard",
     "view:projects",
     "view:mailSorter",
@@ -46,6 +48,7 @@ const permissions = {
     "view:all",
   ],
   CHIEF_DESIGNER: [
+    "view:documents",
     "view:projects",
     "view:receivedInvoices",
     "view:assigned",
@@ -54,6 +57,7 @@ const permissions = {
     "comment:project",
   ],
   PROJECT_MANAGER: [
+    "view:documents",
     "view:projects",
     "view:issuedInvoices",
     "view:assigned",
@@ -62,7 +66,7 @@ const permissions = {
     "manage:issuedInvoices",
     "comment:project",
   ],
-  MAIL_EDITOR: ["view:mailSorter", "manage:mailSorter"],
+  MAIL_EDITOR: ["view:documents", "view:mailSorter", "manage:mailSorter"],
   DESIGNER: ["view:assigned", "upload:receivedInvoices", "comment:project"],
   GUEST: ["guest:createIssuedInvoices"],
 } satisfies Record<UserRole, string[]>;

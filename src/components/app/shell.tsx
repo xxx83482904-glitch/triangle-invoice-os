@@ -23,7 +23,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] border-r bg-background px-4 py-5 lg:flex lg:flex-col">
         <ScopedBrandLink role={user.role} />
         <div className="mt-6 w-full">
-          <CompanySwitch />
+          <CompanySwitch role={user.role} />
         </div>
         <div className="mt-6 w-full">
           <AppNav role={user.role} />
@@ -56,7 +56,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
           <ScopedBrandLink compact role={user.role} />
           <div className="flex min-w-0 items-center gap-2">
-            <MobileCompanySwitch />
+            <MobileCompanySwitch role={user.role} />
             <ThemeToggle compact />
             {canUndoChanges ? <UndoButton compact disabled={!canUndo} /> : null}
             <form action={logoutAction}>

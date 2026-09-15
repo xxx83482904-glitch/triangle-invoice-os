@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { isBillableIssuedInvoice } from "@/lib/documents";
 import { BarChart3, FileCheck2, FolderKanban, ReceiptText } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +63,7 @@ export default async function DashboardPage({
     }));
 
   const projectIds = new Set(rows.map((row) => row.id));
-  const issued = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
+  const issued = data.issuedInvoices.filter((invoice) => isBillableIssuedInvoice(invoice) && projectIds.has(invoice.projectId));
   const received = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
   const paidIncome = issued.reduce((sum, invoice) => sum + paidForIssued(data, invoice.id), 0);
   const issuedTotal = issued.reduce((sum, invoice) => sum + invoice.total, 0);

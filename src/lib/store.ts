@@ -1,4 +1,5 @@
 import "server-only";
+import { isBillableIssuedInvoice } from "@/lib/documents";
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -619,7 +620,9 @@ function snapshotData(data: AppData): AppDataSnapshot {
   return JSON.parse(JSON.stringify(snapshot)) as AppDataSnapshot;
 }
 
-export async function mutateData<T>(
+const mutationState = globalThis as typeof globalThis & { triangleMutationQueue?: Promise<unknown> };
+
+export function mutateData<T>(
   userId: string,
   action: string,
   targetType: string,
@@ -627,6 +630,8 @@ export async function mutateData<T>(
   mutator: (data: AppData) => T,
   beforeJson?: unknown,
 ) {
+  // Serialize read-modify-write operations in the single Synology app process.
+  const operation = (mutationState.triangleMutationQueue ?? Promise.resolve()).then(async () => {
   const data = await readData();
   const beforeState = snapshotData(data);
   const result = mutator(data);
@@ -646,6 +651,9 @@ export async function mutateData<T>(
   normalizeAuditHistory(data);
   await writeData(data);
   return result;
+  });
+  mutationState.triangleMutationQueue = operation.catch(() => undefined);
+  return operation;
 }
 
 export async function getActiveData() {
@@ -679,7 +687,7 @@ export function paidForReceived(data: AppData, receivedInvoiceId: string) {
 
 export function projectMoney(data: AppData, projectId: string): ProjectMoney {
   const projectItem = data.projects.find((item) => item.id === projectId);
-  const issued = active(data.issuedInvoices).filter((item) => item.projectId === projectId);
+  const issued = data.issuedInvoices.filter((item) => isBillableIssuedInvoice(item) && item.projectId === projectId);
   const received = active(data.receivedInvoices).filter((item) => item.projectId === projectId);
   const contractAmount = projectItem?.contractAmount ?? 0;
   const invoicedAmount = issued.reduce((sum, invoice) => sum + invoice.total, 0);

@@ -158,6 +158,8 @@ function SelectField({
 }
 
 export function ReceivedInvoicesWorkspace({
+  initialId,
+  showTotals = true,
   canApprove,
   canEdit,
   company,
@@ -166,6 +168,8 @@ export function ReceivedInvoicesWorkspace({
   statusOptions,
   vendors,
 }: {
+  initialId?: string;
+  showTotals?: boolean;
   canApprove: boolean;
   canEdit: boolean;
   company: CompanyScope;
@@ -175,9 +179,9 @@ export function ReceivedInvoicesWorkspace({
   vendors: Option[];
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [activeId, setActiveId] = useState(invoices[0]?.id ?? "");
+  const [activeId, setActiveId] = useState(initialId ?? invoices[0]?.id ?? "");
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
-  const [filter, setFilter] = useState<WorkFilter>("unpaid");
+  const [filter, setFilter] = useState<WorkFilter>(initialId ? "all" : "unpaid");
   const [query, setQuery] = useState("");
 
   const filteredInvoices = useMemo(() => {
@@ -191,7 +195,7 @@ export function ReceivedInvoicesWorkspace({
     });
   }, [filter, invoices, query, today]);
 
-  const activeInvoice = filteredInvoices.find((invoice) => invoice.id === activeId) ?? filteredInvoices[0] ?? invoices[0] ?? null;
+  const activeInvoice = filteredInvoices.find((invoice) => invoice.id === activeId) ?? filteredInvoices[0] ?? null;
 
   const monthGroups = useMemo(() => {
     const grouped = new Map<string, ReceivedInvoiceWorkspaceItem[]>();
@@ -243,20 +247,20 @@ export function ReceivedInvoicesWorkspace({
             月別に確認し、行を選ぶと右側でPDFと詳細を見ながら処理できます。
           </div>
         </div>
-        <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-3 lg:min-w-[420px]">
+        {showTotals ? <div className="grid grid-cols-3 gap-1 text-xs text-muted-foreground lg:min-w-[420px]">
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
             <div>合計</div>
-            <div className="font-mono text-sm font-semibold text-foreground">{yen.format(totals.total)}</div>
+            <div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.total)}</div>
           </div>
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
             <div>支払済</div>
-            <div className="font-mono text-sm font-semibold text-emerald-700">{yen.format(totals.paid)}</div>
+            <div className="break-all font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">{yen.format(totals.paid)}</div>
           </div>
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
             <div>未払い</div>
-            <div className="font-mono text-sm font-semibold text-amber-700">{yen.format(Math.max(0, totals.unpaid))}</div>
+            <div className="break-all font-mono text-sm font-semibold text-amber-700 dark:text-amber-300">{yen.format(Math.max(0, totals.unpaid))}</div>
           </div>
-        </div>
+        </div> : null}
       </CardHeader>
       <CardContent>
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-2">
@@ -314,7 +318,7 @@ export function ReceivedInvoicesWorkspace({
                                 <span>{monthLabel(month)}</span>
                               </span>
                               <span className="shrink-0 text-xs text-muted-foreground">
-                                {monthInvoices.length}件 / {yen.format(monthTotal)} / 未払い {yen.format(Math.max(0, monthUnpaid))}
+                                {monthInvoices.length}件{showTotals ? ` / ${yen.format(monthTotal)} / 未払い ${yen.format(Math.max(0, monthUnpaid))}` : ""}
                               </span>
                             </button>
                           </td>
@@ -425,7 +429,7 @@ export function ReceivedInvoicesWorkspace({
                   </div>
 
                   {canEdit ? (
-                    <form action={updateReceivedInvoiceInline} className="space-y-3 rounded-lg border p-3">
+                    <form key={activeInvoice.id} action={updateReceivedInvoiceInline} className="space-y-3 rounded-lg border p-3">
                       <input type="hidden" name="company" value={company} />
                       <input type="hidden" name="receivedInvoiceId" value={activeInvoice.id} />
                       <div className="flex items-center justify-between gap-3">

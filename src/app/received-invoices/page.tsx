@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { todayIso } from "@/lib/format";
+import { receivedStatusLabels, visibleProjects } from "@/lib/documents";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { paidForReceived, readDataForRequest as readData } from "@/lib/store";
@@ -33,7 +34,7 @@ export default async function ReceivedInvoicesPage({
   const mayApprove = can(user, "manage:receivedInvoices") || can(user, "approve:receivedInvoices");
   const mayEdit = can(user, "manage:receivedInvoices");
 
-  const projects = data.projects
+  const projects = visibleProjects(data, user)
     .filter((project) => !project.deletedAt && matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
   const projectIds = new Set(projects.map((project) => project.id));
@@ -44,6 +45,9 @@ export default async function ReceivedInvoicesPage({
     label: option.label,
     value: option.value,
   }));
+  for (const invoice of data.receivedInvoices.filter((i) => !i.deletedAt && projectIds.has(i.projectId))) {
+    if (!statusOptions.some((s) => s.value === invoice.status)) statusOptions.push({ value: invoice.status, label: receivedStatusLabels[invoice.status] || invoice.status });
+  }
 
   const invoices = data.receivedInvoices
     .filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId))
@@ -52,17 +56,18 @@ export default async function ReceivedInvoicesPage({
       const vendor = vendors.find((item) => item.id === invoice.vendorId);
       const project = projects.find((item) => item.id === invoice.projectId);
       const paidAmount = paidForReceived(data, invoice.id);
+      const linkedMail = data.mailDocuments.find((m) => !m.deletedAt && m.relatedReceivedInvoiceId === invoice.id);
       return {
         createdAt: invoice.createdAt,
         dueDate: invoice.dueDate,
-        fileUrl: invoice.fileUrl,
+        fileUrl: invoice.fileUrl || linkedMail?.fileUrl,
         folderMonth: invoice.folderMonth,
         id: invoice.id,
         issueDate: invoice.issueDate,
         memo: invoice.memo,
-        mimeType: invoice.mimeType,
-        ocrText: invoice.ocrText,
-        originalFileName: invoice.originalFileName,
+        mimeType: invoice.mimeType || linkedMail?.mimeType,
+        ocrText: invoice.ocrText || linkedMail?.ocrText,
+        originalFileName: invoice.originalFileName || linkedMail?.originalFileName,
         paidAmount,
         projectId: invoice.projectId,
         projectName: project?.name ?? "案件未設定",
@@ -79,6 +84,7 @@ export default async function ReceivedInvoicesPage({
   return (
     <AppShell>
       <PageHeader title="受領請求書" description="請求書ファイルを直接ドロップすると、OCRで支払先・案件・日付・金額を仮仕分けします。">
+        <Button asChild variant="outline"><Link href={`/documents?company=${company}`}>全書類</Link></Button>
         <Button asChild variant="outline">
           <Link href={`/api/export/received-invoices?company=${company}`} prefetch={false}>CSVエクスポート</Link>
         </Button>
@@ -87,6 +93,9 @@ export default async function ReceivedInvoicesPage({
       <div className="space-y-6">
         {mayUpload ? <ReceivedInvoiceDropzone company={company} /> : null}
         <ReceivedInvoicesWorkspace
+          key={`${company}:${params.document || ""}`}
+          initialId={params.document}
+          showTotals={can(user, "view:dashboard")}
           canApprove={mayApprove}
           canEdit={mayEdit}
           company={company}

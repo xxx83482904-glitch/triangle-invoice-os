@@ -168,6 +168,15 @@ export type IssuedInvoice = {
   total: number;
   status: IssuedInvoiceStatus;
   pdfUrl?: string;
+  fileUrl?: string;
+  originalFileName?: string;
+  mimeType?: string;
+  fileHash?: string;
+  ocrText?: string;
+  ocrConfidence?: number;
+  ocrWarnings?: string[];
+  ocrClientName?: string;
+  needsReview?: boolean;
   notes?: string;
   internalMemo?: string;
   createdById: string;

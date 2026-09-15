@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { isBillableIssuedInvoice } from "@/lib/documents";
 import { recordExpensePayment, recordIncomePayment } from "@/app/actions";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -31,7 +32,7 @@ export default async function PaymentsPage({
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
   const projectIds = new Set(projects.map((project) => project.id));
   const unpaidIssued = data.issuedInvoices
-    .filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId) && paidForIssued(data, invoice.id) < invoice.total)
+    .filter((invoice) => isBillableIssuedInvoice(invoice) && projectIds.has(invoice.projectId) && paidForIssued(data, invoice.id) < invoice.total)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.invoiceNumber.localeCompare(b.invoiceNumber, "ja"));
   const unpaidReceived = data.receivedInvoices
     .filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId) && paidForReceived(data, invoice.id) < invoice.total)

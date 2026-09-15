@@ -3,20 +3,20 @@ import { redirect } from "next/navigation";
 import { createIssuedInvoice } from "@/app/actions";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
-import { StatusBadge } from "@/components/app/status-badge";
+import { DocumentsWorkspace } from "@/components/app/documents-workspace";
+import { InvoiceDropzone } from "@/components/app/invoice-dropzone";
+import { documentRows } from "@/lib/documents";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
-import { formatDate, todayIso, yen } from "@/lib/format";
+import { todayIso } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { paidForIssued, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
+import { readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 
 export default async function IssuedInvoicesPage({
   searchParams,
@@ -29,60 +29,32 @@ export default async function IssuedInvoicesPage({
   if (!user) redirect("/login");
   if (!can(user, "view:issuedInvoices")) redirect(defaultPathForRole(user.role));
   const data = await readData();
-  const setting = data.invoiceNumberSettings[0];
+  const setting = data.invoiceNumberSettings[0] ?? { prefix: "TRI", fiscalYear: new Date().getFullYear(), nextNumber: data.issuedInvoices.length + 1 };
   const defaultNumber = `${setting.prefix}-${setting.fiscalYear}-${String(setting.nextNumber).padStart(4, "0")}`;
   const projects = scopedProjectsForUser(data, user)
     .filter((project) => !project.deletedAt && matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"));
-  const projectIds = new Set(projects.map((project) => project.id));
   const clients = data.clients
     .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
-  const invoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
+  const documents = documentRows(data, user, company).filter((row) => row.kind === "issued");
   const issuedStatusOptions = selectOptionsFor(data, "ISSUED_INVOICE_STATUS", company);
   const taxRateOptions = selectOptionsFor(data, "TAX_RATE", company);
 
   return (
     <AppShell>
-      <PageHeader title="発行請求書" description="自社が発行する請求書の作成、PDF出力、入金状況を管理します。">
-        <Button asChild variant="outline"><Link href={`/api/export/issued-invoices?company=${company}`} prefetch={false}>CSVエクスポート</Link></Button>
+      <PageHeader title="発行請求書">
+        <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button>
       </PageHeader>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_440px]">
-        <Card>
-          <CardHeader><CardTitle>発行請求書一覧</CardTitle></CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>番号</TableHead><TableHead>発行日</TableHead><TableHead>期限</TableHead><TableHead>クライアント</TableHead><TableHead>案件</TableHead><TableHead>税抜</TableHead><TableHead>消費税</TableHead><TableHead>税込</TableHead><TableHead>状態</TableHead><TableHead>入金</TableHead><TableHead>PDF</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="font-mono text-xs">{invoice.invoiceNumber}</TableCell>
-                    <TableCell>{formatDate(invoice.issueDate)}</TableCell>
-                    <TableCell>{formatDate(invoice.dueDate)}</TableCell>
-                    <TableCell>{data.clients.find((client) => client.id === invoice.clientId)?.companyName}</TableCell>
-                    <TableCell><Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline">{data.projects.find((project) => project.id === invoice.projectId)?.name}</Link></TableCell>
-                    <TableCell>{yen.format(invoice.subtotal)}</TableCell>
-                    <TableCell>{yen.format(invoice.taxTotal)}</TableCell>
-                    <TableCell>{yen.format(invoice.total)}</TableCell>
-                    <TableCell><StatusBadge status={invoice.status} /></TableCell>
-                    <TableCell>{yen.format(paidForIssued(data, invoice.id))}</TableCell>
-                    <TableCell><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <div className="space-y-5">
+        {can(user, "manage:issuedInvoices") ? <InvoiceDropzone key={`drop:${company}`} company={company} kind="issued" projects={projects.map((p) => ({ value: p.id, label: p.name }))} /> : null}
+        <DocumentsWorkspace key={company} company={company} rows={documents} issuedOnly initialId={params.document} canExport={can(user, "export:csv")} projects={projects.map((p) => ({ value: p.id, label: p.name, clientName: clients.find((c) => c.id === p.clientId)?.companyName }))} />
 
         {user && can(user, "manage:issuedInvoices") ? (
-          <Card>
-            <CardHeader><CardTitle>請求書を作成</CardTitle></CardHeader>
-            <CardContent>
+          <details className="border-y py-4">
+            <summary className="cursor-pointer py-2 font-medium">手入力で作成</summary>
+            <div className="max-w-3xl pt-4">
               <form action={createIssuedInvoice} className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2"><Label>請求書番号</Label><Input name="invoiceNumber" defaultValue={defaultNumber} required /></div>
@@ -137,8 +109,8 @@ export default async function IssuedInvoicesPage({
                 <div className="space-y-2"><Label>社内メモ</Label><Textarea name="internalMemo" /></div>
                 <Button className="w-full">作成する</Button>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+          </details>
         ) : null}
       </div>
     </AppShell>

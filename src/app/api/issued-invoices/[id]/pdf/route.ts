@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import PDFDocument from "pdfkit";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { documentRows } from "@/lib/documents";
+import { contentDispositionFileName, readUploadedFile } from "@/lib/files";
+import { companyFromParam } from "@/lib/company";
 import { formatDate, yen } from "@/lib/format";
 import { readData, taxLabel } from "@/lib/store";
 import type { AppData } from "@/lib/types";
@@ -108,20 +111,32 @@ function createPdfBuffer(
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   const data = await readData();
   const invoice = data.issuedInvoices.find((item) => item.id === id && !item.deletedAt);
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (user.role === "GUEST" && invoice.createdById !== user.id) {
+  const company = companyFromParam(data.projects.find((p) => p.id === invoice.projectId)?.company);
+  if (user.role === "GUEST" ? invoice.createdById !== user.id : !documentRows(data, user, company).some((r) => r.id === `issued:${id}`)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  if (invoice.fileUrl) {
+    const file = await readUploadedFile(invoice.fileUrl);
+    if (!file) return NextResponse.json({ error: "Original file not found" }, { status: 404 });
+    return new NextResponse(new Uint8Array(file.data), { headers: {
+      "Content-Type": file.mimeType, "Content-Disposition": contentDispositionFileName(invoice.originalFileName || "invoice.pdf"),
+      "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+    } });
   }
 
   const buffer = await createPdfBuffer(invoice, data);
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`,
+      "Content-Disposition": contentDispositionFileName(`${invoice.invoiceNumber}.pdf`),
+      "Cache-Control": "private, no-store",
     },
   });
 }

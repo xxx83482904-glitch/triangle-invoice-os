@@ -125,7 +125,7 @@ export default async function MailSorterPage({
         fileUrl: invoice.fileUrl,
         folderMonth: invoice.folderMonth,
         id: `invoice-${invoice.id}`,
-        mailProcessed: invoice.mailProcessed ?? true,
+        mailProcessed: invoice.mailProcessed ?? invoice.status === "PAID",
         memo: invoice.memo,
         mimeType: invoice.mimeType,
         ocrPreview: previewText(invoice.ocrText),
@@ -143,6 +143,7 @@ export default async function MailSorterPage({
         title="郵便物フォルダー"
         description="OCRした郵便物を月別フォルダーで管理します。請求書・領収書は受領請求書にも反映します。"
       >
+        <Button asChild variant="outline"><Link href={`/documents?company=${company}`}>全書類</Link></Button>
         {can(user, "view:receivedInvoices") ? (
           <Button asChild variant="outline">
             <Link href={`/received-invoices?company=${company}`} prefetch={false}>受領請求書を見る</Link>

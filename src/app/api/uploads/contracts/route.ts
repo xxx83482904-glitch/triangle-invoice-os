@@ -81,6 +81,7 @@ export async function POST(request: Request) {
   }, before);
 
   revalidatePath("/projects");
+  revalidatePath("/documents");
   revalidatePath("/dashboard");
   revalidatePath(`/projects/${projectId}`);
 

@@ -2,7 +2,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, Ellipsis, FileText, LayoutGrid, LoaderCircle, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCircle, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
@@ -10,7 +10,8 @@ import { canRole, defaultPathForRole } from "@/lib/rbac";
 import type { UserRole } from "@/lib/types";
 
 const nav = [
-  { href: "/dashboard", label: "一覧", icon: LayoutGrid, permission: "view:dashboard" },
+  { href: "/dashboard", label: "ダッシュボード", icon: LayoutGrid, permission: "view:dashboard" },
+  { href: "/documents", label: "全書類", icon: Files, permission: "view:documents" },
   { href: "/projects", label: "案件", icon: Building2, permission: "view:projects" },
   { href: "/mail-sorter", label: "郵便仕分け", icon: Mail, permission: "view:mailSorter" },
   { href: "/issued-invoices", label: "発行請求書", icon: FileText, permission: "view:issuedInvoices" },
@@ -30,8 +31,8 @@ function navHref(href: string, company: CompanyScope) {
   return `${href}?company=${href === "/mail-sorter" ? mailSorterCompany : company}`;
 }
 
-function optionsForPath(pathname: string) {
-  return pathname === "/mail-sorter" ? companyOptions.filter((option) => option.value === mailSorterCompany) : companyOptions;
+function optionsForPath(pathname: string, role?: UserRole) {
+  return pathname === "/mail-sorter" || role === "MAIL_EDITOR" ? companyOptions.filter((option) => option.value === mailSorterCompany) : companyOptions;
 }
 
 function NavLinkPending({ className = "" }: { className?: string }) {
@@ -44,10 +45,10 @@ function NavLinkPending({ className = "" }: { className?: string }) {
   );
 }
 
-export function CompanySwitch() {
+export function CompanySwitch({ role }: { role?: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const options = optionsForPath(pathname);
+  const options = optionsForPath(pathname, role);
   const company = pathname === "/mail-sorter" ? mailSorterCompany : companyFromParam(searchParams.get("company"));
 
   return (
@@ -67,10 +68,10 @@ export function CompanySwitch() {
   );
 }
 
-export function MobileCompanySwitch() {
+export function MobileCompanySwitch({ role }: { role?: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const options = optionsForPath(pathname);
+  const options = optionsForPath(pathname, role);
   const company = pathname === "/mail-sorter" ? mailSorterCompany : companyFromParam(searchParams.get("company"));
 
   return (
@@ -95,7 +96,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
   const searchParams = useSearchParams();
   const company = companyFromParam(searchParams.get("company"));
   const allowedNav = nav.filter((item) => canRole(role, item.permission));
-  const primaryHrefs = ["/dashboard", "/projects", "/mail-sorter", "/received-invoices"];
+  const primaryHrefs = ["/documents", "/projects", "/mail-sorter", "/issued-invoices"];
   const primaryItems = primaryHrefs
     .map((href) => allowedNav.find((item) => item.href === href))
     .filter((item): item is (typeof nav)[number] => Boolean(item));
@@ -103,7 +104,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
   const moreActive = moreItems.some((item) => pathname === item.href);
 
   return (
-    <nav className={`grid h-16 ${moreItems.length ? "grid-cols-5" : "grid-cols-4"} items-stretch gap-1 px-2 py-1.5`}>
+    <nav style={{ gridTemplateColumns: `repeat(${primaryItems.length + (moreItems.length ? 1 : 0)}, minmax(0, 1fr))` }} className="grid h-16 items-stretch gap-1 px-2 py-1.5">
       {primaryItems.map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href;

@@ -1,15 +1,5 @@
-import { NextResponse } from "next/server";
-import { contentDispositionFileName, readUploadedFile } from "@/lib/files";
+import { serveDocumentFile } from "@/lib/document-files";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
-  const { name } = await params;
-  const file = await readUploadedFile(name);
-  if (!file) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  return new NextResponse(new Uint8Array(file.data), {
-    headers: {
-      "Content-Type": file.mimeType,
-      "Content-Disposition": contentDispositionFileName(name),
-    },
-  });
+  return serveDocumentFile((await params).name);
 }

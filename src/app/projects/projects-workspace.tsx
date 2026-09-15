@@ -117,7 +117,7 @@ export function ProjectsWorkspace({
 
   return (
     <div className="space-y-4">
-      <section className="grid gap-3 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SummaryTile icon={FolderKanban} label="案件" value={`${summary.total}件`} />
         <SummaryTile icon={AlertTriangle} label="要対応" value={`${summary.needsAction}件`} tone={summary.needsAction > 0 ? "warn" : "neutral"} />
         {showFinancials ? (
@@ -676,16 +676,16 @@ function SummaryTile({
 }) {
   const toneClass =
     tone === "danger"
-      ? "border-red-200 bg-red-50 text-red-800"
+      ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
       : tone === "warn"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
+        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
         : "border-border bg-card text-card-foreground";
   return (
     <div className={cn("rounded-lg border p-3", toneClass)}>
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-1 text-lg font-semibold">{value}</div>
+          <div className="mt-1 break-all text-base font-semibold sm:text-lg">{value}</div>
         </div>
         <Icon className="h-5 w-5 shrink-0" />
       </div>
@@ -695,7 +695,7 @@ function SummaryTile({
 
 function MiniAmount({ hot, label, value }: { hot?: boolean; label: string; value: number }) {
   return (
-    <div className={cn("min-w-0 rounded-lg border px-2 py-1.5", hot ? "border-amber-200 bg-amber-50 text-amber-800" : "bg-muted/30")}>
+    <div className={cn("min-w-0 rounded-lg border px-2 py-1.5", hot ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" : "bg-muted/30")}>
       <div className="truncate text-[11px] text-muted-foreground">{label}</div>
       <div className="truncate font-mono font-medium">{yen.format(value)}</div>
     </div>

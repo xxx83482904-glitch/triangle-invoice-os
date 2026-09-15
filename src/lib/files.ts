@@ -106,10 +106,10 @@ export function receivedInvoiceFileUrl(fileName: string) {
 export function uploadedFileNameFromUrl(fileUrl?: string | null) {
   if (!fileUrl) return "";
   try {
-    return decodeURIComponent(path.basename(new URL(fileUrl, "http://localhost").pathname));
+    return path.basename(decodeURIComponent(path.basename(new URL(fileUrl, "http://localhost").pathname)));
   } catch {
     try {
-      return decodeURIComponent(path.basename(fileUrl));
+      return path.basename(decodeURIComponent(path.basename(fileUrl)));
     } catch {
       return path.basename(fileUrl);
     }

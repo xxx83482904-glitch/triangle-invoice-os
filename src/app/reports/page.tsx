@@ -1,6 +1,7 @@
 import { AppShell, PageHeader } from "@/components/app/shell";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { isBillableIssuedInvoice } from "@/lib/documents";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,7 +24,7 @@ export default async function ReportsPage({
   const data = await readData();
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));
-  const issuedInvoices = data.issuedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
+  const issuedInvoices = data.issuedInvoices.filter((invoice) => isBillableIssuedInvoice(invoice) && projectIds.has(invoice.projectId));
   const receivedInvoices = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
   const issuedIds = new Set(issuedInvoices.map((invoice) => invoice.id));
   const receivedIds = new Set(receivedInvoices.map((invoice) => invoice.id));
