@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
-import { deleteClient, updateProjectBasics, type ClientDeleteInput, type ProjectBasicInput } from "@/lib/partner-project-edits";
+import { deleteClient, saveClient, updateProjectBasics, type ClientDeleteInput, type ClientSaveInput, type ProjectBasicInput } from "@/lib/partner-project-edits";
 import { mutateData } from "@/lib/store";
+import { consolidateBillingProject } from "@/lib/billing-project-cleanup";
 
 function refresh() {
   for (const path of ["/partners", "/projects", "/projects/[id]", "/issued-invoices", "/estimates", "/documents", "/dashboard"]) revalidatePath(path, "page");
@@ -25,5 +26,21 @@ export async function deleteClientAction(company: CompanyScope, input: ClientDel
   try {
     await mutateData(user.id, "DELETE_CLIENT", "Client", input.id, (data) => deleteClient(data, user, company, input));
     refresh(); return { success: true };
+  } catch (error) { return { error: message(error) }; }
+}
+
+export async function saveClientAction(company: CompanyScope, input: ClientSaveInput) {
+  const user = await requireUser();
+  try {
+    const client = await mutateData(user.id, input.id ? "UPDATE_CLIENT" : "CREATE_CLIENT", "Client", input.id || "new", (data) => saveClient(data, user, company, input));
+    refresh(); return { client };
+  } catch (error) { return { error: message(error) }; }
+}
+
+export async function consolidateBillingProjectAction(company: CompanyScope, input: { id: string; signature: string }) {
+  const user = await requireUser();
+  try {
+    const project = await mutateData(user.id, "CONSOLIDATE_BILLING_PROJECT", "Project", input.id, (data) => consolidateBillingProject(data, user, company, input));
+    refresh(); return { project };
   } catch (error) { return { error: message(error) }; }
 }

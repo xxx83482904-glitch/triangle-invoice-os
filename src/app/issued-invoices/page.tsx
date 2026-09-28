@@ -8,6 +8,8 @@ import { InvoiceDropzone } from "@/components/app/invoice-dropzone";
 import { InvoiceCreateDialog, InvoiceCreateSubmit } from "@/components/app/invoice-create-dialog";
 import { DocumentItemsEditor } from "@/components/app/document-items-editor";
 import { InvoiceProjectFields } from "@/components/app/editable-project-select";
+import { BillingProjectCleanup } from "@/components/app/billing-project-cleanup";
+import { billingProjectGroups } from "@/lib/billing-project-cleanup";
 import { documentRows, issuedStatusLabels } from "@/lib/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +52,7 @@ export default async function IssuedInvoicesPage({
   return (
     <AppShell>
       <PageHeader title="発行請求書">
+        <BillingProjectCleanup company={company} groups={billingProjectGroups(data, user, company)} />
         <Button asChild variant="outline"><Link href={`/estimates?company=${company}`} prefetch={false}>見積書</Link></Button>
         {can(user, "view:documents") ? <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button> : null}
         {user && can(user, "manage:issuedInvoices") ? (

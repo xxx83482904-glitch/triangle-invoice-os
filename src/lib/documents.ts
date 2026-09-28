@@ -15,6 +15,7 @@ export type DocumentRow = {
   counterpart: string;
   projectId?: string;
   projectName: string;
+  billingLabel?: string;
   month: string;
   date: string;
   dueDate?: string;
@@ -67,7 +68,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
   if (can(user, "view:estimates")) for (const e of data.estimates) {
     if (e.deletedAt || !projectMap.has(e.projectId)) continue;
     rows.push({ id: `estimate:${e.id}`, sourceId: e.id, kind: "estimate", title: e.estimateNumber, category: "ESTIMATE",
-      counterpart: clients.get(e.clientId) || "取引先未設定", projectId: e.projectId, projectName: projectMap.get(e.projectId)!.name,
+      counterpart: clients.get(e.clientId) || "取引先未設定", projectId: e.projectId, projectName: projectMap.get(e.projectId)!.name, billingLabel: e.billingLabel,
       month: month(e.issueDate), date: e.issueDate, dueDate: e.validUntil, total: e.total, status: e.status, statusLabel: estimateStatusLabels[e.status],
       state: e.status === "DRAFT" ? "review" : ["CONVERTED", "DECLINED"].includes(e.status) ? "done" : "open",
       fileUrl: `/api/estimates/${e.id}/pdf`, fileName: `${e.estimateNumber}.pdf`, mimeType: "application/pdf",
@@ -77,7 +78,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
     if (i.deletedAt || !projectMap.has(i.projectId)) continue;
     const payment = invoicePaymentSummary(data, i);
     rows.push({ id: `issued:${i.id}`, sourceId: i.id, kind: "issued", title: i.invoiceNumber, category: "INVOICE",
-      counterpart: clients.get(i.clientId) ?? "請求先未設定", projectId: i.projectId, projectName: projectMap.get(i.projectId)!.name,
+      counterpart: clients.get(i.clientId) ?? "請求先未設定", projectId: i.projectId, projectName: projectMap.get(i.projectId)!.name, billingLabel: i.billingLabel,
       month: month(i.issueDate), date: i.issueDate, dueDate: i.dueDate, total: i.total, status: payment.status, paidAmount: payment.paid, statusPaymentAmount: payment.statusPaid,
       statusLabel: issuedStatusLabels[payment.status],
       state: ["PAID", "CANCELED"].includes(payment.status) ? "done" : i.needsReview || payment.status === "DRAFT" ? "review" : "open",

@@ -22,6 +22,15 @@ async function main() {
   await mkdir(upload);
   const data = fixture();
   data.users = ["ADMIN", "PROJECT_MANAGER", "MAIL_EDITOR"].map((role, n) => ({ id: ["admin", "manager", "mail"][n], name: `Test ${role}`, email: `${role.toLowerCase()}@example.invalid`, role: role as "ADMIN" | "PROJECT_MANAGER" | "MAIL_EDITOR", passwordHash: hashSync("local-documents-test-only", 10), createdAt: timestamp, updatedAt: timestamp }));
+  if (process.argv.includes("--installments")) {
+    data.users.push({ id: "billing", name: "Test Billing", email: "billing@example.invalid", role: "BILLING_EDITOR", passwordHash: hashSync("local-documents-test-only", 10), createdAt: timestamp, updatedAt: timestamp });
+    for (const [index, label] of ["初回", "二回目回", "三回目"].entries()) {
+      const id = `round-${index}`;
+      data.projects.push({ id, company: "JAPAN", name: `横浜吉野町ホテルステイ 設計${label}請求書`, clientId: "client", managerId: "billing", memberIds: ["billing"], status: "PLANNING", contractAmount: 0, billingCount: 1,
+        memo: "発行請求書OCRから自動作成。案件名・請求先・契約情報要確認。", createdAt: timestamp, updatedAt: timestamp });
+      data.issuedInvoices.push({ ...data.issuedInvoices[0], id: `round-invoice-${index}`, projectId: id, invoiceNumber: `ROUND-${index}` });
+    }
+  }
   for (const file of ["issued.pdf", "other.pdf", "china.pdf", "contract.pdf", "old.pdf", "received.pdf"]) await writeFile(path.join(upload, file), await pdf(file));
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
   for (let i = 1; i <= 3; i++) await writeFile(path.join(root, `drop-${i}.pdf`), await pdf(`Invoice Number: DROP-00${i}\nInvoice date: 2026-09-15\nDue date: 2026-10-15\nBill to: Test customer\nTotal amount: 12,000`));

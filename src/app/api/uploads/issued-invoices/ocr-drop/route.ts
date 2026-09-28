@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         issueDate: inferred.issueDate, dueDate: inferred.dueDate, transactionDate: inferred.issueDate,
         subtotal: inferred.total, taxTotal: 0, total: inferred.total, status: "DRAFT", needsReview: true,
         fileUrl: receivedInvoiceFileUrl(savedName), fileHash, originalFileName: file.name, mimeType: file.type,
-        ocrText: extracted.text, ocrConfidence: inferred.confidence, ocrWarnings: inferred.warnings, ocrClientName: inferred.clientName,
+        ocrText: extracted.text, ocrConfidence: inferred.confidence, ocrWarnings: inferred.warnings, ocrClientName: inferred.clientName, billingLabel: inferred.billingLabel,
         createdById: user.id, createdAt: timestamp, updatedAt: timestamp,
       };
       const result = await mutateData(user.id, "OCR_DROP_ISSUED_INVOICE", "IssuedInvoice", id, (draft) => {

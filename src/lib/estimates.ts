@@ -91,7 +91,7 @@ export function convertEstimate(data: AppData, user: Actor, company: CompanyScop
     id: randomUUID(), invoiceNumber: `${prefix}${String(serial).padStart(4, "0")}`, estimateId: estimate.id,
     projectId: estimate.projectId, clientId: estimate.clientId, issueDate: parsed.issueDate, dueDate: parsed.dueDate,
     transactionDate: parsed.transactionDate, subtotal: estimate.subtotal, taxTotal: estimate.taxTotal, total: estimate.total,
-    status: "DRAFT", needsReview: false, notes: estimate.notes, internalMemo: estimate.internalMemo,
+    status: "DRAFT", needsReview: false, notes: estimate.notes, internalMemo: estimate.internalMemo, billingLabel: estimate.billingLabel,
     createdById: user.id, createdAt: timestamp, updatedAt: timestamp,
   };
   data.issuedInvoices.unshift(invoice);

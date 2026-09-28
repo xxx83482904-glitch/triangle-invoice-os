@@ -134,7 +134,7 @@ export function EstimatesWorkspace({ company, estimates, projects, clients, canE
       </ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">{actions(e).map((action) => <ContextMenu.Item key={action.label} className={menuClass} disabled={pending} onSelect={action.action}><action.icon />{action.label}</ContextMenu.Item>)}</ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root></Fragment>)}
       {!filtered.length ? <p className="py-16 text-center text-sm text-muted-foreground">{estimates.length ? "該当する見積書がありません" : "見積書はまだありません"}</p> : null}
     </div>
-    <Dialog open={editor !== null} onOpenChange={(open) => { if (!open && !pending) setEditor(null); }}><DialogContent aria-describedby={undefined} className="max-h-[90dvh] min-w-0 overflow-y-auto rounded-lg sm:max-w-4xl" onInteractOutside={(e) => e.preventDefault()}>
+    <Dialog open={editor !== null} onOpenChange={(open) => { if (!open && !pending) setEditor(null); }}><DialogContent aria-describedby={undefined} showCloseButton={!pending} className="max-h-[90dvh] min-w-0 overflow-y-auto rounded-lg sm:max-w-4xl" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>{editor === "new" ? "見積書を作成" : "見積書を編集"}</DialogTitle></DialogHeader>
       {error ? <p role="alert" className="break-words text-destructive">{error}</p> : null}
       {editor ? <EstimateEditor key={editor === "new" ? "new" : editor.id} estimate={editor === "new" ? undefined : editor} projects={projects} clients={clients} pending={pending} onSave={save} company={company} /> : null}
@@ -148,7 +148,7 @@ export function EstimatesWorkspace({ company, estimates, projects, clients, canE
         {preview.invoiceId ? <Button asChild><Link href={invoiceHref(company, preview.invoiceId)}><FileText className="size-4" />請求書を開く</Link></Button> : editable(preview) && preview.status !== "DECLINED" ? <Button onClick={() => { setError(""); setConvertTarget(preview); }}><ArrowRightLeft className="size-4" />請求書に変換</Button> : null}
       </div><iframe title={`見積書PDF: ${preview.estimateNumber}`} src={pdfUrl(preview)} className="h-[65dvh] min-h-72 w-full border bg-white" /></> : null}
     </DialogContent></Dialog>
-    <Dialog open={convertTarget !== null} onOpenChange={(open) => { if (!open && !pending) setConvertTarget(null); }}><DialogContent aria-describedby={undefined} className="max-h-[90dvh] overflow-y-auto rounded-lg sm:max-w-lg">
+    <Dialog open={convertTarget !== null} onOpenChange={(open) => { if (!open && !pending) setConvertTarget(null); }}><DialogContent aria-describedby={undefined} showCloseButton={!pending} className="max-h-[90dvh] overflow-y-auto rounded-lg sm:max-w-lg" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>請求書に変換</DialogTitle></DialogHeader>
       <p className="break-words text-sm">{convertTarget?.estimateNumber} / {money(convertTarget?.total || 0)}</p>
       <p className="text-sm text-muted-foreground">請求書は下書きで作成されます。変換後、元の見積書は編集・削除できません。</p>

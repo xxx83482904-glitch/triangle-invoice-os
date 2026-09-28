@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient, createSelectOption, createVendor, moveClientOption, moveSelectOption, moveVendorOption } from "@/app/actions";
+import { createSelectOption, createVendor, moveClientOption, moveSelectOption, moveVendorOption } from "@/app/actions";
+import { ClientEditButton, ClientForm } from "@/components/app/client-editor";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { ClientDeleteButton } from "@/components/app/client-delete-button";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ export default async function PartnersPage({
         </TabsList>
 
         <TabsContent value="clients" className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
-          <Card>
+          <Card className="min-w-0">
             <CardHeader><CardTitle>クライアント</CardTitle></CardHeader>
             <CardContent>
               <Table>
@@ -60,7 +61,7 @@ export default async function PartnersPage({
                       <TableCell>{client.contactName}</TableCell>
                       <TableCell>{client.email}</TableCell>
                       <TableCell>{client.invoiceRegistrationNumber}</TableCell>
-                      {mayEdit ? <TableCell><ClientDeleteButton company={company} client={{ id: client.id, companyName: client.companyName, updatedAt: client.updatedAt }} /></TableCell> : null}
+                      {mayEdit ? <TableCell><div className="flex"><ClientEditButton company={company} client={client} /><ClientDeleteButton company={company} client={{ id: client.id, companyName: client.companyName, updatedAt: client.updatedAt }} /></div></TableCell> : null}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -172,22 +173,6 @@ function OptionGroupCard({
         ) : null}
       </CardContent>
     </Card>
-  );
-}
-
-function ClientForm({ company }: { company: CompanyScope }) {
-  return (
-    <form action={createClient} className="space-y-3">
-      <input type="hidden" name="company" value={company} />
-      <InputBlock name="companyName" label="会社名" required />
-      <InputBlock name="contactName" label="担当者名" />
-      <InputBlock name="email" label="メールアドレス" type="email" />
-      <InputBlock name="phone" label="電話番号" />
-      <InputBlock name="address" label="住所" />
-      <InputBlock name="invoiceRegistrationNumber" label="登録番号" />
-      <div className="space-y-2"><Label>備考</Label><Textarea name="memo" /></div>
-      <Button className="w-full">追加</Button>
-    </form>
   );
 }
 

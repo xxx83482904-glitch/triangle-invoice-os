@@ -113,6 +113,18 @@ test("installed PDF parser reads an actual PDF file", async () => {
 
 const hints = (projectName = "", clientName = "Test customer", text = "") => ({ projectName, clientName, text, fileName: "test-invoice.pdf" });
 
+test("issued OCR rejects installment recipients and retains billing labels separately", () => {
+  const result = inferIssuedInvoice({ text: "請求先：株式会社テスト\n件名：横浜吉野町ホテルステイ 設計二回目回請求書", engine: "test", warnings: [] }, { clientName: "２回目" });
+  assert.equal(result.clientName, "株式会社テスト"); assert.equal(result.projectName, "横浜吉野町ホテルステイ");
+  assert.equal(result.billingLabel, "設計二回目回請求書");
+  const data = fixture();
+  const one = resolveIssuedImportProject(data, billing, "JAPAN", "", hints("横浜吉野町ホテルステイ 設計初回請求書"));
+  const two = resolveIssuedImportProject(data, billing, "JAPAN", "", hints("横浜吉野町ホテルステイ 設計三回目請求書"));
+  assert.equal(one.project.id, two.project.id); assert.equal(one.project.name, "横浜吉野町ホテルステイ");
+  resolveIssuedImportProject(data, billing, "JAPAN", "", hints("Separate project", "1回目"));
+  assert.ok(!data.clients.some((c) => c.companyName === "1回目"));
+});
+
 test("issued OCR extracts project and recipient labels without an AI key", () => {
   for (const text of ["Project name: New shop\nBill to: Example customer", "案件名：New shop\n請求先：Example customer", "项目名称：New shop\n购买方名称：Example customer"]) {
     const result = inferIssuedInvoice({ text, engine: "test", warnings: [] });

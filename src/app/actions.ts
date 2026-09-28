@@ -12,9 +12,9 @@ import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
+import { saveClient } from "@/lib/partner-project-edits";
 import type {
   AppData,
-  Client,
   IssuedInvoice,
   IssuedInvoiceItem,
   MailDocumentCategory,
@@ -341,13 +341,8 @@ export async function undoLastAction(formData: FormData) {
 
 export async function createClient(formData: FormData) {
   const user = await requireUser();
-  assertCan(user, "manage:clients");
-  const timestamp = now();
   const company = companyFromParam(value(formData, "company"));
-  assertCompanyAccess(user, company);
-  const client: Client = {
-    id: newId(),
-    company,
+  const input = {
     companyName: value(formData, "companyName"),
     contactName: optional(formData, "contactName"),
     email: optional(formData, "email"),
@@ -355,15 +350,9 @@ export async function createClient(formData: FormData) {
     address: optional(formData, "address"),
     invoiceRegistrationNumber: optional(formData, "invoiceRegistrationNumber"),
     memo: optional(formData, "memo"),
-    sortOrder: nextSortOrder((await readData()).clients, company),
-    createdAt: timestamp,
-    updatedAt: timestamp,
   };
 
-  await mutateData(user.id, "CREATE_CLIENT", "Client", client.id, (data) => {
-    data.clients.unshift(client);
-    return client;
-  });
+  await mutateData(user.id, "CREATE_CLIENT", "Client", "new", (data) => saveClient(data, user, company, input));
   revalidatePath("/partners");
 }
 

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { CompanyScope } from "@/lib/company";
 import type { SelectOptionGroup } from "@/lib/types";
+import { toast } from "@/hooks/use-toast";
 
 type Option = {
   label: string;
@@ -44,7 +45,8 @@ export function CreatableSelect({
   required?: boolean;
   searchPlaceholder?: string;
 }) {
-  const [items, setItems] = useState(options);
+  const [createdItems, setCreatedItems] = useState<Option[]>([]);
+  const items = useMemo(() => [...options, ...createdItems.filter((created) => !options.some((option) => option.value === created.value))], [options, createdItems]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [internalValue, setValue] = useState(defaultValue ?? "");
@@ -71,15 +73,21 @@ export function CreatableSelect({
     if (!create || !query.trim()) return;
     const label = query.trim();
     startTransition(async () => {
-      const response = await fetch("/api/dropdown-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...create, label }),
-      });
-      if (!response.ok) return;
-      const next = (await response.json()) as Option;
-      setItems((current) => [...current, next]);
-      selectItem(next);
+      try {
+        const response = await fetch("/api/dropdown-options", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...create, label }),
+        });
+        if (!response.ok) {
+          const result = await response.json();
+          toast({ title: result.error || "登録に失敗しました", variant: "destructive" });
+          return;
+        }
+        const next = (await response.json()) as Option;
+        setCreatedItems((current) => [...current.filter((item) => item.value !== next.value), next]);
+        selectItem(next);
+      } catch { toast({ title: "通信に失敗しました。再度お試しください", variant: "destructive" }); }
     });
   }
 

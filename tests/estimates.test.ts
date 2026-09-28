@@ -23,10 +23,11 @@ test("estimates have independent numbers and totals and do not enter financial t
 
 test("conversion copies all fields into a draft and is idempotent on a stale retry", () => {
   const data = fixture(); const e = saveEstimate(data, billing, "JAPAN", input());
+  e.billingLabel = "設計二回目請求書";
   const request = { id: e.id, updatedAt: e.updatedAt, ...dates };
   const invoice = convertEstimate(data, billing, "JAPAN", request);
   assert.equal(invoice.estimateId, e.id); assert.equal(e.invoiceId, invoice.id); assert.equal(e.status, "CONVERTED");
-  for (const key of ["projectId", "clientId", "subtotal", "taxTotal", "total", "notes", "internalMemo"] as const) assert.equal(invoice[key], e[key]);
+  for (const key of ["projectId", "clientId", "subtotal", "taxTotal", "total", "notes", "internalMemo", "billingLabel"] as const) assert.equal(invoice[key], e[key]);
   assert.equal(invoice.transactionDate, dates.transactionDate); assert.equal(invoice.dueDate, dates.dueDate);
   assert.equal(invoice.status, "DRAFT"); assert.ok(!isBillableIssuedInvoice(invoice));
   const items = data.issuedInvoiceItems.filter((i) => i.invoiceId === invoice.id);

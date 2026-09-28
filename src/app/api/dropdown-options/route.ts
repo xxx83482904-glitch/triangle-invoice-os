@@ -4,6 +4,8 @@ import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { can, canAccessCompany, canEditOptionGroup } from "@/lib/rbac";
 import { mutateData, newId } from "@/lib/store";
 import type { AppData, SelectOptionGroup } from "@/lib/types";
+import { saveClient } from "@/lib/partner-project-edits";
+import { ZodError } from "zod";
 
 const now = () => new Date().toISOString();
 
@@ -58,19 +60,12 @@ export async function POST(request: Request) {
 
   if (body.kind === "client") {
     if (!can(user, "manage:clients")) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
-    const client = await mutateData(user.id, "QUICK_CREATE_CLIENT", "Client", label, (data) => {
-      const item = {
-        id: newId(),
-        company,
-        companyName: label,
-        sortOrder: nextSortOrder(data.clients, company),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      data.clients.push(item);
-      return item;
-    });
-    return NextResponse.json({ label: client.companyName, value: client.id });
+    try {
+      const client = await mutateData(user.id, "QUICK_CREATE_CLIENT", "Client", label, (data) => saveClient(data, user, company, { companyName: label }));
+      return NextResponse.json({ label: client.companyName, value: client.id });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof ZodError ? error.issues[0]?.message : error instanceof Error ? error.message : "登録に失敗しました" }, { status: 400 });
+    }
   }
 
   if (body.kind === "vendor") {

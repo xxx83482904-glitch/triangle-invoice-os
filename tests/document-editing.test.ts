@@ -1,13 +1,114 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { documentItemsFromFormData, documentItemsSchema, documentItemTotals } from "../src/lib/document-items";
-import { deleteClient, updateProjectBasics } from "../src/lib/partner-project-edits";
+import { deleteClient, saveClient, updateProjectBasics } from "../src/lib/partner-project-edits";
+import { recipientName, splitBillingProjectName } from "../src/lib/billing-project-name";
+import { billingProjectGroups, consolidateBillingProject } from "../src/lib/billing-project-cleanup";
 import { groupDocuments, orderDocuments } from "../src/lib/document-order";
 import { documentRows } from "../src/lib/documents";
 import { can } from "../src/lib/rbac";
 import { fixture, admin, manager, timestamp } from "./document-fixture";
 
 const billing = { id: "billing", role: "BILLING_EDITOR" as const };
+
+test("installment names are separate from project and client identities", () => {
+  for (const prefix of ["横浜吉野町ホテルステイ", "南大塚駅前ホテルステイ"]) {
+    for (const suffix of ["設計初回請求書", "設計二回目回請求書", "設計三回目請求書", "第２回請求", "一回目請求書"]) {
+      const result = splitBillingProjectName(`${prefix} ${suffix}`);
+      assert.equal(result.projectName, prefix); assert.equal(result.billingLabel, suffix.normalize("NFKC"));
+    }
+  }
+  for (const name of ["初回", "２回目", "設計二回目回請求書 / PD終了請求分"]) {
+    assert.equal(splitBillingProjectName(name).projectName, ""); assert.equal(recipientName(name), "");
+  }
+  for (const name of ["第2工芸株式会社", "三回堂株式会社", "Studio 1", "第2ビル設計", "KIRIN GROUP AWARD 2025"]) {
+    assert.equal(splitBillingProjectName(name).projectName, name); assert.equal(recipientName(name), name);
+  }
+});
+
+test("client create and edit preserve IDs, relationships, company, order and creation history", () => {
+  const data = fixture();
+  const created = saveClient(data, billing, "JAPAN", { companyName: " New client ", contactName: "担当者", email: "client@example.invalid", address: "東京都" });
+  assert.equal(created.companyName, "New client"); assert.equal(created.company, "JAPAN");
+  const before = structuredClone(data.clients[0]); const docs = structuredClone(data.issuedInvoices);
+  const result = saveClient(data, billing, "JAPAN", { ...before, companyName: "Renamed client", address: "New address", company: "CHINA" } as Parameters<typeof saveClient>[3]);
+  assert.equal(result.id, before.id); assert.equal(result.createdAt, before.createdAt); assert.equal(result.company, "JAPAN");
+  assert.notEqual(result.updatedAt, before.updatedAt); assert.equal(result.address, "New address");
+  assert.deepEqual(data.issuedInvoices, docs); assert.equal(data.projects[0].clientId, before.id);
+});
+
+test("client writes reject duplicates, billing descriptions, missing targets, cross-scope edits and stale edits atomically", () => {
+  const data = fixture(); const before = JSON.stringify(data); const current = data.clients[0];
+  for (const name of ["TEST CUSTOMER", "Ｔｅｓｔ ｃｕｓｔｏｍｅｒ", "一回目", "第２回請求書", "設計二回目回請求書 / PD終了請求分", ""]) {
+    assert.throws(() => saveClient(data, billing, "JAPAN", { companyName: name }));
+  }
+  assert.throws(() => saveClient(data, billing, "CHINA", current));
+  assert.throws(() => saveClient(data, billing, "JAPAN", { ...current, id: "missing" }));
+  assert.throws(() => saveClient(data, billing, "JAPAN", { ...current, updatedAt: "stale" }));
+  assert.throws(() => saveClient(data, { id: "mail", role: "MAIL_EDITOR" }, "JAPAN", current));
+  assert.throws(() => saveClient(data, billing, "JAPAN", { companyName: "Valid", email: "not an email" }));
+  assert.equal(JSON.stringify(data), before);
+});
+
+function roundsFixture() {
+  const data = fixture();
+  for (const [index, label] of ["初回", "二回目回", "三回目"].entries()) {
+    const id = `round-${index}`;
+    data.projects.push({ id, name: `横浜吉野町ホテルステイ 設計${label}請求書`, clientId: "client", company: "JAPAN", managerId: "manager", memberIds: [],
+      status: "PLANNING", contractAmount: 0, billingCount: 1, memo: "発行請求書OCRから自動作成。案件名・請求先・契約情報要確認。", createdAt: timestamp, updatedAt: timestamp });
+    data.issuedInvoices.push({ ...data.issuedInvoices[0], id: `round-invoice-${index}`, invoiceNumber: `ROUND-${index}`, projectId: id, status: "PAID", paidAt: "2026-09-15" });
+  }
+  data.payments.push({ id: "payment-round", issuedInvoiceId: "round-invoice-0", type: "INCOME", amount: 12000, paymentDate: "2026-09-15", createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
+  return data;
+}
+
+test("confirmed cleanup consolidates only project IDs and retains installments, money, recipients, originals and payments", () => {
+  const data = roundsFixture(); const previous = structuredClone(data);
+  const groups = billingProjectGroups(data, billing, "JAPAN");
+  assert.equal(groups.length, 1); assert.equal(groups[0].names.length, 3); assert.equal(groups[0].documentCount, 3);
+  assert.deepEqual(data, previous, "listing candidates is read only");
+  const result = consolidateBillingProject(data, billing, "JAPAN", groups[0]);
+  assert.equal(result.name, "横浜吉野町ホテルステイ");
+  assert.equal(data.projects.filter((p) => p.id.startsWith("round-") && !p.deletedAt).length, 1);
+  for (const i of data.issuedInvoices.filter((i) => i.id.startsWith("round-"))) {
+    const old = previous.issuedInvoices.find((p) => p.id === i.id)!;
+    assert.equal(i.projectId, result.id); assert.ok(i.billingLabel);
+    assert.deepEqual({ ...i, projectId: old.projectId, updatedAt: old.updatedAt, billingLabel: undefined }, { ...old, billingLabel: undefined });
+  }
+  assert.deepEqual(data.payments, previous.payments); assert.deepEqual(data.clients, previous.clients);
+  assert.equal(billingProjectGroups(data, billing, "JAPAN").length, 0);
+  assert.throws(() => consolidateBillingProject(data, billing, "JAPAN", groups[0]));
+});
+
+test("cleanup does not cross client, company or access boundaries, and never retires contracts or manually maintained projects", () => {
+  for (const change of [
+    (d: ReturnType<typeof fixture>) => { d.projects.at(-1)!.contractAmount = 100; },
+    (d: ReturnType<typeof fixture>) => { d.projects.at(-1)!.memo = "Important job"; },
+    (d: ReturnType<typeof fixture>) => { d.projects.at(-1)!.managerId = "other"; },
+    (d: ReturnType<typeof fixture>) => { d.projects.at(-1)!.contractFileUrl = "/api/files/contract.pdf"; },
+  ]) {
+    const data = roundsFixture(); change(data);
+    assert.equal(billingProjectGroups(data, billing, "JAPAN").length, 0);
+  }
+  const data = roundsFixture();
+  data.clients.push({ ...data.clients[0], id: "another", companyName: "Other client" });
+  data.projects.push({ ...data.projects.at(-1)!, id: "foreign-client", clientId: "another" });
+  const groups = billingProjectGroups(data, billing, "JAPAN"); assert.equal(groups.length, 2);
+  consolidateBillingProject(data, billing, "JAPAN", groups.find((g) => g.clientName === "Test customer")!);
+  assert.equal(data.projects.at(-1)!.name, "横浜吉野町ホテルステイ 設計三回目請求書");
+  assert.equal(billingProjectGroups(data, billing, "CHINA").length, 0);
+  assert.equal(billingProjectGroups(data, { id: "mail", role: "MAIL_EDITOR" }, "JAPAN").length, 0);
+});
+
+test("cleanup rejects stale invoices and concurrent membership changes without partial mutation", () => {
+  const data = roundsFixture(); const [group] = billingProjectGroups(data, billing, "JAPAN");
+  data.issuedInvoices.at(-1)!.total += 10;
+  const before = JSON.stringify(data);
+  assert.throws(() => consolidateBillingProject(data, billing, "JAPAN", group));
+  assert.throws(() => consolidateBillingProject(data, { id: "mail", role: "MAIL_EDITOR" }, "JAPAN", group));
+  assert.throws(() => consolidateBillingProject(data, billing, "CHINA", group));
+  assert.equal(JSON.stringify(data), before);
+});
 function fields(count: number, details = true) {
   const form = new FormData();
   for (let i = 0; i < count; i++) {

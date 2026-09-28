@@ -93,7 +93,7 @@ function createBusinessDocumentPdf(invoice: IssuedInvoice, data: AppData, validU
       text(validUntil !== undefined ? "見積金額" : "合計金額", 352, 252, 65, 9);
       fitted(`¥${amount.format(invoice.total)}`, 420, 247, 133, 16, "right");
       const subjectY = Math.max(263, recipientBottom + 18);
-      const subjects = wrap(project?.name || "", 276, 9);
+      const subjects = wrap([project?.name, invoice.billingLabel].filter(Boolean).join(" "), 276, 9);
       text("件名", left + 2, subjectY, 40, 9);
       subjects.forEach((v, i) => text(v, left + 50, subjectY + i * 13, 276, 9));
       line(subjectY + subjects.length * 13 + 4, left, 336);

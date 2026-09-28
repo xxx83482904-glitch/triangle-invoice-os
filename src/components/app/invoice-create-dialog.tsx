@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 export function InvoiceCreateDialog({ children }: { children: ReactNode }) {
   return <Dialog>
     <DialogTrigger asChild><Button><Plus className="size-4" />新規作成</Button></DialogTrigger>
-    <DialogContent aria-describedby={undefined} className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl">
+    <DialogContent aria-describedby={undefined} className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>請求書を作成</DialogTitle></DialogHeader>
       {children}
     </DialogContent>

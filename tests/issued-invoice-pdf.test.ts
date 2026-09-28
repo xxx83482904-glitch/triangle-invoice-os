@@ -39,11 +39,13 @@ test("estimate PDF has issuer, seal and validity but no payment instructions or 
 
 test("new invoice PDF embeds Japanese, requested issuer and bank on one A4 page", async () => {
   const data = invoicePdfFixture();
+  data.issuedInvoices[0].billingLabel = "設計二回目請求書";
   const parser = new PDFParse({ data: await createIssuedInvoicePdf(data.issuedInvoices[0], data) });
   try {
     const result = await parser.getText();
     assert.equal(result.total, 1);
     const text = result.text.replaceAll(/\s/g, "");
+    assert.ok(text.includes("設計二回目請求書"));
     for (const value of [...Object.values(invoiceIssuer), "49,500", "45,000", "4,500", "30,000", "15,000", "株式会社サンプル御中", "2026/02/28"]) {
       assert.ok(text.includes(value.replaceAll(/\s/g, "")), value);
     }
@@ -52,6 +54,10 @@ test("new invoice PDF embeds Japanese, requested issuer and bank on one A4 page"
     assert.ok(text.indexOf(invoiceIssuer.name) < text.indexOf(invoiceIssuer.address), "Issuer name must be above the address");
     const screenshot = await parser.getScreenshot({ desiredWidth: 882 });
     assert.equal(Math.round(screenshot.pages[0].width), 882);
+    if (process.env.PDF_ARTIFACT_DIR) {
+      await mkdir(process.env.PDF_ARTIFACT_DIR, { recursive: true });
+      await writeFile(path.join(process.env.PDF_ARTIFACT_DIR, "invoice-billing-label.png"), screenshot.pages[0].data);
+    }
     assert.ok(screenshot.pages[0].data.length > 20000);
     const rendered = await loadImage(screenshot.pages[0].data);
     const canvas = createCanvas(rendered.width, rendered.height);

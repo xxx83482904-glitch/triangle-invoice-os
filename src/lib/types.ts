@@ -179,6 +179,7 @@ export type IssuedInvoice = {
   ocrConfidence?: number;
   ocrWarnings?: string[];
   ocrClientName?: string;
+  billingLabel?: string;
   needsReview?: boolean;
   notes?: string;
   internalMemo?: string;
@@ -192,6 +193,7 @@ export type IssuedInvoice = {
 export type EstimateItem = Pick<IssuedInvoiceItem, "id" | "description" | "details" | "quantity" | "unitPrice" | "taxRate" | "amount">;
 export type Estimate = {
   id: string;
+  billingLabel?: string;
   estimateNumber: string;
   projectId: string;
   clientId: string;

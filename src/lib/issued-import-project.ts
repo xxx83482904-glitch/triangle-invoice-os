@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recipientName, splitBillingProjectName } from "@/lib/billing-project-name";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
 import { assertCompanyAccess, can } from "@/lib/rbac";
@@ -32,8 +33,8 @@ export function resolveIssuedImportProject(
     return { project, projectCreated: false, projectMatch: "manual" as const, warnings: [] as string[] };
   }
   const clients = data.clients.filter((c) => !c.deletedAt && companyFromParam(c.company) === company);
-  const clientName = cleanName(hints.clientName).replace(/\s*(御中|様)$/, "");
-  const projectName = cleanName(hints.projectName);
+  const clientName = recipientName(hints.clientName);
+  const projectName = splitBillingProjectName(cleanName(hints.projectName)).projectName;
   const matchedClients = clientName ? clients.filter((c) => clientKey(c.companyName) === clientKey(clientName)) : [];
   const compatible = (p: Project) => !clientName || matchedClients.some((c) => c.id === p.clientId);
   const named = projects.filter((p) => projectName
