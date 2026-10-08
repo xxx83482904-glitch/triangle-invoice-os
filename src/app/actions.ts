@@ -7,7 +7,7 @@ import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, mailSorterCompany, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, assertCompanyAccess, can, canEditOptionGroup, defaultPathForRole } from "@/lib/rbac";
-import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, writeData } from "@/lib/store";
+import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, withDataMutationLock, writeData } from "@/lib/store";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
@@ -57,6 +57,7 @@ function revalidateWorkspace() {
     "/received-invoices",
     "/mail-sorter",
     "/payments",
+    "/banking",
     "/partners",
     "/reports",
     "/guest-invoices",
@@ -305,36 +306,35 @@ export async function undoLastAction(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "undo:changes");
   const returnPath = value(formData, "returnPath") || defaultPathForRole(user.role);
-  const data = await readData();
-  const targetLog = data.auditLogs.find((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson);
+  await withDataMutationLock(async () => {
+    const data = await readData();
+    const targetLog = data.auditLogs.find((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson);
+    if (!targetLog) return;
 
-  if (!targetLog) {
-    redirect(returnPath);
-  }
-
-  restoreUndoState(data, targetLog.beforeStateJson);
-  const timestamp = now();
-  const restoredLog = data.auditLogs.find((log) => log.id === targetLog.id);
-  if (restoredLog) {
-    restoredLog.undoneAt = timestamp;
-    restoredLog.undoneById = user.id;
-  }
-  data.auditLogs.unshift({
-    id: newId(),
-    userId: user.id,
-    action: "UNDO_ACTION",
-    targetType: targetLog.targetType,
-    targetId: targetLog.targetId,
-    undoOfAuditLogId: targetLog.id,
-    afterJson: {
-      action: targetLog.action,
+    restoreUndoState(data, targetLog.beforeStateJson);
+    const timestamp = now();
+    const restoredLog = data.auditLogs.find((log) => log.id === targetLog.id);
+    if (restoredLog) {
+      restoredLog.undoneAt = timestamp;
+      restoredLog.undoneById = user.id;
+    }
+    data.auditLogs.unshift({
+      id: newId(),
+      userId: user.id,
+      action: "UNDO_ACTION",
       targetType: targetLog.targetType,
       targetId: targetLog.targetId,
-    },
-    createdAt: timestamp,
-  });
+      undoOfAuditLogId: targetLog.id,
+      afterJson: {
+        action: targetLog.action,
+        targetType: targetLog.targetType,
+        targetId: targetLog.targetId,
+      },
+      createdAt: timestamp,
+    });
 
-  await writeData(data);
+    await writeData(data);
+  });
   revalidateWorkspace();
   redirect(returnPath);
 }

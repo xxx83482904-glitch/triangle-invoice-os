@@ -18,6 +18,7 @@ const nav = [
   { href: "/estimates", label: "見積書", icon: ReceiptText, permission: "view:estimates" },
   { href: "/received-invoices", label: "受領請求書", icon: ReceiptText, permission: "view:receivedInvoices" },
   { href: "/payments", label: "入金・支払い", icon: WalletCards, permission: "view:payments" },
+  { href: "/banking", label: "口座・カード明細", icon: WalletCards, permission: "view:banking" },
   { href: "/partners", label: "取引先", icon: Users, permission: "view:partners" },
   { href: "/reports", label: "集計", icon: BarChart3, permission: "view:reports" },
 ];

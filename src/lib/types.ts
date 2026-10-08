@@ -1,3 +1,5 @@
+import type { AccountingCategory, BankAccount, BankRule, BankSyncState, BankTransaction } from "@/lib/banking-types";
+
 export type UserRole =
   | "ADMIN"
   | "ACCOUNTING"
@@ -342,6 +344,11 @@ export type AppData = {
   mailFolders: MailFolder[];
   mailDocuments: MailDocument[];
   payments: Payment[];
+  bankAccounts: BankAccount[];
+  bankTransactions: BankTransaction[];
+  accountingCategories: AccountingCategory[];
+  bankRules: BankRule[];
+  bankSyncStates: BankSyncState[];
   attachments: Attachment[];
   auditLogs: AuditLog[];
   invoiceNumberSettings: InvoiceNumberSetting[];

@@ -189,6 +189,11 @@ function seedData(): AppData {
     mailFolders: [],
     mailDocuments: [],
     payments: [],
+    bankAccounts: [],
+    bankTransactions: [],
+    accountingCategories: [],
+    bankRules: [],
+    bankSyncStates: [],
     attachments: [],
     auditLogs: [],
     invoiceNumberSettings: [
@@ -219,6 +224,11 @@ const undoCollectionKeys = [
   "mailFolders",
   "mailDocuments",
   "payments",
+  "bankAccounts",
+  "bankTransactions",
+  "accountingCategories",
+  "bankRules",
+  "bankSyncStates",
   "attachments",
   "invoiceNumberSettings",
 ] as const;
@@ -264,8 +274,10 @@ function isUndoPatch(value: unknown): value is UndoPatch {
 function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
   const changes: UndoPatch["changes"] = [];
   for (const collection of undoCollectionKeys) {
-    const beforeRows = before[collection] as unknown[];
-    const afterRows = after[collection] as unknown[];
+    // Legacy snapshots predate these collections and must not undo later imports.
+    if (!Array.isArray(before[collection])) continue;
+    const beforeRows = (before[collection] ?? []) as unknown[];
+    const afterRows = (after[collection] ?? []) as unknown[];
     const beforeById = new Map(
       beforeRows.filter(isUndoEntity).map((row, index) => [row.id, { index, row }] as const),
     );
@@ -290,7 +302,8 @@ function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
 function isLegacySnapshot(value: unknown): value is AppDataSnapshot {
   if (!value || typeof value !== "object") return false;
   const source = value as Record<string, unknown>;
-  return undoCollectionKeys.every((key) => (key === "estimates" && source[key] === undefined) || Array.isArray(source[key]));
+  const optionalLegacyKeys = new Set<string>(["estimates", "bankAccounts", "bankTransactions", "accountingCategories", "bankRules", "bankSyncStates"]);
+  return undoCollectionKeys.every((key) => (optionalLegacyKeys.has(key) && source[key] === undefined) || Array.isArray(source[key]));
 }
 
 export function restoreUndoState(data: AppData, snapshot: unknown) {
@@ -305,10 +318,24 @@ export function restoreUndoState(data: AppData, snapshot: unknown) {
         continue;
       }
       if (currentIndex >= 0) {
-        rows[currentIndex] = change.before;
+        if (change.collection === "bankTransactions") {
+          const current = rows[currentIndex];
+          const sourceChanged = ["bankAccountId", "transactionDate", "amount", "side", "content", "sourceMemo", "sourceStatus", "sourceMissing"].some((key) => current[key] !== change.before![key]);
+          const restored = { ...current };
+          for (const key of ["categoryId", "subCategoryId", "treatment", "classificationSource", "ruleId", "reviewed", "memo"]) restored[key] = change.before[key];
+          if (sourceChanged || current.sourceMissing) restored.reviewed = false;
+          restored.updatedAt = new Date(Math.max(Date.now(), Date.parse(String(current.updatedAt)) + 1)).toISOString();
+          rows[currentIndex] = restored;
+        } else {
+          rows[currentIndex] = change.before;
+        }
       } else {
         rows.splice(Math.min(change.index, rows.length), 0, change.before);
       }
+    }
+    const removedCategories = new Set(snapshot.changes.filter((change) => change.collection === "accountingCategories" && (change.before === null || change.before.deletedAt)).map((change) => change.id));
+    if (data.bankTransactions.some((row) => removedCategories.has(row.categoryId || "") || removedCategories.has(row.subCategoryId || "")) || data.bankRules.some((row) => !row.deletedAt && (removedCategories.has(row.categoryId || "") || removedCategories.has(row.subCategoryId || "")))) {
+      throw new Error("同期後の明細・ルールで使用中の勘定科目は元に戻せません");
     }
     return;
   }
@@ -562,6 +589,11 @@ async function normalizeData(data: AppData) {
   if (!Array.isArray(data.mailFolders)) { data.mailFolders = []; changed = true; }
   if (!Array.isArray(data.mailDocuments)) { data.mailDocuments = []; changed = true; }
   if (!Array.isArray(data.payments)) { data.payments = []; changed = true; }
+  if (!Array.isArray(data.bankAccounts)) { data.bankAccounts = []; changed = true; }
+  if (!Array.isArray(data.bankTransactions)) { data.bankTransactions = []; changed = true; }
+  if (!Array.isArray(data.accountingCategories)) { data.accountingCategories = []; changed = true; }
+  if (!Array.isArray(data.bankRules)) { data.bankRules = []; changed = true; }
+  if (!Array.isArray(data.bankSyncStates)) { data.bankSyncStates = []; changed = true; }
   if (!Array.isArray(data.attachments)) { data.attachments = []; changed = true; }
   if (!Array.isArray(data.auditLogs)) { data.auditLogs = []; changed = true; }
   if (!Array.isArray(data.invoiceNumberSettings)) { data.invoiceNumberSettings = seedData().invoiceNumberSettings; changed = true; }
@@ -625,6 +657,13 @@ function snapshotData(data: AppData): AppDataSnapshot {
 
 const mutationState = globalThis as typeof globalThis & { triangleMutationQueue?: Promise<unknown> };
 
+export function withDataMutationLock<T>(callback: () => Promise<T>) {
+  // All writers, including background sync and Undo, share this process queue.
+  const operation = (mutationState.triangleMutationQueue ?? Promise.resolve()).then(callback);
+  mutationState.triangleMutationQueue = operation.catch(() => undefined);
+  return operation;
+}
+
 export function mutateData<T>(
   userId: string,
   action: string,
@@ -632,31 +671,29 @@ export function mutateData<T>(
   targetId: string,
   mutator: (data: AppData) => T,
   beforeJson?: unknown,
+  options?: { undoable?: boolean },
 ) {
-  // Serialize read-modify-write operations in the single Synology app process.
-  const operation = (mutationState.triangleMutationQueue ?? Promise.resolve()).then(async () => {
-  const data = await readData();
-  const beforeState = snapshotData(data);
-  const result = mutator(data);
-  const beforeStateJson = buildUndoPatch(beforeState, data);
-  const audit: AuditLog = {
-    id: newId(),
-    userId,
-    action,
-    targetType,
-    targetId,
-    beforeJson,
-    beforeStateJson: beforeStateJson.changes.length ? beforeStateJson : undefined,
-    afterJson: result,
-    createdAt: now(),
-  };
-  data.auditLogs.unshift(audit);
-  normalizeAuditHistory(data);
-  await writeData(data);
-  return result;
+  return withDataMutationLock(async () => {
+    const data = await readData();
+    const beforeState = options?.undoable === false ? null : snapshotData(data);
+    const result = mutator(data);
+    const beforeStateJson = beforeState ? buildUndoPatch(beforeState, data) : { changes: [] };
+    const audit: AuditLog = {
+      id: newId(),
+      userId,
+      action,
+      targetType,
+      targetId,
+      beforeJson,
+      beforeStateJson: beforeStateJson.changes.length ? beforeStateJson : undefined,
+      afterJson: result,
+      createdAt: now(),
+    };
+    data.auditLogs.unshift(audit);
+    normalizeAuditHistory(data);
+    await writeData(data);
+    return result;
   });
-  mutationState.triangleMutationQueue = operation.catch(() => undefined);
-  return operation;
 }
 
 export async function getActiveData() {
