@@ -48,7 +48,7 @@ export default async function DashboardPage({
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
     .map((project, index) => ({
       id: project.id,
-      index: project.sortOrder ?? index + 1,
+      index: index + 1,
       name: project.name,
       clientId: project.clientId,
       clientName: data.clients.find((client) => client.id === project.clientId)?.companyName ?? "",
@@ -83,10 +83,10 @@ export default async function DashboardPage({
       <PageHeader title="ダッシュボード" description="案件、請求、支払いの状態を一覧で確認できます。" />
 
       <div className="mb-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard accent="blue" icon={FolderKanban} label="案件数" progress={Math.min(100, rows.length * 6)} value={`${rows.length}件`} />
+        <MetricCard accent="blue" icon={FolderKanban} label="案件数" value={`${rows.length}件`} />
         <MetricCard accent="sky" icon={ReceiptText} label="発行請求合計" progress={Math.min(100, Math.round(issuedTotal / Math.max(rows.reduce((sum, row) => sum + row.billingTotal, 1), 1) * 100))} value={yen.format(issuedTotal)} />
         <MetricCard accent="indigo" icon={FileCheck2} label="入金済み" progress={Math.min(100, Math.round((paidIncome / Math.max(issuedTotal, 1)) * 100))} value={yen.format(paidIncome)} />
-        <MetricCard accent="slate" icon={BarChart3} label="粗利" progress={Math.max(0, Math.min(100, Math.round((grossProfit / Math.max(paidIncome, 1)) * 100)))} value={yen.format(grossProfit)} />
+        <MetricCard accent="slate" icon={BarChart3} label="請求差額（税込）" value={yen.format(grossProfit)} />
       </div>
 
       <div className="mb-7 grid gap-5 xl:grid-cols-[1.45fr_0.75fr]">
@@ -94,7 +94,7 @@ export default async function DashboardPage({
           <CardHeader className="flex-row items-start justify-between gap-4">
             <div>
               <CardTitle>月別請求推移（{thisYear}年）</CardTitle>
-              <div className="mt-2 text-2xl font-semibold">{yen.format(issuedTotal)}</div>
+              <div className="mt-2 text-2xl font-semibold">{yen.format(issuedByMonth.reduce((sum, value) => sum + value, 0))}</div>
             </div>
             <div className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">進捗 {progress}%</div>
           </CardHeader>
@@ -142,7 +142,7 @@ function MetricCard({
   accent: "blue" | "indigo" | "sky" | "slate";
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  progress: number;
+  progress?: number;
   value: string;
 }) {
   const tone = {
@@ -161,16 +161,16 @@ function MetricCard({
             <Icon className="h-5 w-5" />
           </div>
         </div>
-        <div className="text-xl font-semibold">{value}</div>
-        <div className="space-y-2">
+        <div className="break-all text-xl font-semibold tabular-nums">{value}</div>
+        {progress !== undefined ? <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>0%</span>
             <span>{progress}%</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${Math.max(4, Math.min(100, progress))}%` }} />
+            <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
           </div>
-        </div>
+        </div> : null}
       </CardContent>
     </Card>
   );
@@ -215,7 +215,7 @@ function BalanceRow({ color, label, max, value }: { color: string; label: string
         <span className="font-medium">{yen.format(value)}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(4, Math.min(100, Math.round((value / max) * 100)))}%` }} />
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(0, Math.min(100, Math.round((value / max) * 100)))}%` }} />
       </div>
     </div>
   );

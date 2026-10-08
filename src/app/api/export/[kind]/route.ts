@@ -152,7 +152,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     ]);
   } else {
     body = csv([
-      ["案件", "契約金額", "請求済み", "入金済み", "未入金", "受領請求書合計", "支払い済み", "未払い", "粗利", "粗利率"],
+      ["案件", "契約金額", "請求済み", "入金済み", "未入金", "受領請求書合計", "支払い済み", "未払い", "請求差額（税込）", "請求差額率", "入出金差額"],
       ...projects
         .map((project) => {
           const money = projectMoney(data, project.id);
@@ -167,6 +167,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
             money.unpaidExpenseAmount,
             money.grossProfit,
             money.grossProfitRate,
+            money.paidIncomeAmount - money.paidExpenseAmount,
           ];
         }),
     ]);

@@ -376,7 +376,7 @@ function ProjectListItem({
         <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
           <MiniAmount label="未請求" value={uninvoicedAmount} hot={uninvoicedAmount > 0} />
           <MiniAmount label="未入金" value={row.unpaidIncomeAmount} hot={row.unpaidIncomeAmount > 0} />
-          <MiniAmount label="粗利" value={row.grossProfit} hot={row.grossProfit < 0} />
+          <MiniAmount label="請求差額（税込）" value={row.grossProfit} hot={row.grossProfit < 0} />
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -479,8 +479,9 @@ function ProjectDetailPanel({
             <div className="grid grid-cols-2 gap-3 text-sm">
               <InfoLine label="契約金額" value={yen.format(row.contractAmount)} />
               <InfoLine label="請求回数" value={`${row.billingCount}回`} />
-              <InfoLine label="粗利" value={yen.format(row.grossProfit)} strong={row.grossProfit < 0} />
-              <InfoLine label="粗利率" value={percent(row.grossProfitRate)} strong={row.grossProfitRate < 0} />
+              <InfoLine label="請求差額（税込）" value={yen.format(row.grossProfit)} strong={row.grossProfit < 0} />
+              <InfoLine label="差額率" value={row.invoicedAmount > 0 ? percent(row.grossProfitRate) : "-"} strong={row.grossProfitRate < 0} />
+              <InfoLine label="入出金差額" value={yen.format(row.paidIncomeAmount - row.paidExpenseAmount)} />
             </div>
           </CardContent>
         </Card>

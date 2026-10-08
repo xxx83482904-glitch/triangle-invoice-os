@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import { runtimeDataDir } from "@/lib/runtime-paths";
 import type { AppData, Estimate, IssuedInvoice } from "@/lib/types";
+import { documentTaxBreakdown } from "@/lib/document-items";
 
 export const invoiceIssuer = {
   name: "株式会社トライアングル.JP",
@@ -127,14 +128,13 @@ function createBusinessDocumentPdf(invoice: IssuedInvoice, data: AppData, validU
           y += Math.max(20, part.length * 14 + 8); line(y);
         }
       }
-      if (page === 1) while (y < 493) { y += 20; line(y); }
-
-      const taxes = new Map<number, { subtotal: number; tax: number }>();
-      for (const item of items) {
-        const group = taxes.get(item.taxRate) || { subtotal: 0, tax: 0 };
-        group.subtotal += item.amount;
-        if (item.taxRate === 10 || item.taxRate === 8) group.tax += Math.round(item.amount * item.taxRate / 100);
-        taxes.set(item.taxRate, group);
+      const taxes = new Map(documentTaxBreakdown(items).map((group) => [group.taxRate, group]));
+      // Preserve historical PDF amounts until the user explicitly edits that document.
+      if (invoice.taxRounding !== "PER_RATE") {
+        for (const group of taxes.values()) group.tax = 0;
+        for (const item of items) {
+          if (item.taxRate > 0) taxes.get(item.taxRate)!.tax += Math.round(item.amount * item.taxRate / 100);
+        }
       }
       const totals: [string, number][] = [["税抜計", invoice.subtotal]];
       if (taxes.size === 1 && (taxes.has(10) || taxes.has(8))) totals.push([`消費税 (${[...taxes.keys()][0]}%)`, invoice.taxTotal]);
@@ -146,6 +146,10 @@ function createBusinessDocumentPdf(invoice: IssuedInvoice, data: AppData, validU
         }
       }
       totals.push(["合計", invoice.total]);
+      if (page === 1) {
+        const blankRowLimit = Math.min(493, 602 - totals.length * 20);
+        while (y + 20 <= blankRowLimit) { y += 20; line(y); }
+      }
       if (y + totals.length * 20 > 602) { nextPage(); y = 140; }
       for (const [label, value] of totals) {
         text(label, left + 3, y + 5, 390, 10);

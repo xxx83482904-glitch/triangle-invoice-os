@@ -25,7 +25,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mt-6 w-full">
           <CompanySwitch role={user.role} />
         </div>
-        <div className="mt-6 w-full">
+        <div className="mt-6 min-h-0 w-full flex-1 overflow-y-auto">
           <AppNav role={user.role} />
         </div>
         <div className="mt-auto w-full space-y-2">

@@ -46,7 +46,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             ["受領請求書合計", money.receivedInvoiceTotal],
             ["支払い済み", money.paidExpenseAmount],
             ["未払い", money.unpaidExpenseAmount],
-            ["案件粗利", money.grossProfit],
+            ["請求差額（税込）", money.grossProfit],
+            ["入出金差額", money.paidIncomeAmount - money.paidExpenseAmount],
           ].map(([label, value]) => (
             <Card key={label as string}>
               <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
@@ -54,8 +55,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </Card>
           ))}
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">案件粗利率</CardTitle></CardHeader>
-            <CardContent className="text-xl font-semibold">{percent(money.grossProfitRate)}</CardContent>
+            <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">請求差額率</CardTitle></CardHeader>
+            <CardContent className="text-xl font-semibold">{money.invoicedAmount > 0 ? percent(money.grossProfitRate) : "-"}</CardContent>
           </Card>
         </section>
       ) : null}

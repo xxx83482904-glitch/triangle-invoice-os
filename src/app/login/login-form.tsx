@@ -38,7 +38,7 @@ export function LoginForm() {
           </Button>
         </form>
         <Button asChild variant="outline" className="mt-3 w-full">
-          <Link href="/register">初めての方は登録する</Link>
+          <Link href="/register">初めての方は利用を申請</Link>
         </Button>
       </CardContent>
     </Card>

@@ -1,5 +1,6 @@
 import "server-only";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
+import { outstandingAmount } from "@/lib/accounting-summary";
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -735,19 +736,19 @@ export function projectMoney(data: AppData, projectId: string): ProjectMoney {
   const paidIncomeAmount = issued.reduce((sum, invoice) => sum + paidForIssued(data, invoice.id), 0);
   const receivedInvoiceTotal = received.reduce((sum, invoice) => sum + invoice.total, 0);
   const paidExpenseAmount = received.reduce((sum, invoice) => sum + paidForReceived(data, invoice.id), 0);
-  const grossProfit = paidIncomeAmount - receivedInvoiceTotal;
-  const base = paidIncomeAmount || invoicedAmount || contractAmount;
+  // Kept as grossProfit internally for compatibility; UI labels this tax-inclusive invoice margin.
+  const grossProfit = invoicedAmount - receivedInvoiceTotal;
 
   return {
     contractAmount,
     invoicedAmount,
     paidIncomeAmount,
-    unpaidIncomeAmount: Math.max(invoicedAmount - paidIncomeAmount, 0),
+    unpaidIncomeAmount: issued.reduce((sum, invoice) => sum + outstandingAmount(invoice.total, paidForIssued(data, invoice.id)), 0),
     receivedInvoiceTotal,
     paidExpenseAmount,
-    unpaidExpenseAmount: Math.max(receivedInvoiceTotal - paidExpenseAmount, 0),
+    unpaidExpenseAmount: received.reduce((sum, invoice) => sum + outstandingAmount(invoice.total, paidForReceived(data, invoice.id)), 0),
     grossProfit,
-    grossProfitRate: base > 0 ? grossProfit / base : 0,
+    grossProfitRate: invoicedAmount > 0 ? grossProfit / invoicedAmount : 0,
   };
 }
 

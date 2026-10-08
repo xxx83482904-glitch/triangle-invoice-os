@@ -7,7 +7,8 @@ import { PDFParse } from "pdf-parse";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { createEstimatePdf, createIssuedInvoicePdf, invoiceIssuer } from "../src/lib/issued-invoice-pdf";
 import { invoicePdfFixture } from "./invoice-pdf-fixture";
-import type { Estimate } from "../src/lib/types";
+import type { Estimate, TaxRate } from "../src/lib/types";
+import { documentItemTotals } from "../src/lib/document-items";
 
 let sealRoot: string;
 const previousSeal = process.env.INVOICE_SEAL_PATH;
@@ -22,6 +23,37 @@ before(async () => {
 after(async () => {
   if (previousSeal === undefined) delete process.env.INVOICE_SEAL_PATH; else process.env.INVOICE_SEAL_PATH = previousSeal;
   await rm(sealRoot, { recursive: true, force: true });
+});
+
+test("mixed-rate PDFs match per-rate totals while legacy documents retain their saved amounts", async () => {
+  for (const legacy of [false, true]) {
+    const data = invoicePdfFixture();
+    data.issuedInvoiceItems = ([10, 10, 8, 8, 0, -1] as TaxRate[]).map((taxRate, index) => ({
+      ...data.issuedInvoiceItems[0], id: `tax-${index}`, description: `税率確認 ${index + 1}`, taxRate, quantity: 1, unitPrice: 15, amount: 15,
+    }));
+    const invoice = data.issuedInvoices[0];
+    Object.assign(invoice, documentItemTotals(data.issuedInvoiceItems));
+    if (legacy) { invoice.taxTotal = 6; invoice.total = 96; }
+    else invoice.taxRounding = "PER_RATE";
+    const before = structuredClone(data);
+    for (const kind of ["invoice", "estimate"] as const) {
+      const estimate: Estimate = { ...invoice, estimateNumber: "EST-TAX", validUntil: "2026-03-31", status: "DRAFT", items: data.issuedInvoiceItems };
+      const pdf = kind === "invoice" ? await createIssuedInvoicePdf(invoice, data) : await createEstimatePdf(estimate, data);
+      const parser = new PDFParse({ data: pdf });
+      try {
+        const text = (await parser.getText()).text.replaceAll(/\s/g, "");
+        assert.ok(text.includes(`10%対象30/消費税${legacy ? 4 : 3}`), text);
+        assert.ok(text.includes("8%対象30/消費税2"), text);
+        assert.ok(text.includes(`合計${legacy ? 96 : 95}`), text);
+        if (process.env.PDF_ARTIFACT_DIR && !legacy) {
+          await mkdir(process.env.PDF_ARTIFACT_DIR, { recursive: true });
+          const image = (await parser.getScreenshot({ desiredWidth: 882 })).pages[0];
+          await writeFile(path.join(process.env.PDF_ARTIFACT_DIR, `${kind}-per-rate.png`), image.data);
+        }
+      } finally { await parser.destroy(); }
+    }
+    assert.deepEqual(data, before);
+  }
 });
 
 test("estimate PDF has issuer, seal and validity but no payment instructions or internal memo", async () => {

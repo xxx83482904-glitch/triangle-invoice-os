@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
-import { monthKey, percent, yen } from "@/lib/format";
+import { percent, yen } from "@/lib/format";
+import { monthlyInvoiceSummary } from "@/lib/accounting-summary";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData } from "@/lib/store";
 
@@ -36,13 +37,7 @@ export default async function ReportsPage({
   );
   const clients = data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company));
   const vendors = data.vendors.filter((vendor) => !vendor.deletedAt && partnerMatchesCompany(vendor, company));
-  const months = Array.from(
-    new Set([
-      ...issuedInvoices.map((invoice) => monthKey(invoice.issueDate)),
-      ...payments.map((payment) => monthKey(payment.paymentDate)),
-      ...receivedInvoices.map((invoice) => monthKey(invoice.dueDate)),
-    ]),
-  ).sort();
+  const months = monthlyInvoiceSummary(issuedInvoices, receivedInvoices, payments);
 
   return (
     <AppShell>
@@ -50,32 +45,24 @@ export default async function ReportsPage({
         <Button asChild variant="outline"><Link href={`/api/export/projects?company=${company}`} prefetch={false}>案件別CSV</Link></Button>
       </PageHeader>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid min-w-0 gap-6">
         <Card>
-          <CardHeader><CardTitle>月別集計</CardTitle></CardHeader>
+          <CardHeader><CardTitle>月別集計（税込）</CardTitle></CardHeader>
           <CardContent>
             <Table>
-              <TableHeader><TableRow><TableHead>年月</TableHead><TableHead>売上請求</TableHead><TableHead>入金</TableHead><TableHead>未入金</TableHead><TableHead>支払予定</TableHead><TableHead>支払済み</TableHead></TableRow></TableHeader>
-              <TableBody>{months.map((month) => {
-                const issued = issuedInvoices.filter((invoice) => monthKey(invoice.issueDate) === month);
-                const income = payments.filter((payment) => payment.type === "INCOME" && monthKey(payment.paymentDate) === month);
-                const received = receivedInvoices.filter((invoice) => monthKey(invoice.dueDate) === month);
-                const expense = payments.filter((payment) => payment.type === "EXPENSE" && monthKey(payment.paymentDate) === month);
-                const issuedTotal = issued.reduce((sum, invoice) => sum + invoice.total, 0);
-                const incomeTotal = income.reduce((sum, payment) => sum + payment.amount, 0);
-                return <TableRow key={month}><TableCell>{month}</TableCell><TableCell>{yen.format(issuedTotal)}</TableCell><TableCell>{yen.format(incomeTotal)}</TableCell><TableCell>{yen.format(Math.max(issuedTotal - incomeTotal, 0))}</TableCell><TableCell>{yen.format(received.reduce((sum, invoice) => sum + invoice.total, 0))}</TableCell><TableCell>{yen.format(expense.reduce((sum, payment) => sum + payment.amount, 0))}</TableCell></TableRow>;
-              })}</TableBody>
+              <TableHeader><TableRow><TableHead>年月</TableHead><TableHead>発行請求</TableHead><TableHead>入金</TableHead><TableHead>発行分の未入金（現在）</TableHead><TableHead>支払期限の請求額</TableHead><TableHead>支払済み</TableHead><TableHead>入出金差額</TableHead></TableRow></TableHeader>
+              <TableBody>{months.map((row) => <TableRow key={row.month}><TableCell>{row.month}</TableCell><TableCell>{yen.format(row.issuedTotal)}</TableCell><TableCell>{yen.format(row.incomeTotal)}</TableCell><TableCell>{yen.format(row.unpaidIssuedAmount)}</TableCell><TableCell>{yen.format(row.receivedDueTotal)}</TableCell><TableCell>{yen.format(row.expenseTotal)}</TableCell><TableCell>{yen.format(row.incomeTotal - row.expenseTotal)}</TableCell></TableRow>)}</TableBody>
             </Table>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>案件別粗利</CardTitle></CardHeader>
+          <CardHeader><CardTitle>案件別 請求差額・入出金（税込）</CardTitle></CardHeader>
           <CardContent>
             <Table>
-              <TableHeader><TableRow><TableHead>案件</TableHead><TableHead>入金済み</TableHead><TableHead>支払い</TableHead><TableHead>粗利</TableHead><TableHead>粗利率</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>案件</TableHead><TableHead>発行請求</TableHead><TableHead>受領請求</TableHead><TableHead>請求差額</TableHead><TableHead>差額率</TableHead><TableHead>入出金差額</TableHead></TableRow></TableHeader>
               <TableBody>{projects.map((project) => {
                 const money = projectMoney(data, project.id);
-                return <TableRow key={project.id}><TableCell className="font-medium">{project.name}</TableCell><TableCell>{yen.format(money.paidIncomeAmount)}</TableCell><TableCell>{yen.format(money.receivedInvoiceTotal)}</TableCell><TableCell>{yen.format(money.grossProfit)}</TableCell><TableCell>{percent(money.grossProfitRate)}</TableCell></TableRow>;
+                return <TableRow key={project.id}><TableCell className="font-medium">{project.name}</TableCell><TableCell>{yen.format(money.invoicedAmount)}</TableCell><TableCell>{yen.format(money.receivedInvoiceTotal)}</TableCell><TableCell>{yen.format(money.grossProfit)}</TableCell><TableCell>{money.invoicedAmount > 0 ? percent(money.grossProfitRate) : "-"}</TableCell><TableCell>{yen.format(money.paidIncomeAmount - money.paidExpenseAmount)}</TableCell></TableRow>;
               })}</TableBody>
             </Table>
           </CardContent>

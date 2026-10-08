@@ -2,7 +2,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCircle, Mail, ReceiptText, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCircle, Mail, ReceiptText, Users, UserCheck, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
@@ -21,6 +21,7 @@ const nav = [
   { href: "/banking", label: "口座・カード明細", icon: WalletCards, permission: "view:banking" },
   { href: "/partners", label: "取引先", icon: Users, permission: "view:partners" },
   { href: "/reports", label: "集計", icon: BarChart3, permission: "view:reports" },
+  { href: "/users", label: "利用者管理", icon: UserCheck, permission: "manage:users" },
 ];
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {

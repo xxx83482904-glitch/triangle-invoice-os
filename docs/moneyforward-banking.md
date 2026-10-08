@@ -9,9 +9,12 @@ TRIANGLE Invoice OS の `/banking?company=JAPAN` に、連携口座・クレジ�
 3. Synology のアプリコンテナに次の環境変数を設定する。値は `.env.example` ではなく、非公開の実行環境に保存する。
 
 ```dotenv
+APP_URL=https://invoice.kuremasato.com
 MONEYFORWARD_JAPAN_API_KEY=
 MONEYFORWARD_JAPAN_OFFICE_CODE=
 ```
+
+`APP_URL` はブラウザーで利用する公開URLと一致させる。古いNASアドレスや `localhost` のままだと、同期開始時の送信元チェックで拒否される。Cloudflare経由の本番では上記URLを使い、チェック自体は無効化しない。既存コンテナの環境変数を変更した場合は、設定ファイルの保存や単なる再起動だけでなく、コンテナの再作成で反映する。
 
 事業者番号は `0000-0000` 形式。中国側も必要な場合だけ `MONEYFORWARD_CHINA_API_KEY` と `MONEYFORWARD_CHINA_OFFICE_CODE` を設定する。同じ事業者を両社に重複接続することや、既存明細のある会社を別事業者へ差し替えることは拒否する。
 

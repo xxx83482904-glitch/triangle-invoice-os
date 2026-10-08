@@ -13,6 +13,7 @@ import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
 import { saveClient } from "@/lib/partner-project-edits";
+import { registrationSchema, requestRegistration } from "@/lib/user-access";
 import type {
   AppData,
   IssuedInvoice,
@@ -23,7 +24,6 @@ import type {
   Project,
   ReceivedInvoice,
   SelectOptionGroup,
-  UserRole,
   Vendor,
 } from "@/lib/types";
 
@@ -244,51 +244,26 @@ function nextInvoiceNumber(data: AppData, timestamp: string) {
 }
 
 export type LoginState = { error: string };
-export type RegisterState = { error: string };
-
-function registrationRole(item: string): Extract<UserRole, "PROJECT_MANAGER" | "MAIL_EDITOR"> {
-  return item === "MAIL_EDITOR" ? "MAIL_EDITOR" : "PROJECT_MANAGER";
-}
+export type RegisterState = { error: string; success?: boolean };
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const user = await signIn(value(formData, "email"), value(formData, "password"));
-  if (!user) return { error: "メールアドレスまたはパスワードが違います。" };
+  if (!user) return { error: "ログインできません。メールアドレス・パスワードと、管理者の承認状況を確認してください。" };
   redirect(defaultPathForRole(user.role));
 }
 
 export async function registerAction(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
-  const name = value(formData, "name");
-  const email = value(formData, "email").toLowerCase();
-  const password = value(formData, "password");
-  const role = registrationRole(value(formData, "role"));
-
-  if (!name || !email || !password) return { error: "名前、メールアドレス、パスワードを入力してください。" };
-  if (password.length < 8) return { error: "パスワードは8文字以上にしてください。" };
-
-  const data = await readData();
-  if (data.users.some((user) => user.email.toLowerCase() === email && !user.deletedAt)) {
-    return { error: "このメールアドレスはすでに登録されています。" };
+  const parsed = registrationSchema.safeParse({ name: value(formData, "name"), email: value(formData, "email"), password: value(formData, "password") });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const passwordHash = await hash(parsed.data.password, 12);
+  try {
+    await mutateData("registration", "REQUEST_REGISTRATION", "User", "pending", (draft) =>
+      requestRegistration(draft, { name: parsed.data.name, email: parsed.data.email, passwordHash }), undefined, { undoable: false });
+  } catch {
+    return { error: "申請できませんでした。登録済みの場合は管理者に確認してください。" };
   }
-
-  const timestamp = now();
-  const user = {
-    id: newId(),
-    name,
-    email,
-    passwordHash: await hash(password, 10),
-    role,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  await mutateData(user.id, "REGISTER_USER", "User", user.id, (draft) => {
-    draft.users.unshift(user);
-    return user;
-  });
-
-  const signedIn = await signIn(email, password);
-  if (!signedIn) return { error: "登録は完了しました。ログインしてください。" };
-  redirect(defaultPathForRole(signedIn.role));
+  revalidatePath("/users");
+  return { error: "", success: true };
 }
 
 export async function guestLoginAction() {
@@ -690,6 +665,7 @@ export async function createGuestIssuedInvoice(formData: FormData) {
     taxTotal,
     total: subtotal + taxTotal,
     status: "ISSUED",
+    taxRounding: "PER_RATE",
     notes: optional(formData, "notes"),
     internalMemo: "GUEST_ISSUED",
     createdById: user.id,
@@ -736,6 +712,7 @@ export async function createIssuedInvoice(formData: FormData) {
     taxTotal,
     total: subtotal + taxTotal,
     status: value(formData, "status") as IssuedInvoice["status"],
+    taxRounding: "PER_RATE",
     notes: optional(formData, "notes"),
     internalMemo: optional(formData, "internalMemo"),
     createdById: user.id,

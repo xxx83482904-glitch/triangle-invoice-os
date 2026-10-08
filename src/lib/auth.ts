@@ -7,6 +7,7 @@ import { jwtVerify, SignJWT } from "jose";
 import { cache } from "react";
 import { readData, readDataForRequest } from "@/lib/store";
 import type { User } from "@/lib/types";
+import { isActiveUser } from "@/lib/user-access";
 
 const cookieName = "triangle-session";
 
@@ -26,7 +27,7 @@ export type SessionUser = Pick<User, "id" | "name" | "email" | "role">;
 
 export async function signIn(email: string, password: string) {
   const data = await readData();
-  const user = data.users.find((item) => item.email.toLowerCase() === email.toLowerCase() && !item.deletedAt);
+  const user = data.users.find((item) => item.email.toLowerCase() === email.toLowerCase() && isActiveUser(item));
   if (!user) return null;
   const ok = await compare(password, user.passwordHash);
   if (!ok) return null;
@@ -67,7 +68,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   try {
     const verified = await jwtVerify(token, secretKey());
     const payload = verified.payload as SessionUser;
-    const user = (await readDataForRequest()).users.find((item) => item.id === payload.id && !item.deletedAt);
+    const user = (await readDataForRequest()).users.find((item) => item.id === payload.id && isActiveUser(item));
     if (!user) return null;
     return {
       id: user.id,

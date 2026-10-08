@@ -106,7 +106,7 @@ export function ProjectsTable({
           <SortableHead className={showFinancials ? "w-[10%]" : "w-[14%]"} label="会社/状態" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <SortableHead className="w-[12%] text-right" label="請求設定" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           {showFinancials ? <SortableHead className="w-[15%]" label="入金状況" sortKey="unpaidIncomeAmount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
-          {showFinancials ? <SortableHead className="w-[12%]" label="支払い・粗利" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
+          {showFinancials ? <SortableHead className="w-[12%]" label="支払・請求差額" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
           <TableHead className={showFinancials ? "w-[10%]" : "w-[16%]"}>契約書</TableHead>
           <SortableHead className={showFinancials ? "w-[6%]" : "w-[8%]"} label="更新" sortKey="updatedAt" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <TableHead className="w-12 text-right">編集</TableHead>
@@ -146,7 +146,7 @@ export function ProjectsTable({
               </TableCell> : null}
               {showFinancials ? <TableCell>
                 <div className="text-xs">支払済 {yen.format(row.paidExpenseAmount)}</div>
-                <div className="text-xs font-medium">粗利 {yen.format(row.grossProfit)}</div>
+                <div className="text-xs font-medium">請求差額（税込） {yen.format(row.grossProfit)}</div>
               </TableCell> : null}
               <TableCell>
                 <ContractUpload canEdit={canEdit} row={row} />

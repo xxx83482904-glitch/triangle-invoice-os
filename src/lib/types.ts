@@ -65,6 +65,9 @@ export type User = {
   email: string;
   passwordHash: string;
   role: UserRole;
+  accessStatus?: "PENDING" | "ACTIVE" | "REJECTED";
+  approvedById?: string;
+  approvedAt?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -170,6 +173,7 @@ export type IssuedInvoice = {
   transactionDate: string;
   subtotal: number;
   taxTotal: number;
+  taxRounding?: "PER_RATE";
   total: number;
   status: IssuedInvoiceStatus;
   pdfUrl?: string;
@@ -205,6 +209,7 @@ export type Estimate = {
   items: EstimateItem[];
   subtotal: number;
   taxTotal: number;
+  taxRounding?: "PER_RATE";
   total: number;
   notes?: string;
   internalMemo?: string;

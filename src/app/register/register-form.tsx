@@ -15,11 +15,11 @@ export function RegisterForm() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle className="text-xl">アカウント登録</CardTitle>
-        <CardDescription>登録後、権限に応じた画面へ移動します。</CardDescription>
+        <CardTitle className="text-xl">利用申請</CardTitle>
+        <CardDescription>管理者の承認後にログインできます。</CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={action} className="space-y-4">
+        {state.success ? <Alert role="status"><AlertDescription>申請を受け付けました。管理者の承認をお待ちください。</AlertDescription></Alert> : <form action={action} className="space-y-4">
           {state.error ? (
             <Alert variant="destructive">
               <AlertDescription>{state.error}</AlertDescription>
@@ -27,32 +27,20 @@ export function RegisterForm() {
           ) : null}
           <div className="space-y-2">
             <Label htmlFor="name">名前</Label>
-            <Input id="name" name="name" autoComplete="name" required />
+            <Input id="name" name="name" autoComplete="name" maxLength={100} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">メールアドレス</Label>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
+            <Input id="email" name="email" type="email" autoComplete="email" maxLength={254} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">パスワード</Label>
-            <Input id="password" name="password" type="password" autoComplete="new-password" minLength={8} required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="role">担当種別</Label>
-            <select
-              id="role"
-              name="role"
-              defaultValue="PROJECT_MANAGER"
-              className="h-11 w-full rounded-md border border-input bg-background px-3 text-[16px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:h-10 lg:text-sm"
-            >
-              <option value="PROJECT_MANAGER">担当: 案件・発行請求書</option>
-              <option value="MAIL_EDITOR">郵便物担当: 郵便仕分けのみ</option>
-            </select>
+            <Input id="password" name="password" type="password" autoComplete="new-password" minLength={8} maxLength={72} required />
           </div>
           <Button className="w-full" disabled={pending}>
-            {pending ? "登録中..." : "登録する"}
+            {pending ? "申請中..." : "利用を申請"}
           </Button>
-        </form>
+        </form>}
         <Button asChild variant="outline" className="mt-3 w-full">
           <Link href="/login">ログインへ戻る</Link>
         </Button>

@@ -29,8 +29,15 @@ export function documentItemsFromFormData(formData: FormData): DocumentItemInput
 }
 
 export function documentItemTotals(items: { quantity: number; unitPrice: number; taxRate: TaxRate }[]) {
-  const amounts = items.map((item) => Math.round(item.quantity * item.unitPrice));
-  const subtotal = amounts.reduce((sum, value) => sum + value, 0);
-  const taxTotal = items.reduce((sum, item, i) => sum + (item.taxRate > 0 ? Math.round(amounts[i] * item.taxRate / 100) : 0), 0);
+  const groups = documentTaxBreakdown(items.map((item) => ({ amount: Math.round(item.quantity * item.unitPrice), taxRate: item.taxRate })));
+  const subtotal = groups.reduce((sum, group) => sum + group.subtotal, 0);
+  const taxTotal = groups.reduce((sum, group) => sum + group.tax, 0);
   return { subtotal, taxTotal, total: subtotal + taxTotal };
+}
+
+export function documentTaxBreakdown(items: { amount: number; taxRate: TaxRate }[]) {
+  const groups = new Map<TaxRate, number>();
+  for (const item of items) groups.set(item.taxRate, (groups.get(item.taxRate) ?? 0) + item.amount);
+  // Qualified invoices round only once per tax rate, not once per line.
+  return [...groups].map(([taxRate, subtotal]) => ({ taxRate, subtotal, tax: taxRate > 0 ? Math.round(subtotal * taxRate / 100) : 0 }));
 }
