@@ -43,6 +43,7 @@ test("sync commits complete months, resumes safely and serializes concurrent edi
     let saved = await readData();
     assert.equal(saved.bankTransactions.length, 1); assert.equal(saved.bankSyncStates[0].status, "ERROR");
     assert.equal(saved.bankSyncStates[0].completedThrough, "2020-08-31");
+    assert.deepEqual(saved.bankSyncStates[0].coverage, [{ start: "2020-08-01", end: "2020-08-31", accountIds: [saved.bankAccounts[0].id] }]);
     assert.ok(!JSON.stringify(saved).includes("never-log-test-secret"));
     assert.ok(saved.auditLogs.filter((log) => log.action.startsWith("BANK_SYNC")).every((log) => !log.beforeStateJson));
     failSeptember = false; months.length = 0;
@@ -51,6 +52,7 @@ test("sync commits complete months, resumes safely and serializes concurrent edi
     saved = await readData();
     assert.deepEqual(months, ["2020-09-01"]); assert.equal(saved.bankTransactions.length, 2);
     assert.equal(saved.bankSyncStates[0].status, "SUCCESS"); assert.equal(saved.bankSyncStates[0].lastSuccessAt, undefined);
+    assert.deepEqual(saved.bankSyncStates[0].coverage, [{ start: "2020-08-01", end: "2020-09-30", accountIds: [saved.bankAccounts[0].id] }]);
     await runBankSync(await queueBankSync("JAPAN", request, admin));
     assert.equal((await readData()).bankTransactions.length, 2);
     await assert.rejects(queueBankSync("CHINA", request, admin), /別の会社/);

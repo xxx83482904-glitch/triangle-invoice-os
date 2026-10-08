@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, TrendingUp, WandSparkles, X } from "lucide-react";
 import { applyBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
 import { BankingSettings, BankCategoryFields, bankSelectClass } from "@/components/app/banking-settings";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,8 @@ export function BankingWorkspace(props: Props) {
   const [pending, startTransition] = useTransition();
   const [settings, setSettings] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
+  const [classifyOpen, setClassifyOpen] = useState(false);
+  const [classifyScope, setClassifyScope] = useState<"page" | "selected" | "all">("page");
   const [leaveUrl, setLeaveUrl] = useState<string | null>(null);
   const [sync, setSync] = useState(props.sync);
   const [syncing, setSyncing] = useState(props.busy);
@@ -124,9 +127,11 @@ export function BankingWorkspace(props: Props) {
   function reclassify() {
     setError(""); startTransition(async () => {
       try {
-        const result = await applyBankRulesAction(company);
+        const ids = classifyScope === "all" ? undefined : rows.filter((row) => classifyScope === "page" || selected.has(row.id)).map((row) => row.id);
+        const result = await applyBankRulesAction(company, ids);
         if (!result.success) { setError(result.error || "分類できませんでした"); return; }
-        router.refresh(); toast({ title: `${result.count}件にルールを適用しました`, variant: "success" });
+        setClassifyOpen(false); router.refresh();
+        toast({ title: `${result.count}件を更新しました（未分類 ${result.unclassified}件）`, variant: "success" });
       } catch { setError("通信に失敗しました"); }
     });
   }
@@ -145,7 +150,7 @@ export function BankingWorkspace(props: Props) {
   function status(row: BankTransaction, value: BankEdit) {
     return <span className={`inline-flex items-center gap-1 text-xs ${row.sourceMissing ? "text-destructive" : value.reviewed ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
       {row.sourceMissing ? <CircleAlert className="size-3.5" /> : null}{row.sourceMissing ? "元明細なし" : value.reviewed ? "確認済み" : !value.categoryId && value.treatment === "NORMAL" ? "未分類" : "未確認"}
-      {drafts[row.id] ? "・未保存" : row.classificationSource === "RULE" ? "・自動分類" : ""}
+      {drafts[row.id] ? "・未保存" : row.classificationSource === "RULE" ? "・ルール" : row.classificationSource === "HISTORY" ? "・過去明細から分類" : row.classificationSource === "AUTO" ? "・自動分類" : row.classificationSource === "MANUAL" ? "・手動" : ""}
     </span>;
   }
   function fields(row: BankTransaction, value: BankEdit) {
@@ -161,6 +166,7 @@ export function BankingWorkspace(props: Props) {
     <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
       <div className="min-w-0"><h1 className="break-words text-xl font-semibold">口座・カード明細</h1><div className="mt-1 text-sm text-muted-foreground">{company === "JAPAN" ? "日本本社" : "中国支社"}{sync?.officeName ? ` / ${sync.officeName}` : ""}</div></div>
       <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" href={`/banking/forecast?company=${company}${filters.account ? `&account=${encodeURIComponent(filters.account)}` : ""}`}><TrendingUp className="size-4" />予測</Link>
         <Button className="min-h-11" variant="outline" disabled={pending || Boolean(dirty)} onClick={() => setSettings(true)}><Settings2 className="size-4" />科目・ルール</Button>
         <Button className="min-h-11" variant="outline" disabled={!configured || syncing || pending || Boolean(dirty)} onClick={() => setSyncOpen(true)}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}同期</Button>
         <Button className="min-h-11" disabled={!dirty || pending} onClick={() => save()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{dirty ? ` (${dirty})` : ""}</Button>
@@ -209,7 +215,7 @@ export function BankingWorkspace(props: Props) {
         <div className="flex flex-wrap items-center gap-2 border-y py-2">
           <label className="flex min-h-11 cursor-pointer items-center gap-2 px-1 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label="表示中の明細をすべて選択" checked={Boolean(rows.length) && rows.every((row) => selected.has(row.id))} disabled={pending || !rows.length} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((row) => row.id)) : new Set())} />表示中を選択</label>
           <span className="text-sm text-muted-foreground">{selected.size}件選択</span>
-          <Button type="button" className="ml-auto min-h-11" variant="ghost" disabled={pending || Boolean(dirty) || !rules.some((rule) => rule.enabled)} onClick={reclassify}><WandSparkles className="size-4" />ルール適用</Button>
+          <Button type="button" className="ml-auto min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => { setClassifyScope(selected.size ? "selected" : rows.length ? "page" : "all"); setError(""); setClassifyOpen(true); }}><WandSparkles className="size-4" />自動分類</Button>
         </div>
         {selected.size ? <div className="grid min-w-0 gap-2 bg-muted/40 p-2 sm:grid-cols-3">
           <select className={bankSelectClass} aria-label="選択明細の勘定科目を一括変更" value="" disabled={pending} onChange={(e) => bulk({ categoryId: e.target.value === "__clear" ? undefined : e.target.value, subCategoryId: undefined, reviewed: false })}><option value="" disabled>勘定科目を一括変更</option><option value="__clear">未分類に戻す</option>{categories.filter((row) => !row.parentId && row.available && !row.deletedAt).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
@@ -225,7 +231,7 @@ export function BankingWorkspace(props: Props) {
               const controls = fields(row, value);
               return <tr key={row.id} className={`border-b align-top ${selected.has(row.id) ? "bg-primary/5" : "hover:bg-muted/30"}`}>
                 <td>{selectionBox(row)}</td><td className="px-2 py-3 text-xs tabular-nums">{row.transactionDate}</td>
-                <td className="break-words px-2 py-3"><div>{row.content || "摘要なし"}</div><div className="mt-1">{status(row, value)}</div>{row.sourceMemo ? <div className="mt-1 text-xs text-muted-foreground">{row.sourceMemo}</div> : null}</td>
+                <td className="break-words px-2 py-3"><div>{row.content || "摘要なし"}</div><div className="mt-1">{status(row, value)}</div>{!drafts[row.id] && row.classificationReason ? <div className="mt-1 text-xs text-muted-foreground">{row.classificationReason}</div> : null}{row.sourceMemo ? <div className="mt-1 text-xs text-muted-foreground">{row.sourceMemo}</div> : null}</td>
                 <td className="break-words px-2 py-3 text-xs text-muted-foreground">{accountMap.get(row.bankAccountId) || "口座未取得"}</td>
                 <td className={`px-2 py-3 text-right tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}><span className="whitespace-nowrap">{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></td>
                 <td className="px-1 py-2">{controls[0]}</td><td className="px-1 py-2">{controls[1]}</td><td className="px-1 py-2">{controls[2]}</td>
@@ -237,6 +243,7 @@ export function BankingWorkspace(props: Props) {
         <div className="divide-y md:hidden">{rows.map((row) => { const value = drafts[row.id] || editFrom(row); return <article key={row.id} className={`min-w-0 space-y-2 py-3 ${selected.has(row.id) ? "bg-primary/5" : ""}`}>
           <div className="flex min-w-0 items-start gap-1">{selectionBox(row)}<div className="min-w-0 flex-1"><div className="flex flex-wrap justify-between gap-1"><time className="text-xs">{row.transactionDate}</time><span className={`break-all text-sm font-medium tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></div><h3 className="mt-1 break-words text-sm font-medium">{row.content || "摘要なし"}</h3><div className="break-words text-xs text-muted-foreground">{accountMap.get(row.bankAccountId)}</div>{status(row, value)}</div></div>
           {row.sourceMemo ? <div className="break-words text-xs text-muted-foreground">{row.sourceMemo}</div> : null}
+          {!drafts[row.id] && row.classificationReason ? <div className="break-words text-xs text-muted-foreground">{row.classificationReason}</div> : null}
           <div className="grid min-w-0 gap-2">{fields(row, value)}</div>
           <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label={`${row.content}を確認済みにする`} checked={value.reviewed} disabled={pending || row.sourceMissing} onChange={(e) => edit(row, { reviewed: e.target.checked })} />確認済み</label>
         </article>; })}</div>
@@ -257,6 +264,18 @@ export function BankingWorkspace(props: Props) {
       </DialogContent>
     </Dialog>
     <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} />
+    <Dialog open={classifyOpen} onOpenChange={(value) => { if (!pending) setClassifyOpen(value); }}>
+      <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
+        <DialogHeader><DialogTitle>勘定科目の自動分類</DialogTitle><DialogDescription>手動変更・確認済みの明細は対象外です。分類結果は未確認で保存されます。</DialogDescription></DialogHeader>
+        <label className="grid min-w-0 gap-1 text-sm">対象<select aria-label="自動分類の対象" className={bankSelectClass} value={classifyScope} disabled={pending} onChange={(event) => setClassifyScope(event.target.value as typeof classifyScope)}>
+          {selected.size ? <option value="selected">選択した明細（{selected.size}件）</option> : null}
+          {rows.length ? <option value="page">表示中のページ（{rows.length}件）</option> : null}
+          <option value="all">{company === "JAPAN" ? "日本" : "中国"}の全期間・全口座</option>
+        </select></label>
+        {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
+        <Button className="min-h-11" disabled={pending} onClick={reclassify}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}自動分類して保存</Button>
+      </DialogContent>
+    </Dialog>
     <Dialog open={syncOpen} onOpenChange={(value) => { if (!syncing) setSyncOpen(value); }}>
       <DialogContent aria-describedby={undefined} showCloseButton={!syncing} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
         <DialogHeader><DialogTitle>Money Forward 明細同期</DialogTitle></DialogHeader>

@@ -6,6 +6,7 @@ import { mutateData, readData } from "@/lib/store";
 import type { CompanyScope } from "@/lib/company";
 import type { AppData, User } from "@/lib/types";
 import type { BankSyncState } from "@/lib/banking-types";
+import { recordBankCoverage } from "@/lib/bank-forecast";
 
 type Actor = Pick<User, "id" | "role">;
 export type BankSyncRequest = { mode: "recent" | "all" | "range"; start?: string; end?: string };
@@ -100,6 +101,7 @@ export async function runBankSync(job: Awaited<ReturnType<typeof queueBankSync>>
       const items = await client.transactions(range.start, range.end);
       await update("BANK_SYNC_MONTH", (data, current) => {
         const result = mergeBankTransactions(data, company, office.code, items, range);
+        recordBankCoverage(current, range.start, range.end, data.bankAccounts.filter((row) => row.company === company && row.officeCode === office.code && row.available).map((row) => row.id));
         current.imported += result.imported; current.updated += result.updated; current.completedThrough = range.end;
         return { ...result, through: range.end };
       });

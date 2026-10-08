@@ -26,6 +26,7 @@ const nav = [
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {
   const params = new URLSearchParams(searchParams.toString());
+  if (pathname === "/banking/forecast" && params.get("company") !== company) params.delete("account");
   params.set("company", company);
   return `${pathname}?${params.toString()}`;
 }
@@ -104,13 +105,13 @@ export function MobileAppNav({ role }: { role: UserRole }) {
     .map((href) => allowedNav.find((item) => item.href === href))
     .filter((item): item is (typeof nav)[number] => Boolean(item));
   const moreItems = allowedNav.filter((item) => !primaryHrefs.includes(item.href));
-  const moreActive = moreItems.some((item) => pathname === item.href);
+  const moreActive = moreItems.some((item) => pathname === item.href || (item.href === "/banking" && pathname.startsWith("/banking/")));
 
   return (
     <nav style={{ gridTemplateColumns: `repeat(${primaryItems.length + (moreItems.length ? 1 : 0)}, minmax(0, 1fr))` }} className="grid h-16 items-stretch gap-1 px-2 py-1.5">
       {primaryItems.map((item) => {
         const Icon = item.icon;
-        const active = pathname === item.href;
+        const active = pathname === item.href || (item.href === "/banking" && pathname.startsWith("/banking/"));
         return (
           <Link
             key={item.href}
@@ -169,7 +170,7 @@ export function AppNav({ role }: { role: UserRole }) {
     <nav className="flex w-full flex-col gap-1">
       {nav.filter((item) => canRole(role, item.permission)).map((item) => {
         const Icon = item.icon;
-        const active = pathname === item.href;
+        const active = pathname === item.href || (item.href === "/banking" && pathname.startsWith("/banking/"));
         return (
           <Link
             key={item.href}

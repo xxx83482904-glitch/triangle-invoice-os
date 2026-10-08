@@ -1,7 +1,7 @@
 import type { CompanyScope } from "@/lib/company";
 
 export type BankTreatment = "NORMAL" | "TRANSFER" | "EXCLUDED";
-export type BankClassificationSource = "UNASSIGNED" | "RULE" | "MANUAL";
+export type BankClassificationSource = "UNASSIGNED" | "RULE" | "HISTORY" | "AUTO" | "MANUAL";
 type BankEntity = { id: string; company: CompanyScope; createdAt: string; updatedAt: string };
 
 export type BankAccount = BankEntity & {
@@ -12,6 +12,16 @@ export type BankAccount = BankEntity & {
   serviceName: string;
   isManual: boolean;
   available: boolean;
+  forecastSettings?: BankForecastSettings;
+};
+
+export type BankForecastSettings = {
+  accountKind: "UNKNOWN" | "BANK" | "CARD" | "OTHER";
+  balanceMonth: string;
+  openingBalance?: number;
+  minimumBalance: number;
+  incomePercent: number;
+  expensePercent: number;
 };
 
 export type AccountingCategory = BankEntity & {
@@ -39,6 +49,7 @@ export type BankTransaction = BankEntity & {
   subCategoryId?: string;
   treatment: BankTreatment;
   classificationSource: BankClassificationSource;
+  classificationReason?: string;
   ruleId?: string;
   reviewed: boolean;
   memo: string;
@@ -73,6 +84,7 @@ export type BankSyncState = BankEntity & {
   imported: number;
   updated: number;
   error?: string;
+  coverage?: Array<{ start: string; end: string; accountIds: string[] }>;
 };
 
 export type BankEdit = {

@@ -6,6 +6,10 @@ import { requireUser } from "@/lib/auth";
 import { applyBankRules, deleteBankDefinition, saveAccountingCategory, saveBankEdits, saveBankRule } from "@/lib/banking";
 import { setBankAutoSync } from "@/lib/banking-sync";
 import type { BankEdit, BankRuleInput, CategoryInput } from "@/lib/banking-types";
+import type { BankForecastSettings } from "@/lib/banking-types";
+import { saveBankForecastSettings } from "@/lib/bank-forecast";
+import { bankToday } from "@/lib/banking";
+import { isActiveUser } from "@/lib/user-access";
 import type { CompanyScope } from "@/lib/company";
 import { mutateData } from "@/lib/store";
 
@@ -40,10 +44,10 @@ export async function deleteBankDefinitionAction(company: CompanyScope, kind: "c
     revalidatePath("/banking"); return { success: true };
   } catch (error) { return { error: errorMessage(error) }; }
 }
-export async function applyBankRulesAction(company: CompanyScope) {
+export async function applyBankRulesAction(company: CompanyScope, ids?: string[]) {
   const user = await requireUser();
   try {
-    const result = await mutateData(user.id, "BANK_RULE_APPLY", "BankRule", company, (data) => applyBankRules(data, user, company));
+    const result = await mutateData(user.id, "BANK_RULE_APPLY", "BankRule", company, (data) => applyBankRules(data, user, company, ids));
     revalidatePath("/banking"); return { ...result, success: true as const };
   } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
@@ -53,4 +57,17 @@ export async function setBankAutoSyncAction(company: CompanyScope, enabled: bool
     await setBankAutoSync(user, company, enabled);
     revalidatePath("/banking"); return { success: true };
   } catch (error) { return { error: errorMessage(error) }; }
+}
+
+export async function saveBankForecastAction(company: CompanyScope, accountId: string, updatedAt: string, settings: BankForecastSettings) {
+  const user = await requireUser();
+  try {
+    const result = await mutateData(user.id, "BANK_FORECAST_SETTINGS", "BankAccount", accountId, (data) => {
+      const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
+      if (!live) throw new Error("利用者の権限を確認してください");
+      return saveBankForecastSettings(data, live, company, accountId, updatedAt, settings, bankToday());
+    });
+    revalidatePath("/banking/forecast");
+    return { ...result, success: true as const };
+  } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }

@@ -14,7 +14,7 @@
     "test:statuses": "node --conditions=react-server --import tsx --test tests/status-consistency.test.ts",
     "test:editing": "node --conditions=react-server --import tsx --test tests/document-editing.test.ts",
     "test:accounting": "node --conditions=react-server --import tsx --test tests/accounting-safety.test.ts tests/user-access.test.ts",
-    "test:banking": "node --conditions=react-server --import tsx --test tests/banking.test.ts tests/moneyforward-client.test.ts tests/banking-sync.test.ts",
+    "test:banking": "node --conditions=react-server --import tsx --test tests/banking.test.ts tests/bank-classification.test.ts tests/bank-forecast.test.ts tests/moneyforward-client.test.ts tests/banking-sync.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

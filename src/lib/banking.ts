@@ -3,6 +3,7 @@ import type { CompanyScope } from "@/lib/company";
 import { assertCan } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankTransaction, CategoryInput } from "@/lib/banking-types";
+import { createBankSuggester } from "@/lib/bank-classification";
 
 export const treatmentLabels = { NORMAL: "通常", TRANSFER: "振替・カード精算", EXCLUDED: "対象外" } as const;
 export const categoryGroups = { EXPENSE: "費用", INCOME: "収益", ASSET: "資産", LIABILITY: "負債", EQUITY: "純資産", OTHER: "その他" } as const;
@@ -61,7 +62,7 @@ export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope,
     return { row, edit };
   });
   // Validate the entire batch before touching any row.
-  for (const { row, edit } of changes) Object.assign(row, edit, { categoryId: edit.categoryId || undefined, subCategoryId: edit.subCategoryId || undefined, classificationSource: "MANUAL", ruleId: undefined, updatedAt: stamp(row.updatedAt) });
+  for (const { row, edit } of changes) Object.assign(row, edit, { categoryId: edit.categoryId || undefined, subCategoryId: edit.subCategoryId || undefined, classificationSource: "MANUAL", classificationReason: undefined, ruleId: undefined, updatedAt: stamp(row.updatedAt) });
   return { count: changes.length };
 }
 
@@ -128,25 +129,32 @@ function ruleFor(data: AppData, transaction: BankTransaction) {
     });
 }
 
-export function classifyBankTransaction(data: AppData, transaction: BankTransaction) {
+export function classifyBankTransaction(data: AppData, transaction: BankTransaction, suggest = createBankSuggester(data)) {
   if (transaction.classificationSource === "MANUAL" || transaction.reviewed || transaction.sourceMissing || transaction.sourceStatus === "excluded") return false;
   const rule = ruleFor(data, transaction);
-  if (!rule) {
-    if (transaction.classificationSource !== "RULE") return false;
-    Object.assign(transaction, { categoryId: undefined, subCategoryId: undefined, ruleId: undefined, treatment: "NORMAL", classificationSource: "UNASSIGNED", updatedAt: stamp(transaction.updatedAt) });
+  const suggestion = rule ? undefined : suggest(transaction);
+  if (!rule && !suggestion) {
+    if (!["RULE", "HISTORY", "AUTO"].includes(transaction.classificationSource)) return false;
+    Object.assign(transaction, { categoryId: undefined, subCategoryId: undefined, ruleId: undefined, classificationReason: undefined, treatment: "NORMAL", classificationSource: "UNASSIGNED", updatedAt: stamp(transaction.updatedAt) });
     return true;
   }
-  const next = { categoryId: rule.categoryId, subCategoryId: rule.subCategoryId, treatment: rule.treatment, classificationSource: "RULE" as const, ruleId: rule.id };
+  const next = rule
+    ? { categoryId: rule.categoryId, subCategoryId: rule.subCategoryId, treatment: rule.treatment, classificationSource: "RULE" as const, classificationReason: `ルール: ${rule.name}`, ruleId: rule.id }
+    : { ...suggestion!, ruleId: undefined };
   if (Object.entries(next).every(([key, value]) => transaction[key as keyof BankTransaction] === value)) return false;
   Object.assign(transaction, next, { updatedAt: stamp(transaction.updatedAt) });
   return true;
 }
 
-export function applyBankRules(data: AppData, user: Actor, company: CompanyScope) {
+export function applyBankRules(data: AppData, user: Actor, company: CompanyScope, ids?: string[]) {
   assertBankAccess(user, company);
+  const selected = ids === undefined ? undefined : new Set(z.array(z.string().min(1)).min(1).max(500).parse(ids));
+  const rows = data.bankTransactions.filter((row) => row.company === company && (!selected || selected.has(row.id)));
+  if (selected && selected.size !== rows.length) throw new Error("明細が見つかりません。画面を更新してください");
+  const suggest = createBankSuggester(data);
   let count = 0;
-  for (const row of data.bankTransactions) if (row.company === company && classifyBankTransaction(data, row)) count++;
-  return { count };
+  for (const row of rows) if (classifyBankTransaction(data, row, suggest)) count++;
+  return { count, unclassified: rows.filter((row) => !row.sourceMissing && row.treatment === "NORMAL" && !row.categoryId).length };
 }
 
 export type ImportedAccount = { id: string; subId?: string; name: string; serviceName: string; isManual: boolean };
@@ -188,6 +196,7 @@ export function mergeBankTransactions(data: AppData, company: CompanyScope, offi
     if (!accountIds.has(sourceKey(company, office, "account", item.connected_account_id, item.connected_sub_account_id || undefined))) throw new Error("明細の口座情報が一致しません。再同期してください");
   }
   let imported = 0, updated = 0;
+  const importedRows: BankTransaction[] = [];
   for (const item of items) {
     const existing = byId.get(item.id);
     const values = { bankAccountId: sourceKey(company, office, "account", item.connected_account_id, item.connected_sub_account_id || undefined), transactionDate: item.date, amount: item.value, side: item.side, content: item.content, sourceMemo: item.memo || "", sourceStatus: item.journalizing_status, sourceMissing: false };
@@ -200,11 +209,11 @@ export function mergeBankTransactions(data: AppData, company: CompanyScope, offi
         Object.assign(existing, values, { reviewed: false, updatedAt: stamp(existing.updatedAt) });
         updated++;
       }
-      classifyBankTransaction(data, existing);
+      importedRows.push(existing);
     } else {
       const timestamp = stamp();
       const row: BankTransaction = { ...values, id: sourceKey(company, office, "transaction", item.id), company, officeCode: office, sourceId: item.id, treatment: item.journalizing_status === "excluded" ? "EXCLUDED" : "NORMAL", classificationSource: "UNASSIGNED", reviewed: false, memo: "", createdAt: timestamp, updatedAt: timestamp };
-      classifyBankTransaction(data, row);
+      importedRows.push(row);
       data.bankTransactions.push(row); imported++;
     }
   }
@@ -212,6 +221,9 @@ export function mergeBankTransactions(data: AppData, company: CompanyScope, offi
   for (const row of byId.values()) if (row.transactionDate >= range.start && row.transactionDate <= range.end && !seen.has(row.sourceId) && !row.sourceMissing) {
     row.sourceMissing = true; row.reviewed = false; row.updatedAt = stamp(row.updatedAt); updated++;
   }
+  // Build history only after source corrections and missing rows invalidate review.
+  const suggest = createBankSuggester(data);
+  for (const row of importedRows) classifyBankTransaction(data, row, suggest);
   return { imported, updated };
 }
 

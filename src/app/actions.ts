@@ -58,6 +58,7 @@ function revalidateWorkspace() {
     "/mail-sorter",
     "/payments",
     "/banking",
+    "/banking/forecast",
     "/partners",
     "/reports",
     "/guest-invoices",
