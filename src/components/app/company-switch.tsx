@@ -6,27 +6,19 @@ import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCirc
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
-import { canRole, companyForUser, defaultPathForRole } from "@/lib/rbac";
+import { companyForUser, defaultPathForRole } from "@/lib/rbac";
+import { mobileNavigation, navigationActive, navigationCompany, navigationGroups, workflowNavigation } from "@/lib/app-navigation";
 import type { UserRole } from "@/lib/types";
 
-const nav = [
-  { href: "/dashboard", label: "ダッシュボード", icon: LayoutGrid, permission: "view:dashboard" },
-  { href: "/documents", label: "全書類", icon: Files, permission: "view:documents" },
-  { href: "/projects", label: "案件", icon: Building2, permission: "view:projects" },
-  { href: "/mail-sorter", label: "郵便仕分け", icon: Mail, permission: "view:mailSorter" },
-  { href: "/issued-invoices", label: "発行請求書", icon: FileText, permission: "view:issuedInvoices" },
-  { href: "/estimates", label: "見積書", icon: ReceiptText, permission: "view:estimates" },
-  { href: "/received-invoices", label: "受領請求書", icon: ReceiptText, permission: "view:receivedInvoices" },
-  { href: "/payments", label: "入金・支払い", icon: WalletCards, permission: "view:payments" },
-  { href: "/banking", label: "口座・カード明細", icon: WalletCards, permission: "view:banking" },
-  { href: "/partners", label: "取引先", icon: Users, permission: "view:partners" },
-  { href: "/reports", label: "集計", icon: BarChart3, permission: "view:reports" },
-  { href: "/users", label: "利用者管理", icon: UserCheck, permission: "manage:users" },
-];
+const icons: Record<string, typeof Files> = {
+  "/dashboard": LayoutGrid, "/documents": Files, "/projects": Building2, "/mail-sorter": Mail,
+  "/issued-invoices": FileText, "/estimates": ReceiptText, "/received-invoices": ReceiptText,
+  "/payments": WalletCards, "/banking": WalletCards, "/partners": Users, "/reports": BarChart3, "/users": UserCheck,
+};
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {
   const params = new URLSearchParams(searchParams.toString());
-  if (pathname === "/banking/forecast" && params.get("company") !== company) params.delete("account");
+  if (pathname.startsWith("/banking") && params.get("company") !== company) { params.delete("account"); params.delete("transaction"); params.delete("analysisThrough"); params.delete("invoice"); params.delete("page"); }
   params.set("company", company);
   return `${pathname}?${params.toString()}`;
 }
@@ -56,16 +48,16 @@ export function CompanySwitch({ role }: { role?: UserRole }) {
   const company = pathname === "/mail-sorter" ? mailSorterCompany : role ? companyForUser({ role }, searchParams.get("company")) : companyFromParam(searchParams.get("company"));
 
   return (
-    <div className={`grid ${options.length === 1 ? "grid-cols-1" : "grid-cols-2"} gap-2 rounded-xl border bg-muted/30 p-1`}>
+    <div aria-label="対象会社" className={`grid ${options.length === 1 ? "grid-cols-1" : "grid-cols-2"} gap-1 rounded-md border bg-muted/30 p-1`}>
       {options.map((option) => (
         <Button
           key={option.value}
           asChild
           size="xs"
           variant={company === option.value ? "default" : "ghost"}
-          className="h-8 w-full rounded-lg px-2 text-xs"
+          className="h-8 w-full rounded px-2 text-xs"
         >
-          <Link href={scopedHref(pathname, searchParams, option.value)} prefetch={false}>{option.shortLabel}</Link>
+          <Link href={scopedHref(pathname, searchParams, option.value)} aria-current={company === option.value ? "true" : undefined} prefetch={false}>{option.shortLabel}</Link>
         </Button>
       ))}
     </div>
@@ -98,32 +90,28 @@ export function MobileCompanySwitch({ role }: { role?: UserRole }) {
 export function MobileAppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const company = companyForUser({ role }, searchParams.get("company"));
-  const allowedNav = nav.filter((item) => canRole(role, item.permission));
-  const primaryHrefs = role === "BILLING_EDITOR" ? ["/issued-invoices", "/estimates", "/partners"] : ["/documents", "/projects", "/mail-sorter", "/issued-invoices"];
-  const primaryItems = primaryHrefs
-    .map((href) => allowedNav.find((item) => item.href === href))
-    .filter((item): item is (typeof nav)[number] => Boolean(item));
-  const moreItems = allowedNav.filter((item) => !primaryHrefs.includes(item.href));
-  const moreActive = moreItems.some((item) => pathname === item.href || (item.href === "/banking" && pathname.startsWith("/banking/")));
+  const company = navigationCompany(role, searchParams.get("company"));
+  const { primary: primaryItems, more: moreItems } = mobileNavigation(role);
+  const moreActive = moreItems.some((item) => navigationActive(pathname, item.href));
 
   return (
-    <nav style={{ gridTemplateColumns: `repeat(${primaryItems.length + (moreItems.length ? 1 : 0)}, minmax(0, 1fr))` }} className="grid h-16 items-stretch gap-1 px-2 py-1.5">
+    <nav aria-label="メインメニュー（モバイル）" style={{ gridTemplateColumns: `repeat(${Math.max(1, primaryItems.length + (moreItems.length ? 1 : 0))}, minmax(0, 1fr))` }} className="grid h-16 items-stretch gap-1 px-2 py-1.5">
       {primaryItems.map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href || (item.href === "/banking" && pathname.startsWith("/banking/"));
+        const Icon = icons[item.href];
+        const active = navigationActive(pathname, item.href);
         return (
           <Link
             key={item.href}
             href={navHref(item.href, company)}
             prefetch={false}
             title={item.label}
+            aria-current={active ? "page" : undefined}
             className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 transition ${
               active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" />
-            <span className="max-w-full truncate text-[10px] leading-tight">{item.label}</span>
+            <span className="max-w-full truncate text-[10px] leading-tight">{item.href === "/banking" ? "口座・カード" : item.label}</span>
             <NavLinkPending className="absolute right-1 top-1" />
           </Link>
         );
@@ -141,12 +129,12 @@ export function MobileAppNav({ role }: { role: UserRole }) {
               <span className="max-w-full truncate text-[10px] leading-tight">その他</span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="top" sideOffset={8} className="w-44">
+          <DropdownMenuContent align="end" side="top" sideOffset={8} className="max-h-[65dvh] w-56 overflow-y-auto">
             {moreItems.map((item) => {
-              const Icon = item.icon;
+              const Icon = icons[item.href];
               return (
                 <DropdownMenuItem key={item.href} asChild>
-                  <Link href={navHref(item.href, company)} prefetch={false} className="flex items-center gap-2">
+                  <Link href={navHref(item.href, company)} prefetch={false} aria-current={navigationActive(pathname, item.href) ? "page" : undefined} className="flex min-h-11 items-center gap-2 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary">
                     <Icon className="h-4 w-4" />
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     <NavLinkPending />
@@ -164,38 +152,53 @@ export function MobileAppNav({ role }: { role: UserRole }) {
 export function AppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const company = companyForUser({ role }, searchParams.get("company"));
+  const company = navigationCompany(role, searchParams.get("company"));
 
   return (
-    <nav className="flex w-full flex-col gap-1">
-      {nav.filter((item) => canRole(role, item.permission)).map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href || (item.href === "/banking" && pathname.startsWith("/banking/"));
+    <nav aria-label="メインメニュー" className="flex w-full flex-col gap-4 pb-3">
+      {navigationGroups(role).map((group) => <div key={group.label}>
+        <p className="mb-1 px-3 text-xs font-medium text-muted-foreground">{group.label}</p>
+        <div className="space-y-0.5">{group.items.map((item) => {
+        const Icon = icons[item.href];
+        const active = navigationActive(pathname, item.href);
         return (
           <Link
             key={item.href}
             href={navHref(item.href, company)}
             prefetch={false}
             title={item.label}
-            className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm transition ${
+            aria-current={active ? "page" : undefined}
+            className={`flex min-h-9 w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition focus-visible:outline-2 focus-visible:outline-ring ${
               active
-                ? "bg-primary text-primary-foreground shadow-sm"
+                ? "bg-primary/10 font-semibold text-primary"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-4 w-4 shrink-0" />
             <span className="min-w-0 truncate">{item.label}</span>
             <NavLinkPending className="ml-auto" />
           </Link>
         );
-      })}
+      })}</div></div>)}
     </nav>
   );
 }
 
+export function WorkflowNav({ role }: { role: UserRole }) {
+  const pathname = usePathname(), searchParams = useSearchParams();
+  const items = workflowNavigation(pathname, new URLSearchParams(searchParams.toString()), role);
+  if (items.length < 2) return null;
+  return <nav aria-label="関連画面" className="mb-5 flex min-w-0 flex-wrap gap-x-4 border-b">
+    {items.map((item) => <Link key={item.href} href={item.href} prefetch={false} aria-current={item.active ? "page" : undefined}
+      className={`relative inline-flex min-h-11 items-center gap-1 border-b-2 px-1 text-sm transition focus-visible:outline-2 focus-visible:outline-ring ${item.active ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"}`}>
+      {item.label}<NavLinkPending />
+    </Link>)}
+  </nav>;
+}
+
 export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; role: UserRole }) {
   const searchParams = useSearchParams();
-  const company = companyForUser({ role }, searchParams.get("company"));
+  const company = navigationCompany(role, searchParams.get("company"));
   const href = defaultPathForRole(role);
 
   return (

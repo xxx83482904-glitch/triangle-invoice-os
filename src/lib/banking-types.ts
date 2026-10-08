@@ -108,4 +108,21 @@ export type BankFilters = {
   query: string;
   sort: string;
   page: number;
+  transaction?: string;
+  analysisThrough?: string;
+};
+
+export type BankReconciliation = BankEntity & {
+  transactionId: string;
+  invoiceKind: "issued" | "received";
+  invoiceId: string;
+  paymentId: string;
+  amount: number;
+  createdPayment: boolean;
+  bankEvidence: string;
+  invoiceEvidence: string;
+  paymentEvidence: string;
+  note: string;
+  confirmedById: string;
+  deletedAt?: string | null;
 };

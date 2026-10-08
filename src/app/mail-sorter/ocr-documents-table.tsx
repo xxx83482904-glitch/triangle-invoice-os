@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Square, Trash2, UploadCloud, X } from "lucide-react";
-import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, List, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Search, Square, Trash2, UploadCloud, X } from "lucide-react";
+import { Fragment, type CSSProperties, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { MailDocumentCategory, ReceivedInvoiceStatus } from "@/lib/types";
+import { matchesMailSearch } from "@/lib/mail-search";
 
 type Option = {
   label: string;
@@ -62,7 +62,7 @@ type FolderOption = {
   month: string;
 };
 
-type CategoryFilter = "all" | "INVOICE" | "RECEIPT";
+type CategoryFilter = "all" | MailDocumentCategory;
 type DuplicateFilter = "all" | "duplicates";
 type ProcessingFilter = "all" | "unprocessed" | "processed";
 type ProcessingStatusValue = "unprocessed" | "processed";
@@ -541,6 +541,12 @@ export function OcrDocumentsTable({
   const router = useRouter();
   const [isMoving, startMoveTransition] = useTransition();
   const [isFiltering, startFilterTransition] = useTransition();
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [folderCreateOpen, setFolderCreateOpen] = useState(false);
+  const [newFolderMonth, setNewFolderMonth] = useState("");
+  const [creatingFolder, startCreateFolder] = useTransition();
+  const [folderError, setFolderError] = useState("");
   const folderUploadInputRef = useRef<HTMLInputElement>(null);
   const [draggedIds, setDraggedIds] = useState<Set<string>>(new Set());
   const [dragOverMonth, setDragOverMonth] = useState<string | null>(null);
@@ -564,9 +570,17 @@ export function OcrDocumentsTable({
       if (processingFilter !== "all" && processing !== processingFilter) return false;
       if (categoryFilter !== "all" && category !== categoryFilter) return false;
       if (duplicateFilter === "duplicates" && !isDuplicate(row)) return false;
-      return true;
+      return matchesMailSearch(row, deferredQuery);
     });
-  }, [categoryFilter, duplicateFilter, pendingCategories, pendingProcessing, processingFilter, rows]);
+  }, [categoryFilter, duplicateFilter, pendingCategories, pendingProcessing, processingFilter, rows, deferredQuery]);
+  const processingCounts = useMemo(() => rows.reduce((counts, row) => {
+    counts[pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed")]++;
+    return counts;
+  }, { all: rows.length, processed: 0, unprocessed: 0 }), [rows, pendingProcessing]);
+  const hasFilters = Boolean(query || processingFilter !== "all" || categoryFilter !== "all" || duplicateFilter !== "all");
+  function resetFilters() {
+    setQuery(""); setProcessingFilter("all"); setCategoryFilter("all"); setDuplicateFilter("all"); setVisibleListCount(LIST_BATCH_SIZE);
+  }
   const groups = useMemo(() => {
     const grouped = new Map<string, OcrDocumentListItem[]>();
     for (const row of filteredRows) {
@@ -623,6 +637,8 @@ export function OcrDocumentsTable({
   const bulkDeleteFormRef = useRef<HTMLFormElement>(null);
 
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
+  const filteredIds = useMemo(() => new Set(filteredRows.map((row) => row.id)), [filteredRows]);
+  const hiddenSelectedCount = selectedRows.filter((row) => !filteredIds.has(row.id)).length;
   const duplicateRows = useMemo(() => rows.filter(isDuplicate), [rows]);
   const listVisibleRows = useMemo(
     () => listGroups.flatMap(([month, monthRows]) => (collapsedMonths.has(month) ? [] : monthRows)),
@@ -948,54 +964,30 @@ export function OcrDocumentsTable({
           event.target.value = "";
         }}
       />
-      <Card>
-        <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle>郵便物フォルダー</CardTitle>
-            <div className="mt-1 text-xs text-muted-foreground">
-              一覧を中心に月分類・プレビューを確認できます。月見出しへファイルを収納し、境界線ドラッグで幅を調整できます。
-            </div>
+      <section aria-label="郵便物一覧" className="min-w-0 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">郵便物 <span className="ml-1 text-sm font-normal text-muted-foreground">{filteredRows.length} / {rows.length}件</span></h2>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {canExport ? <Button asChild size="icon" variant="outline" className="size-11 lg:size-11"><a href={exportHref} title={selectedRows.length ? `${selectedRows.length}件をCSV出力` : "全件をCSV出力"} aria-label="郵便物をCSV出力"><Download className="size-4" /></a></Button> : null}
+            <Button type="button" className="min-h-11 lg:min-h-11" variant="outline" disabled={!canEdit} onClick={() => { setFolderError(""); setFolderCreateOpen(true); }}><FolderPlus className="size-4" />月フォルダー</Button>
+            <Button type="button" className="min-h-11 lg:min-h-11" disabled={!canEdit} onClick={openDropzone}><Plus className="size-4" />郵便物を追加</Button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={toggleVisibleSelection} disabled={!selectionScopeRows.length}>
-              {allScopeSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-              {allScopeSelected ? "表示中を解除" : "表示中を選択"}
-            </Button>
-            <Button asChild size="sm" variant="outline" className="gap-1">
-              <a href={exportHref}>
-                <Download className="h-3.5 w-3.5" />
-                {selectedRows.length ? `${selectedRows.length}件CSV` : "全件CSV"}
-              </a>
-            </Button>
-            {/* #13: Bulk delete modal */}
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 border-b pb-3">
+          <div className="relative min-w-0 basis-64 flex-1"><Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} aria-label="郵便物を検索" placeholder="発送元・ファイル名・案件を検索" className="min-h-11 pl-9 lg:min-h-11 lg:pl-9" onChange={(event) => { setQuery(event.target.value); setVisibleListCount(LIST_BATCH_SIZE); }} /></div>
+          <select aria-label="郵便物の分類で絞り込み" className="h-11 max-w-full rounded-md border bg-background px-3 text-sm" value={categoryFilter} onChange={(event) => startFilterTransition(() => { setCategoryFilter(event.target.value as CategoryFilter); setVisibleListCount(LIST_BATCH_SIZE); })}>
+            <option value="all">すべての分類</option>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <div role="group" aria-label="郵便物の表示形式" className="flex rounded-md border p-0.5">
+            <Button type="button" size="icon" className="size-11 lg:size-11" variant={viewMode === "list" ? "secondary" : "ghost"} aria-pressed={viewMode === "list"} aria-label="一覧表示" title="一覧表示" onClick={() => startFilterTransition(() => setViewMode("list"))}><List className="size-4" /></Button>
+            <Button type="button" size="icon" className="size-11 lg:size-11" variant={viewMode === "folder" ? "secondary" : "ghost"} aria-pressed={viewMode === "folder"} aria-label="フォルダー表示" title="フォルダー表示" onClick={() => startFilterTransition(() => setViewMode("folder"))}><Folder className="size-4" /></Button>
+          </div>
+          {viewMode === "folder" ? <>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="gap-1 text-destructive"
-              disabled={!canEdit || !selectedRows.length}
-              onClick={() => setBulkDeleteOpen(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              選択削除
-            </Button>
-            <form action={createMailFolder} className="flex items-center gap-2">
-              <input type="hidden" name="company" value={company} />
-              <Input name="month" type="month" aria-label="作成する月" className="h-9 w-36 text-sm" disabled={!canEdit} required />
-              <Button type="submit" size="sm" variant="outline" className="gap-1" disabled={!canEdit}>
-                <FolderPlus className="h-3.5 w-3.5" />
-                フォルダー作成
-              </Button>
-            </form>
-            <Button type="button" size="sm" variant="outline" className="gap-1" onClick={openDropzone}>
-              <Plus className="h-3.5 w-3.5" />
-              追加
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="gap-1"
+              className="min-h-11 gap-1 lg:min-h-11"
               onClick={() => {
                 const next = monthColumn === "normal" ? "compact" : "normal";
                 setMonthColumn(next);
@@ -1009,7 +1001,7 @@ export function OcrDocumentsTable({
               type="button"
               size="sm"
               variant="outline"
-              className="gap-1"
+              className="min-h-11 gap-1 lg:min-h-11"
               onClick={() => {
                 const next = senderColumn === "normal" ? "compact" : "normal";
                 setSenderColumn(next);
@@ -1019,15 +1011,31 @@ export function OcrDocumentsTable({
               {senderColumn === "normal" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               発送元{senderColumn === "normal" ? "小" : "広"}
             </Button>
+          </> : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div role="group" aria-label="郵便物の処理状態" className="flex flex-wrap gap-1 border-b">
+            {(["all", "unprocessed", "processed"] as ProcessingFilter[]).map((filter) => <button type="button" key={filter} aria-pressed={processingFilter === filter} className={`inline-flex min-h-11 items-center gap-2 border-b-2 px-3 text-sm ${processingFilter === filter ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => startFilterTransition(() => { setProcessingFilter(filter); setVisibleListCount(LIST_BATCH_SIZE); })}>
+              {filter === "all" ? "すべて" : filter === "processed" ? "処理済み" : "未処理"}<span className="text-xs tabular-nums">{processingCounts[filter]}</span>
+            </button>)}
           </div>
-        </CardHeader>
-        <CardContent>
+          {duplicateRows.length || duplicateFilter === "duplicates" ? <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={duplicateFilter === "duplicates"} onChange={(event) => startFilterTransition(() => { setDuplicateFilter(event.target.checked ? "duplicates" : "all"); setVisibleListCount(LIST_BATCH_SIZE); })} />重複候補のみ ({duplicateRows.length})</label> : null}
+          <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={toggleVisibleSelection} disabled={!selectionScopeRows.length}>
+            {allScopeSelected ? <CheckSquare className="size-4" /> : <Square className="size-4" />}{allScopeSelected ? "表示中を解除" : "表示中を選択"}
+          </Button>
+          {duplicateRows.length ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={() => setSelectedIds(new Set(filteredRows.filter(isDuplicate).map((row) => row.id)))}><CheckSquare className="size-4" />重複を選択</Button> : null}
+          {hasFilters ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
+          <LoaderCircle aria-label="絞り込み中" className={`size-4 animate-spin ${isFiltering || query !== deferredQuery ? "opacity-100" : "invisible"}`} />
+        </div>
+        <div>
           {selectedRows.length || pendingEdits.length ? (
-            <div className="sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur">
+            <div className="sticky top-16 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-background/95 p-2 shadow-sm backdrop-blur lg:top-2 [&_button]:min-h-11 [&_select]:min-h-11">
               <Badge variant={selectedRows.length ? "default" : "secondary"}>
                 {selectedRows.length ? `${selectedRows.length}件選択` : "未保存あり"}
               </Badge>
               {pendingEdits.length ? <Badge variant="outline">{pendingEdits.length}件の変更</Badge> : null}
+              {hiddenSelectedCount ? <span className="text-xs text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}
+              <Button type="button" variant="ghost" size="icon" className="size-11 text-destructive" title="選択した郵便物を削除" aria-label="選択した郵便物を削除" disabled={!canEdit || !selectedRows.length} onClick={() => setBulkDeleteOpen(true)}><Trash2 className="size-4" /></Button>
               <select
                 aria-label="選択した書類の処理状態"
                 className="h-9 min-w-32 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
@@ -1103,64 +1111,7 @@ export function OcrDocumentsTable({
               </Button>
             </div>
           ) : null}
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-2">
-            {(["all", "unprocessed", "processed"] as ProcessingFilter[]).map((filter) => (
-              <Button
-                key={filter}
-                type="button"
-                size="sm"
-                variant={processingFilter === filter ? "default" : "outline"}
-                onClick={() => startFilterTransition(() => {
-                  setProcessingFilter(filter);
-                  setVisibleListCount(LIST_BATCH_SIZE);
-                })}
-              >
-                {filter === "all" ? "全件" : filter === "processed" ? "処理済み" : "未処理"}
-              </Button>
-            ))}
-            {(["all", "INVOICE", "RECEIPT"] as CategoryFilter[]).map((filter) => (
-              <Button
-                key={filter}
-                type="button"
-                size="sm"
-                variant={categoryFilter === filter ? "default" : "outline"}
-                onClick={() => startFilterTransition(() => {
-                  setCategoryFilter(filter);
-                  setVisibleListCount(LIST_BATCH_SIZE);
-                })}
-              >
-                {filter === "all" ? "全分類" : categoryLabels[filter]}
-              </Button>
-            ))}
-            <Button
-              type="button"
-              size="sm"
-              variant={duplicateFilter === "duplicates" ? "default" : "outline"}
-              onClick={() => startFilterTransition(() => {
-                setDuplicateFilter((current) => (current === "duplicates" ? "all" : "duplicates"));
-                setVisibleListCount(LIST_BATCH_SIZE);
-              })}
-              disabled={!duplicateRows.length}
-            >
-              重複候補{duplicateRows.length ? ` ${duplicateRows.length}` : ""}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!duplicateRows.length}
-              onClick={() => setSelectedIds(new Set(duplicateRows.map((row) => row.id)))}
-            >
-              重複を選択
-            </Button>
-            <Button type="button" size="sm" variant={viewMode === "folder" ? "default" : "outline"} onClick={() => startFilterTransition(() => setViewMode("folder"))}>
-              フォルダー
-            </Button>
-            <Button type="button" size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => startFilterTransition(() => setViewMode("list"))}>
-              一覧
-            </Button>
-            <LoaderCircle aria-hidden className={`h-4 w-4 animate-spin transition-opacity ${isFiltering ? "opacity-100" : "opacity-0"}`} />
-          </div>
+          {hasFilters && !filteredRows.length ? <p role="status" className="mb-3 border-l-2 border-primary py-3 pl-3 text-sm">条件に合う郵便物がありません。</p> : null}
           {groups.length ? (
             viewMode === "list" ? (
               <div
@@ -2002,8 +1953,23 @@ export function OcrDocumentsTable({
               ) : null}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
+      <Dialog open={folderCreateOpen} onOpenChange={(open) => { if (!creatingFolder) setFolderCreateOpen(open); }}>
+        <DialogContent showCloseButton={!creatingFolder} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle>月フォルダーを作成</DialogTitle><DialogDescription>作成する年月を選択してください。</DialogDescription></DialogHeader>
+          <form action={(formData) => startCreateFolder(async () => {
+            setFolderError("");
+            try { await createMailFolder(formData); setFolderCreateOpen(false); setNewFolderMonth(""); toast({ title: "月フォルダーを作成しました", variant: "success" }); }
+            catch { setFolderError("フォルダーを作成できませんでした。年月と権限を確認してください。"); }
+          })} className="grid gap-4">
+            <input type="hidden" name="company" value={company} />
+            <label className="grid gap-2 text-sm">年月<Input name="month" type="month" value={newFolderMonth} onChange={(event) => setNewFolderMonth(event.target.value)} className="min-h-11 lg:min-h-11" required disabled={creatingFolder} /></label>
+            {folderError ? <p role="alert" className="text-sm text-destructive">{folderError}</p> : null}
+            <Button type="submit" className="min-h-11 lg:min-h-11" disabled={creatingFolder}>{creatingFolder ? <LoaderCircle className="size-4 animate-spin" /> : <FolderPlus className="size-4" />}作成</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Expand dialog */}
       <Dialog open={Boolean(dialogRow)} onOpenChange={(open) => !open && setDialogRow(null)}>

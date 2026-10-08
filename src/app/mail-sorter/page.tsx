@@ -1,9 +1,8 @@
-import Link from "next/link";
+import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { redirect } from "next/navigation";
 import { MailSorterDropzone } from "@/app/mail-sorter/mail-sorter-dropzone";
 import { OcrDocumentsTable, type OcrDocumentListItem } from "@/app/mail-sorter/ocr-documents-table";
 import { AppShell, PageHeader } from "@/components/app/shell";
-import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, mailSorterCompany, matchesCompany } from "@/lib/company";
 import { can, defaultPathForRole } from "@/lib/rbac";
@@ -141,14 +140,8 @@ export default async function MailSorterPage({
     <AppShell>
       <PageHeader
         title="郵便物フォルダー"
-        description="OCRした郵便物を月別フォルダーで管理します。請求書・領収書は受領請求書にも反映します。"
       >
-        <Button asChild variant="outline"><Link href={`/documents?company=${company}`}>全書類</Link></Button>
-        {can(user, "view:receivedInvoices") ? (
-          <Button asChild variant="outline">
-            <Link href={`/received-invoices?company=${company}`} prefetch={false}>受領請求書を見る</Link>
-          </Button>
-        ) : null}
+        {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
       </PageHeader>
 
       <div className="space-y-6">

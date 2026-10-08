@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { isBillableIssuedInvoice } from "@/lib/documents";
 import { recordExpensePayment, recordIncomePayment } from "@/app/actions";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -43,7 +44,7 @@ export default async function PaymentsPage({
 
   return (
     <AppShell>
-      <PageHeader title="入金・支払い管理" description="発行請求書への入金、受領請求書への支払いを複数回に分けて記録できます。" />
+      <PageHeader title="入金・支払い管理" description="発行請求書への入金、受領請求書への支払いを複数回に分けて記録できます。">{can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}</PageHeader>
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>

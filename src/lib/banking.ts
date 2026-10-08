@@ -228,11 +228,21 @@ export function mergeBankTransactions(data: AppData, company: CompanyScope, offi
 }
 
 export function bankFilters(params: Record<string, string | undefined>): BankFilters {
-  return { month: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month || "") ? params.month! : "", account: params.account || "", category: params.category || "", side: ["INCOME", "EXPENSE"].includes(params.side || "") ? params.side! : "", status: ["unclassified", "unreviewed", "reviewed", "transfer", "excluded", "missing"].includes(params.status || "") ? params.status! : "", query: (params.q || "").slice(0, 200), sort: ["date-asc", "amount-desc", "amount-asc"].includes(params.sort || "") ? params.sort! : "date-desc", page: Math.max(1, Math.min(100000, Math.floor(Number(params.page) || 1))) };
+  const analysisThrough = isBankDate(params.analysisThrough || "") ? params.analysisThrough : undefined;
+  return {
+    month: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month || "") ? params.month! : "",
+    account: params.account || "", category: params.category || "",
+    side: ["INCOME", "EXPENSE"].includes(params.side || "") ? params.side! : "",
+    status: ["unclassified", "unreviewed", "reviewed", "transfer", "excluded", "missing"].includes(params.status || "") ? params.status! : "",
+    query: (params.q || "").slice(0, 200), sort: ["date-asc", "amount-desc", "amount-asc"].includes(params.sort || "") ? params.sort! : "date-desc",
+    page: Math.max(1, Math.min(100000, Math.floor(Number(params.page) || 1))), transaction: (params.transaction || "").slice(0, 500), analysisThrough,
+  };
 }
 
 export function selectBankTransactions(data: AppData, company: CompanyScope, filters: BankFilters) {
-  const all = data.bankTransactions.filter((row) => row.company === company);
+  const analysisAccount = filters.analysisThrough ? data.bankAccounts.find((row) => row.company === company && row.id === filters.account) : undefined;
+  const all = data.bankTransactions.filter((row) => row.company === company && (!filters.transaction || row.id === filters.transaction)
+    && (!filters.analysisThrough || (analysisAccount && row.officeCode === analysisAccount.officeCode && row.transactionDate <= filters.analysisThrough && row.side === "EXPENSE" && row.amount > 0 && row.treatment === "NORMAL" && !row.sourceMissing && row.bankAccountId === filters.account)));
   const query = normalized(filters.query);
   const rows = all.filter((row) => (!filters.month || row.transactionDate.startsWith(filters.month)) && matchesBankAccount(data, company, filters.account, row.bankAccountId) && (!filters.category || row.categoryId === filters.category || row.subCategoryId === filters.category) && (!filters.side || row.side === filters.side) && (!query || normalized(`${row.content} ${row.memo} ${row.sourceMemo}`).includes(query)) && (!filters.status || (filters.status === "unclassified" && !row.categoryId && row.treatment === "NORMAL") || (filters.status === "unreviewed" && !row.reviewed) || (filters.status === "reviewed" && row.reviewed) || (filters.status === "transfer" && row.treatment === "TRANSFER") || (filters.status === "excluded" && row.treatment === "EXCLUDED") || (filters.status === "missing" && row.sourceMissing)));
   const months = Array.from(new Set(all.map((row) => row.transactionDate.slice(0, 7)))).sort().reverse();

@@ -1,4 +1,4 @@
-import type { AccountingCategory, BankAccount, BankRule, BankSyncState, BankTransaction } from "@/lib/banking-types";
+import type { AccountingCategory, BankAccount, BankReconciliation, BankRule, BankSyncState, BankTransaction } from "@/lib/banking-types";
 
 export type UserRole =
   | "ADMIN"
@@ -285,7 +285,7 @@ export type MailFolder = {
 
 export type Payment = {
   id: string;
-  source?: "INVOICE_STATUS";
+  source?: "INVOICE_STATUS" | "BANK_RECONCILIATION";
   type: PaymentType;
   issuedInvoiceId?: string;
   receivedInvoiceId?: string;
@@ -354,6 +354,8 @@ export type AppData = {
   accountingCategories: AccountingCategory[];
   bankRules: BankRule[];
   bankSyncStates: BankSyncState[];
+  bankReconciliations: BankReconciliation[];
+  bankAiUsage?: Partial<Record<"JAPAN" | "CHINA", { day: string; count: number; lastRequestedAt: string }>>;
   attachments: Attachment[];
   auditLogs: AuditLog[];
   invoiceNumberSettings: InvoiceNumberSetting[];

@@ -59,6 +59,8 @@ function revalidateWorkspace() {
     "/payments",
     "/banking",
     "/banking/forecast",
+    "/banking/insights",
+    "/banking/reconcile",
     "/partners",
     "/reports",
     "/guest-invoices",

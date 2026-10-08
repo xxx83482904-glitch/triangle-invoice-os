@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, TrendingUp, WandSparkles, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
 import { applyBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
 import { BankingSettings, BankCategoryFields, bankSelectClass } from "@/components/app/banking-settings";
 import { Button } from "@/components/ui/button";
@@ -90,7 +89,8 @@ export function BankingWorkspace(props: Props) {
 
   function navigate(values: Record<string, string>) {
     if (pending) return;
-    const params = new URLSearchParams({ company, month: filters.month, account: filters.account, category: filters.category, side: filters.side, status: filters.status, q: filters.query, sort: filters.sort, page: "1", ...values });
+    const keepAnalysis = !["month", "account", "side", "status"].some((key) => key in values);
+    const params = new URLSearchParams({ company, month: filters.month, account: filters.account, category: filters.category, side: filters.side, status: filters.status, q: filters.query, sort: filters.sort, analysisThrough: keepAnalysis ? filters.analysisThrough || "" : "", page: "1", ...values });
     for (const [key, value] of Array.from(params.entries())) if (!value) params.delete(key);
     const destination = `/banking?${params}`;
     if (dirty) { setLeaveUrl(destination); return; }
@@ -166,7 +166,6 @@ export function BankingWorkspace(props: Props) {
     <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
       <div className="min-w-0"><h1 className="break-words text-xl font-semibold">口座・カード明細</h1><div className="mt-1 text-sm text-muted-foreground">{company === "JAPAN" ? "日本本社" : "中国支社"}{sync?.officeName ? ` / ${sync.officeName}` : ""}</div></div>
       <div className="flex flex-wrap gap-2">
-        <Link className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" href={`/banking/forecast?company=${company}${filters.account ? `&account=${encodeURIComponent(filters.account)}` : ""}`}><TrendingUp className="size-4" />予測</Link>
         <Button className="min-h-11" variant="outline" disabled={pending || Boolean(dirty)} onClick={() => setSettings(true)}><Settings2 className="size-4" />科目・ルール</Button>
         <Button className="min-h-11" variant="outline" disabled={!configured || syncing || pending || Boolean(dirty)} onClick={() => setSyncOpen(true)}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}同期</Button>
         <Button className="min-h-11" disabled={!dirty || pending} onClick={() => save()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{dirty ? ` (${dirty})` : ""}</Button>
@@ -196,6 +195,8 @@ export function BankingWorkspace(props: Props) {
         </nav>
       </aside>
       <section className="min-w-0 space-y-3">
+        {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
+        {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
         <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{monthName(filters.month)}</h2><span className="text-sm text-muted-foreground">{total.toLocaleString()}件</span></div>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 border-b pb-3 text-sm md:grid-cols-4">
           <div className="min-w-0"><dt className="text-xs text-muted-foreground">入金・返金</dt><dd className="break-all font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{money.format(summary.income)}</dd></div>
@@ -211,7 +212,9 @@ export function BankingWorkspace(props: Props) {
           <select className={bankSelectClass} aria-label="分類状態で絞り込み" value={filters.status} disabled={pending} onChange={(e) => navigate({ status: e.target.value })}><option value="">すべての状態</option><option value="unclassified">未分類</option><option value="unreviewed">未確認</option><option value="reviewed">確認済み</option><option value="transfer">振替・カード精算</option><option value="excluded">対象外</option><option value="missing">元明細なし</option></select>
           <select className={bankSelectClass} aria-label="並び順" value={filters.sort} disabled={pending} onChange={(e) => navigate({ sort: e.target.value })}><option value="date-desc">取引日が新しい順</option><option value="date-asc">取引日が古い順</option><option value="amount-desc">金額が大きい順</option><option value="amount-asc">金額が小さい順</option></select>
         </div>
-        <form className="flex min-w-0 gap-2" onSubmit={(e) => { e.preventDefault(); navigate({ q: search }); }}><Input className="h-11 min-w-0" aria-label="摘要・メモを検索" placeholder="摘要・メモを検索" value={search} maxLength={200} onChange={(e) => setSearch(e.target.value)} /><Button type="submit" variant="outline" size="icon" className="size-11 shrink-0" aria-label="検索" title="検索" disabled={pending}><Search className="size-4" /></Button></form>
+        <form className="flex min-w-0 flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); navigate({ q: search }); }}><Input className="h-11 min-w-0 basis-48 flex-1" aria-label="摘要・メモを検索" placeholder="摘要・メモを検索" value={search} maxLength={200} onChange={(e) => setSearch(e.target.value)} /><Button type="submit" variant="outline" size="icon" className="size-11 shrink-0" aria-label="検索" title="検索" disabled={pending}><Search className="size-4" /></Button>
+          {filters.month || filters.account || filters.category || filters.side || filters.status || filters.query || filters.analysisThrough || filters.transaction ? <Button type="button" className="min-h-11 lg:min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ month: "", account: "", category: "", side: "", status: "", q: "", analysisThrough: "", transaction: "" })}><X className="size-4" />絞り込みを解除</Button> : null}
+        </form>
         <div className="flex flex-wrap items-center gap-2 border-y py-2">
           <label className="flex min-h-11 cursor-pointer items-center gap-2 px-1 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label="表示中の明細をすべて選択" checked={Boolean(rows.length) && rows.every((row) => selected.has(row.id))} disabled={pending || !rows.length} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((row) => row.id)) : new Set())} />表示中を選択</label>
           <span className="text-sm text-muted-foreground">{selected.size}件選択</span>

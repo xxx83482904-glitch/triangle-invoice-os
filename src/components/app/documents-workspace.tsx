@@ -18,7 +18,7 @@ import { EstimateStatusSelect } from "@/components/app/estimate-status-select";
 import type { Estimate } from "@/lib/types";
 import { groupDocuments, orderDocuments } from "@/lib/document-order";
 
-const selectClass = "h-10 max-w-full rounded-md border bg-background px-3 text-sm";
+const selectClass = "h-11 max-w-full rounded-md border bg-background px-3 text-sm";
 const pageSize = 50;
 type ProjectOption = { value: string; label: string; clientName?: string };
 const number = new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 });
@@ -173,6 +173,12 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
   const months = [...new Set(rows.map((r) => r.month))].sort().reverse();
   const allSelected = Boolean(filtered.length && filtered.every((r) => selected.has(r.id)));
   const selectedRows = rows.filter((r) => selected.has(r.id));
+  const filteredIds = useMemo(() => new Set(filtered.map((row) => row.id)), [filtered]);
+  const hiddenSelectedCount = selectedRows.filter((row) => !filteredIds.has(row.id)).length;
+  const hasFilters = Boolean(query || kind !== "all" || category !== "all" || state !== "all" || month !== "all" || paymentFilter !== "all");
+  function resetFilters() {
+    setQuery(""); setKind("all"); setCategory("all"); setMonth("all"); setState("all"); setPaymentFilter("all"); setLimit(pageSize);
+  }
   const editableSelected = selectedRows.filter((r) => r.kind === "issued" && r.editable);
   const paymentChanges = Object.entries(edits).flatMap(([id, edit]) => {
     const row = rows.find((r) => r.id === id);
@@ -244,17 +250,21 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <div role="group" aria-label="確認状態" className="flex flex-wrap gap-1">
-        {[["all", "すべて"], ["review", "要確認"], ["open", "未完了"], ["done", "完了"]].map(([v, l]) => <Button key={v} size="sm" variant={state === v ? "default" : "ghost"} aria-pressed={state === v} onClick={() => { setState(v); setLimit(pageSize); }}>{l}</Button>)}
+        {[["all", "すべて"], ["review", "要確認"], ["open", "対応中"], ["done", issuedOnly ? "完了・取消" : "完了"]].map(([v, l]) => <button key={v} type="button" className={`min-h-11 border-b-2 px-3 text-sm ${state === v ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} aria-pressed={state === v} onClick={() => { setState(v); setLimit(pageSize); }}>{l}</button>)}
       </div>
       {issuedOnly || kind === "issued" ? <select aria-label="入金状態で絞り込み" className={selectClass} value={paymentFilter} onChange={(e) => { setPaymentFilter(e.target.value); setLimit(pageSize); }}><option value="all">すべての入金状態</option><option value="unpaid">入金未完了（一部入金含む）</option><option value="paid">入金完了</option></select> : null}
-      <span className="text-xs text-muted-foreground">{filtered.length}件{selectedRows.length ? " / " + selectedRows.length + "件選択" : ""}</span>
+      <span className="text-xs text-muted-foreground" role="status">{filtered.length} / {rows.length}件</span>
+      {hasFilters ? <Button variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
       {canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="ml-auto" onClick={exportCsv}><Download className="size-4" /></Button> : null}
+    </div>
+    {selectedRows.length ? <div aria-label="選択した書類の一括操作" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 [&_button]:min-h-11">
+      <span className="mr-auto text-sm font-medium">{selectedRows.length}件選択{hiddenSelectedCount ? <span className="ml-2 text-xs font-normal text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}</span>
       {selectedRows.length ? <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>選択解除</Button> : null}
       {selectedRows.length > 0 && selectedRows.every((r) => r.kind === "issued" && r.editable) ? <Button variant="outline" size="sm" disabled={saving || deleting} className="text-destructive" onClick={() => askDelete(selectedRows)}><Trash2 className="size-4" />選択した{selectedRows.length}件を削除</Button> : null}
       {editableSelected.length ? <select aria-label="選択した発行請求書の状態を一括変更" disabled={saving} className={selectClass} value="" onChange={(e) => { const status = e.target.value as IssuedEdit["status"]; if (!status) return; setEdits((old) => { const next = { ...old }; for (const r of editableSelected) next[r.id] = { ...(old[r.id] || editFrom(r)), status }; return next; }); }}>
         <option value="">発行 {editableSelected.length}件を一括変更</option>{Object.entries(issuedStatusLabels).filter(([s]) => s !== "PARTIALLY_PAID").map(([s, label]) => <option key={s} value={s}>{label}</option>)}
       </select> : null}
-    </div>
+    </div> : null}
     {changes ? <div className="sticky top-14 z-20 flex flex-wrap items-center gap-2 border-y border-amber-500/30 bg-background p-3 lg:top-0" role="status">
       <span className="mr-auto text-sm">{changes}件の未保存変更</span>
       <Button variant="outline" disabled={saving} onClick={() => { if (window.confirm("未保存の変更を破棄しますか？")) setEdits({}); }}><RotateCcw className="size-4" />元に戻す</Button>
@@ -299,7 +309,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
               </tr></DocumentContextMenu>) : null}
             </Fragment>)}</tbody>
           </table>
-          {!filtered.length ? <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"><FileText className="size-8" />{rows.length ? "条件に合う書類がありません" : "書類はまだありません"}{rows.length ? <Button variant="outline" onClick={() => { setQuery(""); setKind("all"); setCategory("all"); setMonth("all"); setState("all"); setPaymentFilter("all"); }}>絞り込みを解除</Button> : null}</div> : null}
+          {!filtered.length ? <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"><FileText className="size-8" />{rows.length ? "条件に合う書類がありません" : "書類はまだありません"}{rows.length ? <Button variant="outline" onClick={resetFilters}>絞り込みを解除</Button> : null}</div> : null}
         </div>
         {filtered.length > limit ? <div className="flex justify-center p-3"><Button variant="outline" onClick={() => setLimit((n) => n + pageSize)}>さらに表示（残り{filtered.length - limit}件）</Button></div> : null}
       </div>

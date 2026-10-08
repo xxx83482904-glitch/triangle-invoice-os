@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { assertBankAccess, isBankDate } from "@/lib/banking";
+import { bankPeriodCovered } from "@/lib/bank-analysis";
 import type { BankAccount, BankForecastSettings, BankSyncState } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
 import type { AppData, User } from "@/lib/types";
@@ -71,12 +72,7 @@ export function bankForecastEvidence(data: AppData, company: CompanyScope, accou
   if (!account) throw new Error("口座が見つかりません");
   const month = today.slice(0, 7), firstMonth = shiftForecastMonth(month, -6);
   const state = data.bankSyncStates.find((row) => row.company === company && row.officeCode === account.officeCode);
-  const covered = (start: string, end: string) => {
-    const ranges = (state?.coverage || []).filter((range) => range.accountIds.includes(accountId)).sort((a, b) => a.start.localeCompare(b.start));
-    let through = Date.parse(start) - 86400000;
-    for (const range of ranges) if (Date.parse(range.start) <= through + 86400000) through = Math.max(through, Date.parse(range.end));
-    return through >= Date.parse(end);
-  };
+  const covered = (start: string, end: string) => bankPeriodCovered(state, accountId, start, end);
   const all = data.bankTransactions.filter((row) => row.company === company && row.officeCode === account.officeCode && row.bankAccountId === accountId);
   // Cash movement includes transfers and non-journalized rows, not just expenses.
   const rows = all.filter((row) => !row.sourceMissing && row.transactionDate <= today && row.transactionDate >= `${firstMonth}-01`);

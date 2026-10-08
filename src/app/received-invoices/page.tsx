@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { redirect } from "next/navigation";
 import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -84,6 +85,7 @@ export default async function ReceivedInvoicesPage({
   return (
     <AppShell>
       <PageHeader title="受領請求書" description="請求書ファイルを直接ドロップすると、OCRで支払先・案件・日付・金額を仮仕分けします。">
+        {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
         <Button asChild variant="outline"><Link href={`/documents?company=${company}`}>全書類</Link></Button>
         <Button asChild variant="outline">
           <Link href={`/api/export/received-invoices?company=${company}`} prefetch={false}>CSVエクスポート</Link>

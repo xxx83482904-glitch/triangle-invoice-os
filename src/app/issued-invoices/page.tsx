@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { redirect } from "next/navigation";
 import { createIssuedInvoice } from "@/app/actions";
 import { CreatableSelect } from "@/components/app/creatable-select";
@@ -52,8 +53,8 @@ export default async function IssuedInvoicesPage({
   return (
     <AppShell>
       <PageHeader title="発行請求書">
+        {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
         <BillingProjectCleanup company={company} groups={billingProjectGroups(data, user, company)} />
-        <Button asChild variant="outline"><Link href={`/estimates?company=${company}`} prefetch={false}>見積書</Link></Button>
         {can(user, "view:documents") ? <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button> : null}
         {user && can(user, "manage:issuedInvoices") ? (
           <InvoiceCreateDialog key={params.created || "new"}>

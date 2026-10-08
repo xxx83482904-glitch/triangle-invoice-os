@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CircleAlert, LoaderCircle, RotateCcw, Save, TrendingUp } from "lucide-react";
+import { ArrowLeft, ChartNoAxesCombined, CircleAlert, LoaderCircle, RotateCcw, Save, TrendingUp } from "lucide-react";
 import { saveBankForecastAction } from "@/app/banking/actions";
 import { bankSelectClass } from "@/components/app/banking-settings";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ export function BankForecastWorkspace({ company, account, accounts, evidence }: 
   return <div className="min-w-0 space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
       <div className="min-w-0"><Link className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground" href={`/banking?company=${company}&account=${encodeURIComponent(account.id)}`}><ArrowLeft className="size-4" />口座・カード明細</Link><h1 className="text-xl font-semibold">口座の予測</h1></div>
-      <Button className="min-h-[44px]" disabled={!dirty || pending || !valid.success} onClick={() => save()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}条件を保存{dirty ? "（未保存）" : ""}</Button>
+      <div className="flex flex-wrap gap-2"><Link className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" href={`/banking/insights?company=${company}&account=${encodeURIComponent(account.id)}`}><ChartNoAxesCombined className="size-4" />出金の傾向・注意</Link><Button className="min-h-[44px]" disabled={!dirty || pending || !valid.success} onClick={() => save()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}条件を保存{dirty ? "（未保存）" : ""}</Button></div>
     </header>
     <div className="flex min-w-0 flex-wrap items-end gap-3">
       <label className="grid min-w-0 flex-1 gap-1 text-sm">予測する口座・カード<select className={bankSelectClass} value={account.id} disabled={pending} onChange={(event) => navigate(`/banking/forecast?company=${company}&account=${encodeURIComponent(event.target.value)}`)}>{accounts.map((row) => <option key={row.id} value={row.id}>{row.name}{row.available ? "" : "（連携終了）"}</option>)}</select></label>
