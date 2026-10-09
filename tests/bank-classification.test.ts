@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { admin, fixture } from "./document-fixture";
-import { applyBankRules, mergeBankMasters, mergeBankTransactions, saveBankEdits, saveBankRule, sourceKey, type ImportedTransaction } from "../src/lib/banking";
+import { applyBankRules, mergeBankMasters, mergeBankTransactions, previewBankRules, saveBankEdits, saveBankRule, sourceKey, type ImportedTransaction } from "../src/lib/banking";
 import { restoreUndoState } from "../src/lib/store";
 import type { BankEdit, BankTransaction } from "../src/lib/banking-types";
 
@@ -155,4 +155,61 @@ test("ten thousand existing rows are classified in one pass with stable reruns",
   data.bankTransactions = Array.from({ length: 10000 }, (_, i) => ({ ...base, id: `row-${i}`, sourceId: `row-${i}`, content: "振込手数料" }));
   assert.equal(applyBankRules(data, admin, "JAPAN").count, 10000);
   assert.equal(applyBankRules(data, admin, "JAPAN").count, 0);
+});
+
+test("classification previews return editable suggestions without changing saved data or versions", () => {
+  const data = setup();
+  mergeBankTransactions(data, "JAPAN", office, [item("one", "Unknown"), item("two", "Unknown")], range);
+  data.bankTransactions[0].content = "東京電力";
+  const before = JSON.stringify(data), source = data.bankTransactions[0];
+  const preview = previewBankRules(data, admin, "JAPAN");
+  assert.equal(JSON.stringify(data), before);
+  assert.equal(preview.count, 1); assert.equal(preview.unclassified, 1);
+  assert.equal(preview.rows[0].categoryId, category("utility"));
+  assert.equal(preview.rows[0].updatedAt, source.updatedAt);
+  assert.equal(preview.rows[0].reviewed, false);
+  preview.rows[0].memo = "Candidate corrected before saving";
+  assert.equal(JSON.stringify(data), before);
+  saveBankEdits(data, admin, "JAPAN", [edit(preview.rows[0], { categoryId: category("fees") })]);
+  assert.equal(source.categoryId, category("fees"));
+  assert.equal(source.memo, "Candidate corrected before saving");
+  assert.equal(source.reviewed, false);
+});
+
+test("previews protect existing edits and reject unauthorized or foreign selections without mutation", () => {
+  const data = setup();
+  mergeBankTransactions(data, "JAPAN", office, ["manual", "reviewed", "missing", "excluded", "candidate", "other"].map((id) => item(id, "Unknown")), range);
+  data.bankTransactions.forEach((row) => { row.content = "東京電力"; });
+  data.bankTransactions[0].classificationSource = "MANUAL";
+  data.bankTransactions[1].reviewed = true;
+  data.bankTransactions[2].sourceMissing = true;
+  data.bankTransactions[3].sourceStatus = "excluded";
+  const before = JSON.stringify(data), ids = data.bankTransactions.slice(0, 5).map((row) => row.id);
+  assert.deepEqual(previewBankRules(data, admin, "JAPAN", ids).rows.map((row) => row.sourceId), ["candidate"]);
+  for (const role of ["BILLING_EDITOR", "MAIL_EDITOR", "DESIGNER"] as const) assert.throws(() => previewBankRules(data, { id: "staff", role }, "JAPAN"), /権限/);
+  assert.throws(() => previewBankRules(data, admin, "CHINA", ids), /見つかりません/);
+  assert.throws(() => previewBankRules(data, admin, "JAPAN", [ids[0], "unknown"]), /見つかりません/);
+  assert.throws(() => previewBankRules(data, admin, "JAPAN", []));
+  assert.equal(JSON.stringify(data), before);
+});
+
+test("stale previews cannot overwrite newer saved or synchronized changes", () => {
+  const data = setup();
+  mergeBankTransactions(data, "JAPAN", office, [item("one", "Unknown"), item("two", "Unknown")], range);
+  data.bankTransactions.forEach((row) => { row.content = "東京電力"; });
+  const preview = previewBankRules(data, admin, "JAPAN");
+  saveBankEdits(data, admin, "JAPAN", [edit(data.bankTransactions[1], { memo: "Newer change" })]);
+  const before = JSON.stringify(data);
+  assert.throws(() => saveBankEdits(data, admin, "JAPAN", preview.rows.map((row) => edit(row, {}))), /更新/);
+  assert.equal(JSON.stringify(data), before);
+});
+
+test("all-period previews include more than 500 rows and leave persistence to explicit bounded saves", () => {
+  const data = setup();
+  mergeBankTransactions(data, "JAPAN", office, [item("one", "Unknown")], range);
+  data.bankTransactions = Array.from({ length: 501 }, (_, i) => ({ ...data.bankTransactions[0], id: `preview-${i}`, sourceId: `preview-${i}`, content: "振込手数料" }));
+  const before = JSON.stringify(data), preview = previewBankRules(data, admin, "JAPAN");
+  assert.equal(preview.count, 501); assert.equal(JSON.stringify(data), before);
+  for (let start = 0; start < preview.rows.length; start += 100) saveBankEdits(data, admin, "JAPAN", preview.rows.slice(start, start + 100).map((row) => edit(row, {})));
+  assert.ok(data.bankTransactions.every((row) => row.categoryId === category("fees") && !row.reviewed));
 });

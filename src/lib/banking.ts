@@ -157,6 +157,17 @@ export function applyBankRules(data: AppData, user: Actor, company: CompanyScope
   return { count, unclassified: rows.filter((row) => !row.sourceMissing && row.treatment === "NORMAL" && !row.categoryId).length };
 }
 
+export function previewBankRules(data: AppData, user: Actor, company: CompanyScope, ids?: string[]) {
+  assertBankAccess(user, company);
+  const originals = new Map(data.bankTransactions.map((row) => [row.id, row]));
+  const preview = { ...data, bankTransactions: data.bankTransactions.map((row) => ({ ...row })) };
+  const result = applyBankRules(preview, user, company, ids);
+  // Keep the saved version so a later explicit save can reject stale suggestions.
+  const rows = preview.bankTransactions.filter((row) => row.updatedAt !== originals.get(row.id)!.updatedAt)
+    .map((row) => ({ ...row, updatedAt: originals.get(row.id)!.updatedAt }));
+  return { ...result, rows };
+}
+
 export type ImportedAccount = { id: string; subId?: string; name: string; serviceName: string; isManual: boolean };
 export type ImportedCategory = { id: string; parentSourceId?: string; name: string; group: string; available: boolean };
 export type ImportedTransaction = { id: string; connected_account_id: string; connected_sub_account_id?: string | null; date: string; value: number; side: "INCOME" | "EXPENSE"; content: string; memo?: string | null; journalizing_status: string };

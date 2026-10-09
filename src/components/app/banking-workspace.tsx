@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
-import { applyBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
+import { previewBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
 import { BankingSettings, BankCategoryFields, bankSelectClass } from "@/components/app/banking-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,7 @@ type Props = {
 };
 
 export function BankingWorkspace(props: Props) {
-  const { company, rows, accounts, categories, rules, filters, total, page, months, summary, configured, admin } = props;
+  const { company, accounts, categories, rules, filters, months, summary, configured, admin } = props;
   const router = useRouter();
   const [drafts, setDrafts] = useState<Record<string, BankEdit>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -37,6 +37,9 @@ export function BankingWorkspace(props: Props) {
   const [syncOpen, setSyncOpen] = useState(false);
   const [classifyOpen, setClassifyOpen] = useState(false);
   const [classifyScope, setClassifyScope] = useState<"page" | "selected" | "all">("page");
+  const [classificationPreview, setClassificationPreview] = useState<BankTransaction[] | null>(null);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [savedCount, setSavedCount] = useState(0);
   const [leaveUrl, setLeaveUrl] = useState<string | null>(null);
   const [sync, setSync] = useState(props.sync);
   const [syncing, setSyncing] = useState(props.busy);
@@ -44,6 +47,9 @@ export function BankingWorkspace(props: Props) {
   const [start, setStart] = useState(`${bankToday().slice(0, 7)}-01`);
   const [end, setEnd] = useState(bankToday());
   const dirty = Object.keys(drafts).length;
+  const total = classificationPreview?.length ?? props.total;
+  const page = classificationPreview ? previewPage : props.page;
+  const rows = classificationPreview ? classificationPreview.slice((page - 1) * BANK_PAGE_SIZE, page * BANK_PAGE_SIZE) : props.rows;
   const syncWasRunning = useRef(props.busy);
   const accountMap = new Map(accounts.map((row) => [row.id, row.name]));
 
@@ -89,6 +95,9 @@ export function BankingWorkspace(props: Props) {
 
   function navigate(values: Record<string, string>) {
     if (pending) return;
+    if (classificationPreview && Object.keys(values).length === 1 && values.page) {
+      setPreviewPage(Number(values.page)); setSelected(new Set()); anchor.current = null; return;
+    }
     const keepAnalysis = !["month", "account", "side", "status"].some((key) => key in values);
     const params = new URLSearchParams({ company, month: filters.month, account: filters.account, category: filters.category, side: filters.side, status: filters.status, q: filters.query, sort: filters.sort, analysisThrough: keepAnalysis ? filters.analysisThrough || "" : "", page: "1", ...values });
     for (const [key, value] of Array.from(params.entries())) if (!value) params.delete(key);
@@ -114,24 +123,42 @@ export function BankingWorkspace(props: Props) {
     anchor.current = row.id;
   }
   function save(destination?: string) {
-    setError(""); startTransition(async () => {
+    setError(""); setSavedCount(0); startTransition(async () => {
+      const remaining = { ...drafts }, edits = Object.values(remaining);
+      let saved = 0;
       try {
-        const result = await saveBankEditsAction(company, Object.values(drafts));
-        if (!result.success) { setError(result.error || "保存できませんでした"); return; }
-        setDrafts({}); setLeaveUrl(null);
+        // Only explicit saves write data; bounded batches also cover all-period previews.
+        for (let offset = 0; offset < edits.length; offset += 100) {
+          const batch = edits.slice(offset, offset + 100);
+          const result = await saveBankEditsAction(company, batch);
+          if (!result.success) throw new Error(result.error || "保存できませんでした");
+          for (const row of batch) delete remaining[row.id];
+          saved += result.count; setSavedCount(saved); setDrafts({ ...remaining });
+          setClassificationPreview((current) => current?.filter((row) => remaining[row.id]) ?? null);
+          setPreviewPage(1); setSelected(new Set());
+        }
+        setDrafts({}); setClassificationPreview(null); setLeaveUrl(null);
         if (destination) router.push(destination); else router.refresh();
-        toast({ title: `${result.count}件を保存しました`, variant: "success" });
-      } catch { setError("通信に失敗しました。変更内容は保持されています"); }
+        toast({ title: `${saved}件を保存しました`, variant: "success" });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "通信に失敗しました";
+        setError(`${saved ? `${saved}件保存済み。` : ""}${message}。残りの変更内容は保持されています`);
+      }
     });
   }
   function reclassify() {
     setError(""); startTransition(async () => {
       try {
         const ids = classifyScope === "all" ? undefined : rows.filter((row) => classifyScope === "page" || selected.has(row.id)).map((row) => row.id);
-        const result = await applyBankRulesAction(company, ids);
+        const result = await previewBankRulesAction(company, ids);
         if (!result.success) { setError(result.error || "分類できませんでした"); return; }
-        setClassifyOpen(false); router.refresh();
-        toast({ title: `${result.count}件を更新しました（未分類 ${result.unclassified}件）`, variant: "success" });
+        if (result.rows.length) {
+          setClassificationPreview(result.rows.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || a.id.localeCompare(b.id)));
+          setDrafts(Object.fromEntries(result.rows.map((row) => [row.id, editFrom(row)])));
+          setPreviewPage(1); setSelected(new Set()); anchor.current = null;
+        }
+        setClassifyOpen(false);
+        toast({ title: result.count ? `${result.count}件の分類候補（未保存）` : `変更候補はありません（未分類 ${result.unclassified}件）` });
       } catch { setError("通信に失敗しました"); }
     });
   }
@@ -152,6 +179,10 @@ export function BankingWorkspace(props: Props) {
       {row.sourceMissing ? <CircleAlert className="size-3.5" /> : null}{row.sourceMissing ? "元明細なし" : value.reviewed ? "確認済み" : !value.categoryId && value.treatment === "NORMAL" ? "未分類" : "未確認"}
       {drafts[row.id] ? "・未保存" : row.classificationSource === "RULE" ? "・ルール" : row.classificationSource === "HISTORY" ? "・過去明細から分類" : row.classificationSource === "AUTO" ? "・自動分類" : row.classificationSource === "MANUAL" ? "・手動" : ""}
     </span>;
+  }
+  function classificationReason(row: BankTransaction, value: BankEdit) {
+    if (classificationPreview) return row.categoryId === value.categoryId && row.subCategoryId === value.subCategoryId && row.treatment === value.treatment ? row.classificationReason : undefined;
+    return drafts[row.id] ? undefined : row.classificationReason;
   }
   function fields(row: BankTransaction, value: BankEdit) {
     return [
@@ -187,14 +218,15 @@ export function BankingWorkspace(props: Props) {
       }} />自動同期（6時間ごと）</label>
     </div>
     {error || sync?.error ? <div role="alert" className="flex items-start gap-2 border-l-2 border-destructive bg-destructive/5 p-3 text-sm"><CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" /><span className="min-w-0 break-words">{error || sync?.error}</span>{error ? <Button size="icon" variant="ghost" className="ml-auto size-11 shrink-0" aria-label="エラーを閉じる" title="閉じる" onClick={() => setError("")}><X className="size-4" /></Button> : null}</div> : null}
-    <div className="grid min-w-0 gap-4 xl:grid-cols-[168px_minmax(0,1fr)]">
-      <aside className="hidden border-r pr-3 xl:block">
+    <div className={classificationPreview ? "min-w-0" : "grid min-w-0 gap-4 xl:grid-cols-[168px_minmax(0,1fr)]"}>
+      {!classificationPreview ? <aside className="hidden border-r pr-3 xl:block">
         <h2 className="mb-2 text-sm font-medium">取引月</h2>
         <nav aria-label="取引月" className="max-h-[65vh] space-y-1 overflow-y-auto">
           {["", ...months].map((month) => <button key={month} className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm ${filters.month === month ? "bg-primary/10 font-medium text-primary" : "hover:bg-muted"}`} aria-current={filters.month === month ? "page" : undefined} onClick={() => navigate({ month })}><Folder className="size-4 shrink-0" /><span>{monthName(month)}</span></button>)}
         </nav>
-      </aside>
+      </aside> : null}
       <section className="min-w-0 space-y-3">
+        {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><h2 className="text-base font-semibold">分類候補 {total.toLocaleString()}件・未保存</h2><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
         {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
         {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
         <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{monthName(filters.month)}</h2><span className="text-sm text-muted-foreground">{total.toLocaleString()}件</span></div>
@@ -215,6 +247,7 @@ export function BankingWorkspace(props: Props) {
         <form className="flex min-w-0 flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); navigate({ q: search }); }}><Input className="h-11 min-w-0 basis-48 flex-1" aria-label="摘要・メモを検索" placeholder="摘要・メモを検索" value={search} maxLength={200} onChange={(e) => setSearch(e.target.value)} /><Button type="submit" variant="outline" size="icon" className="size-11 shrink-0" aria-label="検索" title="検索" disabled={pending}><Search className="size-4" /></Button>
           {filters.month || filters.account || filters.category || filters.side || filters.status || filters.query || filters.analysisThrough || filters.transaction ? <Button type="button" className="min-h-11 lg:min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ month: "", account: "", category: "", side: "", status: "", q: "", analysisThrough: "", transaction: "" })}><X className="size-4" />絞り込みを解除</Button> : null}
         </form>
+        </>}
         <div className="flex flex-wrap items-center gap-2 border-y py-2">
           <label className="flex min-h-11 cursor-pointer items-center gap-2 px-1 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label="表示中の明細をすべて選択" checked={Boolean(rows.length) && rows.every((row) => selected.has(row.id))} disabled={pending || !rows.length} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((row) => row.id)) : new Set())} />表示中を選択</label>
           <span className="text-sm text-muted-foreground">{selected.size}件選択</span>
@@ -234,7 +267,7 @@ export function BankingWorkspace(props: Props) {
               const controls = fields(row, value);
               return <tr key={row.id} className={`border-b align-top ${selected.has(row.id) ? "bg-primary/5" : "hover:bg-muted/30"}`}>
                 <td>{selectionBox(row)}</td><td className="px-2 py-3 text-xs tabular-nums">{row.transactionDate}</td>
-                <td className="break-words px-2 py-3"><div>{row.content || "摘要なし"}</div><div className="mt-1">{status(row, value)}</div>{!drafts[row.id] && row.classificationReason ? <div className="mt-1 text-xs text-muted-foreground">{row.classificationReason}</div> : null}{row.sourceMemo ? <div className="mt-1 text-xs text-muted-foreground">{row.sourceMemo}</div> : null}</td>
+                <td className="break-words px-2 py-3"><div>{row.content || "摘要なし"}</div><div className="mt-1">{status(row, value)}</div>{classificationReason(row, value) ? <div className="mt-1 text-xs text-muted-foreground">{classificationReason(row, value)}</div> : null}{row.sourceMemo ? <div className="mt-1 text-xs text-muted-foreground">{row.sourceMemo}</div> : null}</td>
                 <td className="break-words px-2 py-3 text-xs text-muted-foreground">{accountMap.get(row.bankAccountId) || "口座未取得"}</td>
                 <td className={`px-2 py-3 text-right tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}><span className="whitespace-nowrap">{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></td>
                 <td className="px-1 py-2">{controls[0]}</td><td className="px-1 py-2">{controls[1]}</td><td className="px-1 py-2">{controls[2]}</td>
@@ -246,7 +279,7 @@ export function BankingWorkspace(props: Props) {
         <div className="divide-y md:hidden">{rows.map((row) => { const value = drafts[row.id] || editFrom(row); return <article key={row.id} className={`min-w-0 space-y-2 py-3 ${selected.has(row.id) ? "bg-primary/5" : ""}`}>
           <div className="flex min-w-0 items-start gap-1">{selectionBox(row)}<div className="min-w-0 flex-1"><div className="flex flex-wrap justify-between gap-1"><time className="text-xs">{row.transactionDate}</time><span className={`break-all text-sm font-medium tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></div><h3 className="mt-1 break-words text-sm font-medium">{row.content || "摘要なし"}</h3><div className="break-words text-xs text-muted-foreground">{accountMap.get(row.bankAccountId)}</div>{status(row, value)}</div></div>
           {row.sourceMemo ? <div className="break-words text-xs text-muted-foreground">{row.sourceMemo}</div> : null}
-          {!drafts[row.id] && row.classificationReason ? <div className="break-words text-xs text-muted-foreground">{row.classificationReason}</div> : null}
+          {classificationReason(row, value) ? <div className="break-words text-xs text-muted-foreground">{classificationReason(row, value)}</div> : null}
           <div className="grid min-w-0 gap-2">{fields(row, value)}</div>
           <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label={`${row.content}を確認済みにする`} checked={value.reviewed} disabled={pending || row.sourceMissing} onChange={(e) => edit(row, { reviewed: e.target.checked })} />確認済み</label>
         </article>; })}</div>
@@ -254,14 +287,14 @@ export function BankingWorkspace(props: Props) {
         <footer className="flex flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">{total ? (page - 1) * BANK_PAGE_SIZE + 1 : 0}〜{Math.min(page * BANK_PAGE_SIZE, total)} / {total}件</span><div className="flex items-center gap-2"><Button variant="outline" size="icon" className="size-11" aria-label="前のページ" title="前のページ" disabled={page <= 1 || pending} onClick={() => navigate({ page: String(page - 1) })}><ChevronLeft className="size-4" /></Button><span>{page} / {totalPages}</span><Button variant="outline" size="icon" className="size-11" aria-label="次のページ" title="次のページ" disabled={page >= totalPages || pending} onClick={() => navigate({ page: String(page + 1) })}><ChevronRight className="size-4" /></Button></div></footer>
       </section>
     </div>
-    {dirty ? <div className="sticky bottom-20 z-10 flex flex-wrap items-center justify-between gap-2 border bg-background px-3 py-2 shadow-sm lg:bottom-2"><span className="text-sm">未保存 {dirty}件</span><Button className="min-h-11" disabled={pending} onClick={() => save()}><Save className="size-4" />すべて保存</Button></div> : null}
+    {dirty ? <div className="sticky bottom-20 z-10 flex flex-wrap items-center justify-between gap-2 border bg-background px-3 py-2 shadow-sm lg:bottom-2"><span className="text-sm">未保存 {dirty}件{pending && savedCount ? ` / 保存済み ${savedCount}件` : ""}</span><Button className="min-h-11" disabled={pending} onClick={() => save()}><Save className="size-4" />すべて保存</Button></div> : null}
     <Dialog open={Boolean(leaveUrl)} onOpenChange={(open) => { if (!open && !pending) setLeaveUrl(null); }}>
       <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
         <DialogHeader><DialogTitle>未保存の変更があります</DialogTitle><DialogDescription>{dirty}件の編集内容が未保存です。</DialogDescription></DialogHeader>
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button className="min-h-11" variant="outline" disabled={pending} onClick={() => setLeaveUrl(null)}>キャンセル</Button>
-          <Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => { const destination = leaveUrl; setDrafts({}); setSelected(new Set()); setLeaveUrl(null); if (destination) startTransition(() => router.push(destination)); }}>破棄して移動</Button>
+          <Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => { const destination = leaveUrl; setDrafts({}); setClassificationPreview(null); setSelected(new Set()); setLeaveUrl(null); if (destination) startTransition(() => router.push(destination)); }}>破棄して移動</Button>
           <Button className="min-h-11" disabled={pending} onClick={() => save(leaveUrl || undefined)}><Save className="size-4" />保存して移動</Button>
         </div>
       </DialogContent>
@@ -269,14 +302,14 @@ export function BankingWorkspace(props: Props) {
     <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} />
     <Dialog open={classifyOpen} onOpenChange={(value) => { if (!pending) setClassifyOpen(value); }}>
       <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
-        <DialogHeader><DialogTitle>勘定科目の自動分類</DialogTitle><DialogDescription>手動変更・確認済みの明細は対象外です。分類結果は未確認で保存されます。</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>勘定科目の自動分類</DialogTitle><DialogDescription>分類結果は未保存の候補です。手動変更・確認済みの明細は対象外です。</DialogDescription></DialogHeader>
         <label className="grid min-w-0 gap-1 text-sm">対象<select aria-label="自動分類の対象" className={bankSelectClass} value={classifyScope} disabled={pending} onChange={(event) => setClassifyScope(event.target.value as typeof classifyScope)}>
           {selected.size ? <option value="selected">選択した明細（{selected.size}件）</option> : null}
           {rows.length ? <option value="page">表示中のページ（{rows.length}件）</option> : null}
           <option value="all">{company === "JAPAN" ? "日本" : "中国"}の全期間・全口座</option>
         </select></label>
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
-        <Button className="min-h-11" disabled={pending} onClick={reclassify}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}自動分類して保存</Button>
+        <Button className="min-h-11" disabled={pending} onClick={reclassify}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}分類候補を作成</Button>
       </DialogContent>
     </Dialog>
     <Dialog open={syncOpen} onOpenChange={(value) => { if (!syncing) setSyncOpen(value); }}>

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
-import { applyBankRules, deleteBankDefinition, saveAccountingCategory, saveBankEdits, saveBankRule } from "@/lib/banking";
+import { deleteBankDefinition, previewBankRules, saveAccountingCategory, saveBankEdits, saveBankRule } from "@/lib/banking";
 import { setBankAutoSync } from "@/lib/banking-sync";
 import type { BankEdit, BankRuleInput, CategoryInput } from "@/lib/banking-types";
 import type { BankForecastSettings } from "@/lib/banking-types";
@@ -11,7 +11,7 @@ import { saveBankForecastSettings } from "@/lib/bank-forecast";
 import { bankToday } from "@/lib/banking";
 import { isActiveUser } from "@/lib/user-access";
 import type { CompanyScope } from "@/lib/company";
-import { mutateData } from "@/lib/store";
+import { mutateData, readData } from "@/lib/store";
 
 function errorMessage(error: unknown) {
   return error instanceof ZodError ? "入力内容を確認してください" : error instanceof Error ? error.message : "保存に失敗しました";
@@ -25,7 +25,11 @@ function revalidateBanking() {
 export async function saveBankEditsAction(company: CompanyScope, edits: BankEdit[]) {
   const user = await requireUser();
   try {
-    const result = await mutateData(user.id, "BANK_CLASSIFY", "BankTransaction", company, (data) => saveBankEdits(data, user, company, edits));
+    const result = await mutateData(user.id, "BANK_CLASSIFY", "BankTransaction", company, (data) => {
+      const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
+      if (!live) throw new Error("利用者の権限を確認してください");
+      return saveBankEdits(data, live, company, edits);
+    });
     revalidateBanking(); return { ...result, success: true as const };
   } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
@@ -50,11 +54,13 @@ export async function deleteBankDefinitionAction(company: CompanyScope, kind: "c
     revalidateBanking(); return { success: true };
   } catch (error) { return { error: errorMessage(error) }; }
 }
-export async function applyBankRulesAction(company: CompanyScope, ids?: string[]) {
+export async function previewBankRulesAction(company: CompanyScope, ids?: string[]) {
   const user = await requireUser();
   try {
-    const result = await mutateData(user.id, "BANK_RULE_APPLY", "BankRule", company, (data) => applyBankRules(data, user, company, ids));
-    revalidateBanking(); return { ...result, success: true as const };
+    const data = await readData();
+    const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
+    if (!live) throw new Error("利用者の権限を確認してください");
+    return { ...previewBankRules(data, live, company, ids), success: true as const };
   } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
 export async function setBankAutoSyncAction(company: CompanyScope, enabled: boolean) {

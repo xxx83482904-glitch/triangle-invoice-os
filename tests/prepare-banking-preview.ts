@@ -36,6 +36,10 @@ async function main() {
     { ...example, id: "auto-preview", sourceId: "auto-preview", transactionDate: "2026-10-08", content: "東京電力 電気料金", amount: 12500, categoryId: undefined, ruleId: undefined, classificationReason: undefined, classificationSource: "UNASSIGNED", treatment: "NORMAL", reviewed: false, memo: "" },
     { ...example, id: "unknown-preview", sourceId: "unknown-preview", transactionDate: "2026-10-08", content: "AMAZON テスト購入", amount: 3300, categoryId: undefined, ruleId: undefined, classificationReason: undefined, classificationSource: "UNASSIGNED", treatment: "NORMAL", reviewed: false, memo: "" },
   );
+  if (process.argv.includes("--classification-pages")) {
+    const candidate = data.bankTransactions.find((row) => row.id === "auto-preview")!;
+    data.bankTransactions.push(...Array.from({ length: 151 }, (_, index) => ({ ...candidate, id: `candidate-${String(index).padStart(3, "0")}`, sourceId: `candidate-${index}`, content: `東京電力 テスト候補 ${String(index).padStart(3, "0")}` })));
+  }
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
   console.log(root);
 }
