@@ -13,9 +13,9 @@ async function main() {
   const data = fixture(), office = "0000-0001", today = bankToday(), month = today.slice(0, 7);
   data.users = (["ADMIN", "ACCOUNTING", "BILLING_EDITOR", "MAIL_EDITOR"] as UserRole[]).map((role) => ({ id: role === "ADMIN" ? "admin" : role.toLowerCase(), name: `Local test ${role}`, email: `${role.toLowerCase()}@example.invalid`, role, passwordHash: hashSync("local-banking-test-only", 10), createdAt: timestamp, updatedAt: timestamp }));
   mergeBankMasters(data, "JAPAN", office, [
-    { id: "bank", name: "テスト銀行", serviceName: "テスト銀行", isManual: false },
-    { id: "bank", subId: "branch", name: "テスト銀行 / 普通預金", serviceName: "テスト銀行", isManual: false },
-    { id: "bank", subId: "empty", name: "テスト銀行 / 履歴なし", serviceName: "テスト銀行", isManual: false },
+    { id: "bank", name: "テスト銀行", serviceName: "三菱UFJ銀行", isManual: false },
+    { id: "bank", subId: "branch", name: "テスト銀行 / 普通預金", serviceName: "三菱UFJ銀行", isManual: false },
+    { id: "bank", subId: "empty", name: "テスト銀行 / 履歴なし", serviceName: "三菱UFJ銀行", isManual: false },
     { id: "card", name: "テスト法人カード", serviceName: "テスト法人カード", isManual: false },
   ], []);
   const bankId = sourceKey("JAPAN", office, "account", "bank", "branch"), cardId = sourceKey("JAPAN", office, "account", "card");

@@ -36,6 +36,20 @@ async function main() {
   for (const [id, side, amount, content] of [[incomeId, "INCOME", 12000, "テスト照合 クライアント テスト照合-001"], [existingBankId, "INCOME", 12000, "テスト照合 クライアント テスト照合-002"], [expenseId, "EXPENSE", 8000, "テスト照合 制作会社"]] as const) {
     data.bankTransactions.unshift({ ...common, id, company: "JAPAN", officeCode: account.officeCode, sourceId: id, bankAccountId: account.id, transactionDate: today, amount, side, content, sourceMemo: "", sourceStatus: "none", sourceMissing: false, treatment: "NORMAL", classificationSource: "UNASSIGNED", reviewed: false, memo: "" });
   }
+  const excludedIds: string[] = [];
+  for (const [suffix, serviceName, name] of [
+    ["paypay-invoice", "PayPay銀行", "テスト PayPay銀行 / 普通 1237691"],
+    ["paypay-expense", "PayPay銀行", "テスト PayPay銀行 / 普通 1234567"],
+    ["other-bank", "楽天銀行", "テスト 楽天銀行 / 普通 1237691"],
+  ]) {
+    const accountId = `${prefix}-${suffix}`;
+    data.bankAccounts.push({ ...account, ...common, id: accountId, sourceId: accountId, sourceSubId: "branch", name, serviceName });
+    for (const side of ["INCOME", "EXPENSE"] as const) {
+      const id = `${accountId}-${side}`;
+      data.bankTransactions.push({ ...data.bankTransactions[0], ...common, id, sourceId: id, bankAccountId: accountId, side, amount: side === "INCOME" ? 12000 : 8000, content: `テスト口座範囲 ${suffix} ${side}` });
+      if (suffix !== "paypay-invoice") excludedIds.push(id);
+    }
+  }
   data.bankReconciliations ||= [];
   await writeFile(file, JSON.stringify(data, null, 2));
   await (await fetch(`${base}/login`)).text();
@@ -55,7 +69,8 @@ async function main() {
   for (const cookie of [admin, accounting]) {
     const response = await fetch(`${base}/banking/reconcile?company=JAPAN&transaction=${incomeId}`, { headers: { Cookie: cookie } });
     assert.equal(response.status, 200); const html = await response.text();
-    for (const text of ["銀行・請求書の照合", "テスト照合-001", "請求書番号が摘要に一致", "受領請求書と未連携の郵便物"]) assert.ok(html.includes(text), text);
+    for (const text of ["銀行・請求書の照合", "テスト照合-001", "請求書番号が摘要に一致", "受領請求書と未連携の郵便物", "PayPay銀行（末尾7691）", "その他の口座・カード", "テスト口座範囲 paypay-invoice"]) assert.ok(html.includes(text), text);
+    for (const suffix of ["paypay-expense", "other-bank"]) assert.ok(!html.includes(`テスト口座範囲 ${suffix}`));
   }
   async function input(kind: "issued" | "received", invoiceId: string, transactionId: string, amount: number, extra: Partial<ReconcileInput> = {}): Promise<ReconcileInput> {
     const current = await read(), bank = current.bankTransactions.find((row) => row.id === transactionId)!, invoice = (kind === "issued" ? current.issuedInvoices : current.receivedInvoices).find((row) => row.id === invoiceId)!;
@@ -63,6 +78,15 @@ async function main() {
   }
   const expenseInput = await input("received", receivedId, expenseId, 3000), before = await read();
   const assertUntouched = async () => { const current = await read(); for (const key of ["bankTransactions", "bankReconciliations", "payments", "issuedInvoices", "receivedInvoices", "mailDocuments"] as const) assert.deepEqual(current[key], before[key], key); };
+  for (const id of excludedIds) {
+    const side = data.bankTransactions.find((row) => row.id === id)!.side;
+    const request = side === "INCOME" ? await input("issued", issuedId, id, 12000) : await input("received", receivedId, id, 8000);
+    assert.match(await (await call("confirmBankReconciliationAction", ["JAPAN", request], admin)).text(), /"success":false/);
+    await assertUntouched();
+  }
+  const excludedHtml = await (await fetch(`${base}/banking/reconcile?company=JAPAN&status=excluded&transaction=${excludedIds[0]}`, { headers: { Cookie: admin } })).text();
+  assert.ok(excludedHtml.includes("口座番号の末尾7691を確認できる口座のみ"));
+  assert.ok(excludedHtml.includes("テスト口座範囲 paypay-expense"));
   for (const cookie of ["", await login("billing_editor"), await login("mail_editor")]) {
     const response = await fetch(`${base}/banking/reconcile?company=JAPAN`, { redirect: "manual", headers: { Cookie: cookie } }); assert.equal(response.status, 307);
     await (await call("confirmBankReconciliationAction", ["JAPAN", expenseInput], cookie)).text(); await assertUntouched();
@@ -88,7 +112,7 @@ async function main() {
   assert.ok(html.includes("紐づけ済みの記録"));
   assert.deepEqual(current.bankTransactions, before.bankTransactions);
   assert.ok(current.auditLogs.some((row) => row.action === "BANK_RECONCILE" && row.beforeStateJson));
-  console.log("PASS: page permissions, action permissions, company/version/amount guards, partial/full payment, linked mail, existing payment reuse, unlink and real Undo persistence. Bank source unchanged.");
+  console.log("PASS: page permissions, UFJ/PayPay account scope and excluded-account action guards, company/version/amount guards, partial/full payment, linked mail, existing payment reuse, unlink and real Undo persistence. Bank source unchanged.");
   console.log(`Preview: ${base}/banking/reconcile?company=JAPAN&transaction=${incomeId}`);
 }
 void main();

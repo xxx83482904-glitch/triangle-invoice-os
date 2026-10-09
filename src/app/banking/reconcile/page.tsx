@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app/shell";
 import { BankReconciliationWorkspace } from "@/components/app/bank-reconciliation-workspace";
 import { getCurrentUser } from "@/lib/auth";
 import { bankReconciliationOverview, reconciliationCandidates } from "@/lib/bank-reconciliation";
+import { invoiceAccountScopeIssue } from "@/lib/bank-reconciliation-accounts";
 import { companyFromParam } from "@/lib/company";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { readDataForRequest } from "@/lib/store";
@@ -32,7 +33,7 @@ export default async function BankReconciliationPage({ searchParams }: { searchP
   const review = view === "checks" ? bankDocumentReview(data, company, overview, params.checkKind, Number(params.checkPage) || 1) : undefined;
   const aiConfig = await effectiveOcrConfig();
   return <AppShell><BankReconciliationWorkspace key={`${company}:${filters.query}:${params.view || "bank"}`} company={company} filters={filters} rows={rows} selected={selected} candidates={candidates}
-    invoices={overview.invoices} links={overview.links} accounts={data.bankAccounts.filter((row) => row.company === company).map((row) => ({ id: row.id, name: row.name }))}
+    invoices={overview.invoices} links={overview.links} accounts={data.bankAccounts.filter((row) => row.company === company).map((row) => ({ id: row.id, name: row.name, invoiceEligible: !invoiceAccountScopeIssue(row) }))}
     page={page} total={bankRows.length} initialView={view} unlinkedMailCount={overview.unlinkedMailCount}
     aiPreview={aiPreview} aiConfigured={Boolean(aiConfig.openAiApiKey)} aiModel={aiConfig.ocrAiModel} review={review}
     aiSettings={can(user, "manage:settings") ? { keyFromEnv: aiConfig.openAiSource === "env", modelFromEnv: aiConfig.ocrAiModelSource === "env" } : undefined}

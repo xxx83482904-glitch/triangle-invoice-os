@@ -3,11 +3,12 @@ import test from "node:test";
 import { admin, fixture, timestamp } from "./document-fixture";
 import { bankReconciliationOverview, confirmBankReconciliation, reconciliationCandidates, reconciliationIssue, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput } from "../src/lib/bank-reconciliation";
 import { restoreUndoState } from "../src/lib/store";
+import { invoiceAccountScopeIssue } from "../src/lib/bank-reconciliation-accounts";
 
 const today = "2026-10-08";
 function setup() {
   const data = fixture();
-  data.bankAccounts = [{ id: "bank", company: "JAPAN", officeCode: "office", sourceId: "bank", name: "テスト銀行", serviceName: "Bank", isManual: false, available: true, createdAt: timestamp, updatedAt: timestamp }];
+  data.bankAccounts = [{ id: "bank", company: "JAPAN", officeCode: "office", sourceId: "bank", name: "テスト銀行", serviceName: "三菱UFJ銀行", isManual: false, available: true, createdAt: timestamp, updatedAt: timestamp }];
   data.bankTransactions = [{ id: "bank-income", company: "JAPAN", officeCode: "office", sourceId: "source-income", bankAccountId: "bank", side: "INCOME", amount: 12000, content: "Test customer INV-001", transactionDate: today, sourceMemo: "", sourceStatus: "none", sourceMissing: false, treatment: "NORMAL", classificationSource: "UNASSIGNED", reviewed: false, memo: "", createdAt: timestamp, updatedAt: timestamp }];
   data.bankTransactions.push({ ...data.bankTransactions[0], id: "bank-expense", sourceId: "source-expense", side: "EXPENSE", amount: 8000, content: "Test supplier" });
   data.issuedInvoices.forEach((row) => { row.status = "ISSUED"; row.needsReview = false; });
@@ -260,4 +261,66 @@ test("10,000 reconciliations can be summarized with indexed lookups", () => {
   assert.equal(view.banks.length, 10000); assert.equal(view.links.length, 10000);
   assert.ok(view.banks.every((row) => row.state === "matched")); assert.ok(view.links.every((row) => !row.issue));
   assert.ok(performance.now() - started < 5000, "overview should not repeatedly scan full source arrays");
+});
+
+test("Japan invoice accounts are UFJ or the specific PayPay suffix, not cards or provider IDs", () => {
+  const account = setup().bankAccounts[0];
+  for (const serviceName of ["三菱UFJ銀行", "三菱東京UFJ銀行（法人）", "三菱ＵＦＪ銀行（BizSTATION）", "UFJ銀行", "MUFG Bank", "三菱UFJ（BizSTATION）"]) {
+    assert.equal(invoiceAccountScopeIssue({ ...account, serviceName }), "", serviceName);
+  }
+  for (const name of ["PayPay銀行 / 普通 1237691", "PayPay銀行 / 普通 ７６９１", "PayPay銀行 / ****7691", "普通預金 1237691（円）"]) {
+    assert.equal(invoiceAccountScopeIssue({ ...account, serviceName: "PayPay銀行", name }), "", name);
+  }
+  for (const name of ["PayPay銀行", "PayPay銀行 / 普通", "PayPay銀行 / 普通 1237692", "PayPay銀行 / 普通 7691000", "PayPay銀行 / 7691支店 / 普通 1234567"]) {
+    assert.ok(invoiceAccountScopeIssue({ ...account, serviceName: "PayPay銀行", name, sourceSubId: "7691", sourceId: "7691" }), name);
+  }
+  for (const serviceName of ["三井住友銀行", "楽天銀行", "UFJニコス", "三菱UFJカード", "PayPayカード"]) {
+    assert.ok(invoiceAccountScopeIssue({ ...account, serviceName, name: `${serviceName} / 7691` }), serviceName);
+  }
+  assert.ok(invoiceAccountScopeIssue({ ...account, serviceName: "PayPay銀行", name: "PayPay銀行 Visaデビット 7691" }));
+  assert.equal(invoiceAccountScopeIssue({ ...account, company: "CHINA", serviceName: "Other bank" }), "");
+});
+
+test("both invoice directions enforce account scope atomically and preserve expense classifications", () => {
+  for (const invoiceKind of ["issued", "received"] as const) for (const serviceName of ["楽天銀行", "PayPay銀行", "三菱UFJカード"]) {
+    const data = setup(); Object.assign(data.bankAccounts[0], { serviceName, name: `${serviceName} / 普通 1234567` });
+    data.bankTransactions.forEach((row) => { row.categoryId = "expense-category"; row.reviewed = true; row.classificationSource = "MANUAL"; });
+    const before = JSON.stringify(data), view = bankReconciliationOverview(data, "JAPAN", today);
+    assert.ok(view.banks.every((row) => row.state === "excluded"));
+    assert.ok(view.banks.every((row) => reconciliationCandidates(row, view.invoices).length === 0));
+    assert.throws(() => confirm(data, { invoiceKind }), /照合.*対象/);
+    assert.equal(JSON.stringify(data), before);
+  }
+  const data = setup(); Object.assign(data.bankAccounts[0], { serviceName: "PayPay銀行", name: "PayPay銀行 / 普通 1237691" });
+  confirm(data); confirm(data, { invoiceKind: "received" });
+  assert.ok(bankReconciliationOverview(data, "JAPAN", today).banks.every((row) => row.state === "matched"));
+});
+
+test("the restricted account scope preserves historical matches, payment totals and postal completion", () => {
+  const data = setup(); confirm(data); confirm(data, { invoiceKind: "received" });
+  Object.assign(data.bankAccounts[0], { serviceName: "Other bank", name: "Other bank" });
+  const before = JSON.stringify(data), view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.ok(view.banks.every((row) => row.state === "matched" && row.issue));
+  assert.ok(view.links.every((row) => !row.issue));
+  assert.equal(view.invoices.find((row) => row.id === "received-1")!.matched, 8000);
+  assert.equal(view.invoices.find((row) => row.id === "issued-1")!.matched, 12000);
+  assert.equal(JSON.stringify(data), before);
+  data.mailDocuments[0].mailProcessed = false;
+  syncReconciledInvoiceStatus(data, admin, "JAPAN", "received", "received-1", data.receivedInvoices[0].updatedAt, today);
+  assert.equal(data.mailDocuments[0].mailProcessed, true);
+  const link = data.bankReconciliations.find((row) => row.invoiceKind === "received")!;
+  removeBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt);
+  assert.equal(data.receivedInvoices[0].status, "SCHEDULED");
+  assert.equal(data.mailDocuments[0].mailProcessed, false);
+});
+
+test("partial historical matches on expense accounts remain valid but cannot be extended", () => {
+  const data = setup(); confirm(data, { amount: 6000 });
+  data.bankAccounts[0].serviceName = "楽天銀行";
+  const before = JSON.stringify(data), view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.equal(view.banks[0].state, "excluded"); assert.equal(view.banks[0].allocated, 6000);
+  assert.equal(view.invoices[0].matched, 6000); assert.equal(view.links[0].issue, "");
+  assert.throws(() => confirm(data, { amount: 6000 }), /照合.*対象/); assert.equal(JSON.stringify(data), before);
+  data.bankTransactions[0].amount++;
+  assert.equal(bankReconciliationOverview(data, "JAPAN", today).banks[0].state, "conflict");
 });

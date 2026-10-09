@@ -2,6 +2,7 @@ import { z } from "zod";
 import { assertBankAccess, bankToday, isBankDate } from "@/lib/banking";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
+import { invoiceAccountScopeIssue } from "@/lib/bank-reconciliation-accounts";
 import type { BankReconciliation, BankTransaction } from "@/lib/banking-types";
 import type { AppData, IssuedInvoice, Payment, ReceivedInvoice, User } from "@/lib/types";
 
@@ -89,6 +90,8 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
   const bank = data.bankTransactions.find((row) => row.company === company && row.id === value.transactionId);
   if (!bank || bank.updatedAt !== value.transactionUpdatedAt) throw new Error("銀行明細が更新されています。画面を更新してください");
   const problem = bankIssue(data, company, bank, today); if (problem) throw new Error(problem);
+  const scopeIssue = invoiceAccountScopeIssue(data.bankAccounts.find((row) => row.id === bank.bankAccountId)!);
+  if (scopeIssue) throw new Error(scopeIssue);
   if (bank.side !== (value.invoiceKind === "issued" ? "INCOME" : "EXPENSE")) throw new Error("請求書と入出金の方向が異なります");
   const links = activeLinks(data, company), bankLinks = links.filter((row) => row.transactionId === bank.id);
   if (bankLinks.some((row) => reconciliationIssue(data, row, today))) throw new Error("この明細には要再確認の照合があります。先に解除して見直してください");
@@ -208,10 +211,15 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     }];
   }));
   const banks = data.bankTransactions.filter((row) => row.company === company).map((row) => {
-    const allocated = (linkedBank.get(row.id) || 0) / 100, issue = bankIssue(data, company, row, today, index);
+    const allocated = (linkedBank.get(row.id) || 0) / 100, sourceIssue = bankIssue(data, company, row, today, index);
+    const account = index.accounts.get(row.bankAccountId);
+    const scopeIssue = account ? invoiceAccountScopeIssue(account) : "";
+    const issue = sourceIssue || scopeIssue;
+    // A new matching scope must not invalidate previously confirmed payment evidence.
+    const matched = !sourceIssue && allocated > 0 && cents(allocated) >= cents(row.amount);
     return { id: row.id, updatedAt: row.updatedAt, accountId: row.bankAccountId, date: row.transactionDate, side: row.side, content: row.content, amount: row.amount,
       remaining: Math.max(0, cents(row.amount) - cents(allocated)) / 100, allocated, issue, conflict: conflictBank.has(row.id),
-      state: conflictBank.has(row.id) ? "conflict" : issue ? "excluded" : allocated > 0 && cents(allocated) >= cents(row.amount) ? "matched" : "unmatched" };
+      state: conflictBank.has(row.id) ? "conflict" : matched ? "matched" : issue ? "excluded" : "unmatched" };
   });
   return { banks, invoices, unlinkedMailCount, links: links.map((row) => ({ id: row.id, updatedAt: row.updatedAt, transactionId: row.transactionId, invoiceKey: `${row.invoiceKind}:${row.invoiceId}`, amount: row.amount, createdPayment: row.createdPayment, issue: issues.get(row.id) || "", note: row.note, createdAt: row.createdAt })) };
 }

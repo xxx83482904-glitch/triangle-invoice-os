@@ -13,7 +13,7 @@ const today = "2026-10-09";
 function setup() {
   const data = fixture();
   data.users.push({ id: "admin", name: "Test admin", email: "admin@example.invalid", passwordHash: "not-a-real-secret", role: "ADMIN", accessStatus: "ACTIVE", createdAt: timestamp, updatedAt: timestamp } as User);
-  data.bankAccounts.push({ id: "bank", company: "JAPAN", officeCode: "office", sourceId: "bank", name: "Test bank", serviceName: "Bank", isManual: false, available: true, createdAt: timestamp, updatedAt: timestamp });
+  data.bankAccounts.push({ id: "bank", company: "JAPAN", officeCode: "office", sourceId: "bank", name: "Test bank", serviceName: "三菱UFJ銀行", isManual: false, available: true, createdAt: timestamp, updatedAt: timestamp });
   data.bankTransactions.push({ id: "expense", company: "JAPAN", officeCode: "office", sourceId: "expense-source", bankAccountId: "bank", side: "EXPENSE", amount: 8000, content: "Test supplier", transactionDate: today, sourceMemo: "DO NOT SEND", sourceStatus: "none", sourceMissing: false, treatment: "NORMAL", classificationSource: "UNASSIGNED", reviewed: false, memo: "DO NOT SEND", createdAt: timestamp, updatedAt: timestamp });
   data.bankTransactions.push({ ...data.bankTransactions[0], id: "income", sourceId: "income-source", side: "INCOME", amount: 24000, content: "Test customer INV-001 INV-002" });
   data.issuedInvoices.forEach((row) => { row.status = "ISSUED"; row.internalMemo = "DO NOT SEND"; row.ocrText = "請求 INV-001 合計 12000\npassword DO NOT SEND"; });
@@ -235,6 +235,38 @@ test("data or permission changes while AI is running discard its output; provide
 test("live permission is rechecked inside the reservation lock before transmitting any data", async () => {
   const fixture = serviceFixture(), mutate = fixture.deps.mutate;
   fixture.deps.mutate = async (...args) => { fixture.data.users[0].role = "BILLING_EDITOR"; return mutate(...args); };
+  await assert.rejects(runBankAiReview("admin", "JAPAN", fixture.input, fixture.deps));
+  assert.equal(fixture.calls(), 0); assert.equal(fixture.data.bankAiUsage, undefined);
+});
+
+test("expense-focused accounts do not enter AI payloads or unmatched invoice alerts", () => {
+  const data = setup();
+  for (const [id, serviceName, name] of [
+    ["paypay-invoice", "PayPay銀行", "PayPay銀行 / 普通 1237691"],
+    ["paypay-expense", "PayPay銀行", "PayPay銀行 / 普通 1234567"],
+    ["paypay-parent", "PayPay銀行", "PayPay銀行"],
+    ["expense-bank", "楽天銀行", "楽天銀行 / 普通 1237691"],
+    ["expense-card", "三菱UFJカード", "三菱UFJカード"],
+  ]) {
+    data.bankAccounts.push({ ...data.bankAccounts[0], id, sourceId: id, name, serviceName });
+    data.bankTransactions.push({ ...data.bankTransactions[0], id, sourceId: id, bankAccountId: id });
+  }
+  const before = JSON.stringify(data), overview = bankReconciliationOverview(data, "JAPAN", today);
+  const context = prepareBankAi(data, "JAPAN", { mode: "month", month: "2026-10" }, today, overview);
+  assert.deepEqual(context.banks.map((row) => row.id).sort(), ["expense", "income", "paypay-invoice"]);
+  const review = bankDocumentReview(data, "JAPAN", overview, "bank_unmatched");
+  assert.equal(review.counts.bank_unmatched, 2);
+  assert.ok(review.items.every((row) => ["bank:expense", "bank:paypay-invoice"].includes(row.id)));
+  const excluded = prepareBankAi(data, "JAPAN", { mode: "transaction", transactionId: "paypay-expense" }, today);
+  assert.equal(excluded.preview.payload.banks.length, 0);
+  assert.equal(excluded.preview.payload.invoices.length, 0);
+  assert.equal(excluded.preview.payload.mails.length, 0);
+  assert.equal(JSON.stringify(data), before);
+});
+
+test("account scope changes invalidate a prepared AI request before any provider call", async () => {
+  const fixture = serviceFixture();
+  fixture.data.bankAccounts[0].serviceName = "楽天銀行";
   await assert.rejects(runBankAiReview("admin", "JAPAN", fixture.input, fixture.deps));
   assert.equal(fixture.calls(), 0); assert.equal(fixture.data.bankAiUsage, undefined);
 });
