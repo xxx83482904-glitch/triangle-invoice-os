@@ -176,6 +176,20 @@ test("classification previews return editable suggestions without changing saved
   assert.equal(source.reviewed, false);
 });
 
+test("an empty page preview can expand to all periods without persisting either result", () => {
+  const data = setup();
+  mergeBankTransactions(data, "JAPAN", office, [item("one", "Unknown")], range);
+  const base = data.bankTransactions[0];
+  data.bankTransactions = Array.from({ length: 51 }, (_, i) => ({ ...base, id: `scope-${i}`, sourceId: `scope-${i}`, content: i < 50 ? "Unknown" : "振込手数料" }));
+  const before = JSON.stringify(data);
+  assert.deepEqual(previewBankRules(data, admin, "JAPAN", data.bankTransactions.slice(0, 50).map((row) => row.id)), { count: 0, unclassified: 50, rows: [] });
+  const all = previewBankRules(data, admin, "JAPAN");
+  assert.equal(all.count, 1);
+  assert.equal(all.unclassified, 50);
+  assert.equal(all.rows[0].id, "scope-50");
+  assert.equal(JSON.stringify(data), before);
+});
+
 test("previews protect existing edits and reject unauthorized or foreign selections without mutation", () => {
   const data = setup();
   mergeBankTransactions(data, "JAPAN", office, ["manual", "reviewed", "missing", "excluded", "candidate", "other"].map((id) => item(id, "Unknown")), range);

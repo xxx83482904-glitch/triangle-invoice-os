@@ -36,7 +36,8 @@ export function BankingWorkspace(props: Props) {
   const [settings, setSettings] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
   const [classifyOpen, setClassifyOpen] = useState(false);
-  const [classifyScope, setClassifyScope] = useState<"page" | "selected" | "all">("page");
+  const [classifyScope, setClassifyScope] = useState<"page" | "selected" | "all">("all");
+  const [classificationEmpty, setClassificationEmpty] = useState<number | null>(null);
   const [classificationPreview, setClassificationPreview] = useState<BankTransaction[] | null>(null);
   const [previewPage, setPreviewPage] = useState(1);
   const [savedCount, setSavedCount] = useState(0);
@@ -146,19 +147,20 @@ export function BankingWorkspace(props: Props) {
       }
     });
   }
-  function reclassify() {
-    setError(""); startTransition(async () => {
+  function reclassify(scope = classifyScope) {
+    setError(""); setClassificationEmpty(null); setClassifyScope(scope); startTransition(async () => {
       try {
-        const ids = classifyScope === "all" ? undefined : rows.filter((row) => classifyScope === "page" || selected.has(row.id)).map((row) => row.id);
+        const ids = scope === "all" ? undefined : rows.filter((row) => scope === "page" || selected.has(row.id)).map((row) => row.id);
         const result = await previewBankRulesAction(company, ids);
         if (!result.success) { setError(result.error || "分類できませんでした"); return; }
+        if (!result.rows.length) { setClassificationEmpty(result.unclassified); return; }
         if (result.rows.length) {
           setClassificationPreview(result.rows.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || a.id.localeCompare(b.id)));
           setDrafts(Object.fromEntries(result.rows.map((row) => [row.id, editFrom(row)])));
           setPreviewPage(1); setSelected(new Set()); anchor.current = null;
         }
         setClassifyOpen(false);
-        toast({ title: result.count ? `${result.count}件の分類候補（未保存）` : `変更候補はありません（未分類 ${result.unclassified}件）` });
+        toast({ title: `${result.count}件の分類候補（未保存）` });
       } catch { setError("通信に失敗しました"); }
     });
   }
@@ -251,7 +253,7 @@ export function BankingWorkspace(props: Props) {
         <div className="flex flex-wrap items-center gap-2 border-y py-2">
           <label className="flex min-h-11 cursor-pointer items-center gap-2 px-1 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label="表示中の明細をすべて選択" checked={Boolean(rows.length) && rows.every((row) => selected.has(row.id))} disabled={pending || !rows.length} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((row) => row.id)) : new Set())} />表示中を選択</label>
           <span className="text-sm text-muted-foreground">{selected.size}件選択</span>
-          <Button type="button" className="ml-auto min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => { setClassifyScope(selected.size ? "selected" : rows.length ? "page" : "all"); setError(""); setClassifyOpen(true); }}><WandSparkles className="size-4" />自動分類</Button>
+          <Button type="button" className="ml-auto min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => { setClassifyScope(selected.size ? "selected" : "all"); setClassificationEmpty(null); setError(""); setClassifyOpen(true); }}><WandSparkles className="size-4" />自動分類</Button>
         </div>
         {selected.size ? <div className="grid min-w-0 gap-2 bg-muted/40 p-2 sm:grid-cols-3">
           <select className={bankSelectClass} aria-label="選択明細の勘定科目を一括変更" value="" disabled={pending} onChange={(e) => bulk({ categoryId: e.target.value === "__clear" ? undefined : e.target.value, subCategoryId: undefined, reviewed: false })}><option value="" disabled>勘定科目を一括変更</option><option value="__clear">未分類に戻す</option>{categories.filter((row) => !row.parentId && row.available && !row.deletedAt).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
@@ -303,13 +305,18 @@ export function BankingWorkspace(props: Props) {
     <Dialog open={classifyOpen} onOpenChange={(value) => { if (!pending) setClassifyOpen(value); }}>
       <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
         <DialogHeader><DialogTitle>勘定科目の自動分類</DialogTitle><DialogDescription>分類結果は未保存の候補です。手動変更・確認済みの明細は対象外です。</DialogDescription></DialogHeader>
-        <label className="grid min-w-0 gap-1 text-sm">対象<select aria-label="自動分類の対象" className={bankSelectClass} value={classifyScope} disabled={pending} onChange={(event) => setClassifyScope(event.target.value as typeof classifyScope)}>
+        <label className="grid min-w-0 gap-1 text-sm">対象<select aria-label="自動分類の対象" className={bankSelectClass} value={classifyScope} disabled={pending} onChange={(event) => { setClassifyScope(event.target.value as typeof classifyScope); setClassificationEmpty(null); setError(""); }}>
           {selected.size ? <option value="selected">選択した明細（{selected.size}件）</option> : null}
-          {rows.length ? <option value="page">表示中のページ（{rows.length}件）</option> : null}
           <option value="all">{company === "JAPAN" ? "日本" : "中国"}の全期間・全口座</option>
+          {rows.length ? <option value="page">表示中のページ（{rows.length}件）</option> : null}
         </select></label>
+        {classificationEmpty !== null ? <div role="status" className="space-y-1 border-l-2 border-muted-foreground bg-muted/40 p-3 text-sm">
+          <p className="font-medium">新しい分類候補はありません</p>
+          <p className="text-muted-foreground">対象内の未分類 {classificationEmpty.toLocaleString()}件・変更なし</p>
+        </div> : null}
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
-        <Button className="min-h-11" disabled={pending} onClick={reclassify}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}分類候補を作成</Button>
+        {classificationEmpty !== null && classifyScope !== "all" ? <Button className="min-h-11" disabled={pending} onClick={() => reclassify("all")}><WandSparkles className="size-4" />全期間・全口座で再実行</Button> : null}
+        <Button className="min-h-11" variant={classificationEmpty !== null && classifyScope !== "all" ? "outline" : "default"} disabled={pending} onClick={() => reclassify()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}{pending ? "分類中..." : "分類候補を作成"}</Button>
       </DialogContent>
     </Dialog>
     <Dialog open={syncOpen} onOpenChange={(value) => { if (!syncing) setSyncOpen(value); }}>
