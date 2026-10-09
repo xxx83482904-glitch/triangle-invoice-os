@@ -19,9 +19,9 @@ export type ClassificationAiPreview = {
 };
 export const classificationAiOutputSchema = z.object({
   decisions: z.array(z.object({
-    bankRef: z.string().regex(/^B\d+$/), categoryRef: z.string().regex(/^C\d+$/).nullable(),
+    bankRef: z.string().regex(/^B\d+$/), categoryRef: z.string().regex(/^C\d+$/),
     confidence: z.enum(["high", "medium", "low", "unknown"]),
     reason: z.string().min(1).max(220), quote: z.string().max(120),
   }).strict()).max(CLASSIFICATION_AI_BATCH_SIZE),
 }).strict();
-export type ClassificationAiResult = { rows: BankTransaction[]; suggested: number; unresolved: number; model: string };
+export type ClassificationAiResult = { rows: BankTransaction[]; suggested: number; lowConfidence: number; model: string };

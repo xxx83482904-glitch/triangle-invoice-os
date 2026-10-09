@@ -6,8 +6,9 @@
 - The separate AI classification action proposes root account categories for unclassified bank/card transactions that rules cannot classify.
 - Scope can be the visible page, selected rows, or all company records. Each explicit request sends at most 50 rows. All-company scope has batch navigation; it does not send every record silently.
 - Manual, reviewed, excluded, missing-source, transfer and already categorized rows are protected.
-- Candidates and unresolved reasons appear in an editable preview. Only explicit Save persists category edits. Discard leaves the financial data unchanged.
-- An uncertain purchase stays unclassified, with a reason. Merchant names alone do not establish purchase purpose, tax treatment or business use.
+- Every successfully processed AI row receives the closest available category, including low/unknown-confidence rows. The provider schema requires a non-null category reference for every row; missing, invalid or incomplete responses fail explicitly rather than appearing as successful unclassified results.
+- Candidates and reasons appear in an editable preview. Low-confidence guesses are marked for review and counted separately. Only explicit Save persists category edits. Discard leaves the financial data unchanged.
+- An uncertain purchase still receives a provisional category, but its explanation must identify assumptions or missing information. Merchant names alone do not establish purchase purpose, tax treatment or business use. Empty or fully masked descriptions may have empty evidence quotes only for low/unknown-confidence proposals. No records are automatically marked reviewed.
 
 ## Configuration And Privacy
 
@@ -17,7 +18,7 @@ Every request requires a fresh preview and explicit consent. The preview contain
 
 The provider endpoint is fixed, redirects are rejected, and `store: false` is sent. Shared company limits are 50 requests/day and a 15-second cooldown. An attempted request records only bounded usage/audit metadata, not a financial edit. Provider failures can still consume usage and incur provider costs.
 
-Authorization, eligible data and category definitions are checked again before sending and after the response. Invalid refs, duplicate/missing results, unsupported categories, invented quotations or stale data reject the result. Structured output validation does not guarantee accounting correctness.
+Authorization, eligible data and category definitions are checked again before sending and after the response. A row with no available category in its company/office fails before sending. Invalid refs, null categories, duplicate/missing results, unsupported categories, invented quotations or stale data reject the result. Structured output validation does not guarantee accounting correctness.
 
 ## Verification
 
@@ -36,8 +37,8 @@ node --conditions=react-server --import tsx tests/prepare-banking-preview.ts --c
 
 Use ONLY the generated temporary `DATA_DIR`, its local test session secret, `OPENAI_API_KEY=local-classification-mock-only` and `OCR_AI_MODEL=test-classification-model`. After a production build, preload `tests/mock-classification-provider.mjs` with Node's `--import` when starting the local Next server. The mock refuses non-temporary data directories or different credentials and labels its responses as test responses. Never preload it on production.
 
-Browser coverage: visible/selected/all scopes, 50-row batch navigation, consent reset, candidate editing, unresolved reasons, discard, explicit save, candidate-free result closing, and missing-key guidance. Compare stored bank transactions/invoices/payments before and after preview: only usage/audit may change until Save.
+Browser checks: visible/selected/all scopes, 50-row batch navigation, consent reset, a category on every AI result, low-confidence reasons, editing, discard, explicit save, and missing-key guidance. Compare stored bank transactions/invoices/payments before and after preview: only usage/audit may change until Save.
 
 These deterministic mock checks verify wiring and persistence safeguards, not real-model accuracy. No production financial data was sent to OpenAI during implementation verification. Validate real-model quality on approved data before relying on suggestions.
 
-This change is not deployed by the implementation turn. Do not push main without a deployment request; main triggers Synology deployment.
+Deploy only on an explicit request; pushing main triggers Synology deployment. Check the exact commit, completed build, restart and HTTPS response in addition to the Actions result.

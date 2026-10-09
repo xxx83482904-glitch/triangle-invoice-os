@@ -12,6 +12,7 @@ function setup() {
   data.users.push({ id: "admin", name: "Test admin", email: "admin@example.invalid", passwordHash: "not-a-real-secret", role: "ADMIN", accessStatus: "ACTIVE", createdAt: timestamp, updatedAt: timestamp });
   mergeBankMasters(data, "JAPAN", office, [{ id: "card", name: "Private card 1234567", serviceName: "Card", isManual: false }], [
     { id: "travel", name: "旅費交通費", group: "EXPENSE", available: true },
+    { id: "supplies", name: "消耗品費", group: "EXPENSE", available: true },
     { id: "fees", name: "支払手数料", group: "EXPENSE", available: true },
     { id: "sub", parentSourceId: "travel", name: "Private subcategory", group: "EXPENSE", available: true },
   ]);
@@ -22,7 +23,8 @@ function setup() {
 const prepare = (data = setup()) => prepareClassificationAi(data, "admin", "JAPAN", scope);
 function answer(payload: ClassificationAiPayload) {
   const travel = payload.categories.find((row) => row.name === "旅費交通費")!.ref;
-  return { decisions: payload.transactions.map((row) => ({ bankRef: row.ref, categoryRef: row.content.includes("コンビニ") ? null : travel, confidence: row.content.includes("コンビニ") ? "unknown" as const : "medium" as const, reason: row.content.includes("コンビニ") ? "購入内容と業務上の用途が必要です" : "交通サービスの利用候補です", quote: row.content })) };
+  const supplies = payload.categories.find((row) => row.name === "消耗品費")!.ref;
+  return { decisions: payload.transactions.map((row) => ({ bankRef: row.ref, categoryRef: row.content.includes("コンビニ") ? supplies : travel, confidence: row.content.includes("コンビニ") ? "low" as const : "medium" as const, reason: row.content.includes("コンビニ") ? "購入内容が不明なため消耗品費と仮定しています。用途は未確認です" : "交通サービスの利用候補です", quote: row.content })) };
 }
 
 test("AI classification scopes bank/card rows, protects edits and rules, and only exposes masked minimal data", () => {
@@ -75,12 +77,14 @@ test("category availability, office and company are enforced even for a fabricat
   assert.throws(() => validateClassificationAi(prepared, output, "model"));
 });
 
-test("AI returns editable candidates and unexplained purchases stay unclassified, without saving anything", () => {
+test("AI assigns a category to every row including uncertain purchases without saving anything", () => {
   const data = setup(), before = JSON.stringify(data), prepared = prepare(data);
   const result = validateClassificationAi(prepared, answer(prepared.preview.payload), "model");
-  assert.equal(result.suggested, 2); assert.equal(result.unresolved, 1);
-  assert.ok(result.rows.filter((row) => row.categoryId).every((row) => !row.reviewed && row.classificationReason?.startsWith("AI候補")));
-  assert.match(result.rows.find((row) => row.content.includes("コンビニ"))!.classificationReason!, /AI未判定/);
+  assert.equal(result.suggested, 3); assert.equal(result.lowConfidence, 1);
+  assert.ok(result.rows.every((row) => row.categoryId && !row.reviewed && row.classificationReason?.startsWith("AI候補")));
+  const uncertain = result.rows.find((row) => row.content.includes("コンビニ"))!;
+  assert.equal(uncertain.categoryId, sourceKey("JAPAN", office, "category", "supplies"));
+  assert.match(uncertain.classificationReason!, /要確認・推定/);
   assert.ok(result.rows.every((row) => row.updatedAt === data.bankTransactions.find((original) => original.id === row.id)!.updatedAt));
   assert.equal(JSON.stringify(data), before);
   const chosen = result.rows.find((row) => row.categoryId)!;
@@ -90,7 +94,7 @@ test("AI returns editable candidates and unexplained purchases stay unclassified
 
 test("missing/duplicate/invented refs, invented evidence and masked evidence reject the entire AI result", () => {
   const prepared = prepare();
-  for (const variant of ["missing", "duplicate", "foreign", "quote", "masked", "extra"] as const) {
+  for (const variant of ["missing", "duplicate", "foreign", "quote", "masked", "extra", "null-category", "missing-category", "blank-category"] as const) {
     const output = answer(prepared.preview.payload);
     if (variant === "missing") output.decisions.pop();
     if (variant === "duplicate") output.decisions[1] = output.decisions[0];
@@ -98,11 +102,45 @@ test("missing/duplicate/invented refs, invented evidence and masked evidence rej
     if (variant === "quote") output.decisions[0].quote = "Invented evidence";
     if (variant === "masked") output.decisions[0].quote = "[NUMBER]";
     if (variant === "extra") Object.assign(output.decisions[0], { paid: true });
+    if (variant === "null-category") Object.assign(output.decisions[0], { categoryRef: null });
+    if (variant === "missing-category") Object.assign(output.decisions[0], { categoryRef: undefined });
+    if (variant === "blank-category") output.decisions[0].categoryRef = "";
     assert.throws(() => validateClassificationAi(prepared, output, "model"), variant);
   }
   const output = answer(prepared.preview.payload);
   const low = { ...output, decisions: output.decisions.map((row) => ({ ...row, confidence: "low" })) };
-  assert.equal(validateClassificationAi(prepared, low, "model").suggested, 0);
+  const result = validateClassificationAi(prepared, low, "model");
+  assert.equal(result.suggested, prepared.rows.length);
+  assert.equal(result.lowConfidence, prepared.rows.length);
+  assert.ok(result.rows.every((row) => row.categoryId && !row.reviewed && row.classificationReason?.includes("要確認・推定")));
+});
+
+test("all confidence levels retain categories; blank or masked descriptions require uncertain proposals", () => {
+  for (const confidence of ["high", "medium", "low", "unknown"] as const) {
+    const prepared = prepare(), output = answer(prepared.preview.payload);
+    const result = validateClassificationAi(prepared, { decisions: output.decisions.map((row) => ({ ...row, confidence })) }, "model");
+    assert.equal(result.rows.filter((row) => row.categoryId).length, prepared.rows.length);
+    assert.equal(result.lowConfidence, confidence === "low" || confidence === "unknown" ? prepared.rows.length : 0);
+  }
+  for (const content of ["", "123456789 contact@example.com"]) {
+    const data = setup(); data.bankTransactions[0].content = content;
+    const prepared = prepare(data), output = answer(prepared.preview.payload);
+    for (const confidence of ["low", "unknown"] as const) {
+      const decisions = output.decisions.map((row) => ({ ...row, quote: "", confidence }));
+      const result = validateClassificationAi(prepared, { decisions }, "model");
+      assert.ok(result.rows.every((row) => row.categoryId && !row.reviewed));
+      for (const invalid of ["Invented evidence", "[NUMBER]"]) assert.throws(() => validateClassificationAi(prepared, { decisions: decisions.map((row) => ({ ...row, quote: invalid })) }, "model"));
+    }
+    assert.throws(() => validateClassificationAi(prepared, { decisions: output.decisions.map((row) => ({ ...row, quote: "", confidence: "high" })) }, "model"));
+  }
+});
+
+test("missing per-office categories fail clearly rather than returning unclassified rows", () => {
+  const data = setup();
+  data.bankTransactions[0].officeCode = "9999-9999";
+  assert.throws(() => prepare(data), /使用できる勘定科目/);
+  data.accountingCategories = [];
+  assert.throws(() => prepare(data), /使用できる勘定科目/);
 });
 
 function serviceFixture() {
@@ -124,7 +162,7 @@ function serviceFixture() {
 test("AI service records only bounded usage; records, amounts, invoices, payments and audit evidence are not classified", async () => {
   const f = serviceFixture(), before = structuredClone(f.data);
   const result = await runClassificationAi("admin", "JAPAN", f.input, f.deps);
-  assert.equal(result.suggested, 2); assert.equal(f.calls(), 1); assert.equal(f.data.bankAiUsage?.JAPAN?.count, 1);
+  assert.equal(result.suggested, 3); assert.equal(f.calls(), 1); assert.equal(f.data.bankAiUsage?.JAPAN?.count, 1);
   for (const key of ["bankTransactions", "accountingCategories", "issuedInvoices", "receivedInvoices", "payments", "mailDocuments", "bankReconciliations"] as const) assert.deepEqual(f.data[key], before[key]);
   assert.doesNotMatch(f.audit(), /SHINKANSEN|fake-key|1200|PRIVATE/);
   await assert.rejects(runClassificationAi("admin", "JAPAN", f.input, f.deps), /15秒/);
@@ -164,6 +202,10 @@ test("classification provider uses strict output, bounded tokens/timeout, fixed 
     const body = JSON.parse(String(init?.body));
     assert.equal(body.store, false); assert.equal(body.max_completion_tokens, 12000); assert.equal(body.tools, undefined);
     assert.equal(body.response_format.json_schema.strict, true); assert.equal(body.response_format.json_schema.name, "bank_account_categories");
+    const decisionSchema = body.response_format.json_schema.schema.properties.decisions.items;
+    assert.equal(decisionSchema.properties.categoryRef.type, "string");
+    assert.ok(decisionSchema.required.includes("categoryRef"));
+    assert.match(body.messages[0].content, /categoryRef must never be null/);
     assert.deepEqual(JSON.parse(body.messages[1].content), payload);
     return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(answer(payload)) } }] }));
   });

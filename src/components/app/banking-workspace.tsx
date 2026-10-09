@@ -44,7 +44,7 @@ export function BankingWorkspace(props: Props) {
   const [classificationPreview, setClassificationPreview] = useState<BankTransaction[] | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiScope, setAiScope] = useState<"page" | "selected" | "all">("page");
-  const [aiResult, setAiResult] = useState<{ suggested: number; unresolved: number; model: string } | null>(null);
+  const [aiResult, setAiResult] = useState<{ suggested: number; lowConfidence: number; model: string } | null>(null);
   const [previewPage, setPreviewPage] = useState(1);
   const [savedCount, setSavedCount] = useState(0);
   const [leaveUrl, setLeaveUrl] = useState<string | null>(null);
@@ -240,7 +240,7 @@ export function BankingWorkspace(props: Props) {
         </nav>
       </aside> : null}
       <section className="min-w-0 space-y-3">
-        {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><div className="min-w-0"><h2 className="text-base font-semibold">{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}</h2>{aiResult ? <p className="mt-1 break-words text-xs text-muted-foreground">候補 {aiResult.suggested}件・未判定 {aiResult.unresolved}件 / {aiResult.model}</p> : null}</div><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
+        {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><div className="min-w-0"><h2 className="text-base font-semibold">{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}</h2>{aiResult ? <p className="mt-1 break-words text-xs text-muted-foreground">候補 {aiResult.suggested}件・うち低確度の推定 {aiResult.lowConfidence}件 / {aiResult.model}</p> : null}</div><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
         {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
         {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
         <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{monthName(filters.month)}</h2><span className="text-sm text-muted-foreground">{total.toLocaleString()}件</span></div>
@@ -316,7 +316,7 @@ export function BankingWorkspace(props: Props) {
     </Dialog>
     <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} />
     <BankClassificationAiDialog key={aiOpen ? "ai-open" : "ai-closed"} company={company} open={aiOpen} onOpenChange={setAiOpen} rowIds={rows.map((row) => row.id)} selectedIds={rows.filter((row) => selected.has(row.id)).map((row) => row.id)} initialScope={aiScope} onResult={(result) => {
-      setClassificationPreview(result.rows); setAiResult({ suggested: result.suggested, unresolved: result.unresolved, model: result.model });
+      setClassificationPreview(result.rows); setAiResult({ suggested: result.suggested, lowConfidence: result.lowConfidence, model: result.model });
       setDrafts(Object.fromEntries(result.rows.filter((row) => row.categoryId).map((row) => [row.id, editFrom(row)])));
       setError(""); setPreviewPage(1); setSelected(new Set()); anchor.current = null;
     }} />

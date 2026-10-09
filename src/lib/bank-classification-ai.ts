@@ -34,6 +34,7 @@ export function prepareClassificationAi(data: AppData, userId: string, company: 
       };
     }),
   };
+  if (payload.transactions.some((row) => !row.allowedCategoryRefs.length)) throw new Error("対象明細に使用できる勘定科目がありません。対象会社・事業者の有効な科目を登録してください。");
   // Bind consent to exact records, eligible ordering and category definitions, not just visible text.
   const revision = createHash("sha256").update(JSON.stringify({ scope, payload, candidates: candidates.map((row) => [row.id, row.updatedAt]), categories: categories.map((row) => [row.id, row.updatedAt]), rows })).digest("hex");
   const preview: ClassificationAiPreview = { scope, revision, payload, total: candidates.length, scoped: scoped.length, protected: scoped.length - eligible.length, ruleCandidates: eligible.length - candidates.length };
@@ -44,17 +45,17 @@ export function validateClassificationAi(prepared: ReturnType<typeof prepareClas
   const output = classificationAiOutputSchema.parse(raw), { payload } = prepared.preview;
   const decisions = new Map(output.decisions.map((row) => [row.bankRef, row]));
   if (decisions.size !== output.decisions.length || decisions.size !== payload.transactions.length || output.decisions.some((row) => !payload.transactions.some((bank) => bank.ref === row.bankRef))) throw new Error("AIの明細参照を検証できませんでした。結果は保存していません。");
-  let suggested = 0;
+  let lowConfidence = 0;
   const rows = prepared.rows.map((row, i) => {
     const bank = payload.transactions[i], decision = decisions.get(bank.ref)!;
-    if (decision.categoryRef && !bank.allowedCategoryRefs.includes(decision.categoryRef)) throw new Error("AIの勘定科目を検証できませんでした。結果は保存していません。");
-    const accepted = decision.categoryRef && ["high", "medium"].includes(decision.confidence);
-    if (accepted && (!decision.quote.trim() || !bank.content.includes(decision.quote) || /\[(NUMBER|SECRET|ACCOUNT|EMAIL|URL)\]/.test(decision.quote))) throw new Error("AIの判断根拠を検証できませんでした。結果は保存していません。");
+    if (!bank.allowedCategoryRefs.includes(decision.categoryRef)) throw new Error("AIの勘定科目を検証できませんでした。結果は保存していません。");
+    const uncertain = decision.confidence === "low" || decision.confidence === "unknown";
+    // Missing evidence is allowed only for explicitly uncertain proposals; fabricated evidence never is.
+    if ((!uncertain && !decision.quote.trim()) || (decision.quote && (!bank.content.includes(decision.quote) || /\[(NUMBER|SECRET|ACCOUNT|EMAIL|URL)\]/.test(decision.quote)))) throw new Error("AIの判断根拠を検証できませんでした。結果は保存していません。");
     const reason = maskBankAiText(decision.reason, 220);
-    if (!accepted) return { ...row, classificationReason: `AI未判定: ${reason}` };
     const index = payload.categories.findIndex((category) => category.ref === decision.categoryRef);
-    suggested++;
-    return { ...row, categoryId: prepared.categories[index].id, subCategoryId: undefined, reviewed: false, classificationSource: "AUTO" as const, ruleId: undefined, classificationReason: `AI候補（${decision.confidence === "high" ? "確度高" : "要確認"}）: ${reason}` };
+    if (uncertain) lowConfidence++;
+    return { ...row, categoryId: prepared.categories[index].id, subCategoryId: undefined, reviewed: false, classificationSource: "AUTO" as const, ruleId: undefined, classificationReason: `AI候補（${uncertain ? "要確認・推定" : decision.confidence === "high" ? "確度高" : "要確認"}）: ${reason}` };
   });
-  return { rows, suggested, unresolved: rows.length - suggested, model };
+  return { rows, suggested: rows.length, lowConfidence, model };
 }

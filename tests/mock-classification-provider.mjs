@@ -18,9 +18,10 @@ globalThis.fetch = async (input, init) => {
   const payload = JSON.parse(body.messages[1].content);
   assert.ok(payload.transactions.length <= 50);
   const travel = payload.categories.find((row) => row.name === "旅費交通費");
+  const supplies = payload.categories.find((row) => row.name === "消耗品費");
   const decisions = payload.transactions.map((row) => {
     const match = /JRW SHINKANSEN|エスライド/.test(row.content);
-    return { bankRef: row.ref, categoryRef: match ? travel.ref : null, confidence: match ? "medium" : "unknown", reason: match ? "テストAI応答: 交通サービスの利用候補です" : "テストAI応答: 購入内容と用途が必要です", quote: match ? row.content : "" };
+    return { bankRef: row.ref, categoryRef: match ? travel.ref : supplies.ref, confidence: match ? "medium" : "low", reason: match ? "テストAI応答: 交通サービスの利用候補です" : "テストAI応答: 購入内容が不明なため消耗品費と仮定しています。用途は未確認です", quote: row.content.slice(0, 120) };
   });
   return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ decisions }) } }] }), { headers: { "Content-Type": "application/json" } });
 };
