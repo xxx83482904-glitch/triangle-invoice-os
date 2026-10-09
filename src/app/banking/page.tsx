@@ -8,6 +8,7 @@ import { companyFromParam } from "@/lib/company";
 import { moneyForwardConfig } from "@/lib/moneyforward-client";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { readDataForRequest } from "@/lib/store";
+import { effectiveOcrConfig } from "@/lib/ocr-settings";
 
 export default async function BankingPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
@@ -19,10 +20,12 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
   const filters = bankFilters(params);
   const result = selectBankTransactions(data, company, filters);
   const sync = data.bankSyncStates.find((state) => state.company === company);
+  const ai = await effectiveOcrConfig();
   return <AppShell><BankingWorkspace key={`${company}:${JSON.stringify(filters)}`} company={company} filters={filters} {...result}
     accounts={data.bankAccounts.filter((row) => row.company === company)}
     categories={data.accountingCategories.filter((row) => row.company === company).sort((a, b) => a.name.localeCompare(b.name, "ja"))}
     rules={data.bankRules.filter((row) => row.company === company && !row.deletedAt)}
     configured={Boolean(moneyForwardConfig(company))} sync={sync} busy={bankSyncBusy(sync)} admin={user.role === "ADMIN"}
+    aiSettings={can(user, "manage:settings") ? { configured: Boolean(ai.openAiApiKey), model: ai.ocrAiModel, keyFromEnv: ai.openAiSource === "env", modelFromEnv: ai.ocrAiModelSource === "env" } : undefined}
   /></AppShell>;
 }

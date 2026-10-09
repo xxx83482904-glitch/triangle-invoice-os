@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
 import { previewBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
 import { BankingSettings, BankCategoryFields, bankSelectClass } from "@/components/app/banking-settings";
+import { BankAiSettings } from "@/components/app/bank-ai-settings";
+import { BankClassificationAiDialog } from "@/components/app/bank-classification-ai-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +24,7 @@ type Props = {
   filters: BankFilters; total: number; page: number; months: string[];
   summary: { income: number; expense: number; excluded: number; unclassified: number };
   configured: boolean; sync?: BankSyncState; busy: boolean; admin: boolean;
+  aiSettings?: { configured: boolean; model: string; keyFromEnv: boolean; modelFromEnv: boolean };
 };
 
 export function BankingWorkspace(props: Props) {
@@ -39,6 +42,9 @@ export function BankingWorkspace(props: Props) {
   const [classifyScope, setClassifyScope] = useState<"page" | "selected" | "all">("all");
   const [classificationEmpty, setClassificationEmpty] = useState<number | null>(null);
   const [classificationPreview, setClassificationPreview] = useState<BankTransaction[] | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiScope, setAiScope] = useState<"page" | "selected" | "all">("page");
+  const [aiResult, setAiResult] = useState<{ suggested: number; unresolved: number; model: string } | null>(null);
   const [previewPage, setPreviewPage] = useState(1);
   const [savedCount, setSavedCount] = useState(0);
   const [leaveUrl, setLeaveUrl] = useState<string | null>(null);
@@ -104,6 +110,7 @@ export function BankingWorkspace(props: Props) {
     for (const [key, value] of Array.from(params.entries())) if (!value) params.delete(key);
     const destination = `/banking?${params}`;
     if (dirty) { setLeaveUrl(destination); return; }
+    setClassificationPreview(null); setAiResult(null);
     setSelected(new Set()); startTransition(() => router.push(destination));
   }
   function edit(row: BankTransaction, patch: Partial<BankEdit>) {
@@ -138,7 +145,7 @@ export function BankingWorkspace(props: Props) {
           setClassificationPreview((current) => current?.filter((row) => remaining[row.id]) ?? null);
           setPreviewPage(1); setSelected(new Set());
         }
-        setDrafts({}); setClassificationPreview(null); setLeaveUrl(null);
+        setDrafts({}); setClassificationPreview(null); setAiResult(null); setLeaveUrl(null);
         if (destination) router.push(destination); else router.refresh();
         toast({ title: `${saved}件を保存しました`, variant: "success" });
       } catch (error) {
@@ -156,6 +163,7 @@ export function BankingWorkspace(props: Props) {
         if (!result.rows.length) { setClassificationEmpty(result.unclassified); return; }
         if (result.rows.length) {
           setClassificationPreview(result.rows.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || a.id.localeCompare(b.id)));
+          setAiResult(null);
           setDrafts(Object.fromEntries(result.rows.map((row) => [row.id, editFrom(row)])));
           setPreviewPage(1); setSelected(new Set()); anchor.current = null;
         }
@@ -163,6 +171,9 @@ export function BankingWorkspace(props: Props) {
         toast({ title: `${result.count}件の分類候補（未保存）` });
       } catch { setError("通信に失敗しました"); }
     });
+  }
+  function openAi(scope: typeof aiScope) {
+    setAiScope(scope); setClassifyOpen(false); setAiOpen(true);
   }
   async function beginSync() {
     setError(""); setSyncing(true);
@@ -199,6 +210,7 @@ export function BankingWorkspace(props: Props) {
     <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
       <div className="min-w-0"><h1 className="break-words text-xl font-semibold">口座・カード明細</h1><div className="mt-1 text-sm text-muted-foreground">{company === "JAPAN" ? "日本本社" : "中国支社"}{sync?.officeName ? ` / ${sync.officeName}` : ""}</div></div>
       <div className="flex flex-wrap gap-2">
+        {props.aiSettings ? <BankAiSettings {...props.aiSettings} disabled={pending || Boolean(dirty)} /> : null}
         <Button className="min-h-11" variant="outline" disabled={pending || Boolean(dirty)} onClick={() => setSettings(true)}><Settings2 className="size-4" />科目・ルール</Button>
         <Button className="min-h-11" variant="outline" disabled={!configured || syncing || pending || Boolean(dirty)} onClick={() => setSyncOpen(true)}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}同期</Button>
         <Button className="min-h-11" disabled={!dirty || pending} onClick={() => save()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{dirty ? ` (${dirty})` : ""}</Button>
@@ -228,7 +240,7 @@ export function BankingWorkspace(props: Props) {
         </nav>
       </aside> : null}
       <section className="min-w-0 space-y-3">
-        {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><h2 className="text-base font-semibold">分類候補 {total.toLocaleString()}件・未保存</h2><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
+        {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><div className="min-w-0"><h2 className="text-base font-semibold">{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}</h2>{aiResult ? <p className="mt-1 break-words text-xs text-muted-foreground">候補 {aiResult.suggested}件・未判定 {aiResult.unresolved}件 / {aiResult.model}</p> : null}</div><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
         {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
         {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
         <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{monthName(filters.month)}</h2><span className="text-sm text-muted-foreground">{total.toLocaleString()}件</span></div>
@@ -254,6 +266,7 @@ export function BankingWorkspace(props: Props) {
           <label className="flex min-h-11 cursor-pointer items-center gap-2 px-1 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label="表示中の明細をすべて選択" checked={Boolean(rows.length) && rows.every((row) => selected.has(row.id))} disabled={pending || !rows.length} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((row) => row.id)) : new Set())} />表示中を選択</label>
           <span className="text-sm text-muted-foreground">{selected.size}件選択</span>
           <Button type="button" className="ml-auto min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => { setClassifyScope(selected.size ? "selected" : "all"); setClassificationEmpty(null); setError(""); setClassifyOpen(true); }}><WandSparkles className="size-4" />自動分類</Button>
+          <Button type="button" className="min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => openAi(selected.size ? "selected" : rows.length ? "page" : "all")}><Bot className="size-4" />AI分類</Button>
         </div>
         {selected.size ? <div className="grid min-w-0 gap-2 bg-muted/40 p-2 sm:grid-cols-3">
           <select className={bankSelectClass} aria-label="選択明細の勘定科目を一括変更" value="" disabled={pending} onChange={(e) => bulk({ categoryId: e.target.value === "__clear" ? undefined : e.target.value, subCategoryId: undefined, reviewed: false })}><option value="" disabled>勘定科目を一括変更</option><option value="__clear">未分類に戻す</option>{categories.filter((row) => !row.parentId && row.available && !row.deletedAt).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
@@ -296,12 +309,17 @@ export function BankingWorkspace(props: Props) {
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button className="min-h-11" variant="outline" disabled={pending} onClick={() => setLeaveUrl(null)}>キャンセル</Button>
-          <Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => { const destination = leaveUrl; setDrafts({}); setClassificationPreview(null); setSelected(new Set()); setLeaveUrl(null); if (destination) startTransition(() => router.push(destination)); }}>破棄して移動</Button>
+          <Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => { const destination = leaveUrl; setDrafts({}); setClassificationPreview(null); setAiResult(null); setSelected(new Set()); setLeaveUrl(null); if (destination) startTransition(() => router.push(destination)); }}>破棄して移動</Button>
           <Button className="min-h-11" disabled={pending} onClick={() => save(leaveUrl || undefined)}><Save className="size-4" />保存して移動</Button>
         </div>
       </DialogContent>
     </Dialog>
     <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} />
+    <BankClassificationAiDialog key={aiOpen ? "ai-open" : "ai-closed"} company={company} open={aiOpen} onOpenChange={setAiOpen} rowIds={rows.map((row) => row.id)} selectedIds={rows.filter((row) => selected.has(row.id)).map((row) => row.id)} initialScope={aiScope} onResult={(result) => {
+      setClassificationPreview(result.rows); setAiResult({ suggested: result.suggested, unresolved: result.unresolved, model: result.model });
+      setDrafts(Object.fromEntries(result.rows.filter((row) => row.categoryId).map((row) => [row.id, editFrom(row)])));
+      setError(""); setPreviewPage(1); setSelected(new Set()); anchor.current = null;
+    }} />
     <Dialog open={classifyOpen} onOpenChange={(value) => { if (!pending) setClassifyOpen(value); }}>
       <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
         <DialogHeader><DialogTitle>勘定科目の自動分類</DialogTitle><DialogDescription>分類結果は未保存の候補です。手動変更・確認済みの明細は対象外です。</DialogDescription></DialogHeader>
@@ -315,6 +333,7 @@ export function BankingWorkspace(props: Props) {
           <p className="text-muted-foreground">対象内の未分類 {classificationEmpty.toLocaleString()}件・変更なし</p>
         </div> : null}
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
+        <Button className="min-h-11" variant="outline" disabled={pending} onClick={() => openAi(classifyScope)}><Bot className="size-4" />AIで未分類を判定</Button>
         {classificationEmpty !== null && classifyScope !== "all" ? <Button className="min-h-11" disabled={pending} onClick={() => reclassify("all")}><WandSparkles className="size-4" />全期間・全口座で再実行</Button> : null}
         <Button className="min-h-11" variant={classificationEmpty !== null && classifyScope !== "all" ? "outline" : "default"} disabled={pending} onClick={() => reclassify()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}{pending ? "分類中..." : "分類候補を作成"}</Button>
       </DialogContent>

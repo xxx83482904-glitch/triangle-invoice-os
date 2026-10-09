@@ -10,13 +10,17 @@ Do not invent a missing invoice or payment. A lack of a match is not proof of a 
 class BankAiProviderError extends Error {}
 
 export async function requestBankAi(payload: BankAiPayload, config: { apiKey: string; model: string }, fetcher: typeof fetch = fetch) {
+  return requestBankStructuredAi(payload, config, { schema: bankAiOutputSchema, name: "bank_document_review", prompt: systemPrompt, maxTokens: 4000 }, fetcher);
+}
+
+export async function requestBankStructuredAi<T extends z.ZodType>(payload: unknown, config: { apiKey: string; model: string }, format: { schema: T; name: string; prompt: string; maxTokens: number; timeoutMs?: number }, fetcher: typeof fetch = fetch): Promise<z.infer<T>> {
   if (!config.apiKey || !config.model) throw new Error("AIのAPIキー・モデルが未設定です");
   try {
-    const schema = z.toJSONSchema(bankAiOutputSchema); delete schema.$schema;
+    const schema = z.toJSONSchema(format.schema); delete schema.$schema;
     const response = await fetcher("https://api.openai.com/v1/chat/completions", {
-      method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(45000),
+      method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(format.timeoutMs || 45000),
       headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: config.model, store: false, max_completion_tokens: 4000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify(payload) }], response_format: { type: "json_schema", json_schema: { name: "bank_document_review", strict: true, schema } } }),
+      body: JSON.stringify({ model: config.model, store: false, max_completion_tokens: format.maxTokens, messages: [{ role: "system", content: format.prompt }, { role: "user", content: JSON.stringify(payload) }], response_format: { type: "json_schema", json_schema: { name: format.name, strict: true, schema } } }),
     });
     if (!response.ok) {
       await response.body?.cancel();
@@ -30,9 +34,9 @@ export async function requestBankAi(payload: BankAiPayload, config: { apiKey: st
     const envelope = z.object({ choices: z.array(z.object({ finish_reason: z.string(), message: z.object({ content: z.string().nullable(), refusal: z.string().nullable().optional() }) })).min(1) }).parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
     const first = envelope.choices[0];
     if (first.finish_reason !== "stop" || first.message.refusal || !first.message.content) throw new BankAiProviderError("AIは有効な候補を返せませんでした");
-    return bankAiOutputSchema.parse(JSON.parse(first.message.content));
+    return format.schema.parse(JSON.parse(first.message.content));
   } catch (error) {
     if (error instanceof BankAiProviderError) throw error;
-    throw new Error("AIの応答を確認できませんでした。時間切れ・形式不正の可能性があります。通常の照合は引き続き利用できます。");
+    throw new Error("AIの応答を確認できませんでした。時間切れ・形式不正の可能性があります。判定結果は保存されていません。");
   }
 }

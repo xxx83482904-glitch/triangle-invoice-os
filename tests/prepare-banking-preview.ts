@@ -40,6 +40,10 @@ async function main() {
     const candidate = data.bankTransactions.find((row) => row.id === "auto-preview")!;
     data.bankTransactions.push(...Array.from({ length: 151 }, (_, index) => ({ ...candidate, id: `candidate-${String(index).padStart(3, "0")}`, sourceId: `candidate-${index}`, content: `東京電力 テスト候補 ${String(index).padStart(3, "0")}` })));
   }
+  if (process.argv.includes("--classification-ai")) {
+    const candidate = data.bankTransactions.find((row) => row.id === "auto-preview")!;
+    data.bankTransactions.push(...Array.from({ length: 54 }, (_, index) => ({ ...candidate, id: `ai-test-${String(index).padStart(3, "0")}`, sourceId: `ai-test-${index}`, transactionDate: "2026-10-09", content: `${["JRW SHINKANSEN", "エスライド", "テストコンビニ"][index % 3]} テスト ${String(index).padStart(3, "0")}` })));
+  }
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
   console.log(root);
 }
