@@ -22,17 +22,17 @@ export default async function BankReconciliationPage({ searchParams }: { searchP
   const focus = overview.invoices.find((row) => row.key === filters.invoice);
   const linkedBankIds = new Set(overview.links.filter((row) => row.invoiceKey === focus?.key).map((row) => row.transactionId));
   const query = filters.query.normalize("NFKC").toLocaleLowerCase("ja");
-  const bankRows = overview.banks.filter((row) => (!filters.account || row.accountId === filters.account) && (!filters.month || row.date.startsWith(filters.month)) && (filters.status === "all" || row.state === filters.status) && (!query || `${row.content} ${row.amount}`.normalize("NFKC").toLocaleLowerCase("ja").includes(query)) && (!filters.invoice || (focus && (linkedBankIds.has(row.id) || reconciliationCandidates(row, [focus]).length > 0)))).sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  const focusScores = new Map(focus ? overview.banks.map((row) => [row.id, reconciliationCandidates(row, [focus])[0]?.score || 0]) : []);
+  const bankRows = overview.banks.filter((row) => (!filters.account || row.accountId === filters.account) && (!filters.month || row.date.startsWith(filters.month)) && (filters.status === "all" || row.state === filters.status) && (!query || `${row.content} ${row.amount}`.normalize("NFKC").toLocaleLowerCase("ja").includes(query)) && (!filters.invoice || (focus && (linkedBankIds.has(row.id) || (!row.issue && !row.conflict && row.remaining > 0 && row.side === (focus.kind === "issued" ? "INCOME" : "EXPENSE")))))).sort((a, b) => Number(linkedBankIds.has(b.id)) - Number(linkedBankIds.has(a.id)) || (focusScores.get(b.id) || 0) - (focusScores.get(a.id) || 0) || b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
   const page = Math.min(Math.max(1, Math.floor(Number(params.page) || 1)), Math.max(1, Math.ceil(bankRows.length / 50)));
   const rows = bankRows.slice((page - 1) * 50, page * 50);
   const selected = params.transaction ? overview.banks.find((row) => row.id === params.transaction) : rows[0];
-  const candidates = selected ? reconciliationCandidates(selected, overview.invoices) : [];
   const view = params.view === "checks" ? "checks" : params.view === "invoices" ? "invoices" : "bank";
   const today = bankToday(), month = /^\d{4}-(0[1-9]|1[0-2])$/.test(params.checkMonth || "") && params.checkMonth! <= today.slice(0, 7) ? params.checkMonth! : today.slice(0, 7);
   const aiPreview = view === "checks" ? prepareBankAi(data, company, { mode: "month", month }, today, overview).preview : view === "bank" && selected ? prepareBankAi(data, company, { mode: "transaction", transactionId: selected.id }, today, overview).preview : undefined;
   const review = view === "checks" ? bankDocumentReview(data, company, overview, params.checkKind, Number(params.checkPage) || 1) : undefined;
   const aiConfig = await effectiveOcrConfig();
-  return <AppShell><BankReconciliationWorkspace key={`${company}:${filters.query}:${params.view || "bank"}`} company={company} filters={filters} rows={rows} selected={selected} candidates={candidates}
+  return <AppShell><BankReconciliationWorkspace key={`${company}:${filters.query}:${params.view || "bank"}`} company={company} filters={filters} rows={rows} selected={selected}
     invoices={overview.invoices} links={overview.links} accounts={data.bankAccounts.filter((row) => row.company === company).map((row) => ({ id: row.id, name: row.name, invoiceEligible: !invoiceAccountScopeIssue(row) }))}
     page={page} total={bankRows.length} initialView={view} unlinkedMailCount={overview.unlinkedMailCount}
     aiPreview={aiPreview} aiConfigured={Boolean(aiConfig.openAiApiKey)} aiModel={aiConfig.ocrAiModel} review={review}

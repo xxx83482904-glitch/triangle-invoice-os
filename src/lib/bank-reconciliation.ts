@@ -5,11 +5,12 @@ import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { invoiceAccountScopeIssue } from "@/lib/bank-reconciliation-accounts";
 import type { BankReconciliation, BankTransaction } from "@/lib/banking-types";
 import type { AppData, IssuedInvoice, Payment, ReceivedInvoice, User } from "@/lib/types";
+import { normalizeReconciliationName } from "@/lib/bank-reconciliation-matching";
+export { reconciliationCandidates } from "@/lib/bank-reconciliation-matching";
 
 type Kind = "issued" | "received";
 const cents = (value: number) => Math.round(value * 100);
 const monetary = (value: number) => Number.isFinite(value) && value > 0 && value <= 1e12 && Math.abs(value * 100 - cents(value)) < 0.001;
-const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase("ja").replace(/株式会社|有限会社|合同会社|[\s()（）・.,，．\-]/g, "");
 const stamp = (old: string) => new Date(Math.max(Date.now(), Date.parse(old) + 1)).toISOString();
 const bankEvidence = (row: BankTransaction) => JSON.stringify([row.officeCode, row.bankAccountId, row.sourceId, row.side, row.transactionDate, row.amount, row.content]);
 const invoiceEvidence = (kind: Kind, row: IssuedInvoice | ReceivedInvoice) => JSON.stringify([kind, row.projectId, "clientId" in row ? row.clientId : row.vendorId, row.total]);
@@ -201,7 +202,9 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       ? (invoice.status === "PAID") !== complete || Boolean((invoice as ReceivedInvoice).mailProcessed) !== complete || mail.some((row) => Boolean(row.mailProcessed) !== complete)
       : invoicePaymentSummary({ payments }, invoice as IssuedInvoice).status !== invoice.status);
     return [{ key, kind, id: invoice.id, updatedAt: invoice.updatedAt, title: kind === "issued" ? (invoice as IssuedInvoice).invoiceNumber : (invoice as ReceivedInvoice).originalFileName || mail[0]?.title || "受領請求書",
-      party: party?.companyName || "取引先未設定", project: project.name, total: invoice.total, date: invoice.issueDate, dueDate: invoice.dueDate,
+      party: party?.companyName || "取引先未設定", partyId: party?.id || "", accountHolder: party && "accountHolder" in party && typeof party.accountHolder === "string" ? party.accountHolder : "",
+      confirmedNames: [] as Array<{ accountId: string; content: string }>,
+      project: project.name, total: invoice.total, date: invoice.issueDate, dueDate: invoice.dueDate,
       paid: paid / 100, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, matched: matched / 100, unmatched: Math.max(0, cents(invoice.total) - matched) / 100,
       recordedUnmatched: Math.max(0, paid - matched) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,
       eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), stateMismatch,
@@ -210,6 +213,26 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       payments: payments.map((row) => ({ id: row.id, updatedAt: row.updatedAt, amount: row.amount, date: row.paymentDate, available: Math.max(0, cents(row.amount) - (linkedPayment.get(row.id) || 0)) / 100, method: row.method || "手入力" })),
     }];
   }));
+  // Only intact, unambiguous confirmations teach a bank description to a counterparty.
+  const invoiceByKey = new Map(invoices.map((row) => [row.key, row]));
+  const identities = new Map<string, { accountId: string; content: string; parties: Set<string> }>();
+  for (const link of links) {
+    if (issues.get(link.id)) continue;
+    const invoice = invoiceByKey.get(`${link.invoiceKind}:${link.invoiceId}`), bank = index.banks.get(link.transactionId);
+    if (!invoice?.partyId || !bank) continue;
+    const content = normalizeReconciliationName(bank.content);
+    if (content.length < 4 || /^(振込|振替|入金|出金|送金|振込入金|振込出金)$/.test(content)) continue;
+    const key = JSON.stringify([bank.bankAccountId, bank.side, content]);
+    const entry = identities.get(key) || { accountId: bank.bankAccountId, content, parties: new Set<string>() };
+    entry.parties.add(`${invoice.kind}:${invoice.partyId}`); identities.set(key, entry);
+  }
+  const namesByParty = new Map<string, Array<{ accountId: string; content: string }>>();
+  for (const entry of identities.values()) {
+    if (entry.parties.size !== 1) continue;
+    const key = [...entry.parties][0], names = namesByParty.get(key) || [];
+    names.push({ accountId: entry.accountId, content: entry.content }); namesByParty.set(key, names);
+  }
+  for (const invoice of invoices) invoice.confirmedNames = namesByParty.get(`${invoice.kind}:${invoice.partyId}`) || [];
   const banks = data.bankTransactions.filter((row) => row.company === company).map((row) => {
     const allocated = (linkedBank.get(row.id) || 0) / 100, sourceIssue = bankIssue(data, company, row, today, index);
     const account = index.accounts.get(row.bankAccountId);
@@ -226,20 +249,3 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
 export type ReconciliationOverview = ReturnType<typeof bankReconciliationOverview>;
 export type ReconciliationInvoice = ReconciliationOverview["invoices"][number];
 export type ReconciliationBank = ReconciliationOverview["banks"][number];
-
-export function reconciliationCandidates(bank: ReconciliationBank, invoices: ReconciliationInvoice[]) {
-  const description = normalized(bank.content);
-  if (bank.issue || bank.conflict || bank.remaining <= 0) return [];
-  return invoices.filter((row) => row.eligible && !row.conflict && (row.outstanding > 0 || row.payments.some((payment) => payment.available > 0)) && (bank.side === "INCOME" ? row.kind === "issued" : row.kind === "received")).map((row) => {
-    const reasons: string[] = []; let score = 0;
-    if (row.outstanding > 0 && cents(row.outstanding) === cents(bank.remaining)) { reasons.push("未入金・未払い額と一致"); score += 40; }
-    if (row.payments.some((payment) => payment.available > 0 && cents(payment.available) === cents(bank.remaining))) { reasons.push("登録済みの支払い額と一致"); score += 40; }
-    const party = normalized(row.party);
-    if (party.length >= 3 && description.includes(party)) { reasons.push("取引先名が摘要に一致"); score += 35; }
-    const number = normalized(row.title);
-    if (row.kind === "issued" && number.length >= 4 && description.includes(number)) { reasons.push("請求書番号が摘要に一致"); score += 60; }
-    const dates = [row.dueDate, ...row.payments.map((payment) => payment.date)].filter(isBankDate);
-    if (dates.some((date) => Math.abs(Date.parse(date) - Date.parse(bank.date)) <= 14 * 86400000)) { reasons.push("期日・記録日と14日以内"); score += 10; }
-    return { key: row.key, score, reasons };
-  }).filter((row) => row.score >= 35).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, 8);
-}

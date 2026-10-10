@@ -4,6 +4,7 @@ import { admin, fixture, timestamp } from "./document-fixture";
 import { bankReconciliationOverview, confirmBankReconciliation, reconciliationCandidates, reconciliationIssue, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput } from "../src/lib/bank-reconciliation";
 import { restoreUndoState } from "../src/lib/store";
 import { invoiceAccountScopeIssue } from "../src/lib/bank-reconciliation-accounts";
+import { normalizeReconciliationName, reconciliationPaymentOptions } from "../src/lib/bank-reconciliation-matching";
 
 const today = "2026-10-08";
 function setup() {
@@ -191,6 +192,81 @@ test("matching reasons are evidence, not automatic confirmation; equal amounts r
   assert.equal(candidates[0].key, "issued:issued-1"); assert.ok(candidates[0].reasons.includes("請求書番号が摘要に一致"));
   assert.ok(candidates.some((row) => row.key === "issued:issued-2"));
   assert.ok(candidates.every((row) => row.key.startsWith("issued:"))); assert.equal(JSON.stringify(data), before);
+});
+
+test("kana, corporate abbreviations and the vendor bank holder match without inventing kanji readings", () => {
+  assert.equal(normalizeReconciliationName("（カ）ﾃｽﾄ ﾃﾞｻﾞｲﾝ"), normalizeReconciliationName("株式会社てすとデザイン"));
+  assert.equal(normalizeReconciliationName("タナカ)"), "タナカ");
+  const data = setup();
+  data.vendors[0].companyName = "株式会社制作会社"; data.vendors[0].accountHolder = "カ）テストセイサク";
+  data.bankTransactions[1].content = "振込 ｶ)ﾃｽﾄｾｲｻｸ"; data.receivedInvoices[0].dueDate = today;
+  const view = bankReconciliationOverview(data, "JAPAN", today), candidates = reconciliationCandidates(view.banks[1], view.invoices);
+  assert.ok(candidates[0].reasons.includes("振込口座名義が摘要に一致")); assert.equal(candidates[0].confidence, "strong");
+});
+
+test("amount-only old invoices are suppressed, near-date ties rank first, and number prefixes do not match", () => {
+  const data = setup(); data.bankTransactions[0].content = "振込 読み不明 INV-0010";
+  data.issuedInvoices[0].dueDate = "2025-01-01"; data.issuedInvoices[1].dueDate = today;
+  const view = bankReconciliationOverview(data, "JAPAN", today), candidates = reconciliationCandidates(view.banks[0], view.invoices);
+  assert.deepEqual(candidates.map((row) => row.key), ["issued:issued-2"]);
+  assert.equal(candidates[0].confidence, "review"); assert.ok(candidates[0].warnings.includes("金額のみ一致・名義を確認"));
+});
+
+test("identity keeps partial/fee-like and old payments searchable but requires review", () => {
+  const data = setup(); data.bankTransactions[0].amount = 11670; data.issuedInvoices[0].dueDate = "2025-01-01";
+  const view = bankReconciliationOverview(data, "JAPAN", today), row = reconciliationCandidates(view.banks[0], view.invoices)[0];
+  assert.equal(row.key, "issued:issued-1"); assert.equal(row.difference, -330); assert.equal(row.confidence, "review");
+  assert.ok(row.warnings.includes("期日・記録日から90日超")); assert.equal(data.payments.length, 0);
+});
+
+test("confirmed bank descriptions teach the same party only within the same account", () => {
+  const data = setup(); data.bankTransactions[0].content = "カ）ヨミカタフメイ";
+  confirm(data);
+  data.bankTransactions.push({ ...data.bankTransactions[0], id: "next", sourceId: "next" });
+  data.issuedInvoices[1].dueDate = today;
+  let view = bankReconciliationOverview(data, "JAPAN", today), bank = view.banks.find((row) => row.id === "next")!;
+  let row = reconciliationCandidates(bank, view.invoices)[0];
+  assert.equal(row.key, "issued:issued-2"); assert.ok(row.reasons.includes("同じ口座・摘要の確定済み照合と一致"));
+  assert.equal(row.confidence, "strong");
+  row = reconciliationCandidates({ ...bank, accountId: "other" }, view.invoices)[0];
+  assert.equal(row.confidence, "review");
+  data.bankReconciliations[0].deletedAt = timestamp;
+  view = bankReconciliationOverview(data, "JAPAN", today); bank = view.banks.find((row) => row.id === "next")!;
+  assert.ok(reconciliationCandidates(bank, view.invoices).every((item) => !item.reasons.includes("同じ口座・摘要の確定済み照合と一致")));
+});
+
+test("ambiguous and invalid confirmations do not teach a payee", () => {
+  const data = setup(); data.bankTransactions[0].content = "共通の振込サービス"; confirm(data);
+  data.clients.push({ ...data.clients[0], id: "another-party", companyName: "Another party" });
+  data.issuedInvoices[1].clientId = "another-party";
+  data.bankTransactions.push({ ...data.bankTransactions[0], id: "next", sourceId: "next" });
+  confirm(data, { transactionId: "next", invoiceId: "issued-2" });
+  assert.ok(bankReconciliationOverview(data, "JAPAN", today).invoices.every((row) => !row.confirmedNames.length));
+  data.bankTransactions[0].amount += 1;
+  assert.equal(bankReconciliationOverview(data, "JAPAN", today).invoices.find((row) => row.id === "issued-1")!.confirmedNames.length, 0);
+});
+
+test("existing payment default prioritizes exact amount then nearest date; amount evidence is not doubled", () => {
+  const data = setup(); const view = bankReconciliationOverview(data, "JAPAN", today), invoice = view.invoices[0], bank = view.banks[0];
+  invoice.outstanding = 12000; invoice.dueDate = today;
+  const base = { updatedAt: timestamp, method: "手入力", amount: 12000, available: 12000 };
+  invoice.payments = [{ ...base, id: "small", available: 100, date: today }, { ...base, id: "old", date: "2025-01-01" }, { ...base, id: "exact", date: today }];
+  assert.equal(reconciliationPaymentOptions(bank, invoice)[0].id, "exact");
+  const withPayment = reconciliationCandidates(bank, [invoice])[0];
+  invoice.payments = [];
+  assert.equal(reconciliationCandidates(bank, [invoice])[0].score, withPayment.score);
+});
+
+test("equal-evidence invoices are marked ambiguous while an explicit invoice number takes precedence", () => {
+  const data = setup(); data.issuedInvoices.forEach((row) => { row.dueDate = today; });
+  data.bankTransactions[0].content = "Test customer";
+  let view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.ok(reconciliationCandidates(view.banks[0], view.invoices).every((row) => row.confidence === "review" && row.warnings.includes("同条件の請求書が複数")));
+  data.bankTransactions[0].content += " INV-001";
+  view = bankReconciliationOverview(data, "JAPAN", today);
+  const candidates = reconciliationCandidates(view.banks[0], view.invoices);
+  assert.equal(candidates[0].key, "issued:issued-1"); assert.equal(candidates[0].confidence, "strong");
+  assert.equal(candidates[1].confidence, "review"); assert.ok(candidates[1].warnings.includes("別の請求書番号が摘要に一致"));
 });
 
 test("legacy Undo preserves new reconciliation records and current patches undo linked payment/status together", () => {

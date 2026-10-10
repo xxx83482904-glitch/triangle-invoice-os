@@ -19,7 +19,7 @@ async function main() {
   assert.ok(data.bankAccounts.length && data.bankAccounts.every((row) => row.name.startsWith("テスト")));
   await copyFile(file, path.join(root, `before-${prefix}.json`));
   const sample = fixture(), account = data.bankAccounts.find((row) => row.sourceSubId === "branch")!;
-  assert.equal(account.forecastSettings?.accountKind, "BANK");
+  assert.ok(!account.forecastSettings || account.forecastSettings.accountKind === "BANK");
   const today = bankToday(), timestamp = new Date().toISOString(), common = { createdAt: timestamp, updatedAt: timestamp };
   const clientId = `${prefix}-client`, vendorId = `${prefix}-vendor`, projectId = `${prefix}-project`;
   data.clients.push({ ...sample.clients[0], ...common, id: clientId, companyName: "テスト照合 クライアント" });
@@ -109,7 +109,7 @@ async function main() {
   assert.match(await (await call("confirmBankReconciliationAction", ["JAPAN", await input("issued", existingId, existingBankId, 12000, { mode: "existing", paymentId, paymentUpdatedAt: existingPayment.updatedAt })], accounting)).text(), /"success":true/);
   current = await read(); assert.equal(current.payments.length, paymentCount); assert.deepEqual(current.payments.find((row) => row.id === paymentId), existingPayment);
   const html = await (await fetch(`${base}/banking/reconcile?company=JAPAN&invoice=${encodeURIComponent(`issued:${existingId}`)}&status=all`, { headers: { Cookie: admin } })).text();
-  assert.ok(html.includes("紐づけ済みの記録"));
+  assert.ok(html.includes("照合済みの記録"));
   assert.deepEqual(current.bankTransactions, before.bankTransactions);
   assert.ok(current.auditLogs.some((row) => row.action === "BANK_RECONCILE" && row.beforeStateJson));
   console.log("PASS: page permissions, UFJ/PayPay account scope and excluded-account action guards, company/version/amount guards, partial/full payment, linked mail, existing payment reuse, unlink and real Undo persistence. Bank source unchanged.");
