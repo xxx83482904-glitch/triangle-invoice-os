@@ -34,7 +34,7 @@ Image inputs are converted locally, bounded to 1600px, limited to 12MB per sourc
 - PDF pagination/typography: `design-fee-calculator/src/quotationPdf.ts`.
 - Editor: `QuotationEditor.tsx`, `quotation.css`.
 - Font source/license: `design-fee-calculator/public/fonts/`.
-- `npm --prefix design-fee-calculator test`: 144 tests, including 33 quotation tests.
+- `npm --prefix design-fee-calculator test`: 145 tests, including 34 quotation tests.
 - Redesigned standard 5-page, long Japanese 10-page, and long-column/maximum-amount 7-page PDFs rendered and visually inspected with PyMuPDF. Font rendering, text extraction, totals, independent columns and body bounds checked.
 - Browser: adjusted total 4,407,480 RMB, actual downloaded PDF text, JSON download/import, invalid input, outdated PDF suppression, desktop and 390px mobile layout checked.
 

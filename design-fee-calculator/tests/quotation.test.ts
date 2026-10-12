@@ -83,6 +83,12 @@ describe('actual PDF documents', () => {
   it('refuses invalid values before creating a customer-facing document', async () => {
     const q = draft(); q.baseFee = '-1'; await expect(generateQuotationPdf(q, font)).rejects.toThrow('validation');
   });
+  it('keeps ordinary tax and adjustment rows with the issuer on the fee page', async () => {
+    const q = draft(); q.additionalFee = '25000'; q.discount = '10000'; q.taxMode = 'excluded'; q.taxRate = '6';
+    const bytes = await generateQuotationPdf(q, font);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(5);
+    writeFileSync('../tmp/pdfs/quotation-tax.pdf', bytes);
+  }, 30000);
   it('keeps independent columns paginated with long edited scope and a large quote', async () => {
     const q = draft(); q.baseFee = '999999999999'; q.number = 'TR-2026-001';
     q.project = '钛马赫新展厅 / 品牌体验中心与空间设计项目';

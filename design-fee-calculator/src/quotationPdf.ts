@@ -125,7 +125,7 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
     ensure(rows.length * 16 + 15);
     rows.forEach((line, i) => draw(line, margin, y - i * 16, 9.5));
     draw(value, W - margin - valueWidth, y, 11, latin);
-    y -= rows.length * 16 + 14; rule(y); y -= 11;
+    y -= rows.length * 16 + 9; rule(y); y -= 9;
   }
   feeRow(t.base, `${money(totals.base)} RMB`);
   // The area symbol needs the CJK font; the numeric columns use Montserrat.
@@ -141,9 +141,12 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   y -= 20; label(t.notes, 'QUOTATION CONDITIONS');
   text(`${t.validity}：${q.validDays}${t.days}`, 9.5, 17); text(q.notes, 9.5, 17);
   if (q.payment.trim()) { y -= 17; label(t.payment, 'PAYMENT'); text(q.payment, 9.5, 17); }
-  ensure(150); y -= 25; rule(y); y -= 18;
+  const issuerHeight = wrap(q.issuer, 11).length * 21 + wrap(q.address, 8.5).length * 15
+    + (q.contact ? wrap(q.contact, 8.5).length * 15 : 0);
+  const markHeight = q.seal || q.signature ? 108 : 38;
+  ensure(Math.min(35 + issuerHeight + markHeight, 240)); y -= 20; rule(y); y -= 15;
   text(q.issuer, 11, 21); text(q.address, 8.5, 15); if (q.contact) text(q.contact, 8.5, 15);
-  ensure(110); const marksTop = y - 12;
+  ensure(markHeight); const marksTop = y - 12;
   if (q.seal) { const img = await embed(q.seal); const scale = Math.min(90 / img.width, 90 / img.height); page.drawImage(img, { x: margin + 210, y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
   if (q.signature) { const img = await embed(q.signature); const scale = Math.min(120 / img.width, 58 / img.height); page.drawImage(img, { x: W - margin - 120, y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
   y = marksTop - (q.seal || q.signature ? 78 : 8);
