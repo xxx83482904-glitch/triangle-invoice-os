@@ -1,6 +1,10 @@
 import Decimal from 'decimal.js';
 import type { FeeResult } from './calculator';
 import type { Language } from './pricing';
+import chinaSeal from './assets/china-seal.json';
+
+export const CHINA_ISSUER = '上海多三角空间设计有限公司';
+export function createChinaSeal(): QuoteImage { return { ...chinaSeal }; }
 
 export type ServiceStage = { id: string; title: string; goal: string; items: string; deliverables: string; enabled: boolean };
 export type QuoteImage = { name: string; caption: string; data: string };
@@ -47,7 +51,7 @@ export function createQuotation(name: string, result: FeeResult, now = new Date(
     baseFee: String(result.baseFee), additionalFee: String(result.additionalFee), discount: '0', taxMode: 'unspecified', taxRate: '0',
     stages: structuredClone(zhStages), exclusions: zhExclusions,
     notes: '以上报价均以人民币计算，不含设计师赴现场配合的差旅费用。\n最终费用将根据实际项目面积及服务范围进行相应调整。', payment: '',
-    issuer: '上海多三角空间设计有限公司', address: '上海市静安区胶州路273弄60号现所一期', contact: '', representative: '吴胜人', images: [], seal: null, signature: null });
+    issuer: CHINA_ISSUER, address: '上海市静安区胶州路273弄60号现所一期', contact: '', representative: '吴胜人', images: [], seal: createChinaSeal(), signature: null });
 }
 
 export const MAX_MONEY = 999_999_999_999;

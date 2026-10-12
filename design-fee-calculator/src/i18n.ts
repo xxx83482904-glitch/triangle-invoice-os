@@ -8,7 +8,7 @@ const step = format(pricing.simulationStep);
 
 export const messages = {
   ja: {
-    title: '設計費を、明快に。', intro: '面積と用途から、設計費の目安を算出します。',
+    intro: '面積と用途から、設計費の目安を算出します。',
     inputs: 'プロジェクト条件', result: '設計費計算結果', name: 'プロジェクト名', area: '設計面積', type: 'プロジェクト種別',
     additional: '追加設計費', optional: '任意', additionalHint: '未入力は0元。1RMB単位で入力。',
     base: '基本設計費', average: '実質平均単価', total: '設計費総額', coefficient: '難易度係数',
@@ -35,7 +35,7 @@ export const messages = {
     errors: { required: '設計面積を入力してください。', invalid: '有効な数値を入力してください。', positive: '面積は0より大きく、追加設計費は0以上で入力してください。', whole: '追加設計費は1RMB単位の整数で入力してください。', range: '計算できる数値の範囲を超えています。' },
   },
   zh: {
-    title: '让设计费用，一目了然。', intro: '输入面积与项目类型，即时计算设计费用。',
+    intro: '输入面积与项目类型，即时计算设计费用。',
     inputs: '项目条件', result: '设计费用计算结果', name: '项目名称', area: '设计面积', type: '项目类型',
     additional: '附加设计费', optional: '选填', additionalHint: '留空按0元计算，以1RMB为单位输入。',
     base: '基础设计费', average: '平均设计单价', total: '设计费总额', coefficient: '难度系数',

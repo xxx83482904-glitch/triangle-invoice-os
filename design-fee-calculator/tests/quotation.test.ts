@@ -8,9 +8,9 @@ import { generateQuotationPdf } from '../src/quotationPdf';
 
 const draft = () => createQuotation('钛马赫新展厅', calculateRevisedFee(6300), new Date(2026, 9, 12));
 describe('quotation amounts and editable drafts', () => {
-  it('takes the exact calculator amount and starts without unrelated client data or marks', () => {
+  it('takes the exact calculator amount and starts with only the approved Chinese company seal', () => {
     const q = draft(); expect(quotationTotals(q).total).toBe(4143000); expect(quoteErrors(q)).toEqual([]);
-    expect(q.client).toBe(''); expect(q.images).toEqual([]); expect(q.seal).toBeNull(); expect(q.signature).toBeNull();
+    expect(q.client).toBe(''); expect(q.images).toEqual([]); expect(q.seal?.caption).toBe(q.issuer); expect(q.seal?.data).toMatch(/^data:image\/png;base64,/); expect(q.signature).toBeNull();
     expect(JSON.stringify(q)).not.toMatch(/TATA|550 元|首次合作优惠/);
   });
   it('keeps a snapshot independent of the calculator and permits commercial adjustments', () => {

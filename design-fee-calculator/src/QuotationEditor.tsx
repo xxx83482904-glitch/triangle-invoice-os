@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, Download, FileText, Plus, RefreshCw, Upload, X } from 'lucide-react';
-import { chineseMoney, clarifyRenderingScope, documentLabels, isPdfDrawing, parseQuotation, quotationTotals, quoteErrors, quoteFilename, type Quotation, type QuoteImage, type QuoteAttachment } from './quotation';
+import { CHINA_ISSUER, createChinaSeal, chineseMoney, clarifyRenderingScope, documentLabels, isPdfDrawing, parseQuotation, quotationTotals, quoteErrors, quoteFilename, type Quotation, type QuoteImage, type QuoteAttachment } from './quotation';
 import type { Language } from './pricing';
 import './quotation.css';
 
@@ -78,7 +78,11 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
     return () => clearTimeout(timer);
   }, [serialized]);
   useEffect(() => { return () => { if (pdf) URL.revokeObjectURL(pdf.url); }; }, [pdf]);
-  function set<K extends keyof Quotation>(key: K, value: Quotation[K]) { setQ(old => ({ ...old, [key]: value })); setNotice(''); setError(''); }
+  function set<K extends keyof Quotation>(key: K, value: Quotation[K]) {
+    setQ(old => ({ ...old, [key]: value,
+      ...(key === 'issuer' && value !== CHINA_ISSUER && old.seal?.data === createChinaSeal().data ? { seal: null } : {}),
+    })); setNotice(''); setError('');
+  }
   function input(key: keyof Quotation, label: string, opts: { multiline?: boolean; wide?: boolean; numeric?: boolean; type?: string } = {}) {
     return <Field label={label} wide={opts.wide}>{opts.multiline
       ? <textarea rows={4} maxLength={20000} value={q[key] as string} onChange={e => set(key, e.target.value)} />
@@ -180,8 +184,9 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
         </div></details>
         <details className="quote-section" open><summary>06 {j('発行者・印影・署名', '出具方、印章与签名')}</summary><div className="quote-fields">
           {input('issuer', j('発行会社', '出具公司'), { wide: true })}{input('address', j('住所', '地址'), { multiline: true, wide: true })}{input('contact', j('連絡先（任意）', '联系方式（可选）'), { wide: true })}{input('representative', j('発行者名', '负责人姓名'))}
-          <p className="small-note wide">{j('印影・署名は任意です。必要な場合のみ画像を追加してください。', '印章及签名为可选内容，请按需添加图片。')}</p>
-          {(['seal', 'signature'] as const).map(kind => <div key={kind}>{imageUpload(kind, kind === 'seal' ? j('印影を追加', '添加印章') : j('署名を追加', '添加签名'))}{q[kind] && <div className="quote-mark"><img src={q[kind]!.data} alt={kind === 'seal' ? j('印影', '印章') : j('署名', '签名')} /><button className="button" onClick={() => set(kind, null)}><X size={14} />{j('削除', '删除')}</button></div>}</div>)}
+          <p className="small-note wide">{j('印影は中国法人（上海多三角）のものを使用します。不要な場合は削除できます。署名は任意です。', '使用上海多三角的中国公司印章，不需要时可删除。签名为可选项。')}</p>
+          {!q.seal && q.issuer === CHINA_ISSUER && <div className="wide"><button type="button" className="button" disabled={busy} onClick={() => set('seal', createChinaSeal())}>{j('中国法人の印影を使用', '使用中国公司印章')}</button></div>}
+          {(['seal', 'signature'] as const).map(kind => <div key={kind}>{imageUpload(kind, kind === 'seal' ? j('中国法人の印影を変更', '更换中国公司印章') : j('署名を追加', '添加签名'))}{q[kind] && <div className="quote-mark"><img src={q[kind]!.data} alt={kind === 'seal' ? j('中国法人の印影', '中国公司印章') : j('署名', '签名')} /><button className="button" onClick={() => set(kind, null)}><X size={14} />{j('削除', '删除')}</button></div>}</div>)}
         </div></details>
       </fieldset>
       <aside className="quote-summary">

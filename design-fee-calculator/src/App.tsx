@@ -9,11 +9,11 @@ import { createQuotation, type Quotation } from './quotation';
 const QuotationEditor = lazy(() => import('./QuotationEditor'));
 
 const PAGE_SIZE = 50;
-const APP_RELEASE = '2026.10.12.2';
+const APP_RELEASE = '2026.10.12.3';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('ja');
-  const [name, setName] = useState('钛马赫新展厅');
+  const [name, setName] = useState('');
   const [area, setArea] = useState('6300');
   const [typeId, setTypeId] = useState('retail');
   const [additional, setAdditional] = useState('');
@@ -80,7 +80,7 @@ export default function App() {
 
       {quote ? <Suspense fallback={<p className="intro-text">Loading…</p>}><QuotationEditor initial={quote} lang={lang} onBack={() => setQuote(null)} /></Suspense> : <main>
         <div className="intro flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div><p className="eyebrow">DESIGN FEE CALCULATOR</p><h1>{t.title}</h1><p className="intro-text">{t.intro}</p></div>
+          <div><h1 className="eyebrow">DESIGN FEE CALCULATOR</h1><p className="intro-text">{t.intro}</p></div>
           <div className="quotation-entry">
             <button type="button" className="button primary" disabled={!result} onClick={openQuotation}>{lang === 'ja' ? '見積書を作成' : '制作报价单'} →</button>
             <p className="small-note">{lang === 'ja' ? 'PDF出力・図面添付・印影' : '导出PDF・附加图纸・印章'}</p>
