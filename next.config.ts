@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  async redirects() {
+    return [{ source: "/design-fee-calculator", destination: "/design-fee-calculator/index.html", permanent: false }];
+  },
   serverExternalPackages: ["pdfkit", "pdf-parse", "@napi-rs/canvas", "tesseract.js"],
   outputFileTracingIncludes: {
     "/api/estimates/*/pdf": ["./public/fonts/BIZUDMincho-Regular.ttf"],
