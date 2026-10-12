@@ -184,7 +184,7 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
         </div></details>
         <details className="quote-section" open><summary>06 {j('発行者・印影・署名', '出具方、印章与签名')}</summary><div className="quote-fields">
           {input('issuer', j('発行会社', '出具公司'), { wide: true })}{input('address', j('住所', '地址'), { multiline: true, wide: true })}{input('contact', j('連絡先（任意）', '联系方式（可选）'), { wide: true })}{input('representative', j('発行者名', '负责人姓名'))}
-          <p className="small-note wide">{j('印影は中国法人（上海多三角）のものを使用します。不要な場合は削除できます。署名は任意です。', '使用上海多三角的中国公司印章，不需要时可删除。签名为可选项。')}</p>
+          <p className="small-note wide">{j('印影は中国法人（上海多三角）のものを使用します。不要な場合は削除できます。PDFには印影の横に手書き用の署名欄が入ります。署名画像も追加できます。', '使用上海多三角的中国公司印章，不需要时可删除。PDF在印章旁保留手写签名栏，也可添加签名图片。')}</p>
           {!q.seal && q.issuer === CHINA_ISSUER && <div className="wide"><button type="button" className="button" disabled={busy} onClick={() => set('seal', createChinaSeal())}>{j('中国法人の印影を使用', '使用中国公司印章')}</button></div>}
           {(['seal', 'signature'] as const).map(kind => <div key={kind}>{imageUpload(kind, kind === 'seal' ? j('中国法人の印影を変更', '更换中国公司印章') : j('署名を追加', '添加签名'))}{q[kind] && <div className="quote-mark"><img src={q[kind]!.data} alt={kind === 'seal' ? j('中国法人の印影', '中国公司印章') : j('署名', '签名')} /><button className="button" onClick={() => set(kind, null)}><X size={14} />{j('削除', '删除')}</button></div>}</div>)}
         </div></details>

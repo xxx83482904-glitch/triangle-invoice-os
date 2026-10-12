@@ -9,7 +9,7 @@ import { createQuotation, type Quotation } from './quotation';
 const QuotationEditor = lazy(() => import('./QuotationEditor'));
 
 const PAGE_SIZE = 50;
-const APP_RELEASE = '2026.10.12.3';
+const APP_RELEASE = '2026.10.12.4';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('ja');

@@ -143,10 +143,12 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   }
   text(t.averageNote, 8, 13, font, true);
   if (q.taxMode === 'unspecified') text(t.unspecified, 8, 15, font, true);
-  const issuerWidth = q.seal || q.signature ? width - (q.seal && q.signature ? 240 : 140) : width;
+  const signatureWidth = 120;
+  const signatureX = W - margin - (q.seal ? 225 : signatureWidth);
+  const issuerWidth = width - (q.seal ? 240 : 140);
   const issuerHeight = wrap(q.issuer, 11, issuerWidth).length * 21 + wrap(q.address, 8.5, issuerWidth).length * 15
     + (q.contact ? wrap(q.contact, 8.5, issuerWidth).length * 15 : 0);
-  const marksHeight = q.seal ? 90 : q.signature ? 58 : 0;
+  const marksHeight = Math.max(q.seal ? 90 : 0, 88 + wrap(q.representative, 10, signatureWidth).length * 16);
   const termsHeight = 20 + 33 + 17 + wrap(q.notes, 9.5, width).length * 17
     + (q.payment.trim() ? 50 + wrap(q.payment, 9.5, width).length * 17 : 0);
   const closingHeight = termsHeight + 35 + Math.max(issuerHeight, marksHeight) + 33;
@@ -162,9 +164,14 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   // An unusually long editable address can spill; place marks after that overflow.
   if (page! !== issuerPage) { ensure(marksHeight + 33); marksTop = y; }
   if (q.seal) { const img = await embed(q.seal); const scale = Math.min(90 / img.width, 90 / img.height); page.drawImage(img, { x: W - margin - 90, y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
-  if (q.signature) { const img = await embed(q.signature); const scale = Math.min(120 / img.width, 58 / img.height); page.drawImage(img, { x: W - margin - (q.seal ? 225 : 120), y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
-  y = Math.min(y, marksTop - marksHeight) - 15;
-  x = W - margin - 120; measure = 120; text(q.representative, 11, 18); x = margin; measure = width;
+  // Reserve a handwriting field beside the seal even when no signature image is uploaded.
+  draw(q.language === 'zh' ? '签名' : '署名', signatureX, marksTop, 8.5, font, true);
+  if (q.signature) { const img = await embed(q.signature); const scale = Math.min(signatureWidth / img.width, 45 / img.height); page.drawImage(img, { x: signatureX, y: marksTop - 72, width: img.width * scale, height: img.height * scale }); }
+  rule(marksTop - 78, signatureX, signatureWidth);
+  const issuerEnd = y;
+  y = marksTop - 88; x = signatureX; measure = signatureWidth;
+  text(q.representative, 10, 16);
+  y = Math.min(issuerEnd, y, marksTop - marksHeight) - 15; x = margin; measure = width;
 
   // Each pair shares a spread. Overflow continues in the same column on a new page,
   // so one long editable stage can never overwrite its neighbour.

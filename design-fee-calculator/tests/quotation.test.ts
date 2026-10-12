@@ -107,7 +107,7 @@ describe('actual PDF documents', () => {
     q.notes = '長文の見積条件と業務範囲を確認してください。'.repeat(300); q.payment = '契約時50%\n納品時50%';
     q.taxMode = 'excluded'; q.taxRate = '6'; q.additionalFee = '25000'; q.discount = '10000';
     const image = { name: 'test.png', caption: '添付図面のテスト', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=' };
-    q.images = [image]; q.seal = image;
+    q.images = [image]; q.seal = image; q.signature = image;
     const bytes = await generateQuotationPdf(q, font); const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBeGreaterThan(4); writeFileSync('../tmp/pdfs/quotation-long.pdf', bytes);
   }, 30000);
