@@ -63,7 +63,7 @@ describe('RMB uppercase words', () => {
   ])('%s -> %s', (n, expected) => expect(chineseMoney(n as number)).toBe(expected));
 });
 describe('actual PDF documents', () => {
-  const font = readFileSync('public/fonts/NotoSansSC-Regular.ttf');
+  const font = { body: readFileSync('public/fonts/NotoSansSC-Regular.ttf'), regular: readFileSync('public/fonts/Montserrat-Regular.ttf'), bold: readFileSync('public/fonts/Montserrat-Bold.ttf') };
   it('creates an A4 document with embedded text and no mandatory server', async () => {
     const bytes = await generateQuotationPdf(draft(), font);
     const doc = await PDFDocument.load(bytes);
@@ -83,4 +83,15 @@ describe('actual PDF documents', () => {
   it('refuses invalid values before creating a customer-facing document', async () => {
     const q = draft(); q.baseFee = '-1'; await expect(generateQuotationPdf(q, font)).rejects.toThrow('validation');
   });
+  it('keeps independent columns paginated with long edited scope and a large quote', async () => {
+    const q = draft(); q.baseFee = '999999999999'; q.number = 'TR-2026-001';
+    q.project = '钛马赫新展厅 / 品牌体验中心与空间设计项目';
+    q.stages[0].items = Array.from({ length: 24 }, (_, i) => `第${i + 1}项：根据项目实际情况确认设计目标、材料与空间效果，并与委托方完成方案讨论。`).join('\n');
+    q.stages[1].items = q.stages[0].items;
+    q.stages[0].deliverables = '第一阶段最终成果，完整保留。';
+    q.stages[1].deliverables = '第二阶段最终成果，完整保留。';
+    const bytes = await generateQuotationPdf(q, font);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(5);
+    writeFileSync('../tmp/pdfs/quotation-columns.pdf', bytes);
+  }, 30000);
 });

@@ -6,7 +6,11 @@ In the calculator, choose 「この計算結果から見積書を作成」. Edit
 
 ## Template and fields
 
-The reference is the user-provided `260707_TATA木门_空间设计项目报价单_the triangle.jp.pdf`. Its structure is reproduced as A4 project overview and optional plan images, four design stages and deliverables, exclusions, and quotation/issuer page. The standard version is four pages; content expands onto further pages automatically.
+Service content is based on the user-provided `260707_TATA木门_空间设计项目报价单_the triangle.jp.pdf`. The visual design follows the vault's `wiki/concepts/THE TRIANGLE プレゼンフォーマット.md` (September 25 rules): pure white, #141414 ink, thin rules, generous whitespace, large headings with small English labels, and the original outlined footer wordmark. These presentation principles are adapted to printable A4.
+
+The standard quote has five pages: project/total cover; fees, conditions and issuer; two pairs of service stages in independent columns; exclusions. Drawings receive their own large-format appendix pages. Long edited text and columns paginate independently. No shaded cards, enclosed boxes or decorative stock images are used.
+
+The wordmark is exported unchanged from Figma file `moFKrQlW3JHnvwdspdyfA4`, node `180:26`. Its original SVG paths are bundled in `src/assets/triangle-wordmark.svg` and drawn as vectors in every PDF. It is not recreated with typed text. Typography uses Noto Sans SC and Montserrat (regular/bold), the substitutions specified in the vault. Original source PDF, seals and project drawings are not bundled.
 
 Editable: title, quote number, issue date, validity, client, project, service, period, area and area breakdown, designer, stage names/goals/items/deliverables, enabled stages, exclusions, payment terms, notes, issuer/address/contact/name, base fee, additional fee, discount, and tax treatment/rate. PNG/JPEG plans (up to 12), seal and signature are optional local uploads. Reference project diagrams and signatures are never bundled. The reference TATA project, 550 RMB unit rate and first-cooperation discount are not carried into new quotes.
 
@@ -30,8 +34,8 @@ Image inputs are converted locally, bounded to 1600px, limited to 12MB per sourc
 - PDF pagination/typography: `design-fee-calculator/src/quotationPdf.ts`.
 - Editor: `QuotationEditor.tsx`, `quotation.css`.
 - Font source/license: `design-fee-calculator/public/fonts/`.
-- `npm --prefix design-fee-calculator test`: 143 tests, including 32 new quotation tests.
-- Actual standard 4-page and long 8-page PDFs rendered and visually inspected with PyMuPDF. Font rendering, text extraction, totals and body bounds checked.
+- `npm --prefix design-fee-calculator test`: 144 tests, including 33 quotation tests.
+- Redesigned standard 5-page, long Japanese 10-page, and long-column/maximum-amount 7-page PDFs rendered and visually inspected with PyMuPDF. Font rendering, text extraction, totals, independent columns and body bounds checked.
 - Browser: adjusted total 4,407,480 RMB, actual downloaded PDF text, JSON download/import, invalid input, outdated PDF suppression, desktop and 390px mobile layout checked.
 
 Build and deploy through the existing NAS workflow: `npm run build:design-fees`, `npm run build`, then commit source and `public/design-fee-calculator/` together and push `main` when deployment is authorized. The source reference PDF and private test downloads are not published.

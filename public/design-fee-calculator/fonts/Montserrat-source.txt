@@ -1,0 +1,4 @@
+Montserrat Regular (400) and Bold (700)
+Static instances of https://github.com/google/fonts/blob/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf
+Generated with fontTools.varLib.instancer. Bundled under SIL Open Font License 1.1.
+See Montserrat-OFL.txt. Used for PDF Latin headings, labels and numerals.
