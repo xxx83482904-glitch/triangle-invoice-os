@@ -4,6 +4,10 @@ Requested on 2026-10-12. Deployment uses this repository's existing `Deploy Syno
 
 Entry URL: https://trianglejp14f.synology.me/design-fee-calculator
 
+Custom-domain URL (same NAS application): https://invoice.kuremasato.com/design-fee-calculator
+
+Editable quotation and PDF workflow: see `docs/quotation-editor.md`.
+
 The entry redirects to `/design-fee-calculator/index.html`. The calculator is an independent static React/Vite app. It needs no login, database, server API or external credentials. It does not read or modify Invoice OS financial records. Existing Invoice OS authentication is unchanged.
 
 ## Update

@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileSpreadsheet, X } from 'lucide-react';
 import { calculateCurrentFee, calculateRevisedFee, parseInput, projectType, simulationCount, simulationRows } from './calculator';
 import { chineseQuotation, copyText, MAX_COPY_ROWS, number, resultText, tableText } from './export';
 import { messages } from './i18n';
 import { pricing, type Language } from './pricing';
+import { createQuotation, type Quotation } from './quotation';
+
+const QuotationEditor = lazy(() => import('./QuotationEditor'));
 
 const PAGE_SIZE = 50;
 
@@ -16,6 +19,7 @@ export default function App() {
   const [page, setPage] = useState(0);
   const [copied, setCopied] = useState('');
   const [manual, setManual] = useState('');
+  const [quote, setQuote] = useState<Quotation | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const copyField = useRef<HTMLTextAreaElement>(null);
   const t = messages[lang];
@@ -68,7 +72,7 @@ export default function App() {
         </div>
       </header>
 
-      <main>
+      {quote ? <Suspense fallback={<p className="intro-text">Loading…</p>}><QuotationEditor initial={quote} lang={lang} onBack={() => setQuote(null)} /></Suspense> : <main>
         <div className="intro flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div><p className="eyebrow">DESIGN FEE CALCULATOR</p><h1>{t.title}</h1><p className="intro-text">{t.intro}</p></div>
           <span className="edition">{pricing.version} <span>/</span> {t.model}</span>
@@ -100,6 +104,7 @@ export default function App() {
               <button type="button" className="button primary" disabled={!result} onClick={() => void copy('result')}>{copyIcon('result')}{copied === 'result' ? t.copied : t.copyResult}</button>
               <button type="button" className="button" disabled={!result} onClick={() => void copy('chinese')}>{copyIcon('chinese')}{copied === 'chinese' ? t.copied : t.copyChinese}</button>
             </div>
+            <button type="button" className="button quote-launch" style={{ width: '100%', marginTop: 10 }} disabled={!result} onClick={() => { if (result) { setQuote(createQuotation(name, result)); window.scrollTo(0, 0); } }}>{lang === 'ja' ? 'この計算結果から見積書を作成' : '根据计算结果制作报价单'} →</button>
             <details className="disclosure breakdown">
               <summary>{t.breakdown}<ChevronDown size={16} /></summary>
               {result ? <div className="disclosure-content">
@@ -147,7 +152,7 @@ export default function App() {
           <summary>{t.settings}<ChevronDown size={18} /></summary>
           <div className="disclosure-content model-grid"><div><h3>{t.modelName}</h3><p className="small-note">{t.settingsNote}</p><p className="small-note">{t.floorNote}</p></div><dl className="detail-lines"><div><dt>{number(pricing.includedArea)}㎡{t.included}</dt><dd>{fee(pricing.minimumFee)}</dd></div>{pricing.revisedTiers.map((tier, index) => <div key={index}><dt>{number(index ? pricing.revisedTiers[index - 1].upTo! : pricing.includedArea)}{tier.upTo ? `–${number(tier.upTo)}㎡` : `㎡${t.over}`}</dt><dd>{number(tier.rate)} <span className="unit">RMB/㎡</span></dd></div>)}</dl></div>
         </details>
-      </main>
+      </main>}
 
       <footer className="site-footer flex flex-col sm:flex-row sm:justify-between gap-4"><div><p className="footer-brand">THE TRIANGLE.JP</p><p>{t.estimateNote}</p></div><span>DESIGN FEE / {pricing.version}</span></footer>
       <div className="toast" role="status" aria-live="polite">{copied && <><Check size={16} />{t.copied}</>}</div>
