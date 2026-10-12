@@ -73,10 +73,10 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
     // Keep the four-line hierarchy, with a bounded running title for long editable titles.
     const running = wrap(q.title, 8.5, width)[0];
     draw(running, margin, y, 8.5, font, true); y -= 16;
-    draw('DESIGN FEE QUOTATION', margin, y, 7, latin, true); y -= 34;
-    const titleLines = wrap(title, 22, width);
-    for (const line of titleLines) { draw(line, margin, y, 22); y -= 31; }
-    draw(english, margin, y, 8, latin); y -= 26; rule(y); y -= 27;
+    draw('DESIGN FEE QUOTATION', margin, y, 7, latin, true); y -= 25;
+    const titleLines = wrap(title, 15, width);
+    for (const line of titleLines) { draw(line, margin, y, 15); y -= 23; }
+    draw(english, margin, y, 7, latin, true); y -= 20; rule(y); y -= 22;
   }
   function section(title: string, english: string) {
     continuation = () => sectionPage(title, english); continuation();
@@ -93,32 +93,34 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
     x = margin + 120; measure = width - 120;
     text(value, 10, 17); y -= 12; x = margin; measure = width;
   }
-  function amountHero() {
-    ensure(130); text(t.total, 10, 24);
-    const value = money(totals.total), size = Math.min(46, (width - 48) / bold.widthOfTextAtSize(value, 1));
-    draw(value, margin, y, size, bold);
-    draw('RMB', margin + bold.widthOfTextAtSize(value, size) + 12, y - size + 12, 9, latin);
-    y -= size + 15;
-    text(`${t.upper}  ${chineseMoney(totals.total)}`, 9, 16); y -= 15;
+  function amountSummary() {
+    ensure(90);
+    const value = money(totals.total), size = Math.min(23, (width - 150) / bold.widthOfTextAtSize(value, 1));
+    const unitWidth = latin.widthOfTextAtSize('RMB', 8);
+    draw(t.total, margin, y - size + 10, 10);
+    draw(value, W - margin - unitWidth - 10 - bold.widthOfTextAtSize(value, size), y, size, bold);
+    draw('RMB', W - margin - unitWidth, y - size + 8, 8, latin);
+    y -= size + 14;
+    text(`${t.upper}  ${chineseMoney(totals.total)}`, 8.5, 15); y -= 15;
   }
   async function embed(img: QuoteImage) { return img.data.startsWith('data:image/png') ? pdf.embedPng(img.data) : pdf.embedJpg(img.data); }
 
-  // Cover: large type, an open information grid and the actual proposal amount.
+  // Business-document hierarchy: title, project particulars and aligned amount.
   page = pdf.addPage([W, H]); y = H - 48;
   draw('DESIGN SERVICES', margin, y, 8, latin); draw(q.date.replaceAll('-', '.'), W - margin - latin.widthOfTextAtSize(q.date.replaceAll('-', '.'), 8), y, 8, latin);
-  y -= 25; rule(y); y -= 43;
-  text('DESIGN FEE', 43, 49, bold); text('QUOTATION', 43, 49, bold);
-  y -= 10; text(q.title, 17, 25); y -= 43;
-  text(q.project, 28, 38); y -= 25;
+  y -= 25; rule(y); y -= 28;
+  text(q.title, 19, 29);
+  text('DESIGN FEE QUOTATION', 8, 17, latin, true); y -= 29;
+  text(q.project, 15, 23); y -= 22;
   field(t.client, q.client); field(t.number, q.number); field(t.service, q.service);
   const [whole, fraction] = q.area.split('.');
   field(t.area, `${money(Number(whole))}${fraction ? '.' + fraction : ''} ㎡`);
   field(t.period, q.period); field(t.areaNote, q.areaNote); field(t.designer, q.designer);
-  ensure(165); y = Math.min(y - 25, 260); rule(y); y -= 25; amountHero();
+  ensure(120); y -= 20; rule(y); y -= 22; amountSummary();
   if (q.taxMode === 'unspecified') text(t.unspecified, 8, 15, font, true);
 
   section(t.fees, 'FEES & TERMS');
-  amountHero();
+  amountSummary();
   function feeRow(name: string, value: string) {
     ensure(36);
     const valueWidth = latin.widthOfTextAtSize(value, 11);
@@ -169,11 +171,11 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
         page = pages[sheet]; y = starts[sheet]; x = margin + col * (colWidth + 31); measure = colWidth;
         draw(`${String(start + col + 1).padStart(2, '0')} / ${q.language === 'zh' ? '续' : '続き'}`, x, y, 9); y -= 26;
       };
-      text(String(start + col + 1).padStart(2, '0'), 31, 46, bold);
+      text(String(start + col + 1).padStart(2, '0'), 10, 22, bold);
       const parts = stage.title.match(/^(.*?)\s*[（(]([A-Za-z &]+)[）)]\s*$/);
-      text(parts ? parts[1] : stage.title, 17, 25);
+      text(parts ? parts[1] : stage.title, 12, 20);
       if (parts) text(parts[2].toUpperCase(), 7, 16, latin);
-      y -= 20; text(stage.goal, 10, 17); y -= 21;
+      y -= 12; text(stage.goal, 10, 17); y -= 16;
       const items = stage.items.split('\n').filter(s => s.trim());
       for (const [index, item] of items.entries()) {
         ensure(32); draw(String(index + 1).padStart(2, '0'), x, y - 1, 7, latin, true);

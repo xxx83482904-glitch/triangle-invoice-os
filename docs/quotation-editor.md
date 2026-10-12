@@ -6,7 +6,7 @@ In the calculator, choose 「この計算結果から見積書を作成」. Edit
 
 ## Template and fields
 
-Service content is based on the user-provided `260707_TATA木门_空间设计项目报价单_the triangle.jp.pdf`. The visual design follows the vault's `wiki/concepts/THE TRIANGLE プレゼンフォーマット.md` (September 25 rules): pure white, #141414 ink, thin rules, generous whitespace, large headings with small English labels, and the original outlined footer wordmark. These presentation principles are adapted to printable A4.
+Service content is based on the user-provided `260707_TATA木门_空间设计项目报价单_the triangle.jp.pdf`. The visual design follows the vault's `wiki/concepts/THE TRIANGLE プレゼンフォーマット.md` (September 25 rules): pure white, #141414 ink, thin rules, whitespace, small English labels, and the original outlined footer wordmark. At the user's request, typography is adapted to a business document: 19pt document title, 15pt project and section headings, 12pt stage headings and a right-aligned 23pt total. Body text remains approximately 9–10pt. Oversized English cover lettering and large stage numbers are removed.
 
 The standard quote has five pages: project/total cover; fees, conditions and issuer; two pairs of service stages in independent columns; exclusions. Drawings receive their own large-format appendix pages. Long edited text and columns paginate independently. No shaded cards, enclosed boxes or decorative stock images are used.
 
@@ -38,7 +38,7 @@ Image inputs are converted locally, bounded to 1600px and limited to 12MB per so
 - Font source/license: `design-fee-calculator/public/fonts/`.
 - `npm --prefix design-fee-calculator test`: 147 tests, including 36 quotation tests.
 - PDF attachments: multiple original pages, landscape A3, rotated A4, editable caption/JSON round trip, corrupt/oversized/overlong PDF rejection. Browser upload, reorder, seal transparency and downloaded combined PDF checked.
-- Redesigned standard 5-page, long Japanese 10-page, and long-column/maximum-amount 7-page PDFs rendered and visually inspected with PyMuPDF. Font rendering, text extraction, totals, independent columns and body bounds checked.
+- Redesigned standard 5-page, long Japanese 10-page, and long-column/maximum-amount 6-page PDFs rendered and visually inspected with PyMuPDF. Font rendering, text extraction, totals, independent columns and body bounds checked.
 - Browser: adjusted total 4,407,480 RMB, actual downloaded PDF text, JSON download/import, invalid input, outdated PDF suppression, desktop and 390px mobile layout checked.
 
 Build and deploy through the existing NAS workflow: `npm run build:design-fees`, `npm run build`, then commit source and `public/design-fee-calculator/` together and push `main` when deployment is authorized. The source reference PDF and private test downloads are not published.
