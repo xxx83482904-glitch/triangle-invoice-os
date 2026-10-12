@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  async headers() {
+    return ["/design-fee-calculator", "/design-fee-calculator/index.html"].map((source) => ({
+      source,
+      headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
+    }));
+  },
   async redirects() {
     return [{ source: "/design-fee-calculator", destination: "/design-fee-calculator/index.html", permanent: false }];
   },

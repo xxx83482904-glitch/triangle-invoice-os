@@ -9,6 +9,7 @@ import { createQuotation, type Quotation } from './quotation';
 const QuotationEditor = lazy(() => import('./QuotationEditor'));
 
 const PAGE_SIZE = 50;
+const APP_RELEASE = '2026.10.12.2';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('ja');
@@ -60,6 +61,11 @@ export default function App() {
   }
   const copyIcon = (kind: string) => copied === kind ? <Check size={16} /> : <Copy size={16} />;
   const fee = (value: number) => <>{number(value)} <span className="unit">RMB</span></>;
+  function openQuotation() {
+    if (!result) return;
+    setQuote(createQuotation(name, result));
+    window.scrollTo(0, 0);
+  }
 
   return (
     <div className="app-shell">
@@ -75,7 +81,11 @@ export default function App() {
       {quote ? <Suspense fallback={<p className="intro-text">Loading…</p>}><QuotationEditor initial={quote} lang={lang} onBack={() => setQuote(null)} /></Suspense> : <main>
         <div className="intro flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div><p className="eyebrow">DESIGN FEE CALCULATOR</p><h1>{t.title}</h1><p className="intro-text">{t.intro}</p></div>
-          <span className="edition">{pricing.version} <span>/</span> {t.model}</span>
+          <div className="quotation-entry">
+            <button type="button" className="button primary" disabled={!result} onClick={openQuotation}>{lang === 'ja' ? '見積書を作成' : '制作报价单'} →</button>
+            <p className="small-note">{lang === 'ja' ? 'PDF出力・図面添付・印影' : '导出PDF・附加图纸・印章'}</p>
+            <span className="edition">{lang === 'ja' ? '更新版' : '更新版本'} {APP_RELEASE}</span>
+          </div>
         </div>
 
         <div className="calculator-grid">
@@ -104,7 +114,7 @@ export default function App() {
               <button type="button" className="button primary" disabled={!result} onClick={() => void copy('result')}>{copyIcon('result')}{copied === 'result' ? t.copied : t.copyResult}</button>
               <button type="button" className="button" disabled={!result} onClick={() => void copy('chinese')}>{copyIcon('chinese')}{copied === 'chinese' ? t.copied : t.copyChinese}</button>
             </div>
-            <button type="button" className="button quote-launch" style={{ width: '100%', marginTop: 10 }} disabled={!result} onClick={() => { if (result) { setQuote(createQuotation(name, result)); window.scrollTo(0, 0); } }}>{lang === 'ja' ? 'この計算結果から見積書を作成' : '根据计算结果制作报价单'} →</button>
+            <button type="button" className="button quote-launch" style={{ width: '100%', marginTop: 10 }} disabled={!result} onClick={openQuotation}>{lang === 'ja' ? 'この計算結果から見積書を作成' : '根据计算结果制作报价单'} →</button>
             <details className="disclosure breakdown">
               <summary>{t.breakdown}<ChevronDown size={16} /></summary>
               {result ? <div className="disclosure-content">
@@ -154,7 +164,7 @@ export default function App() {
         </details>
       </main>}
 
-      <footer className="site-footer flex flex-col sm:flex-row sm:justify-between gap-4"><div><p className="footer-brand">THE TRIANGLE.JP</p><p>{t.estimateNote}</p></div><span>DESIGN FEE / {pricing.version}</span></footer>
+      <footer className="site-footer flex flex-col sm:flex-row sm:justify-between gap-4"><div><p className="footer-brand">THE TRIANGLE.JP</p><p>{t.estimateNote}</p></div><span>DESIGN FEE / {pricing.version}<br />APP {APP_RELEASE}</span></footer>
       <div className="toast" role="status" aria-live="polite">{copied && <><Check size={16} />{t.copied}</>}</div>
       <dialog ref={dialog} className="copy-dialog" onClose={() => setManual('')}>
         <div className="flex items-center justify-between"><h2>{t.manualCopy}</h2><button type="button" className="icon-button" aria-label={t.close} onClick={() => dialog.current?.close()}><X size={20} /></button></div>
