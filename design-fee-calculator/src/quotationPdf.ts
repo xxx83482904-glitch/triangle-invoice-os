@@ -9,7 +9,7 @@ export type QuotationFonts = { body: FontBytes; regular: FontBytes; bold: FontBy
 let fontPromise: Promise<QuotationFonts> | undefined;
 export async function loadQuoteFont() {
   if (!fontPromise) fontPromise = Promise.all(['NotoSansSC-Regular.ttf', 'Montserrat-Regular.ttf', 'Montserrat-Bold.ttf'].map(async name => {
-    const response = await fetch(`${import.meta.env.BASE_URL}fonts/${name}`);
+    const response = await fetch(`${import.meta.env.BASE_URL}fonts/${name}?v=2`);
     if (!response.ok) throw new Error('font');
     return response.arrayBuffer();
   })).then(([body, regular, bold]) => ({ body, regular, bold })).catch(e => { fontPromise = undefined; throw e; });
@@ -71,8 +71,11 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   function sectionPage(title: string, english: string) {
     page = pdf.addPage([W, H]); x = margin; measure = width; y = H - 45;
     // Keep the four-line hierarchy, with a bounded running title for long editable titles.
-    const running = wrap(q.title, 8.5, width)[0];
+    const running = wrap(q.title, 8.5, width * .55)[0];
     draw(running, margin, y, 8.5, font, true); y -= 16;
+    const projectLines = wrap(q.project, 8, width * .4 - 8);
+    const project = projectLines[0] + (projectLines.length > 1 ? '…' : '');
+    draw(project, W - margin - font.widthOfTextAtSize(project, 8), y + 16, 8, font, true);
     draw('DESIGN FEE QUOTATION', margin, y, 7, latin, true); y -= 25;
     const titleLines = wrap(title, 15, width);
     for (const line of titleLines) { draw(line, margin, y, 15); y -= 23; }
@@ -88,10 +91,10 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   function field(name: string, value: string) {
     if (!value.trim()) return;
     const rows = wrap(value, 10, width - 120);
-    ensure(Math.min(rows.length, 3) * 17 + 12);
+    ensure(Math.min(rows.length, 3) * 17 + 6);
     draw(name, margin, y, 8.5, font, true);
     x = margin + 120; measure = width - 120;
-    text(value, 10, 17); y -= 12; x = margin; measure = width;
+    text(value, 10, 17); y -= 6; x = margin; measure = width;
   }
   function amountSummary() {
     ensure(90);
@@ -110,16 +113,15 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   draw('DESIGN SERVICES', margin, y, 8, latin); draw(q.date.replaceAll('-', '.'), W - margin - latin.widthOfTextAtSize(q.date.replaceAll('-', '.'), 8), y, 8, latin);
   y -= 25; rule(y); y -= 28;
   text(q.title, 19, 29);
-  text('DESIGN FEE QUOTATION', 8, 17, latin, true); y -= 29;
-  text(q.project, 15, 23); y -= 22;
+  text('DESIGN FEE QUOTATION', 8, 17, latin, true); y -= 18;
+  text(q.project, 15, 23); y -= 16;
   field(t.client, q.client); field(t.number, q.number); field(t.service, q.service);
   const [whole, fraction] = q.area.split('.');
   field(t.area, `${money(Number(whole))}${fraction ? '.' + fraction : ''} ㎡`);
   field(t.period, q.period); field(t.areaNote, q.areaNote); field(t.designer, q.designer);
-  ensure(120); y -= 20; rule(y); y -= 22; amountSummary();
-  if (q.taxMode === 'unspecified') text(t.unspecified, 8, 15, font, true);
-
-  section(t.fees, 'FEES & TERMS');
+  // Keep the project and commercial summary together; long edits continue normally.
+  continuation = () => sectionPage(t.fees, 'FEES & TERMS');
+  ensure(125); y -= 12; rule(y); y -= 18;
   amountSummary();
   function feeRow(name: string, value: string) {
     ensure(36);
@@ -141,16 +143,24 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   }
   text(t.averageNote, 8, 13, font, true);
   if (q.taxMode === 'unspecified') text(t.unspecified, 8, 15, font, true);
-  y -= 20; label(t.notes, 'QUOTATION CONDITIONS');
-  text(`${t.validity}：${q.validDays}${t.days}`, 9.5, 17); text(q.notes, 9.5, 17);
-  if (q.payment.trim()) { y -= 17; label(t.payment, 'PAYMENT'); text(q.payment, 9.5, 17); }
   const issuerWidth = q.seal || q.signature ? width - (q.seal && q.signature ? 240 : 140) : width;
   const issuerHeight = wrap(q.issuer, 11, issuerWidth).length * 21 + wrap(q.address, 8.5, issuerWidth).length * 15
     + (q.contact ? wrap(q.contact, 8.5, issuerWidth).length * 15 : 0);
   const marksHeight = q.seal ? 90 : q.signature ? 58 : 0;
+  const termsHeight = 20 + 33 + 17 + wrap(q.notes, 9.5, width).length * 17
+    + (q.payment.trim() ? 50 + wrap(q.payment, 9.5, width).length * 17 : 0);
+  const closingHeight = termsHeight + 35 + Math.max(issuerHeight, marksHeight) + 33;
+  // Keep ordinary conditions with the issuer instead of creating a seal-only page.
+  if (closingHeight <= 500) ensure(closingHeight);
+  y -= 20; label(t.notes, 'QUOTATION CONDITIONS');
+  text(`${t.validity}：${q.validDays}${t.days}`, 9.5, 17); text(q.notes, 9.5, 17);
+  if (q.payment.trim()) { y -= 17; label(t.payment, 'PAYMENT'); text(q.payment, 9.5, 17); }
   ensure(Math.min(35 + Math.max(issuerHeight, marksHeight) + 33, 240)); y -= 20; rule(y); y -= 15;
-  const marksTop = y;
+  const issuerPage = page!;
+  let marksTop = y;
   measure = issuerWidth; text(q.issuer, 11, 21); text(q.address, 8.5, 15); if (q.contact) text(q.contact, 8.5, 15);
+  // An unusually long editable address can spill; place marks after that overflow.
+  if (page! !== issuerPage) { ensure(marksHeight + 33); marksTop = y; }
   if (q.seal) { const img = await embed(q.seal); const scale = Math.min(90 / img.width, 90 / img.height); page.drawImage(img, { x: W - margin - 90, y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
   if (q.signature) { const img = await embed(q.signature); const scale = Math.min(120 / img.width, 58 / img.height); page.drawImage(img, { x: W - margin - (q.seal ? 225 : 120), y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
   y = Math.min(y, marksTop - marksHeight) - 15;
@@ -161,13 +171,14 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   const stages = q.stages.filter(s => s.enabled);
   for (let start = 0; start < stages.length; start += 2) {
     section(t.scope, 'SCOPE OF SERVICES');
-    const pages = [page!], starts = [y], colWidth = (width - 31) / 2;
+    const pages = [page!], starts = [y], ends = [y], colWidth = (width - 31) / 2;
     for (let col = 0; col < 2 && stages[start + col]; col++) {
       const stage = stages[start + col]; let sheet = 0;
       page = pages[0]; y = starts[0]; x = margin + col * (colWidth + 31); measure = colWidth;
       continuation = () => {
+        ends[sheet] = Math.min(ends[sheet], y);
         sheet++;
-        if (!pages[sheet]) { sectionPage(t.scope, 'SCOPE OF SERVICES'); pages.push(page); starts.push(y); }
+        if (!pages[sheet]) { sectionPage(t.scope, 'SCOPE OF SERVICES'); pages.push(page); starts.push(y); ends.push(y); }
         page = pages[sheet]; y = starts[sheet]; x = margin + col * (colWidth + 31); measure = colWidth;
         draw(`${String(start + col + 1).padStart(2, '0')} / ${q.language === 'zh' ? '续' : '続き'}`, x, y, 9); y -= 26;
       };
@@ -178,20 +189,28 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
       y -= 12; text(stage.goal, 10, 17); y -= 16;
       const items = stage.items.split('\n').filter(s => s.trim());
       for (const [index, item] of items.entries()) {
-        ensure(32); draw(String(index + 1).padStart(2, '0'), x, y - 1, 7, latin, true);
-        const origin = x; x += 22; measure -= 22; text(item, 9.3, 15.5); x = origin; measure = colWidth; y -= 8;
+        ensure(34); draw(String(index + 1).padStart(2, '0'), x, y - 1, 8, latin, true);
+        const origin = x; x += 22; measure -= 22; text(item, 10, 16.5); x = origin; measure = colWidth; y -= 8;
       }
       if (stage.deliverables.trim()) {
         ensure(65); y -= 12; rule(y, x, colWidth); y -= 14;
-        label(t.deliverables); text(stage.deliverables, 9.3, 16);
+        label(t.deliverables); text(stage.deliverables, 10, 17);
       }
+      ends[sheet] = Math.min(ends[sheet], y);
     }
-    x = margin; measure = width;
+    page = pages[pages.length - 1]; y = ends[ends.length - 1]; x = margin; measure = width;
   }
   if (q.exclusions.trim()) {
     section(t.exclusions, 'EXCLUSIONS');
     for (const paragraph of q.exclusions.split('\n').filter(p => p.trim())) {
-      ensure(60); text(paragraph, 10.5, 20); y -= 19;
+      const numbered = paragraph.match(/^(\d+)[.．、]\s*(.*)$/);
+      const body = numbered ? numbered[2] : paragraph;
+      const inset = numbered ? 22 : 0;
+      const height = wrap(body, 10, width - inset).length * 18;
+      ensure(Math.min(height + 16, 100));
+      if (numbered) draw(numbered[1].padStart(2, '0'), margin, y - 1, 8, latin, true);
+      x = margin + inset; measure = width - inset;
+      text(body, 10, 18); y -= 16; x = margin; measure = width;
     }
   }
   const originalDrawingPages = new Set<PDFPage>();

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, Download, FileText, Plus, RefreshCw, Upload, X } from 'lucide-react';
-import { chineseMoney, documentLabels, isPdfDrawing, parseQuotation, quotationTotals, quoteErrors, quoteFilename, type Quotation, type QuoteImage, type QuoteAttachment } from './quotation';
+import { chineseMoney, clarifyRenderingScope, documentLabels, isPdfDrawing, parseQuotation, quotationTotals, quoteErrors, quoteFilename, type Quotation, type QuoteImage, type QuoteAttachment } from './quotation';
 import type { Language } from './pricing';
 import './quotation.css';
 
@@ -59,6 +59,8 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
   const [pdf, setPdf] = useState<{ url: string; draft: string; filename: string } | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const serialized = JSON.stringify(q);
+  const clarified = clarifyRenderingScope(q);
+  const hasLegacyRenderingCopy = JSON.stringify(clarified) !== serialized;
   const isCurrentPdf = pdf?.draft === serialized;
   const t = documentLabels[q.language];
   const errors = quoteErrors(q);
@@ -103,7 +105,7 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
   }
   async function addImages(files: FileList | null, kind: 'images' | 'seal' | 'signature') {
     if (!files?.length) return;
-    if (kind === 'images' && q.images.length + files.length > 12) { setError(j('図面は12枚までです。', '最多可添加12张图纸。')); return; }
+    if (kind === 'images' && q.images.length + files.length > 12) { setError(j('図面は12ファイルまでです。', '最多可添加12个图纸文件。')); return; }
     setBusy(true); setError('');
     try {
       const items: QuoteAttachment[] = [];
@@ -142,6 +144,7 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
       <button className="button" disabled={busy} onClick={() => { download(new Blob([serialized], { type: 'application/json' }), quoteFilename(q, 'json')); setQ({ ...structuredClone(initial), seal: q.issuer === initial.issuer ? q.seal : null }); setNotice(j('前の下書きを保存し、新規作成しました。同じ発行会社の印影は引き継いでいます。', '已保存旧草稿并新建；同一出具公司的印章予以保留。')); }}><Plus size={16} />{j('下書きを保存して新規作成', '保存草稿并新建')}</button>
     </div>
     <p className={storageError ? 'error' : 'small-note'}>{storageError ? j('端末への自動保存ができません。下書き保存でファイルを保存してください。', '自动保存失败，请将草稿保存为文件。') : j('このブラウザーに自動保存します。図面・印影を含む入力内容はサーバーへ送信しません。案件別の保管には「下書き保存」を使用してください。', '自动保存在此浏览器；输入内容及图片不上传服务器。请用“保存草稿”分项目归档。')}</p>
+    {hasLegacyRenderingCopy && <div className="quote-copy-update"><p className="small-note">{j('保存済みの下書きに、完成予想図と別途CG制作の区分が曖昧な旧文面があります。通常の完成予想図は基本設計費に含み、範囲外の特別なCG・映像制作のみ別途と明記できます。', '草稿中的旧条款尚未区分常规效果图与额外CG制作。可明确：常规效果图包含在基础设计费内，超出服务范围的特殊CG或影像制作另计。')}</p><button className="button" disabled={busy} onClick={() => { setQ(clarified); setNotice(j('完成予想図の費用区分を更新しました。金額は変更していません。', '已更新效果图费用范围，报价金额不变。')); }}>{j('確認済みの文面修正を適用', '应用已确认的条款修订')}</button></div>}
     <div className="quote-layout">
       <fieldset className="quote-form" disabled={busy}>
         <details className="quote-section" open><summary>01 {j('案件・書類情報', '项目与文件信息')}</summary><div className="quote-fields">
@@ -151,7 +154,7 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
           {input('service', j('サービス内容', '服务内容'))}{input('period', j('業務期間（任意）', '服务周期（可选）'))}
           {input('area', j('設計面積（㎡）', '设计面积（㎡）'), { numeric: true })}{input('designer', j('担当デザイナー', '主设计师'))}
           {input('areaNote', j('面積内訳・対象フロア（任意）', '面积明细及楼层（可选）'), { multiline: true, wide: true })}
-          <p className="small-note wide">{j('言語切替は項目見出しに適用します。表題と本文は自由に編集してください。初期本文は参考資料と同じ中国語です。', '语言切换仅影响栏目标签；标题和正文可自由编辑。初始正文与参考文件一致，采用中文。')}</p>
+          <p className="small-note wide">{j('言語切替は項目見出しに適用します。表題と本文は自由に編集してください。初期本文は参考資料を基にした中国語です。', '语言切换仅影响栏目标签；标题和正文可自由编辑。初始正文以参考文件为基础，采用中文。')}</p>
         </div></details>
         <details className="quote-section" open><summary>02 {j('添付図面', '附件图纸')} ({q.images.length})</summary><div className="quote-section-body">
           <p className="small-note">{j('PDF・PNG・JPEGを12ファイルまで添付できます。PDFは8MB・50ページ以内、画像は12MB以内。選んだ順に見積書の末尾へ追加します。PDFは原本の用紙サイズ・向きを保ちます。', '可添加最多12个PDF、PNG或JPEG文件。PDF每个限8MB、50页，图片限12MB。按显示顺序附在报价末尾，PDF保留原始纸张尺寸和方向。')}</p>{imageUpload('images', j('図面をアップロード', '上传图纸'))}

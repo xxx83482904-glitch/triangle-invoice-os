@@ -4,6 +4,8 @@
 .quote-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 12px; }
 .quote-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 48px; margin-top: 30px; align-items: start; }
 .quote-form { border: 0; padding: 0; margin: 0; min-width: 0; }
+.quote-copy-update { border-top: 1px solid var(--line); padding: 16px 0; margin-top: 20px; }
+.quote-copy-update p { max-width: 70em; }
 .quote-section { border-top: 1px solid var(--line); }
 .quote-section:last-child { border-bottom: 1px solid var(--line); }
 .quote-section > summary { padding: 22px 0; font-size: 14px; font-weight: 600; }

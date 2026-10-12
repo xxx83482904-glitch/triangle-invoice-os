@@ -3,7 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { PDFDocument, StandardFonts, degrees } from 'pdf-lib';
 import { readPdfDrawing } from '../src/quotationAttachments';
 import { calculateRevisedFee } from '../src/calculator';
-import { chineseMoney, createQuotation, parseQuotation, quotationTotals, quoteErrors, quoteFilename } from '../src/quotation';
+import { chineseMoney, clarifyRenderingScope, createQuotation, parseQuotation, quotationTotals, quoteErrors, quoteFilename } from '../src/quotation';
 import { generateQuotationPdf } from '../src/quotationPdf';
 
 const draft = () => createQuotation('钛马赫新展厅', calculateRevisedFee(6300), new Date(2026, 9, 12));
@@ -54,6 +54,22 @@ describe('quotation amounts and editable drafts', () => {
     q.images[0].data = 'data:image/svg+xml;base64,aGVsbG8='; expect(() => parseQuotation(JSON.stringify(q))).toThrow();
   });
   it('sanitizes a saved filename', () => { const q = draft(); q.project = 'a/b:c'; expect(quoteFilename(q, 'pdf')).toBe('2026-10-12_a_b_c_quotation.pdf'); });
+  it('makes ordinary renders included and only additional special CG separately quoted', () => {
+    const q = draft();
+    expect(q.stages[1].items).toContain('常规效果图制作（包含在基础设计费内）');
+    expect(q.exclusions).toContain('经甲方书面确认的特殊CG或影像制作费用');
+    expect(clarifyRenderingScope(q)).toEqual(q);
+  });
+  it('clarifies legacy reference wording explicitly without changing custom copy or amounts', () => {
+    const q = draft(); q.stages[1].items = '效果图制作\n效果图制作：另行协商';
+    q.exclusions = '5. 环境素材及特殊技术费用：包括摄影、插图、渲染及其他特定技术性制作费用。\n自定义条款：保持原文';
+    expect(parseQuotation(JSON.stringify(q)).exclusions).toBe(q.exclusions);
+    const next = clarifyRenderingScope(q);
+    expect(next.stages[1].items).toContain('效果图制作：另行协商');
+    expect(next.exclusions).toContain('自定义条款：保持原文');
+    expect(quotationTotals(next)).toEqual(quotationTotals(q));
+    expect(q.stages[1].items).toBe('效果图制作\n效果图制作：另行协商');
+  });
 });
 describe('RMB uppercase words', () => {
   it.each([
@@ -65,10 +81,24 @@ describe('RMB uppercase words', () => {
 });
 describe('actual PDF documents', () => {
   const font = { body: readFileSync('public/fonts/NotoSansSC-Regular.ttf'), regular: readFileSync('public/fonts/Montserrat-Regular.ttf'), bold: readFileSync('public/fonts/Montserrat-Bold.ttf') };
+  it('keeps TrueType glyph offsets even so small font subsets cannot truncate outlines', () => {
+    for (const bytes of Object.values(font)) {
+      const tables = new Map<string, number>();
+      for (let i = 0; i < bytes.readUInt16BE(4); i++) {
+        const at = 12 + i * 16; tables.set(bytes.toString('ascii', at, at + 4), bytes.readUInt32BE(at + 8));
+      }
+      const format = bytes.readInt16BE(tables.get('head')! + 50);
+      const glyphs = bytes.readUInt16BE(tables.get('maxp')! + 4), loca = tables.get('loca')!;
+      for (let i = 0; i <= glyphs; i++) {
+        const offset = format === 0 ? bytes.readUInt16BE(loca + i * 2) * 2 : bytes.readUInt32BE(loca + i * 4);
+        expect(offset % 2).toBe(0);
+      }
+    }
+  });
   it('creates an A4 document with embedded text and no mandatory server', async () => {
     const bytes = await generateQuotationPdf(draft(), font);
     const doc = await PDFDocument.load(bytes);
-    expect(doc.getPageCount()).toBeGreaterThanOrEqual(4); expect(doc.getPage(0).getWidth()).toBeCloseTo(595.28);
+    expect(doc.getPageCount()).toBe(4); expect(doc.getPage(0).getWidth()).toBeCloseTo(595.28);
     expect(doc.getTitle()).toContain('钛马赫新展厅');
     mkdirSync('../tmp/pdfs', { recursive: true }); writeFileSync('../tmp/pdfs/quotation-standard.pdf', bytes);
   }, 30000);
@@ -99,8 +129,23 @@ describe('actual PDF documents', () => {
     q.stages[0].deliverables = '第一阶段最终成果，完整保留。';
     q.stages[1].deliverables = '第二阶段最终成果，完整保留。';
     const bytes = await generateQuotationPdf(q, font);
-    expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(5);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(4);
     writeFileSync('../tmp/pdfs/quotation-columns.pdf', bytes);
+  }, 30000);
+  it('keeps marks after an issuer address that continues onto another page', async () => {
+    const q = draft(); q.address = Array.from({ length: 55 }, (_, i) => `地址补充第${i + 1}行`).join('\n');
+    q.seal = { name: 'seal.png', caption: '', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=' };
+    const bytes = await generateQuotationPdf(q, font);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(4);
+    writeFileSync('../tmp/pdfs/quotation-issuer-overflow.pdf', bytes);
+  }, 30000);
+  it('places the attachment index after an asymmetric scope overflow with no exclusions', async () => {
+    const q = draft(); q.stages = q.stages.slice(0, 2); q.exclusions = '';
+    q.stages[0].items = Array.from({ length: 42 }, (_, i) => `第${i + 1}项：确认设计目标与材料，并完成方案讨论。`).join('\n');
+    q.images = [{ name: 'plan.png', caption: 'ATTACHMENT INDEX AFTER SCOPE', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=' }];
+    const bytes = await generateQuotationPdf(q, font);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(3);
+    writeFileSync('../tmp/pdfs/quotation-asymmetric.pdf', bytes);
   }, 30000);
   it('appends original PDF drawings in order with their size, rotation and editable caption', async () => {
     const source = await PDFDocument.create(), face = await source.embedFont(StandardFonts.Helvetica);

@@ -21,6 +21,17 @@ export const documentLabels = {
   ja: { overview: 'プロジェクト概要', client: '宛先', project: 'プロジェクト名', service: 'サービス内容', period: '予定業務期間', area: '設計面積', areaNote: '面積内訳', designer: '担当デザイナー', number: '見積番号', date: '発行日', scope: '設計業務の内容', goal: '段階の目的', deliverables: '成果物', exclusions: '別途費用・含まれない業務', fees: '設計費見積', base: '基本設計費', additional: '追加設計費', discount: '金額調整（減額）', subtotal: '設計費小計', average: '実質平均単価', total: '設計費総額', upper: '人民元大写', tax: '税額', included: '内税額', unspecified: '税の扱い：双方確認のうえ決定。', payment: '支払条件', notes: '見積条件', validity: '有効期間', days: '日間（発行日から）', averageNote: '平均単価＝基本設計費÷設計面積。参考値であり、総額の計算には使用しません。', adjustmentNote: '見積金額は以下のとおりです。', draft: '未定' },
 };
 
+const legacyRenderingExclusion = '5. 环境素材及特殊技术费用：包括摄影、插图、渲染及其他特定技术性制作费用。';
+const renderingExclusion = '5. 环境素材及特殊技术费用：包括摄影、插图，以及超出本报价所列设计服务范围、经甲方书面确认的特殊CG或影像制作费用。本报价所列常规效果图制作已包含在基础设计费内。';
+
+/** Apply the user-approved clarification only to unchanged reference wording. */
+export function clarifyRenderingScope(q: Quotation): Quotation {
+  return { ...q,
+    stages: q.stages.map(s => ({ ...s, items: s.items.split('\n').map(line => line === '效果图制作' ? '常规效果图制作（包含在基础设计费内）' : line).join('\n') })),
+    exclusions: q.exclusions.split('\n').map(line => line === legacyRenderingExclusion ? renderingExclusion : line).join('\n'),
+  };
+}
+
 const zhStages: ServiceStage[] = [
   { id: 'concept', enabled: true, title: '概念设计阶段（Concept Design）', goal: '明确品牌与空间定位，建立整体设计概念与空间氛围方向，为后续深化提供创意基础。', items: '项目内容及品牌特性调研与分析\n设计方向与空间主题概念构思\n提供讨论用的概念图片\n关键设计元素及材质意向表达\n初步空间功能分区与动线规划\n平面概念方案与逻辑说明\n入口、主要动线及核心展示区概念设计\n灯光概念设计与照明策略说明\n概念设计汇报资料制作（含设计意图、参考图像及空间氛围说明）', deliverables: '概念设计汇报文本（PDF）' },
   { id: 'schematic', enabled: true, title: '方案设计阶段（Schematic Design）', goal: '将概念方案具体化，形成具备功能性、表现力及可行性的空间设计方案。', items: '空间方案深化与设计逻辑说明\n平面图绘制（含动线、功能区比例）\n立面与空间造型设计\n材料、色彩与灯光氛围初步提案\n效果图制作\n重点空间剖析与设计说明\n配合确定法规条例，确认落地可行性\n配合消防许可确认\n方案设计汇报资料制作（含效果图与材料意向）', deliverables: '方案设计汇报文本（PDF）\n平面图纸（CAD/PDF）' },
@@ -31,12 +42,12 @@ const zhExclusions = '以下费用不包含在本次报价总金额内，如有�
 
 export function createQuotation(name: string, result: FeeResult, now = new Date()): Quotation {
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  return { version: 1, language: 'zh', title: '空间设计项目报价单', number: '', date, validDays: '30', client: '', project: name,
+  return clarifyRenderingScope({ version: 1, language: 'zh', title: '空间设计项目报价单', number: '', date, validDays: '30', client: '', project: name,
     service: '室内装修设计服务', period: '', area: String(result.area), areaNote: '', designer: '吴胜人 KURE Masato',
     baseFee: String(result.baseFee), additionalFee: String(result.additionalFee), discount: '0', taxMode: 'unspecified', taxRate: '0',
     stages: structuredClone(zhStages), exclusions: zhExclusions,
     notes: '以上报价均以人民币计算，不含设计师赴现场配合的差旅费用。\n最终费用将根据实际项目面积及服务范围进行相应调整。', payment: '',
-    issuer: '上海多三角空间设计有限公司', address: '上海市静安区胶州路273弄60号现所一期', contact: '', representative: '吴胜人', images: [], seal: null, signature: null };
+    issuer: '上海多三角空间设计有限公司', address: '上海市静安区胶州路273弄60号现所一期', contact: '', representative: '吴胜人', images: [], seal: null, signature: null });
 }
 
 export const MAX_MONEY = 999_999_999_999;

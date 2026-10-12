@@ -8,7 +8,7 @@ In the calculator, choose 「この計算結果から見積書を作成」. Edit
 
 Service content is based on the user-provided `260707_TATA木门_空间设计项目报价单_the triangle.jp.pdf`. The visual design follows the vault's `wiki/concepts/THE TRIANGLE プレゼンフォーマット.md` (September 25 rules): pure white, #141414 ink, thin rules, whitespace, small English labels, and the original outlined footer wordmark. At the user's request, typography is adapted to a business document: 19pt document title, 15pt project and section headings, 12pt stage headings and a right-aligned 23pt total. Body text remains approximately 9–10pt. Oversized English cover lettering and large stage numbers are removed.
 
-The standard quote has five pages: project/total cover; fees, conditions and issuer; two pairs of service stages in independent columns; exclusions. Drawings receive their own large-format appendix pages. Long edited text and columns paginate independently. No shaded cards, enclosed boxes or decorative stock images are used.
+The standard quote has four pages: project, fees, conditions and issuer together; two pairs of service stages in independent columns; exclusions. Long commercial details add continuation pages, keeping ordinary conditions and the issuer together. Continuation pages identify the project, and numbered exclusions use a hanging indent. Drawings receive their own appendix pages. Long edited text and columns paginate independently. No shaded cards, enclosed boxes or decorative stock images are used.
 
 The wordmark is exported unchanged from Figma file `moFKrQlW3JHnvwdspdyfA4`, node `180:26`. Its original SVG paths are bundled in `src/assets/triangle-wordmark.svg` and drawn as vectors in every PDF. It is not recreated with typed text. Typography uses Noto Sans SC and Montserrat (regular/bold), the substitutions specified in the vault. Original source PDF, seals and project drawings are not bundled.
 
@@ -36,9 +36,17 @@ Image inputs are converted locally, bounded to 1600px and limited to 12MB per so
 - PDF pagination/typography: `design-fee-calculator/src/quotationPdf.ts`.
 - Editor: `QuotationEditor.tsx`, `quotation.css`.
 - Font source/license: `design-fee-calculator/public/fonts/`.
-- `npm --prefix design-fee-calculator test`: 147 tests, including 36 quotation tests.
+- `npm --prefix design-fee-calculator test`: 152 tests, including 41 quotation tests.
 - PDF attachments: multiple original pages, landscape A3, rotated A4, editable caption/JSON round trip, corrupt/oversized/overlong PDF rejection. Browser upload, reorder, seal transparency and downloaded combined PDF checked.
-- Redesigned standard 5-page, long Japanese 10-page, and long-column/maximum-amount 6-page PDFs rendered and visually inspected with PyMuPDF. Font rendering, text extraction, totals, independent columns and body bounds checked.
+- Redesigned standard 4-page, long Japanese 9-page, and long-column/maximum-amount 5-page PDFs rendered and visually inspected with PyMuPDF. Font rendering, text extraction, totals, independent columns and body bounds checked.
 - Browser: adjusted total 4,407,480 RMB, actual downloaded PDF text, JSON download/import, invalid input, outdated PDF suppression, desktop and 390px mobile layout checked.
 
 Build and deploy through the existing NAS workflow: `npm run build:design-fees`, `npm run build`, then commit source and `public/design-fee-calculator/` together and push `main` when deployment is authorized. The source reference PDF and private test downloads are not published.
+
+## October 12 content and rendering review
+
+The user confirmed ordinary renderings are included in the base fee; only special CG or film production outside the stated scope is separately quoted with written client confirmation. New quotes use this clarification. Existing drafts offer an explicit update action for exact, unchanged legacy clauses; customized text, prices and attachments are preserved. Import alone never rewrites terms.
+
+A small CJK subset exposed truncated TrueType glyph offsets: fontkit selects short `loca` offsets for small subsets, while odd source offsets were truncated. Bundled TTF glyph storage is now aligned to two bytes, preserving outlines and metrics. Run `python scripts/normalize-quote-fonts.py` (fontTools required) after replacing fonts. The font URL revision invalidates cached older font files. Tests guard alignment; all embedded glyphs in seven generated document variants were decoded and rendered successfully.
+
+Overflow checks cover a long issuer address with seal and an asymmetric two-column scope followed immediately by an attachment index. Marks follow the completed address, and the index follows the last scope continuation.
