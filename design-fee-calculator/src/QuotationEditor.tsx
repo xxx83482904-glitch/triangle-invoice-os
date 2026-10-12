@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, Download, FileText, Plus, RefreshCw, Upload, X } from 'lucide-react';
-import { chineseMoney, documentLabels, parseQuotation, quotationTotals, quoteErrors, quoteFilename, type Quotation, type QuoteImage } from './quotation';
+import { ArrowDown, ArrowLeft, ArrowUp, Download, FileText, Plus, RefreshCw, Upload, X } from 'lucide-react';
+import { chineseMoney, documentLabels, isPdfDrawing, parseQuotation, quotationTotals, quoteErrors, quoteFilename, type Quotation, type QuoteImage, type QuoteAttachment } from './quotation';
 import type { Language } from './pricing';
 import './quotation.css';
 
@@ -28,6 +28,21 @@ async function readImage(file: File): Promise<QuoteImage> {
 
 function Field({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
   return <label className={`quote-field${wide ? ' wide' : ''}`}><span>{label}</span>{children}</label>;
+}
+
+function DrawingPreview({ item }: { item: QuoteAttachment }) {
+  const [url, setUrl] = useState('');
+  const data = item.data, pdf = isPdfDrawing(item);
+  useEffect(() => {
+    if (!pdf) { setUrl(''); return; }
+    const binary = atob(data.slice(data.indexOf(',') + 1));
+    const next = URL.createObjectURL(new Blob([Uint8Array.from(binary, c => c.charCodeAt(0))], { type: 'application/pdf' }));
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [data, pdf]);
+  return isPdfDrawing(item)
+    ? <div className="quote-pdf-drawing"><FileText size={28} /><span>PDF · {item.pages} p.</span><a className="button" href={url} target="_blank" rel="noreferrer">{item.name}</a></div>
+    : <img src={item.data} alt={item.caption || item.name} />;
 }
 
 export default function QuotationEditor({ initial, lang, onBack }: { initial: Quotation; lang: Language; onBack: () => void }) {
@@ -91,28 +106,40 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
     if (kind === 'images' && q.images.length + files.length > 12) { setError(j('図面は12枚までです。', '最多可添加12张图纸。')); return; }
     setBusy(true); setError('');
     try {
-      const items = await Promise.all(Array.from(files).map(readImage));
+      const items: QuoteAttachment[] = [];
+      for (const file of Array.from(files)) {
+        if (kind === 'images' && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) {
+          const { readPdfDrawing } = await import('./quotationAttachments');
+          items.push(await readPdfDrawing(file));
+        } else items.push(await readImage(file));
+      }
       const next = { ...q, [kind]: kind === 'images' ? [...q.images, ...items] : items[0] };
-      if (JSON.stringify(next).length > 11_000_000) throw new Error('image');
+      if (JSON.stringify(next).length > 11_000_000) throw new Error('total-size');
       setQ(next);
+      setNotice(j('添付しました。PDFを再作成すると反映されます。', '已添加附件，重新生成PDF后生效。'));
     }
-    catch { setError(j('画像はPNG/JPEG、1枚12MB以下で追加してください。', '请使用每张不超过12MB的PNG/JPEG图片。')); }
+    catch (e) {
+      const code = (e as Error).message;
+      setError(code === 'total-size' ? j('添付の合計サイズが大きすぎます。PDFを圧縮するか、図面を減らしてください。', '附件总大小过大，请压缩PDF或减少图纸。')
+        : code.startsWith('pdf') ? j('PDFは1ファイル8MB・50ページ以内です。パスワード保護のない有効なPDFを選んでください。', '每个PDF须在8MB、50页以内，请选择无密码保护的有效PDF。')
+        : j('画像はPNG/JPEG、1枚12MB以下で追加してください。', '请使用每张不超过12MB的PNG/JPEG图片。'));
+    }
     finally { setBusy(false); }
   }
   function imageUpload(kind: 'images' | 'seal' | 'signature', label: string) {
-    return <label className="button quote-upload"><Upload size={15} />{label}<input type="file" accept="image/png,image/jpeg" multiple={kind === 'images'} disabled={busy} onChange={e => { void addImages(e.target.files, kind); e.target.value = ''; }} /></label>;
+    return <label className="button quote-upload"><Upload size={15} />{label}<input aria-label={label} type="file" accept={kind === 'images' ? '.pdf,application/pdf,image/png,image/jpeg' : 'image/png,image/jpeg'} multiple={kind === 'images'} disabled={busy} onChange={e => { void addImages(e.target.files, kind); e.target.value = ''; }} /></label>;
   }
   return <main className="quotation-editor">
     <div className="quote-top"><button className="button" onClick={() => { try { localStorage.setItem(STORAGE, serialized); } catch { /* The visible save warning remains available after reopening. */ } onBack(); }} disabled={busy}><ArrowLeft size={16} />{j('計算機に戻る', '返回计算器')}</button><span className="eyebrow">QUOTATION STUDIO</span></div>
     <h1>{j('見積書をつくる。', '制作项目报价。')}</h1>
-    <p className="intro-text">{j('添付の書式を基に、案件に合わせて編集。A4のPDFにまとめます。', '沿用参考报价单的结构，可按项目编辑并生成A4 PDF。')}</p>
+    <p className="intro-text">{j('THE TRIANGLEの書式で、案件に合わせた見積書を。図面と印影を添えてPDFにまとめます。', '使用THE TRIANGLE版式制作项目报价，可附上图纸与印章并生成PDF。')}</p>
     {(q.project !== initial.project || q.area !== initial.area || q.baseFee !== initial.baseFee || q.additionalFee !== initial.additionalFee) && <p className="small-note">{j('この下書きには、現在の計算結果と異なる案件情報・金額があります。「計算結果を再取込」で更新できます。', '当前草稿的项目信息或金额与计算器不同，可通过“重新载入计算结果”更新。')}</p>}
     <div className="quote-toolbar">
       <button className="button" disabled={busy} onClick={() => { download(new Blob([serialized], { type: 'application/json' }), quoteFilename(q, 'json')); setNotice(j('編集用の下書きを保存しました。', '已保存可编辑草稿。')); }}><Download size={16} />{j('下書き保存', '保存草稿')}</button>
       <button className="button" disabled={busy} onClick={() => importRef.current?.click()}><Upload size={16} />{j('下書き読込', '载入草稿')}</button>
       <input ref={importRef} type="file" accept=".json,application/json" className="sr-only" onChange={e => { void importDraft(e.target.files?.[0]); e.target.value = ''; }} />
       <button className="button" disabled={busy} onClick={() => { setQ(old => ({ ...old, project: initial.project, area: initial.area, baseFee: initial.baseFee, additionalFee: initial.additionalFee, discount: '0' })); setNotice(j('案件名・面積・金額を計算機から取り込みました。税・本文は保持しています。', '已从计算器更新项目名、面积与费用，税务和正文保持不变。')); }}><RefreshCw size={16} />{j('計算結果を再取込', '重新载入计算结果')}</button>
-      <button className="button" disabled={busy} onClick={() => { download(new Blob([serialized], { type: 'application/json' }), quoteFilename(q, 'json')); setQ(structuredClone(initial)); setNotice(j('前の下書きをファイル保存し、新しい見積書を作成しました。', '已将上一份草稿保存为文件，并创建新报价。')); }}><Plus size={16} />{j('下書きを保存して新規作成', '保存草稿并新建')}</button>
+      <button className="button" disabled={busy} onClick={() => { download(new Blob([serialized], { type: 'application/json' }), quoteFilename(q, 'json')); setQ({ ...structuredClone(initial), seal: q.issuer === initial.issuer ? q.seal : null }); setNotice(j('前の下書きを保存し、新規作成しました。同じ発行会社の印影は引き継いでいます。', '已保存旧草稿并新建；同一出具公司的印章予以保留。')); }}><Plus size={16} />{j('下書きを保存して新規作成', '保存草稿并新建')}</button>
     </div>
     <p className={storageError ? 'error' : 'small-note'}>{storageError ? j('端末への自動保存ができません。下書き保存でファイルを保存してください。', '自动保存失败，请将草稿保存为文件。') : j('このブラウザーに自動保存します。図面・印影を含む入力内容はサーバーへ送信しません。案件別の保管には「下書き保存」を使用してください。', '自动保存在此浏览器；输入内容及图片不上传服务器。请用“保存草稿”分项目归档。')}</p>
     <div className="quote-layout">
@@ -126,9 +153,9 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
           {input('areaNote', j('面積内訳・対象フロア（任意）', '面积明细及楼层（可选）'), { multiline: true, wide: true })}
           <p className="small-note wide">{j('言語切替は項目見出しに適用します。表題と本文は自由に編集してください。初期本文は参考資料と同じ中国語です。', '语言切换仅影响栏目标签；标题和正文可自由编辑。初始正文与参考文件一致，采用中文。')}</p>
         </div></details>
-        <details className="quote-section"><summary>02 {j('対象図面・画像', '项目图纸与图片')}</summary><div className="quote-section-body">
-          <p className="small-note">{j('PNG/JPEG、12枚まで。画像は見積書の概要ページに配置されます。', 'PNG/JPEG，最多12张，放置在项目概要页。')}</p>{imageUpload('images', j('図面・画像を追加', '添加图纸或图片'))}
-          <div className="quote-image-grid">{q.images.map((img, i) => <div key={i}><img src={img.data} alt={img.caption || img.name} /><input aria-label={`${j('画像説明', '图片说明')} ${i + 1}`} placeholder={j('画像説明（任意）', '图片说明（可选）')} maxLength={100} value={img.caption} onChange={e => set('images', q.images.map((old, n) => n === i ? { ...old, caption: e.target.value } : old))} /><button className="button" onClick={() => set('images', q.images.filter((_, n) => n !== i))}><X size={14} />{j('削除', '删除')}</button></div>)}</div>
+        <details className="quote-section" open><summary>02 {j('添付図面', '附件图纸')} ({q.images.length})</summary><div className="quote-section-body">
+          <p className="small-note">{j('PDF・PNG・JPEGを12ファイルまで添付できます。PDFは8MB・50ページ以内、画像は12MB以内。選んだ順に見積書の末尾へ追加します。PDFは原本の用紙サイズ・向きを保ちます。', '可添加最多12个PDF、PNG或JPEG文件。PDF每个限8MB、50页，图片限12MB。按显示顺序附在报价末尾，PDF保留原始纸张尺寸和方向。')}</p>{imageUpload('images', j('図面をアップロード', '上传图纸'))}
+          <div className="quote-image-grid">{q.images.map((img, i) => <div key={i}><DrawingPreview item={img} /><p className="small-note quote-file-name">{String(i + 1).padStart(2, '0')} / {img.name}</p><input aria-label={`${j('図面名・説明', '图纸名称与说明')} ${i + 1}`} placeholder={j('図面名・説明', '图纸名称与说明')} maxLength={300} value={img.caption} onChange={e => set('images', q.images.map((old, n) => n === i ? { ...old, caption: e.target.value } : old))} /><div className="quote-attachment-actions">{[-1, 1].map(direction => <button key={direction} className="button" aria-label={`${i + 1} ${direction < 0 ? j('前へ', '前移') : j('後ろへ', '后移')}`} disabled={i + direction < 0 || i + direction >= q.images.length} onClick={() => { const items = [...q.images]; [items[i], items[i + direction]] = [items[i + direction], items[i]]; set('images', items); }}>{direction < 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}</button>)}<button className="button" aria-label={`${j('削除', '删除')} ${img.name}`} onClick={() => set('images', q.images.filter((_, n) => n !== i))}><X size={14} />{j('削除', '删除')}</button></div></div>)}</div>
         </div></details>
         <details className="quote-section"><summary>03 {j('業務内容・成果物', '服务内容与交付成果')}</summary><div className="quote-section-body">
           <p className="small-note">{j('チェックした段階だけを掲載します。業務内容は1行1項目で入力。掲載の変更で金額は変わりません。', '仅包含勾选阶段。服务内容每行一项；改变范围不会自动改变金额。')}</p>
@@ -148,7 +175,7 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
           {input('validDays', j('見積有効期間（日）', '报价有效期（天）'), { numeric: true })}
           {input('exclusions', j('別途費用・除外項目', '不包含项目'), { multiline: true, wide: true })}{input('notes', j('見積条件・備考', '报价说明'), { multiline: true, wide: true })}{input('payment', j('支払条件（任意）', '付款条件（可选）'), { multiline: true, wide: true })}
         </div></details>
-        <details className="quote-section"><summary>06 {j('発行者・印影・署名', '出具方、印章与签名')}</summary><div className="quote-fields">
+        <details className="quote-section" open><summary>06 {j('発行者・印影・署名', '出具方、印章与签名')}</summary><div className="quote-fields">
           {input('issuer', j('発行会社', '出具公司'), { wide: true })}{input('address', j('住所', '地址'), { multiline: true, wide: true })}{input('contact', j('連絡先（任意）', '联系方式（可选）'), { wide: true })}{input('representative', j('発行者名', '负责人姓名'))}
           <p className="small-note wide">{j('印影・署名は任意です。必要な場合のみ画像を追加してください。', '印章及签名为可选内容，请按需添加图片。')}</p>
           {(['seal', 'signature'] as const).map(kind => <div key={kind}>{imageUpload(kind, kind === 'seal' ? j('印影を追加', '添加印章') : j('署名を追加', '添加签名'))}{q[kind] && <div className="quote-mark"><img src={q[kind]!.data} alt={kind === 'seal' ? j('印影', '印章') : j('署名', '签名')} /><button className="button" onClick={() => set(kind, null)}><X size={14} />{j('削除', '删除')}</button></div>}</div>)}

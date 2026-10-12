@@ -1,7 +1,8 @@
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import wordmark from './assets/triangle-wordmark.svg?raw';
-import { chineseMoney, documentLabels, quotationTotals, quoteErrors, type Quotation, type QuoteImage } from './quotation';
+import { chineseMoney, documentLabels, isPdfDrawing, quotationTotals, quoteErrors, type Quotation, type QuoteImage } from './quotation';
+import { attachmentBytes } from './quotationAttachments';
 
 type FontBytes = ArrayBuffer | Uint8Array;
 export type QuotationFonts = { body: FontBytes; regular: FontBytes; bold: FontBytes };
@@ -125,7 +126,7 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
     ensure(rows.length * 16 + 15);
     rows.forEach((line, i) => draw(line, margin, y - i * 16, 9.5));
     draw(value, W - margin - valueWidth, y, 11, latin);
-    y -= rows.length * 16 + 9; rule(y); y -= 9;
+    y -= rows.length * 16 + 8; rule(y); y -= 8;
   }
   feeRow(t.base, `${money(totals.base)} RMB`);
   // The area symbol needs the CJK font; the numeric columns use Montserrat.
@@ -141,15 +142,16 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   y -= 20; label(t.notes, 'QUOTATION CONDITIONS');
   text(`${t.validity}：${q.validDays}${t.days}`, 9.5, 17); text(q.notes, 9.5, 17);
   if (q.payment.trim()) { y -= 17; label(t.payment, 'PAYMENT'); text(q.payment, 9.5, 17); }
-  const issuerHeight = wrap(q.issuer, 11).length * 21 + wrap(q.address, 8.5).length * 15
-    + (q.contact ? wrap(q.contact, 8.5).length * 15 : 0);
-  const markHeight = q.seal || q.signature ? 108 : 38;
-  ensure(Math.min(35 + issuerHeight + markHeight, 240)); y -= 20; rule(y); y -= 15;
-  text(q.issuer, 11, 21); text(q.address, 8.5, 15); if (q.contact) text(q.contact, 8.5, 15);
-  ensure(markHeight); const marksTop = y - 12;
-  if (q.seal) { const img = await embed(q.seal); const scale = Math.min(90 / img.width, 90 / img.height); page.drawImage(img, { x: margin + 210, y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
-  if (q.signature) { const img = await embed(q.signature); const scale = Math.min(120 / img.width, 58 / img.height); page.drawImage(img, { x: W - margin - 120, y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
-  y = marksTop - (q.seal || q.signature ? 78 : 8);
+  const issuerWidth = q.seal || q.signature ? width - (q.seal && q.signature ? 240 : 140) : width;
+  const issuerHeight = wrap(q.issuer, 11, issuerWidth).length * 21 + wrap(q.address, 8.5, issuerWidth).length * 15
+    + (q.contact ? wrap(q.contact, 8.5, issuerWidth).length * 15 : 0);
+  const marksHeight = q.seal ? 90 : q.signature ? 58 : 0;
+  ensure(Math.min(35 + Math.max(issuerHeight, marksHeight) + 33, 240)); y -= 20; rule(y); y -= 15;
+  const marksTop = y;
+  measure = issuerWidth; text(q.issuer, 11, 21); text(q.address, 8.5, 15); if (q.contact) text(q.contact, 8.5, 15);
+  if (q.seal) { const img = await embed(q.seal); const scale = Math.min(90 / img.width, 90 / img.height); page.drawImage(img, { x: W - margin - 90, y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
+  if (q.signature) { const img = await embed(q.signature); const scale = Math.min(120 / img.width, 58 / img.height); page.drawImage(img, { x: W - margin - (q.seal ? 225 : 120), y: marksTop - img.height * scale, width: img.width * scale, height: img.height * scale }); }
+  y = Math.min(y, marksTop - marksHeight) - 15;
   x = W - margin - 120; measure = 120; text(q.representative, 11, 18); x = margin; measure = width;
 
   // Each pair shares a spread. Overflow continues in the same column on a new page,
@@ -190,9 +192,25 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
       ensure(60); text(paragraph, 10.5, 20); y -= 19;
     }
   }
+  const originalDrawingPages = new Set<PDFPage>();
   if (q.images.length) {
     const title = q.language === 'zh' ? '设计范围与参考图纸' : '設計範囲・参考図面';
+    // Identify attachments in the branded document; keep source PDF geometry untouched.
+    continuation = () => sectionPage(title, 'DRAWINGS & REFERENCES');
+    ensure(80); y -= 24; label(q.language === 'zh' ? '附件目录' : '添付図面一覧', 'ATTACHMENTS');
     for (const [index, img] of q.images.entries()) {
+      const count = isPdfDrawing(img) ? ` (${img.pages} ${q.language === 'zh' ? '页' : 'ページ'})` : '';
+      text(`${String(index + 1).padStart(2, '0')}  ${img.caption || img.name}${count}`, 9.5, 17);
+    }
+    for (const [index, img] of q.images.entries()) {
+      if (isPdfDrawing(img)) {
+        const source = await PDFDocument.load(attachmentBytes(img.data), { updateMetadata: false });
+        if (source.getPageCount() !== img.pages || img.pages > 50) throw new Error('pdf-pages');
+        for (const copied of await pdf.copyPages(source, source.getPageIndices())) {
+          pdf.addPage(copied); originalDrawingPages.add(copied);
+        }
+        continue;
+      }
       section(title, 'DRAWINGS & REFERENCES');
       const asset = await embed(img), scale = Math.min(width / asset.width, 460 / asset.height);
       page!.drawImage(asset, { x: margin + (width - asset.width * scale) / 2, y: y - asset.height * scale, width: asset.width * scale, height: asset.height * scale });
@@ -203,6 +221,7 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   const paths = [...wordmark.matchAll(/<path d="([^"]+)"/g)].map(m => m[1]);
   if (paths.length !== 14) throw new Error('wordmark');
   pdf.getPages().forEach((p, i, all) => {
+    if (originalDrawingPages.has(p)) return;
     p.drawText(`${String(i + 1).padStart(2, '0')} / ${String(all.length).padStart(2, '0')}`, { x: margin, y: 36, font: latin, size: 7, color: ink });
     // Original Figma paths, untouched. Never recreate the logo with typed letters.
     for (const path of paths) p.drawSvgPath(path, { x: W - margin - 145, y: 44, scale: 145 / 226, color: ink });

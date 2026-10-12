@@ -4,13 +4,16 @@ import type { Language } from './pricing';
 
 export type ServiceStage = { id: string; title: string; goal: string; items: string; deliverables: string; enabled: boolean };
 export type QuoteImage = { name: string; caption: string; data: string };
+export type QuotePdfDrawing = QuoteImage & { kind: 'pdf'; pages: number };
+export type QuoteAttachment = QuoteImage | QuotePdfDrawing;
+export function isPdfDrawing(item: QuoteAttachment): item is QuotePdfDrawing { return 'kind' in item && item.kind === 'pdf'; }
 export type Quotation = {
   version: 1; language: Language; title: string; number: string; date: string; validDays: string;
   client: string; project: string; service: string; period: string; area: string; areaNote: string; designer: string;
   baseFee: string; additionalFee: string; discount: string; taxMode: 'unspecified' | 'excluded' | 'included'; taxRate: string;
   stages: ServiceStage[]; exclusions: string; notes: string; payment: string;
   issuer: string; address: string; contact: string; representative: string;
-  images: QuoteImage[]; seal: QuoteImage | null; signature: QuoteImage | null;
+  images: QuoteAttachment[]; seal: QuoteImage | null; signature: QuoteImage | null;
 };
 
 export const documentLabels = {
@@ -116,7 +119,16 @@ export function parseQuotation(json: string): Quotation {
     return { name: x.name, caption: x.caption, data: x.data };
   }
   if (!Array.isArray(raw.images) || raw.images.length > 12) throw new Error('draft');
-  q.images = raw.images.map((x: unknown) => { const img = image(x); if (!img) throw new Error('draft'); return img; });
+  q.images = raw.images.map((value: unknown) => {
+    const x = value as QuotePdfDrawing;
+    if (x?.kind === 'pdf') {
+      if (typeof x.name !== 'string' || x.name.length > 300 || typeof x.caption !== 'string' || x.caption.length > 300
+        || typeof x.data !== 'string' || x.data.length > 10_700_000 || !/^data:application\/pdf;base64,JVBERi0[A-Za-z0-9+/]+=*$/.test(x.data)
+        || !Number.isInteger(x.pages) || x.pages < 1 || x.pages > 50) throw new Error('draft');
+      return { kind: 'pdf', name: x.name, caption: x.caption, data: x.data, pages: x.pages };
+    }
+    const img = image(value); if (!img) throw new Error('draft'); return img;
+  });
   q.seal = image(raw.seal); q.signature = image(raw.signature);
   return q as Quotation;
 }

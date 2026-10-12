@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts, degrees } from 'pdf-lib';
+import { readPdfDrawing } from '../src/quotationAttachments';
 import { calculateRevisedFee } from '../src/calculator';
 import { chineseMoney, createQuotation, parseQuotation, quotationTotals, quoteErrors, quoteFilename } from '../src/quotation';
 import { generateQuotationPdf } from '../src/quotationPdf';
@@ -85,6 +86,7 @@ describe('actual PDF documents', () => {
   });
   it('keeps ordinary tax and adjustment rows with the issuer on the fee page', async () => {
     const q = draft(); q.additionalFee = '25000'; q.discount = '10000'; q.taxMode = 'excluded'; q.taxRate = '6';
+    q.seal = { name: 'seal.png', caption: '', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=' };
     const bytes = await generateQuotationPdf(q, font);
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(5);
     writeFileSync('../tmp/pdfs/quotation-tax.pdf', bytes);
@@ -100,4 +102,30 @@ describe('actual PDF documents', () => {
     expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(5);
     writeFileSync('../tmp/pdfs/quotation-columns.pdf', bytes);
   }, 30000);
+  it('appends original PDF drawings in order with their size, rotation and editable caption', async () => {
+    const source = await PDFDocument.create(), face = await source.embedFont(StandardFonts.Helvetica);
+    source.addPage([1190.55, 841.89]).drawText('DRAWING A3 LANDSCAPE', { x: 50, y: 500, font: face, size: 24 });
+    const rotated = source.addPage([595.28, 841.89]); rotated.setRotation(degrees(90));
+    rotated.drawText('DRAWING ROTATED', { x: 50, y: 500, font: face, size: 24 });
+    const sourceBytes = await source.save();
+    const attachment = await readPdfDrawing({ name: 'two-floor-plans.pdf', size: sourceBytes.length, arrayBuffer: async () => sourceBytes.buffer as ArrayBuffer });
+    const q = draft(); attachment.caption = '1F・2F 平面図'; q.images = [attachment];
+    const restored = parseQuotation(JSON.stringify(q));
+    expect(restored.images).toEqual(q.images);
+    const bytes = await generateQuotationPdf(restored, font), doc = await PDFDocument.load(bytes);
+    expect(doc.getPage(doc.getPageCount() - 2).getWidth()).toBeCloseTo(1190.55);
+    expect(doc.getPage(doc.getPageCount() - 1).getRotation().angle).toBe(90);
+    writeFileSync('../tmp/pdfs/two-floor-plans.pdf', sourceBytes);
+    writeFileSync('../tmp/pdfs/quotation-pdf-attachment.pdf', bytes);
+  }, 30000);
+  it('rejects corrupt, oversized and overlong PDF drawings', async () => {
+    const file = { name: 'broken.pdf', size: 6, arrayBuffer: async () => new TextEncoder().encode('%PDF-x').buffer as ArrayBuffer };
+    await expect(readPdfDrawing(file)).rejects.toThrow('pdf-invalid');
+    await expect(readPdfDrawing({ ...file, size: 8_000_001 })).rejects.toThrow('pdf-size');
+    const doc = await PDFDocument.create(); for (let i = 0; i < 51; i++) doc.addPage();
+    const bytes = await doc.save();
+    await expect(readPdfDrawing({ name: 'many.pdf', size: bytes.length, arrayBuffer: async () => bytes.buffer as ArrayBuffer })).rejects.toThrow('pdf-pages');
+    const q = draft(); q.images = [{ kind: 'pdf', name: 'x', caption: '', pages: 1, data: 'data:application/pdf;base64,aGVsbG8=' }];
+    expect(() => parseQuotation(JSON.stringify(q))).toThrow();
+  });
 });
