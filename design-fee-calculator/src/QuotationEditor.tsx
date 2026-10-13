@@ -3,6 +3,8 @@ import { ArrowDown, ArrowLeft, ArrowUp, Download, FileText, Plus, RefreshCw, Upl
 import { CHINA_ISSUER, createChinaSeal, chineseMoney, clarifyRenderingScope, documentLabels, isPdfDrawing, parseQuotation, quotationTotals, quoteErrors, quoteFilename, type Quotation, type QuoteImage, type QuoteAttachment } from './quotation';
 import type { Language } from './pricing';
 import './quotation.css';
+import ScheduleEditor from './ScheduleEditor';
+import { dateDay, scheduleErrors } from './schedule';
 
 const STORAGE = 'triangle-quotation-v1';
 function download(data: Blob, filename: string) {
@@ -45,7 +47,7 @@ function DrawingPreview({ item }: { item: QuoteAttachment }) {
     : <img src={item.data} alt={item.caption || item.name} />;
 }
 
-export default function QuotationEditor({ initial, lang, onBack }: { initial: Quotation; lang: Language; onBack: () => void }) {
+export default function QuotationEditor({ initial, lang, onBack, initialSection }: { initial: Quotation; lang: Language; onBack: () => void; initialSection?: 'schedule' }) {
   const j = (ja: string, zh: string) => lang === 'ja' ? ja : zh;
   const [starting] = useState(() => {
     try { const saved = localStorage.getItem(STORAGE); if (saved) return { quote: parseQuotation(saved), restored: true }; } catch { /* A broken stored draft must not block opening. */ }
@@ -56,7 +58,10 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
   const [notice, setNotice] = useState(starting.restored ? j('前回の下書きを復元しました。新しい計算結果を使う場合は「計算結果を再取込」を押してください。', '已恢复上次草稿。如需使用新的计算结果，请点击“重新载入计算结果”。') : '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [pdf, setPdf] = useState<{ url: string; draft: string; filename: string } | null>(null);
+  const [pdf, setPdf] = useState<{ url: string; draft: string; filename: string; kind: 'quotation' | 'schedule' } | null>(null);
+  const scheduleRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => { if (initialSection === 'schedule') scheduleRef.current?.scrollIntoView({ block: 'start' }); }, [initialSection]);
+  const documentReady = !!q.project.trim() && !!q.issuer.trim() && dateDay(q.date) !== null;
   const importRef = useRef<HTMLInputElement>(null);
   const serialized = JSON.stringify(q);
   const clarified = clarifyRenderingScope(q);
@@ -68,6 +73,7 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
   try { totals = quotationTotals(q); } catch { /* shown in the validation summary */ }
   const num = (v: number, digits = 0) => v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const errorText: Record<string, string> = {
+    schedule: j('スケジュール表の入力を確認してください（07）。', '请完善进度表内容（07）。'),
     required: j('表題・案件名・発行会社を入力してください。', '请填写标题、项目名称和出具公司。'),
     date: j('有効な発行日を入力してください。', '请输入有效的出具日期。'), validity: j('有効期間は1〜3650日で入力してください。', '有效期应为1至3650天。'),
     area: j('設計面積は0より大きい数値を入力してください。', '设计面积必须大于0。'), money: j('金額は0〜999,999,999,999の整数で入力してください。', '金额须为0至999,999,999,999的整数。'),
@@ -88,14 +94,15 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
       ? <textarea rows={4} maxLength={20000} value={q[key] as string} onChange={e => set(key, e.target.value)} />
       : <input type={opts.type || 'text'} inputMode={opts.numeric ? 'decimal' : undefined} maxLength={opts.numeric ? 20 : 500} value={q[key] as string} onChange={e => set(key, e.target.value)} />}</Field>;
   }
-  async function generate() {
-    if (errors.length || busy) return;
+  async function generate(kind: 'quotation' | 'schedule' = 'quotation') {
+    if (busy || (kind === 'quotation' ? errors.length : !documentReady || scheduleErrors(q.schedule, lang).length)) return;
     setBusy(true); setError('');
     try {
-      const { generateQuotationPdf } = await import('./quotationPdf');
-      const bytes = await generateQuotationPdf(q);
+      const bytes = kind === 'schedule'
+        ? await (await import('./schedulePdf')).generateSchedulePdf(q)
+        : await (await import('./quotationPdf')).generateQuotationPdf(q);
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
-      setPdf({ url, draft: serialized, filename: quoteFilename(q, 'pdf') });
+      setPdf({ url, draft: serialized, kind, filename: kind === 'schedule' ? quoteFilename(q, 'pdf').replace(/\.pdf$/, '_schedule.pdf') : quoteFilename(q, 'pdf') });
       setNotice(j('PDFを作成しました。内容を確認して保存してください。', 'PDF已生成，请确认内容后保存。'));
     } catch (e) {
       const message = (e as Error).message;
@@ -141,6 +148,7 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
     <p className="intro-text">{j('THE TRIANGLEの書式で、案件に合わせた見積書を。図面と印影を添えてPDFにまとめます。', '使用THE TRIANGLE版式制作项目报价，可附上图纸与印章并生成PDF。')}</p>
     {(q.project !== initial.project || q.area !== initial.area || q.baseFee !== initial.baseFee || q.additionalFee !== initial.additionalFee) && <p className="small-note">{j('この下書きには、現在の計算結果と異なる案件情報・金額があります。「計算結果を再取込」で更新できます。', '当前草稿的项目信息或金额与计算器不同，可通过“重新载入计算结果”更新。')}</p>}
     <div className="quote-toolbar">
+      <button className="button" disabled={busy} onClick={() => { if (scheduleRef.current) { scheduleRef.current.open = true; scheduleRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }}>{j('スケジュール表', '进度表')}</button>
       <button className="button" disabled={busy} onClick={() => { download(new Blob([serialized], { type: 'application/json' }), quoteFilename(q, 'json')); setNotice(j('編集用の下書きを保存しました。', '已保存可编辑草稿。')); }}><Download size={16} />{j('下書き保存', '保存草稿')}</button>
       <button className="button" disabled={busy} onClick={() => importRef.current?.click()}><Upload size={16} />{j('下書き読込', '载入草稿')}</button>
       <input ref={importRef} type="file" accept=".json,application/json" className="sr-only" onChange={e => { void importDraft(e.target.files?.[0]); e.target.value = ''; }} />
@@ -188,6 +196,9 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
           {!q.seal && q.issuer === CHINA_ISSUER && <div className="wide"><button type="button" className="button" disabled={busy} onClick={() => set('seal', createChinaSeal())}>{j('中国法人の印影を使用', '使用中国公司印章')}</button></div>}
           {(['seal', 'signature'] as const).map(kind => <div key={kind}>{imageUpload(kind, kind === 'seal' ? j('中国法人の印影を変更', '更换中国公司印章') : j('署名を追加', '添加签名'))}{q[kind] && <div className="quote-mark"><img src={q[kind]!.data} alt={kind === 'seal' ? j('中国法人の印影', '中国公司印章') : j('署名', '签名')} /><button className="button" onClick={() => set(kind, null)}><X size={14} />{j('削除', '删除')}</button></div>}</div>)}
         </div></details>
+        <details className="quote-section" ref={scheduleRef} open={initialSection === 'schedule' ? true : undefined}><summary>07 {j('スケジュール表', '进度表')}</summary>
+          <ScheduleEditor value={q.schedule} onChange={value => set('schedule', value)} lang={lang} documentReady={documentReady} onGenerate={() => void generate('schedule')} />
+        </details>
       </fieldset>
       <aside className="quote-summary">
         <p className="eyebrow">QUOTATION / RMB</p><h2>{q.project || '—'}</h2>
@@ -197,12 +208,12 @@ export default function QuotationEditor({ initial, lang, onBack }: { initial: Qu
         {errors.length > 0 && <ul className="error" role="alert">{errors.map(e => <li key={e}>{errorText[e] || e}</li>)}</ul>}
         <button className="button primary quote-generate" disabled={busy || !!errors.length} onClick={() => void generate()}><FileText size={17} />{busy ? j('作成中…', '正在生成…') : j('PDFを作成・プレビュー', '生成并预览PDF')}</button>
         <p className="small-note">{j('初回は日本語・中国語フォントの読込に数秒かかります。', '首次需数秒加载中日文字体。')}</p>
-        {pdf && isCurrentPdf && <a className="button quote-generate" href={pdf.url} download={pdf.filename}><Download size={17} />{j('PDFを保存', '保存PDF')}</a>}
+        {pdf && isCurrentPdf && <a className="button quote-generate" href={pdf.url} download={pdf.filename}><Download size={17} />{pdf.kind === 'schedule' ? j('スケジュールPDFを保存', '保存进度表PDF') : j('PDFを保存', '保存PDF')}</a>}
         {pdf && !isCurrentPdf && <p className="small-note">{j('編集内容を反映するにはPDFを再作成してください。', '内容已修改，请重新生成PDF。')}</p>}
         {error && <p className="error" role="alert">{error}</p>}<p role="status" className="small-note">{notice}</p>
         <p className="small-note">{j('発行前に宛先・業務範囲・税・金額を確認してください。', '出具前请确认委托方、服务范围、税务及金额。')}</p>
       </aside>
     </div>
-    {pdf && isCurrentPdf && <section className="quote-preview"><div className="quote-preview-header"><h2>{j('PDFプレビュー', 'PDF预览')}</h2><a className="button" href={pdf.url} target="_blank" rel="noreferrer">{j('別タブで開く', '在新标签页打开')}</a></div><p className="small-note">{j('表示されない端末では「別タブで開く」または「PDFを保存」を使用してください。', '如无法预览，请选择“在新标签页打开”或“保存PDF”。')}</p><iframe title={`${t.fees} PDF`} src={pdf.url} /></section>}
+    {pdf && isCurrentPdf && <section className="quote-preview"><div className="quote-preview-header"><h2>{j('PDFプレビュー', 'PDF预览')}</h2><a className="button" href={pdf.url} target="_blank" rel="noreferrer">{j('別タブで開く', '在新标签页打开')}</a></div><p className="small-note">{j('表示されない端末では「別タブで開く」または「PDFを保存」を使用してください。', '如无法预览，请选择“在新标签页打开”或“保存PDF”。')}</p><iframe title={`${pdf.kind === 'schedule' ? q.schedule.title : t.fees} PDF`} src={pdf.url} /></section>}
   </main>;
 }

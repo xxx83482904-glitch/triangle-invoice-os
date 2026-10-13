@@ -1,20 +1,10 @@
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import wordmark from './assets/triangle-wordmark.svg?raw';
 import { chineseMoney, documentLabels, isPdfDrawing, quotationTotals, quoteErrors, type Quotation, type QuoteImage } from './quotation';
 import { attachmentBytes } from './quotationAttachments';
-
-type FontBytes = ArrayBuffer | Uint8Array;
-export type QuotationFonts = { body: FontBytes; regular: FontBytes; bold: FontBytes };
-let fontPromise: Promise<QuotationFonts> | undefined;
-export async function loadQuoteFont() {
-  if (!fontPromise) fontPromise = Promise.all(['NotoSansSC-Regular.ttf', 'Montserrat-Regular.ttf', 'Montserrat-Bold.ttf'].map(async name => {
-    const response = await fetch(`${import.meta.env.BASE_URL}fonts/${name}?v=2`);
-    if (!response.ok) throw new Error('font');
-    return response.arrayBuffer();
-  })).then(([body, regular, bold]) => ({ body, regular, bold })).catch(e => { fontPromise = undefined; throw e; });
-  return fontPromise;
-}
+import { addPageFooters, loadQuoteFont, type QuotationFonts } from './pdfAssets';
+import { appendSchedulePages } from './schedulePdf';
+export { loadQuoteFont, type QuotationFonts } from './pdfAssets';
 
 /** A4 adaptation of the vault's white / ink / outlined-wordmark format. */
 export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFonts) {
@@ -23,7 +13,7 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   const bytes = fontBytes ?? await loadQuoteFont();
   const [font, latin, bold] = await Promise.all([bytes.body, bytes.regular, bytes.bold].map(b => pdf.embedFont(b, { subset: true })));
   const supported = new Set(font.getCharacterSet());
-  for (const ch of JSON.stringify({ ...q, images: q.images.map(i => i.caption), seal: null, signature: null })) {
+  for (const ch of JSON.stringify({ ...q, schedule: q.schedule.includeInQuotation ? q.schedule : null, images: q.images.map(i => i.caption), seal: null, signature: null })) {
     if (ch.codePointAt(0)! >= 32 && !supported.has(ch.codePointAt(0)!)) throw new Error(`glyph:${ch}`);
   }
   pdf.setTitle(`${q.title} - ${q.project}`); pdf.setAuthor(q.issuer); pdf.setSubject(q.number); pdf.setCreator('THE TRIANGLE.JP Design Fee Calculator');
@@ -246,13 +236,7 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
       text(String(index + 1).padStart(2, '0'), 9, 20, latin); text(img.caption, 10, 18);
     }
   }
-  const paths = [...wordmark.matchAll(/<path d="([^"]+)"/g)].map(m => m[1]);
-  if (paths.length !== 14) throw new Error('wordmark');
-  pdf.getPages().forEach((p, i, all) => {
-    if (originalDrawingPages.has(p)) return;
-    p.drawText(`${String(i + 1).padStart(2, '0')} / ${String(all.length).padStart(2, '0')}`, { x: margin, y: 36, font: latin, size: 7, color: ink });
-    // Original Figma paths, untouched. Never recreate the logo with typed letters.
-    for (const path of paths) p.drawSvgPath(path, { x: W - margin - 145, y: 44, scale: 145 / 226, color: ink });
-  });
+  if (q.schedule.includeInQuotation) appendSchedulePages(pdf, q, { body: font, regular: latin, bold });
+  addPageFooters(pdf, latin, originalDrawingPages);
   return pdf.save();
 }

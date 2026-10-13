@@ -9,7 +9,7 @@ import { createQuotation, type Quotation } from './quotation';
 const QuotationEditor = lazy(() => import('./QuotationEditor'));
 
 const PAGE_SIZE = 50;
-const APP_RELEASE = '2026.10.12.4';
+const APP_RELEASE = '2026.10.13.1';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('ja');
@@ -20,6 +20,7 @@ export default function App() {
   const [page, setPage] = useState(0);
   const [copied, setCopied] = useState('');
   const [manual, setManual] = useState('');
+  const [initialSection, setInitialSection] = useState<'schedule' | undefined>();
   const [quote, setQuote] = useState<Quotation | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const copyField = useRef<HTMLTextAreaElement>(null);
@@ -61,7 +62,8 @@ export default function App() {
   }
   const copyIcon = (kind: string) => copied === kind ? <Check size={16} /> : <Copy size={16} />;
   const fee = (value: number) => <>{number(value)} <span className="unit">RMB</span></>;
-  function openQuotation() {
+  function openQuotation(section?: 'schedule') {
+    setInitialSection(section);
     if (!result) return;
     setQuote(createQuotation(name, result));
     window.scrollTo(0, 0);
@@ -78,11 +80,12 @@ export default function App() {
         </div>
       </header>
 
-      {quote ? <Suspense fallback={<p className="intro-text">Loading…</p>}><QuotationEditor initial={quote} lang={lang} onBack={() => setQuote(null)} /></Suspense> : <main>
+      {quote ? <Suspense fallback={<p className="intro-text">Loading…</p>}><QuotationEditor initialSection={initialSection} initial={quote} lang={lang} onBack={() => setQuote(null)} /></Suspense> : <main>
         <div className="intro flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div><h1 className="eyebrow">DESIGN FEE CALCULATOR</h1><p className="intro-text">{t.intro}</p></div>
           <div className="quotation-entry">
-            <button type="button" className="button primary" disabled={!result} onClick={openQuotation}>{lang === 'ja' ? '見積書を作成' : '制作报价单'} →</button>
+            <button type="button" className="button primary" disabled={!result} onClick={() => openQuotation()}>{lang === 'ja' ? '見積書を作成' : '制作报价单'} →</button>
+            <button type="button" className="button" disabled={!result} onClick={() => openQuotation('schedule')}>{lang === 'ja' ? 'スケジュール表を作成' : '制作进度表'} →</button>
             <p className="small-note">{lang === 'ja' ? 'PDF出力・図面添付・印影' : '导出PDF・附加图纸・印章'}</p>
             <span className="edition">{lang === 'ja' ? '更新版' : '更新版本'} {APP_RELEASE}</span>
           </div>
@@ -114,7 +117,7 @@ export default function App() {
               <button type="button" className="button primary" disabled={!result} onClick={() => void copy('result')}>{copyIcon('result')}{copied === 'result' ? t.copied : t.copyResult}</button>
               <button type="button" className="button" disabled={!result} onClick={() => void copy('chinese')}>{copyIcon('chinese')}{copied === 'chinese' ? t.copied : t.copyChinese}</button>
             </div>
-            <button type="button" className="button quote-launch" style={{ width: '100%', marginTop: 10 }} disabled={!result} onClick={openQuotation}>{lang === 'ja' ? 'この計算結果から見積書を作成' : '根据计算结果制作报价单'} →</button>
+            <button type="button" className="button quote-launch" style={{ width: '100%', marginTop: 10 }} disabled={!result} onClick={() => openQuotation()}>{lang === 'ja' ? 'この計算結果から見積書を作成' : '根据计算结果制作报价单'} →</button>
             <details className="disclosure breakdown">
               <summary>{t.breakdown}<ChevronDown size={16} /></summary>
               {result ? <div className="disclosure-content">

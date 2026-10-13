@@ -2,6 +2,7 @@ import Decimal from 'decimal.js';
 import type { FeeResult } from './calculator';
 import type { Language } from './pricing';
 import chinaSeal from './assets/china-seal.json';
+import { createSchedule, parseSchedule, scheduleErrors, type Schedule } from './schedule';
 
 export const CHINA_ISSUER = '上海多三角空间设计有限公司';
 export function createChinaSeal(): QuoteImage { return { ...chinaSeal }; }
@@ -18,6 +19,7 @@ export type Quotation = {
   stages: ServiceStage[]; exclusions: string; notes: string; payment: string;
   issuer: string; address: string; contact: string; representative: string;
   images: QuoteAttachment[]; seal: QuoteImage | null; signature: QuoteImage | null;
+  schedule: Schedule;
 };
 
 export const documentLabels = {
@@ -51,7 +53,7 @@ export function createQuotation(name: string, result: FeeResult, now = new Date(
     baseFee: String(result.baseFee), additionalFee: String(result.additionalFee), discount: '0', taxMode: 'unspecified', taxRate: '0',
     stages: structuredClone(zhStages), exclusions: zhExclusions,
     notes: '以上报价均以人民币计算，不含设计师赴现场配合的差旅费用。\n最终费用将根据实际项目面积及服务范围进行相应调整。', payment: '',
-    issuer: CHINA_ISSUER, address: '上海市静安区胶州路273弄60号现所一期', contact: '', representative: '吴胜人', images: [], seal: createChinaSeal(), signature: null });
+    issuer: CHINA_ISSUER, address: '上海市静安区胶州路273弄60号现所一期', contact: '', representative: '吴胜人', images: [], seal: createChinaSeal(), signature: null, schedule: createSchedule(zhStages) });
 }
 
 export const MAX_MONEY = 999_999_999_999;
@@ -108,6 +110,7 @@ export function quoteErrors(q: Quotation): string[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(q.date) || Number.isNaN(Date.parse(q.date)) || new Date(q.date).toISOString().slice(0, 10) !== q.date) errors.push('date');
   if (!/^\d+$/.test(q.validDays) || Number(q.validDays) < 1 || Number(q.validDays) > 3650) errors.push('validity');
   try { quotationTotals(q); } catch (e) { errors.push((e as Error).message); }
+  if (q.schedule.includeInQuotation && scheduleErrors(q.schedule, q.language).length) errors.push('schedule');
   return errors;
 }
 
@@ -145,6 +148,7 @@ export function parseQuotation(json: string): Quotation {
     const img = image(value); if (!img) throw new Error('draft'); return img;
   });
   q.seal = image(raw.seal); q.signature = image(raw.signature);
+  q.schedule = parseSchedule(raw.schedule, q.stages as ServiceStage[]);
   return q as Quotation;
 }
 

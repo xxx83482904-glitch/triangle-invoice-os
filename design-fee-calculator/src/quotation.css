@@ -51,3 +51,20 @@
   .quote-preview iframe { height: 500px; }
 }
 @media (max-width: 480px) { .quote-fields { grid-template-columns: 1fr; } .quote-top { align-items: flex-start; } }
+
+.schedule-task { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 14px; }
+.schedule-task-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.schedule-task-top .eyebrow { margin: 0; }
+.schedule-notes { margin: 24px 0; }
+.schedule-scroll { overflow-x: auto; border: 1px solid var(--line); margin-top: 12px; }
+.schedule-table { min-width: 660px; width: 100%; border-collapse: collapse; table-layout: fixed; }
+.schedule-table th, .schedule-table td { padding: 12px; border-bottom: 1px solid var(--line); text-align: left; font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+.schedule-table th:first-child { width: 260px; }
+.schedule-table th small { display: block; color: var(--muted); font-size: 10px; margin-top: 5px; }
+.schedule-table .schedule-scale { position: relative; height: 42px; padding: 0; }
+.schedule-scale span { position: absolute; top: 12px; padding-left: 2px; font-size: 10px; }
+.schedule-table td { padding: 12px 0; }
+.schedule-track { position: relative; height: 14px; background: #f2f2ef; }
+.schedule-track span { display: block; position: absolute; height: 14px; min-width: 1px; background: #222; }
+.schedule-editor .quote-field input { min-width: 0; }
+.quotation-entry > .button { margin-bottom: 8px; }
