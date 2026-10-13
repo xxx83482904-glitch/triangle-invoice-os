@@ -53,7 +53,7 @@ export function taskSpan(t: ScheduleTask, range: { start: number; days: number }
   const start = dateDay(t.start)!, end = dateDay(t.end)!;
   return { offset: (start - range.start) / range.days, width: (end - start + 1) / range.days, days: end - start + 1 };
 }
-/** A shared scale keeps the screen and PDF consistent, including inclusive end dates. */
+/** Compact date labels for the PDF, including inclusive end dates. */
 export function scheduleTicks(range: { start: number; days: number }) {
   const count = Math.min(8, range.days);
   return Array.from({ length: count }, (_, i) => {
@@ -65,4 +65,37 @@ export function scheduleTsv(s: Schedule, lang: Language) {
   const cell = (v: string) => { const clean = v.replace(/[\r\n\t]+/g, ' '); return /^[\s]*[=+\-@]/.test(clean) ? `'${clean}` : clean; };
   const header = lang === 'ja' ? ['工程', '開始日', '終了日', '日数（暦日）', '担当', '備考'] : ['阶段', '开始日期', '结束日期', '天数（自然日）', '负责人', '备注'];
   return [header, ...s.tasks.map(t => [t.name, t.start, t.end, dateDay(t.start) !== null && dateDay(t.end) !== null ? String(dateDay(t.end)! - dateDay(t.start)! + 1) : '', t.owner, t.note])].map(row => row.map(cell).join('\t')).join('\n');
+}
+
+export type ScheduleDragMode = 'move' | 'start' | 'end';
+/** Move in whole calendar days, clamping both the date limits and total project span. */
+export function rescheduleTask(s: Schedule, id: string, mode: ScheduleDragMode, delta: number): Schedule {
+  const task = s.tasks.find(t => t.id === id);
+  if (!task || !Number.isFinite(delta)) return s;
+  const start = dateDay(task.start), end = dateDay(task.end);
+  if (start === null || end === null || end < start) return s;
+  const others = s.tasks.filter(t => t.id !== id).flatMap(t => {
+    const a = dateDay(t.start), b = dateDay(t.end); return a !== null && b !== null && b >= a ? [a, b] : [];
+  });
+  const low = Math.max(dateDay('1900-01-01')!, others.length ? Math.max(...others) - 3659 : -Infinity);
+  const high = Math.min(dateDay('2199-12-31')!, others.length ? Math.min(...others) + 3659 : Infinity);
+  if (low > high) return s;
+  let a = start, b = end, step = Math.round(delta);
+  if (mode === 'move') { step = Math.max(low - start, Math.min(high - end, step)); a += step; b += step; }
+  else if (mode === 'start') a = Math.max(low, end - 3659, Math.min(end, start + step));
+  else b = Math.min(high, start + 3659, Math.max(start, end + step));
+  if (a < low || b > high || b < a || b - a > 3659 || (a === start && b === end)) return s;
+  return { ...s, tasks: s.tasks.map(t => t.id === id ? { ...t, start: dayDate(a), end: dayDate(b) } : t) };
+}
+
+/** Partial drafts remain editable: valid rows can be moved before all rows are dated. */
+export function ganttRange(s: Schedule, anchor: string) {
+  const dated = s.tasks.flatMap(t => { const a = dateDay(t.start), b = dateDay(t.end); return a !== null && b !== null && b >= a ? [a, b] : []; });
+  const first = dated.length ? Math.min(...dated) : dateDay(anchor)!;
+  const partial = dated.length < s.tasks.length * 2;
+  const last = dated.length ? Math.max(...dated, ...(partial ? [first + 55] : [])) : first + 55;
+  const padding = Math.max(3, Math.min(14, Math.ceil((last - first + 1) * .08)));
+  const start = Math.max(dateDay('1900-01-01')!, first - padding);
+  const end = Math.min(dateDay('2199-12-31')!, last + padding);
+  return { start, end, days: end - start + 1 };
 }
