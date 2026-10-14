@@ -3,7 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
 import { calculateRevisedFee } from '../src/calculator';
 import { createQuotation, parseQuotation, quoteErrors } from '../src/quotation';
-import { dateDay, dayDate, ganttRange, scheduleDays, isWorkday, calendarWarning, reorderTask, reorderTaskTo, scheduleExportNotes, parseSchedule, rescheduleTask, scheduleErrors, scheduleRange, scheduleTsv, taskSpan } from '../src/schedule';
+import { dateDay, dayDate, ganttRange, scheduleDays, isWorkday, calendarWarning, reorderTask, reorderTaskTo, scheduleExportNotes, timelineAxis, parseSchedule, rescheduleTask, scheduleErrors, scheduleRange, scheduleTsv, taskSpan } from '../src/schedule';
 import { generateSchedulePdf } from '../src/schedulePdf';
 import { generateQuotationPdf } from '../src/quotationPdf';
 const draft = () => createQuotation('展示空间设计项目', calculateRevisedFee(6300), new Date(2026, 9, 13));
@@ -22,7 +22,7 @@ it.each(['start', 'end'] as const)('resizes the %s edge in days and cannot inver
 it('clamps shifts at project span and supported calendar limits', () => { const q = ready(); const t = q.schedule.tasks[0]; for (const delta of [-999999, 999999]) { const s = rescheduleTask(q.schedule, t.id, 'move', delta); expect(scheduleErrors(s, 'ja')).toEqual([]); expect(dateDay(s.tasks[0].end)! - dateDay(s.tasks[0].start)!).toBe(20); } q.schedule.tasks = [{ ...t, start: '1900-01-01', end: '1900-01-10' }]; expect(rescheduleTask(q.schedule,t.id,'move',-10)).toBe(q.schedule); q.schedule.tasks = [{ ...t, start: '2199-12-20', end: '2199-12-31' }]; expect(rescheduleTask(q.schedule,t.id,'move',10)).toBe(q.schedule); });
 it('supports partial drafts and ignores non-finite movement', () => { const q = ready(); q.schedule.tasks[1].start = ''; const s = rescheduleTask(q.schedule,q.schedule.tasks[0].id,'move',1); expect(s.tasks[0].start).toBe('2026-11-02'); expect(rescheduleTask(s,s.tasks[0].id,'move',NaN)).toBe(s); expect(rescheduleTask(s,s.tasks[1].id,'move',1)).toBe(s); });
 it('provides a chart for undated drafts and pads a one-day task', () => { const q = draft(); expect(ganttRange(q.schedule,'2026-11-01').days).toBeGreaterThan(55); q.schedule.tasks[0].start = '2026-11-01'; q.schedule.tasks[0].end = '2026-11-01'; const r = ganttRange(q.schedule,'2026-11-01'); expect(r.days).toBeGreaterThan(55); expect(r.start).toBeLessThan(dateDay('2026-11-01')!); expect(r.end).toBeGreaterThan(dateDay('2026-11-01')!); });
-it('creates landscape standalone and appended PDFs, retaining quotation pages', async () => { const q = ready(), f = fonts(); const bytes = await generateSchedulePdf(q, f); const pdf = await PDFDocument.load(bytes); expect(pdf.getPageCount()).toBe(1); expect(pdf.getPage(0).getWidth()).toBeGreaterThan(pdf.getPage(0).getHeight()); mkdirSync('../tmp/pdfs', { recursive: true }); writeFileSync('../tmp/pdfs/schedule-sample.pdf', bytes); writeFileSync('../tmp/pdfs/schedule-draft.json', JSON.stringify(q)); q.schedule.includeInQuotation = true; const attached = await generateQuotationPdf(q, f); const all = await PDFDocument.load(attached); expect(all.getPageCount()).toBe(5); expect(all.getPage(0).getWidth()).toBeLessThan(all.getPage(0).getHeight()); expect(all.getPage(4).getWidth()).toBeGreaterThan(all.getPage(4).getHeight()); writeFileSync('../tmp/pdfs/schedule-attached.pdf', attached); }, 30000);
+it('creates landscape standalone and appended PDFs, retaining quotation pages', async () => { const q = ready(), f = fonts(); const bytes = await generateSchedulePdf(q, f); const pdf = await PDFDocument.load(bytes); mkdirSync('../tmp/pdfs', { recursive: true }); writeFileSync('../tmp/pdfs/schedule-sample.pdf', bytes); expect(pdf.getPageCount()).toBe(1); expect(pdf.getPage(0).getWidth()).toBeGreaterThan(pdf.getPage(0).getHeight()); mkdirSync('../tmp/pdfs', { recursive: true }); writeFileSync('../tmp/pdfs/schedule-sample.pdf', bytes); writeFileSync('../tmp/pdfs/schedule-draft.json', JSON.stringify(q)); q.schedule.includeInQuotation = true; const attached = await generateQuotationPdf(q, f); const all = await PDFDocument.load(attached); expect(all.getPageCount()).toBe(5); expect(all.getPage(0).getWidth()).toBeLessThan(all.getPage(0).getHeight()); expect(all.getPage(4).getWidth()).toBeGreaterThan(all.getPage(4).getHeight()); writeFileSync('../tmp/pdfs/schedule-attached.pdf', attached); }, 30000);
 it('paginates 40 tasks, multiline notes and long metadata without losing content', async () => { const q = ready(); q.schedule.tasks = Array.from({ length: 40 }, (_, i) => ({ ...q.schedule.tasks[0], id: String(i), name: `阶段${i + 1}`, note: i === 0 ? '行\n'.repeat(119) : '备注' })); q.project = '项目名称'.repeat(125); q.schedule.notes = '确认\n'.repeat(400); const bytes = await generateSchedulePdf(q, fonts()); expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(8); writeFileSync('../tmp/pdfs/schedule-long.pdf', bytes); }, 30000);
 
 it('migrates existing schedule drafts and rejects invalid calendar settings', () => {
@@ -69,8 +69,8 @@ it('round-trips calendar settings and exports the selected business-day conventi
 it('generates a business-day PDF with Japan holidays', async () => {
   const q = ready(); q.schedule.dayMode = 'business'; q.schedule.holidayCountry = 'JP';
   const bytes = await generateSchedulePdf(q, fonts());
-  expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
   writeFileSync('../tmp/pdfs/schedule-business.pdf', bytes);
+  expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
   writeFileSync('../tmp/pdfs/schedule-business-draft.json', JSON.stringify(q));
 }, 30000);
 
@@ -93,4 +93,18 @@ it('keeps global and legacy task notes in a separate export section following cu
  expect(tsv.split('\n')[0].split('\t')).toHaveLength(4);
  expect(tsv).not.toContain('THE TRIANGLE');
  expect(tsv).toContain('\n\n備考\n'); expect(tsv).toContain("\n'=SUM(1,2)");
+});
+
+it.each([['2026-11-01', 63], ['2026-12-28', 10], ['2024-02-28', 4], ['2026-01-01', 3660]])('lays out month/year bands and calendar ticks for %s', (start, days) => {
+ const range = { start: dateDay(start)!, days }, axis = timelineAxis(range);
+ expect(axis.bands.reduce((sum, b) => sum + b.width, 0)).toBeCloseTo(1, 10);
+ expect(axis.bands[0].position).toBe(0);
+ axis.bands.forEach(b => { expect(b.width).toBeGreaterThan(0); expect(b.position + b.width).toBeLessThanOrEqual(1.000001); });
+ axis.ticks.forEach(t => { expect(t.position).toBeGreaterThanOrEqual(0); expect(t.position).toBeLessThan(1); });
+ expect(axis.ticks.length).toBeLessThanOrEqual(14);
+});
+it('places week ticks on Mondays and distinguishes year boundaries', () => {
+ const range = { start: dateDay('2026-12-01')!, days: 63 }, axis = timelineAxis(range);
+ expect(axis.bands.map(b => b.label)).toEqual(['2026.12', '2027.01', '2027.02']);
+ axis.ticks.forEach(t => { const day = range.start + Math.round(t.position * range.days); expect(new Date(day * 86400000).getUTCDay()).toBe(1); });
 });

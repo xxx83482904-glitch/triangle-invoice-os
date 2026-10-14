@@ -170,3 +170,28 @@ export function reorderTaskTo(s: Schedule, id: string, target: number): Schedule
   tasks.splice(target, 0, task);
   return { ...s, tasks };
 }
+
+/** Shared calendar geometry for the editor and exported PDF. */
+export function timelineAxis(range: { start: number; days: number }) {
+  const end = range.start + range.days, annual = range.days > 400;
+  const bands: { position: number; width: number; label: string }[] = [];
+  let cursor = range.start;
+  while (cursor < end) {
+    const date = new Date(cursor * DAY), year = date.getUTCFullYear(), month = date.getUTCMonth();
+    const next = Math.min(end, Date.UTC(year + (annual ? 1 : 0), annual ? 0 : month + 1, 1) / DAY);
+    bands.push({ position: (cursor - range.start) / range.days, width: (next - cursor) / range.days, label: annual ? String(year) : `${year}.${String(month + 1).padStart(2, '0')}` });
+    cursor = next;
+  }
+  const ticks: { position: number; label: string }[] = [];
+  if (range.days <= 168) {
+    const step = range.days <= 14 ? 1 : range.days <= 84 ? 7 : 14;
+    const monday = ((range.start + 3) % 7 + 7) % 7;
+    for (let d = step === 1 ? range.start : range.start + (7 - monday) % 7; d < end; d += step) ticks.push({ position: (d - range.start) / range.days, label: dayDate(d).slice(5).replace('-', '/') });
+  } else {
+    const stride = range.days <= 400 ? 1 : range.days <= 1000 ? 3 : range.days <= 2000 ? 6 : 12;
+    const date = new Date(range.start * DAY); let year = date.getUTCFullYear(), month = date.getUTCMonth();
+    if (date.getUTCDate() !== 1) month++;
+    for (let d = Date.UTC(year, month, 1) / DAY; d < end; month += stride, d = Date.UTC(year, month, 1) / DAY) ticks.push({ position: (d - range.start) / range.days, label: annual ? dayDate(d).slice(0, 7).replace('-', '.') : dayDate(d).slice(5, 7) });
+  }
+  return { bands, ticks: ticks.filter(t => t.position < .96) };
+}
