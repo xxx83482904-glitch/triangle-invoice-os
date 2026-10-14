@@ -3,7 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
 import { calculateRevisedFee } from '../src/calculator';
 import { createQuotation, parseQuotation, quoteErrors } from '../src/quotation';
-import { dateDay, dayDate, ganttRange, scheduleDays, isWorkday, calendarWarning, reorderTask, parseSchedule, rescheduleTask, scheduleErrors, scheduleRange, scheduleTsv, taskSpan } from '../src/schedule';
+import { dateDay, dayDate, ganttRange, scheduleDays, isWorkday, calendarWarning, reorderTask, reorderTaskTo, scheduleExportNotes, parseSchedule, rescheduleTask, scheduleErrors, scheduleRange, scheduleTsv, taskSpan } from '../src/schedule';
 import { generateSchedulePdf } from '../src/schedulePdf';
 import { generateQuotationPdf } from '../src/quotationPdf';
 const draft = () => createQuotation('展示空间设计项目', calculateRevisedFee(6300), new Date(2026, 9, 13));
@@ -73,3 +73,24 @@ it('generates a business-day PDF with Japan holidays', async () => {
   writeFileSync('../tmp/pdfs/schedule-business.pdf', bytes);
   writeFileSync('../tmp/pdfs/schedule-business-draft.json', JSON.stringify(q));
 }, 30000);
+
+it('drag reorders across multiple rows without altering task data or calendar settings', () => {
+ const s = ready().schedule, before = JSON.stringify(s), ids = s.tasks.map(t => t.id);
+ const down = reorderTaskTo(s, ids[0], 3);
+ expect(down.tasks.map(t => t.id)).toEqual([ids[1],ids[2],ids[3],ids[0]]);
+ expect(down.tasks[3]).toBe(s.tasks[0]); expect(JSON.stringify(s)).toBe(before);
+ expect(reorderTaskTo(down, ids[0], 0)).toEqual(s);
+ for (const target of [-1, 4, NaN, 1.5]) expect(reorderTaskTo(s, ids[0], target)).toBe(s);
+ expect(reorderTaskTo(s, 'missing', 1)).toBe(s);
+ expect(reorderTaskTo(s, ids[0], 0)).toBe(s);
+});
+it('keeps global and legacy task notes in a separate export section following current row order', () => {
+ const q = ready(); q.schedule.tasks[0].note = '確認事項\n=SUM(1,2)';
+ const s = reorderTaskTo(q.schedule, q.schedule.tasks[0].id, 3);
+ expect(scheduleExportNotes(s)[0]).toBe(s.notes);
+ expect(scheduleExportNotes(s).at(-1)).toContain(`04 ${s.tasks[3].name}：確認事項`);
+ const tsv = scheduleTsv(s, 'ja');
+ expect(tsv.split('\n')[0].split('\t')).toHaveLength(4);
+ expect(tsv).not.toContain('THE TRIANGLE');
+ expect(tsv).toContain('\n\n備考\n'); expect(tsv).toContain("\n'=SUM(1,2)");
+});

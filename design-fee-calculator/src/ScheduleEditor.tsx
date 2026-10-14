@@ -18,7 +18,7 @@ export default function ScheduleEditor({ value: s, onChange, lang, onGenerate, d
     const tasks = [...s.tasks]; [tasks[i], tasks[i + direction]] = [tasks[i + direction], tasks[i]]; onChange({ ...s, tasks });
   }
   return <div className="quote-section-body schedule-editor">
-    <p className="small-note">{j('工程・日付・担当・備考を編集できます。開始日と終了日を含み、日数の表示方式を選べます。工程の重複も設定できます。', '可编辑阶段、日期、负责人及备注。包含起止日，可选择天数计算方式；可安排并行阶段。')}</p>
+    <p className="small-note">{j('工程名と日付を編集できます。開始日と終了日を含み、日数の表示方式を選べます。工程の重複も設定できます。', '可编辑阶段名称和日期。包含起止日，可选择天数计算方式；可安排并行阶段。')}</p>
     <label className="quote-field"><span>{j('スケジュール表の表題', '进度表标题')}</span><input maxLength={200} value={s.title} onChange={e => onChange({ ...s, title: e.target.value })} /></label>
     <div className="schedule-calendar-controls">
       <label>{j('日数の表示', '天数显示')}<select value={s.dayMode} onChange={e => onChange({ ...s, dayMode: e.target.value as Schedule['dayMode'] })}><option value="calendar">{j('暦日', '自然日')}</option><option value="business">{j('営業日', '工作日')}</option></select></label>
@@ -41,12 +41,13 @@ export default function ScheduleEditor({ value: s, onChange, lang, onGenerate, d
       <div className="quote-fields">
         <label className="quote-field wide"><span>{j('工程名', '阶段名称')} {i + 1}</span><input maxLength={120} value={t.name} onChange={e => change(i, 'name', e.target.value)} /></label>
         {(['start', 'end'] as const).map(key => <label className="quote-field" key={key}><span>{key === 'start' ? j('開始日', '开始日期') : j('終了日', '结束日期')} {i + 1}</span><input type="date" min="1900-01-01" max="2199-12-31" value={t[key]} onChange={e => change(i, key, e.target.value)} /></label>)}
-        <label className="quote-field wide"><span>{j('担当', '负责人')} {i + 1}</span><input maxLength={80} value={t.owner} onChange={e => change(i, 'owner', e.target.value)} /></label>
-        <label className="quote-field wide"><span>{j('備考', '备注')} {i + 1}</span><textarea rows={2} maxLength={240} value={t.note} onChange={e => change(i, 'note', e.target.value)} /></label>
       </div>
     </details>)}
     <button className="button" type="button" disabled={s.tasks.length >= MAX_TASKS} onClick={() => { const id = crypto.randomUUID(); onChange({ ...s, tasks: [...s.tasks, { id, name: j('新しい工程', '新阶段'), start: '', end: '', owner: '', note: '' }] }); requestAnimationFrame(() => edit(id)); }}><Plus size={15} />{j('工程を追加', '添加阶段')}</button>
+    <details className="schedule-export-notes" open={!!s.notes || s.tasks.some(t => t.note.trim())}><summary>{j('エクスポート時の備考欄', '导出时的备注栏')}</summary><p className="small-note">{j('PDFとExcelでは、ガントの下に備考欄としてまとめます。', 'PDF及Excel会在甘特图下方集中显示备注。')}</p>
+    {s.tasks.some(t => t.note.trim()) && <div className="schedule-existing-notes">{s.tasks.map((t, i) => t.note.trim() ? <label className="quote-field" key={t.id}><span>{String(i + 1).padStart(2, '0')} {t.name}</span><textarea rows={2} maxLength={240} value={t.note} onChange={e => change(i, 'note', e.target.value)} /></label> : null)}</div>}
     <label className="quote-field schedule-notes"><span>{j('スケジュール全体の備考', '整体进度备注')}</span><textarea rows={3} maxLength={2000} value={s.notes} onChange={e => onChange({ ...s, notes: e.target.value })} /></label>
+    </details>
     <label className="quote-checkbox"><input type="checkbox" checked={s.includeInQuotation} onChange={e => onChange({ ...s, includeInQuotation: e.target.checked })} />{j('見積書PDFの末尾にスケジュール表を添付', '在报价PDF末尾附上进度表')}</label>
     {errors.length > 0 && <details className="small-note"><summary>{j('PDF出力前の入力確認', '导出PDF前完善信息')} ({errors.length})</summary><ul>{errors.map(e => <li key={e}>{e}</li>)}</ul></details>}
     {!documentReady && <p className="small-note">{j('PDF出力には「案件・書類情報」の案件名・発行日と発行会社も必要です。', '导出PDF还需要项目名称、有效出具日期及出具公司。')}</p>}

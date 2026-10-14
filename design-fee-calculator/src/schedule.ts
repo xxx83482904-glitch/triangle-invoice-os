@@ -67,9 +67,11 @@ export function scheduleTicks(range: { start: number; days: number }) {
 }
 export function scheduleTsv(s: Schedule, lang: Language) {
   const cell = (v: string) => { const clean = v.replace(/[\r\n\t]+/g, ' '); return /^[\s]*[=+\-@]/.test(clean) ? `'${clean}` : clean; };
-  const header = lang === 'ja' ? ['工程', '開始日', '終了日', '日数（暦日）', '担当', '備考'] : ['阶段', '开始日期', '结束日期', '天数（自然日）', '负责人', '备注'];
-  header[3] = calendarLabel(s, lang);
-  return [header, ...s.tasks.map(t => [t.name, t.start, t.end, String(scheduleDays(s, t.start, t.end) ?? ''), t.owner, t.note])].map(row => row.map(cell).join('\t')).join('\n');
+  const header = lang === 'ja' ? ['工程', '開始日', '終了日', calendarLabel(s, lang)] : ['阶段', '开始日期', '结束日期', calendarLabel(s, lang)];
+  const rows = [header, ...s.tasks.map(t => [t.name, t.start, t.end, String(scheduleDays(s, t.start, t.end) ?? '')])];
+  const notes = scheduleExportNotes(s);
+  if (notes.length) rows.push([], [lang === 'ja' ? '備考' : '备注'], ...notes.flatMap(note => note.split(/\r?\n/).map(line => [line])));
+  return rows.map(row => row.map(cell).join('\t')).join('\n');
 }
 
 export type ScheduleDragMode = 'move' | 'start' | 'end';
@@ -154,5 +156,17 @@ export function reorderTask(s: Schedule, id: string, direction: -1 | 1): Schedul
   const i = s.tasks.findIndex(t => t.id === id), target = i + direction;
   if (i < 0 || target < 0 || target >= s.tasks.length) return s;
   const tasks = [...s.tasks]; [tasks[i], tasks[target]] = [tasks[target], tasks[i]];
+  return { ...s, tasks };
+}
+
+/** Keep old per-task notes, but export them together below the chart. */
+export function scheduleExportNotes(s: Schedule): string[] {
+  return [s.notes.trim(), ...s.tasks.map((t, i) => t.note.trim() ? `${String(i + 1).padStart(2, '0')} ${t.name}：${t.note.trim()}` : '')].filter(Boolean);
+}
+export function reorderTaskTo(s: Schedule, id: string, target: number): Schedule {
+  const from = s.tasks.findIndex(t => t.id === id);
+  if (from < 0 || !Number.isInteger(target) || target < 0 || target >= s.tasks.length || from === target) return s;
+  const tasks = [...s.tasks], [task] = tasks.splice(from, 1);
+  tasks.splice(target, 0, task);
   return { ...s, tasks };
 }

@@ -13,7 +13,7 @@ export async function generateQuotationPdf(q: Quotation, fontBytes?: QuotationFo
   const bytes = fontBytes ?? await loadQuoteFont();
   const [font, latin, bold] = await Promise.all([bytes.body, bytes.regular, bytes.bold].map(b => pdf.embedFont(b, { subset: true })));
   const supported = new Set(font.getCharacterSet());
-  for (const ch of JSON.stringify({ ...q, schedule: q.schedule.includeInQuotation ? q.schedule : null, images: q.images.map(i => i.caption), seal: null, signature: null })) {
+  for (const ch of JSON.stringify({ ...q, schedule: q.schedule.includeInQuotation ? { ...q.schedule, tasks: q.schedule.tasks.map(({ owner: _owner, ...task }) => task) } : null, images: q.images.map(i => i.caption), seal: null, signature: null })) {
     if (ch.codePointAt(0)! >= 32 && !supported.has(ch.codePointAt(0)!)) throw new Error(`glyph:${ch}`);
   }
   pdf.setTitle(`${q.title} - ${q.project}`); pdf.setAuthor(q.issuer); pdf.setSubject(q.number); pdf.setCreator('THE TRIANGLE.JP Design Fee Calculator');

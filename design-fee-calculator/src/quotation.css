@@ -125,3 +125,13 @@
 
 .schedule-export-bar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; border-block: 1px solid var(--line); margin-top: 24px; padding: 18px 0; font-size: 13px; }
 .schedule-export-bar .small-note { margin: 6px 0 0; }
+
+.gantt-row-actions .gantt-row-grip { cursor: grab; touch-action: none; user-select: none; font-size: 21px; background: transparent; }
+.gantt-row-grip:active { cursor: grabbing; }
+.gantt-row.row-dragging .gantt-task-fields { background: #f2f2ed; }
+.gantt-row.drop-before > div { box-shadow: inset 0 3px #111; }
+.gantt-row.drop-after > div { box-shadow: inset 0 -3px #111; }
+.gantt-row-grip:focus-visible { outline: 2px solid #555; outline-offset: -2px; }
+.schedule-export-notes { margin: 24px 0; border-top: 1px solid var(--line); padding-top: 18px; }
+.schedule-export-notes > summary { cursor: pointer; font-size: 13px; }
+.schedule-existing-notes { display: grid; gap: 14px; margin: 18px 0; }

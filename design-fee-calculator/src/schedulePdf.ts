@@ -2,7 +2,7 @@ import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import type { Quotation } from './quotation';
 import { addPageFooters, loadQuoteFont, type QuotationFonts } from './pdfAssets';
-import { dateDay, dayDate, scheduleDays, calendarLabel, restBands, scheduleErrors, scheduleRange, scheduleTicks, taskSpan } from './schedule';
+import { dateDay, dayDate, scheduleExportNotes, scheduleDays, calendarLabel, restBands, scheduleErrors, scheduleRange, scheduleTicks, taskSpan } from './schedule';
 
 export function scheduleDocumentErrors(q: Quotation): string[] {
   return [...scheduleErrors(q.schedule, q.language), ...(!q.project.trim() || !q.issuer.trim() || dateDay(q.date) === null ? [q.language === 'ja' ? '案件名・発行会社・有効な発行日を入力してください。' : '请填写项目名称、出具公司及有效的出具日期。'] : [])];
@@ -44,14 +44,13 @@ export function appendSchedulePages(pdf: PDFDocument, q: Quotation, fonts: { bod
       draw(text, L, y, size); y -= leading;
     }
   }
-  const chartX = 444, chartW = R - chartX;
+  const chartX = 320, chartW = R - chartX;
   function tableHeader() {
     if (y - 70 < bottom) newPage();
     page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: .7, color: ink });
     y -= 12;
-    draw(j('工程 / 担当', '阶段 / 负责人'), L + 5, y, 8);
+    draw(j('工程', '阶段'), L + 5, y, 8);
     draw(s.dayMode === 'business' ? j('開始 → 終了 / 営業日', '开始 → 结束 / 工作日') : j('開始 → 終了 / 暦日', '开始 → 结束 / 自然日'), 185, y, 8);
-    draw(j('備考', '备注'), 308, y, 8);
     scheduleTicks(range).forEach(t => draw(t.label, chartX + t.position * chartW + 2, y, 7, fonts.regular, true));
     y -= 23;
   }
@@ -67,21 +66,18 @@ export function appendSchedulePages(pdf: PDFDocument, q: Quotation, fonts: { bod
   s.tasks.forEach((task, index) => {
     const span = taskSpan(task, range);
     const name = wrap(`${String(index + 1).padStart(2, '0')}  ${task.name}`, 130);
-    const owner = task.owner.trim() ? wrap(task.owner, 130, 8) : [];
-    const notes = wrap(task.note, 124, 8);
-    const labels = [...name.map(text => ({ text, size: 9, muted: false })), ...owner.map(text => ({ text, size: 8, muted: true }))];
-    const count = Math.max(labels.length, notes.length, 1);
+    const labels = name.map(text => ({ text, size: 9, muted: false }));
+    const count = Math.max(labels.length, 1);
     let offset = 0;
     while (offset < count) {
-      if (y - 54 < bottom) { newPage(); tableHeader(); }
+      if (y - 48 < bottom) { newPage(); tableHeader(); }
       const capacity = Math.max(1, Math.floor((y - bottom - 18) / 13));
       const take = Math.min(count - offset, capacity);
-      const height = Math.max(54, take * 13 + 18);
+      const height = Math.max(48, take * 13 + 18);
       labels.slice(offset, offset + take).forEach((t, i) => draw(t.text, L + 5, y - 10 - i * 13, t.size, fonts.body, t.muted));
       draw(task.start, 185, y - 10, 8, fonts.regular);
       draw(`→ ${task.end}`, 185, y - 23, 8);
       draw(`${scheduleDays(s, task.start, task.end)} ${j('日', '天')}${offset ? j(' / 続き', ' / 续') : ''}`, 185, y - 36, 8, fonts.body, true);
-      notes.slice(offset, offset + take).forEach((t, i) => draw(t, 308, y - 10 - i * 13, 8));
       holidays.forEach(b => page.drawRectangle({ x: chartX + b.offset * chartW, y: y - height, width: b.width * chartW, height, color: rgb(.94, .94, .92) }));
       scheduleTicks(range).forEach(t => page.drawLine({ start: { x: chartX + t.position * chartW, y }, end: { x: chartX + t.position * chartW, y: y - height }, thickness: .4, color: line }));
       const barX = chartX + span.offset * chartW, barW = Math.max(.7, span.width * chartW);
@@ -91,7 +87,12 @@ export function appendSchedulePages(pdf: PDFDocument, q: Quotation, fonts: { bod
       offset += take;
     }
   });
-  if (s.notes.trim()) { y -= 22; flow(j('備考', '备注'), 10, 18); flow(s.notes); }
+  const notes = scheduleExportNotes(s);
+  if (notes.length) {
+    y -= 14; if (y - 32 < bottom) newPage();
+    flow(j('備考', '备注'), 10, 16);
+    notes.forEach(note => { flow(note, 8.5, 12); y -= 2; });
+  }
 }
 
 export async function generateSchedulePdf(q: Quotation, fontBytes?: QuotationFonts) {
@@ -100,7 +101,7 @@ export async function generateSchedulePdf(q: Quotation, fontBytes?: QuotationFon
   const bytes = fontBytes ?? await loadQuoteFont();
   const [body, regular, bold] = await Promise.all([bytes.body, bytes.regular, bytes.bold].map(b => pdf.embedFont(b, { subset: true })));
   const supported = new Set(body.getCharacterSet());
-  for (const ch of JSON.stringify({ project: q.project, issuer: q.issuer, client: q.client, schedule: q.schedule })) {
+  for (const ch of JSON.stringify({ project: q.project, issuer: q.issuer, client: q.client, schedule: { ...q.schedule, tasks: q.schedule.tasks.map(({ owner: _owner, ...task }) => task) } })) {
     if (ch.codePointAt(0)! >= 32 && !supported.has(ch.codePointAt(0)!)) throw new Error(`glyph:${ch}`);
   }
   pdf.setTitle(`${q.schedule.title} - ${q.project}`); pdf.setAuthor(q.issuer); pdf.setCreator('THE TRIANGLE.JP');
