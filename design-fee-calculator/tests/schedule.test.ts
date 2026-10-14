@@ -3,7 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
 import { calculateRevisedFee } from '../src/calculator';
 import { createQuotation, parseQuotation, quoteErrors } from '../src/quotation';
-import { dateDay, dayDate, ganttRange, parseSchedule, rescheduleTask, scheduleErrors, scheduleRange, scheduleTsv, taskSpan } from '../src/schedule';
+import { dateDay, dayDate, ganttRange, scheduleDays, isWorkday, calendarWarning, reorderTask, parseSchedule, rescheduleTask, scheduleErrors, scheduleRange, scheduleTsv, taskSpan } from '../src/schedule';
 import { generateSchedulePdf } from '../src/schedulePdf';
 import { generateQuotationPdf } from '../src/quotationPdf';
 const draft = () => createQuotation('展示空间设计项目', calculateRevisedFee(6300), new Date(2026, 9, 13));
@@ -24,3 +24,52 @@ it('supports partial drafts and ignores non-finite movement', () => { const q = 
 it('provides a chart for undated drafts and pads a one-day task', () => { const q = draft(); expect(ganttRange(q.schedule,'2026-11-01').days).toBeGreaterThan(55); q.schedule.tasks[0].start = '2026-11-01'; q.schedule.tasks[0].end = '2026-11-01'; const r = ganttRange(q.schedule,'2026-11-01'); expect(r.days).toBeGreaterThan(55); expect(r.start).toBeLessThan(dateDay('2026-11-01')!); expect(r.end).toBeGreaterThan(dateDay('2026-11-01')!); });
 it('creates landscape standalone and appended PDFs, retaining quotation pages', async () => { const q = ready(), f = fonts(); const bytes = await generateSchedulePdf(q, f); const pdf = await PDFDocument.load(bytes); expect(pdf.getPageCount()).toBe(1); expect(pdf.getPage(0).getWidth()).toBeGreaterThan(pdf.getPage(0).getHeight()); mkdirSync('../tmp/pdfs', { recursive: true }); writeFileSync('../tmp/pdfs/schedule-sample.pdf', bytes); writeFileSync('../tmp/pdfs/schedule-draft.json', JSON.stringify(q)); q.schedule.includeInQuotation = true; const attached = await generateQuotationPdf(q, f); const all = await PDFDocument.load(attached); expect(all.getPageCount()).toBe(5); expect(all.getPage(0).getWidth()).toBeLessThan(all.getPage(0).getHeight()); expect(all.getPage(4).getWidth()).toBeGreaterThan(all.getPage(4).getHeight()); writeFileSync('../tmp/pdfs/schedule-attached.pdf', attached); }, 30000);
 it('paginates 40 tasks, multiline notes and long metadata without losing content', async () => { const q = ready(); q.schedule.tasks = Array.from({ length: 40 }, (_, i) => ({ ...q.schedule.tasks[0], id: String(i), name: `阶段${i + 1}`, note: i === 0 ? '行\n'.repeat(119) : '备注' })); q.project = '项目名称'.repeat(125); q.schedule.notes = '确认\n'.repeat(400); const bytes = await generateSchedulePdf(q, fonts()); expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(8); writeFileSync('../tmp/pdfs/schedule-long.pdf', bytes); }, 30000);
+
+it('migrates existing schedule drafts and rejects invalid calendar settings', () => {
+  const { dayMode, holidayCountry, includeMakeupDays, ...old } = ready().schedule;
+  expect(parseSchedule(old, []).dayMode).toBe('calendar');
+  for (const patch of [{ dayMode: 'wrong' }, { holidayCountry: 'US' }, { includeMakeupDays: 'yes' }]) expect(() => parseSchedule({ ...old, ...patch }, [])).toThrow();
+});
+it('counts Japan substitute holidays, citizen holidays and weekends inclusively', () => {
+  const s = { ...ready().schedule, dayMode: 'business' as const, holidayCountry: 'JP' as const };
+  expect(scheduleDays(s, '2026-05-01', '2026-05-07')).toBe(2);
+  expect(scheduleDays(s, '2026-09-19', '2026-09-24')).toBe(1);
+  expect(scheduleDays(s, '2027-03-20', '2027-03-23')).toBe(1);
+  expect(scheduleDays(s, '2026-11-03', '2026-11-03')).toBe(0);
+  expect(scheduleDays(s, '2026-11-02', '2026-11-02')).toBe(1);
+});
+it('counts China full holiday breaks and optional compensating working weekends', () => {
+  const s = { ...ready().schedule, dayMode: 'business' as const, holidayCountry: 'CN' as const };
+  expect(scheduleDays(s, '2026-10-01', '2026-10-10')).toBe(3);
+  expect(scheduleDays({ ...s, includeMakeupDays: false }, '2026-10-01', '2026-10-10')).toBe(2);
+  expect(scheduleDays(s, '2026-02-14', '2026-02-23')).toBe(1);
+  for (const d of ['2026-01-04', '2026-02-14', '2026-02-28', '2026-05-09', '2026-09-20', '2026-10-10']) expect(isWorkday(s, dateDay(d)!)).toBe(true);
+});
+it('never guesses holidays for an unsupported year, including across year boundaries', () => {
+  const q = ready(); q.schedule.dayMode = 'business';
+  expect(scheduleDays(q.schedule, '2026-12-30', '2027-01-02')).toBeNull();
+  expect(calendarWarning(q.schedule, 'ja')).toContain('2027');
+  expect(scheduleErrors(q.schedule, 'zh').length).toBeGreaterThan(0);
+  q.schedule.dayMode = 'calendar'; expect(scheduleErrors(q.schedule, 'ja')).toEqual([]);
+  expect(scheduleDays(q.schedule, '2026-12-30', '2027-01-02')).toBe(4);
+});
+it('reorders by identity without changing dates, rejects moving past either end', () => {
+  const s = ready().schedule, first = s.tasks[0];
+  expect(reorderTask(s, first.id, -1)).toBe(s);
+  const next = reorderTask(s, first.id, 1);
+  expect(next.tasks[1]).toBe(first); expect(s.tasks[0]).toBe(first);
+  expect(reorderTask(next, first.id, -1)).toEqual(s);
+});
+it('round-trips calendar settings and exports the selected business-day convention', () => {
+  const q = ready(); q.schedule.dayMode = 'business'; q.schedule.holidayCountry = 'JP'; q.schedule.includeMakeupDays = false;
+  expect(parseQuotation(JSON.stringify(q)).schedule).toEqual(q.schedule);
+  expect(scheduleTsv(q.schedule, 'ja')).toContain('営業日（日本の祝日除外）');
+  expect(scheduleTsv(q.schedule, 'ja')).toContain('2026-11-01\t2026-11-21\t14');
+});
+it('generates a business-day PDF with Japan holidays', async () => {
+  const q = ready(); q.schedule.dayMode = 'business'; q.schedule.holidayCountry = 'JP';
+  const bytes = await generateSchedulePdf(q, fonts());
+  expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+  writeFileSync('../tmp/pdfs/schedule-business.pdf', bytes);
+  writeFileSync('../tmp/pdfs/schedule-business-draft.json', JSON.stringify(q));
+}, 30000);

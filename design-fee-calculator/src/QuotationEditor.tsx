@@ -100,9 +100,12 @@ export default function QuotationEditor({ initial, lang, onBack, initialSection 
       const bytes = kind === 'schedule'
         ? await (await import('./schedulePdf')).generateSchedulePdf(q)
         : await (await import('./quotationPdf')).generateQuotationPdf(q);
-      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
-      setPdf({ url, draft: serialized, kind, filename: kind === 'schedule' ? quoteFilename(q, 'pdf').replace(/\.pdf$/, '_schedule.pdf') : quoteFilename(q, 'pdf') });
-      setNotice(j('PDFを作成しました。内容を確認して保存してください。', 'PDF已生成，请确认内容后保存。'));
+      const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const filename = kind === 'schedule' ? quoteFilename(q, 'pdf').replace(/\.pdf$/, '_schedule.pdf') : quoteFilename(q, 'pdf');
+      setPdf({ url, draft: serialized, kind, filename });
+      if (kind === 'schedule') download(blob, filename);
+      setNotice(kind === 'schedule' ? j('スケジュールPDFを作成しました。ダウンロードが始まらない場合は「スケジュールPDFを保存」を押してください。', '进度表PDF已生成。若未自动下载，请点击“保存进度表PDF”。') : j('PDFを作成しました。内容を確認して保存してください。', 'PDF已生成，请确认内容后保存。'));
     } catch (e) {
       const message = (e as Error).message;
       setError(message.startsWith('glyph:') ? j(`PDFで使用できない文字があります：${message.slice(6)}。置き換えてください。`, `PDF不支持此字符：${message.slice(6)}。请替换。`) : j('PDFを作成できませんでした。通信状態と画像を確認して再試行してください。', 'PDF生成失败，请检查网络和图片后重试。'));

@@ -105,3 +105,23 @@
 .gantt-status { min-height: 20px; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 8px; }
 @media (pointer: coarse) { .gantt-handle { width: 36px; } }
 @media (max-width: 480px) { .gantt-row { grid-template-columns: 160px minmax(0, 1fr); } .gantt-name { padding: 10px; } .gantt-tools { flex-wrap: wrap; } }
+
+.schedule-calendar-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 20px; }
+.schedule-calendar-controls > label { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.schedule-calendar-controls select { min-height: 44px; border: 1px solid var(--line); padding: 8px 12px; background: white; color: #181818; font-size: 16px; }
+.schedule-calendar-warning { padding: 14px; border: 1px solid #999; font-size: 12px; line-height: 1.8; }
+.gantt-task-fields { padding: 10px 12px; }
+.gantt-task-fields input { display: block; width: 100%; min-width: 0; min-height: 36px; border: 0; border-bottom: 1px solid #e6e6e0; background: transparent; border-radius: 0; padding: 6px 2px; font-size: 12px; color: #171717; }
+.gantt-task-fields input:focus { outline: 1px solid #555; background: #fafaf7; }
+.gantt-task-fields .gantt-inline-name { font-weight: 600; }
+.gantt-row-actions { display: flex; align-items: center; gap: 3px; }
+.gantt-row-actions > span { font-size: 10px; color: #777; margin-right: 5px; }
+.gantt-row-actions button { min-width: 32px; min-height: 36px; border: 0; background: #f5f5f2; color: #222; cursor: pointer; }
+.gantt-row-actions button:disabled { opacity: .3; cursor: default; }
+.gantt-row-actions .gantt-details { margin-left: auto; font-size: 10px; padding: 0 6px; background: transparent; text-decoration: underline; }
+.gantt-rest { position: absolute; inset-block: 0; background: rgba(110,110,90,.1); pointer-events: none; }
+@media (pointer: coarse) { .gantt-task-fields input { min-height: 44px; font-size: 16px; } .gantt-row-actions button { min-height: 44px; min-width: 36px; } }
+@media (max-width: 480px) { .gantt-row { grid-template-columns: 190px minmax(0, 1fr); } }
+
+.schedule-export-bar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; border-block: 1px solid var(--line); margin-top: 24px; padding: 18px 0; font-size: 13px; }
+.schedule-export-bar .small-note { margin: 6px 0 0; }

@@ -2,7 +2,7 @@ import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import type { Quotation } from './quotation';
 import { addPageFooters, loadQuoteFont, type QuotationFonts } from './pdfAssets';
-import { dateDay, dayDate, scheduleErrors, scheduleRange, scheduleTicks, taskSpan } from './schedule';
+import { dateDay, dayDate, scheduleDays, calendarLabel, restBands, scheduleErrors, scheduleRange, scheduleTicks, taskSpan } from './schedule';
 
 export function scheduleDocumentErrors(q: Quotation): string[] {
   return [...scheduleErrors(q.schedule, q.language), ...(!q.project.trim() || !q.issuer.trim() || dateDay(q.date) === null ? [q.language === 'ja' ? '案件名・発行会社・有効な発行日を入力してください。' : '请填写项目名称、出具公司及有效的出具日期。'] : [])];
@@ -50,7 +50,7 @@ export function appendSchedulePages(pdf: PDFDocument, q: Quotation, fonts: { bod
     page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: .7, color: ink });
     y -= 12;
     draw(j('工程 / 担当', '阶段 / 负责人'), L + 5, y, 8);
-    draw(j('開始 → 終了 / 暦日', '开始 → 结束 / 自然日'), 185, y, 8);
+    draw(s.dayMode === 'business' ? j('開始 → 終了 / 営業日', '开始 → 结束 / 工作日') : j('開始 → 終了 / 暦日', '开始 → 结束 / 自然日'), 185, y, 8);
     draw(j('備考', '备注'), 308, y, 8);
     scheduleTicks(range).forEach(t => draw(t.label, chartX + t.position * chartW + 2, y, 7, fonts.regular, true));
     y -= 23;
@@ -60,7 +60,9 @@ export function appendSchedulePages(pdf: PDFDocument, q: Quotation, fonts: { bod
   flow(q.project, 12, 18);
   flow(q.issuer, 9, 14);
   if (q.client.trim()) flow(`${j('宛先', '委托方')}：${q.client}`);
-  flow(`${dayDate(range.start)} — ${dayDate(range.end)}  /  ${range.days} ${j('暦日（土日祝日を含む）', '自然日（含周末及节假日）')}`, 9, 18);
+  flow(`${dayDate(range.start)} — ${dayDate(range.end)}  /  ${scheduleDays(s, dayDate(range.start), dayDate(range.end))} ${calendarLabel(s, q.language)}`, 9, 18);
+  if (s.dayMode === 'business') flow(j('日付の横軸は暦日。薄い背景は休業日で、日数から除外しています。', '日期横轴按自然日显示。浅色背景为休息日，已从天数中扣除。'), 8, 16);
+  const holidays = restBands(s, range);
   y -= 10; tableHeader();
   s.tasks.forEach((task, index) => {
     const span = taskSpan(task, range);
@@ -78,8 +80,9 @@ export function appendSchedulePages(pdf: PDFDocument, q: Quotation, fonts: { bod
       labels.slice(offset, offset + take).forEach((t, i) => draw(t.text, L + 5, y - 10 - i * 13, t.size, fonts.body, t.muted));
       draw(task.start, 185, y - 10, 8, fonts.regular);
       draw(`→ ${task.end}`, 185, y - 23, 8);
-      draw(`${span.days} ${j('日', '天')}${offset ? j(' / 続き', ' / 续') : ''}`, 185, y - 36, 8, fonts.body, true);
+      draw(`${scheduleDays(s, task.start, task.end)} ${j('日', '天')}${offset ? j(' / 続き', ' / 续') : ''}`, 185, y - 36, 8, fonts.body, true);
       notes.slice(offset, offset + take).forEach((t, i) => draw(t, 308, y - 10 - i * 13, 8));
+      holidays.forEach(b => page.drawRectangle({ x: chartX + b.offset * chartW, y: y - height, width: b.width * chartW, height, color: rgb(.94, .94, .92) }));
       scheduleTicks(range).forEach(t => page.drawLine({ start: { x: chartX + t.position * chartW, y }, end: { x: chartX + t.position * chartW, y: y - height }, thickness: .4, color: line }));
       const barX = chartX + span.offset * chartW, barW = Math.max(.7, span.width * chartW);
       page.drawRectangle({ x: barX, y: y - 30, width: Math.min(barW, R - barX), height: 10, color: ink });
