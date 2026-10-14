@@ -90,7 +90,7 @@ export function calculateRevisedFee(area: number, typeId = 'retail', additionalF
   };
 }
 
-/** Original comparison: fixed fee in the first band; no global minimum on rate bands.
+/** Main 26-band model: fixed fee in the first band; no global minimum on rate bands.
  * No extrapolation, smoothing, or revised-tier logic is used here.
  */
 export function calculateCurrentFee(area: number, typeId = 'retail', additionalFee = 0, config = pricing) {
@@ -99,10 +99,13 @@ export function calculateCurrentFee(area: number, typeId = 'retail', additionalF
   const coefficient = projectType(typeId, config).coefficient;
   const band = config.currentBands.find(band => area <= band.upTo);
   if (!band) return null;
-  const raw = band.fixedFee !== undefined ? new D(band.fixedFee) : new D(area).times(band.rate).times(coefficient);
+  const subtotal = band.fixedFee !== undefined ? new D(band.fixedFee) : new D(area).times(band.rate);
+  const raw = band.fixedFee !== undefined ? subtotal : subtotal.times(coefficient);
   const baseFee = safeMoney(raw);
   return { area, baseFee, totalFee: safeMoney(new D(baseFee).plus(additionalFee)), additionalFee,
-    averageRate: averageRate(baseFee, area), band, coefficient };
+    averageRate: averageRate(baseFee, area), band, coefficient,
+    subtotal: subtotal.toNumber(), adjustedAmount: raw.toNumber(), minimumApplied: false,
+    breakdown: band.rate === undefined ? [] : [{ from: 0, to: area, area, rate: band.rate, amount: subtotal.toNumber() }] };
 }
 
 export function simulationCount(area: number, config = pricing) {
@@ -112,10 +115,11 @@ export function simulationCount(area: number, config = pricing) {
 // Pages keep very large valid areas responsive. Copy/export can iterate all rows.
 export function* simulationRows(area: number, typeId = 'retail', start = 0, limit = Infinity, config = pricing): Generator<FeeResult> {
   const count = simulationCount(area, config);
+  if (area > config.currentBands.at(-1)!.upTo) throw new RangeError('Area rate is undefined');
   if (!Number.isSafeInteger(start) || start < 0 || limit <= 0 || (limit !== Infinity && !Number.isSafeInteger(limit))) throw new RangeError('Invalid page');
   for (let index = start; index < Math.min(count, start + limit); index++) {
     const rowArea = new D(area).minus(new D(index).times(config.simulationStep)).toNumber();
-    yield calculateRevisedFee(rowArea, typeId, 0, config);
+    yield calculateCurrentFee(rowArea, typeId, 0, config)!;
   }
 }
 

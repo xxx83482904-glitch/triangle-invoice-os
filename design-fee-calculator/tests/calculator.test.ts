@@ -113,14 +113,14 @@ describe('Progressive revised model', () => {
 describe('500㎡ simulation', () => {
   it('matches all 13 initial rows, totals and average rates', () => {
     const expected = [
-      [6300, 657.6, 4143000], [5800, 666.0, 3863000], [5300, 676.0, 3583000],
-      [4800, 685.6, 3291000], [4300, 693.3, 2981000], [3800, 702.9, 2671000],
-      [3300, 715.5, 2361000], [2800, 729.6, 2043000], [2300, 744.8, 1713000],
-      [1800, 768.3, 1383000], [1300, 803.8, 1045000], [800, 868.8, 695000], [300, 1150.0, 345000],
+      [6300, 660, 4158000], [5800, 660, 3828000], [5300, 672, 3561600],
+      [4800, 672, 3225600], [4300, 690, 2967000], [3800, 702, 2667600],
+      [3300, 702, 2316600], [2800, 714, 1999200], [2300, 732, 1683600],
+      [1800, 762, 1371600], [1300, 792, 1029600], [800, 822, 657600], [300, 1086, 325800],
     ];
     expect(Array.from(simulationRows(6300), r => [r.area, Number(r.averageRate.toFixed(1)), r.totalFee])).toEqual(expected);
   });
-  it.each([100, 500, 501, 1000, 1234.56, 6300, 20000])('starts at %s and decrements by exactly 500, excluding nonpositive areas', area => {
+  it.each([100, 500, 501, 1000, 1234.56, 6300, 13700])('starts at %s and decrements by exactly 500, excluding nonpositive areas', area => {
     const rows = Array.from(simulationRows(area, 'hotel'));
     expect(rows).toHaveLength(Math.ceil(area / 500));
     expect(rows[0].area).toBe(area);
@@ -131,10 +131,12 @@ describe('500㎡ simulation', () => {
       if (i) expect(rows[i - 1].area - rows[i].area).toBeCloseTo(500, 8);
     }
   });
-  it('pages very large areas without truncating the series', () => {
-    expect(simulationCount(1000000)).toBe(2000);
-    expect(Array.from(simulationRows(1000000, 'retail', 50, 50))).toHaveLength(50);
-    expect(Array.from(simulationRows(1000000, 'retail', 1999, 50)).map(row => row.area)).toEqual([500]);
+  it('rejects undefined rates without skipping rows or extrapolating', () => {
+    expect(() => Array.from(simulationRows(13700.01))).toThrow('Area rate is undefined');
+    expect(() => Array.from(simulationRows(20000, 'retail', 20, 5))).toThrow();
+    expect(simulationCount(13700)).toBe(28);
+    expect(Array.from(simulationRows(13700, 'retail', 25, 5)).map(row => row.area)).toEqual([1200, 700, 200]);
+    expect(() => tableText(20000, 'retail', 'ja')).toThrow();
   });
 });
 
@@ -166,20 +168,46 @@ describe('Input and export', () => {
     }
   });
   it('copies result and Chinese quotation with standardized labels and correct totals', () => {
-    const result = calculateRevisedFee(6300, 'retail', 20000);
+    const result = calculateCurrentFee(6300, 'retail', 20000)!;
     const ja = resultText('钛马赫新展厅', 'retail', result, 'ja');
     const zh = chineseQuotation('钛马赫新展厅', 'retail', result);
-    expect(ja).toContain('設計費総額: 4,163,000 RMB');
+    expect(ja).toContain('設計費総額: 4,178,000 RMB');
     for (const label of ['设计面积', '平均设计单价', '基础设计费', '附加设计费', '设计费总额']) expect(zh).toContain(label);
-    expect(zh).toContain('4,163,000');
+    expect(zh).toContain('4,178,000');
+    expect(zh).toContain('面积 × 所属档单价');
+    expect(zh).not.toContain('阶梯累加');
+    expect(ja).toContain('面積 × 該当区分の単価');
   });
   it('exports all rows as numeric TSV (no grouping commas) without extras', () => {
     const rows = tableText(6300, 'retail', 'zh', true).split('\r\n').map(r => r.split('\t'));
     expect(rows).toHaveLength(14);
     expect(rows[0]).toEqual(['设计面积 (㎡)', '平均设计单价 (RMB/㎡)', '设计费总额 (RMB)']);
-    expect(rows[1]).toEqual(['6300', '657.6', '4143000']);
-    expect(rows.at(-1)).toEqual(['300', '1150.0', '345000']);
+    expect(rows[1]).toEqual(['6300', '660.0', '4158000']);
+    expect(rows.at(-1)).toEqual(['300', '1086.0', '325800']);
     expect(tableText(6300, 'office', 'ja')).toContain('0.87');
     expect(() => tableText(10000500, 'retail', 'ja')).toThrow();
+  });
+});
+
+
+describe('Main band fee integration', () => {
+  it('keeps the fixed fee only within the fixed band and multiplies the entire area above it', () => {
+    expect(calculateCurrentFee(150, 'residential', 1000)).toMatchObject({ baseFee: 240000, totalFee: 241000, breakdown: [] });
+    expect(calculateCurrentFee(151)).toMatchObject({ subtotal: 225594, baseFee: 225594, minimumApplied: false });
+    expect(calculateCurrentFee(6300)).toMatchObject({ subtotal: 4158000, baseFee: 4158000, averageRate: 660,
+      breakdown: [{ from: 0, to: 6300, area: 6300, rate: 660, amount: 4158000 }] });
+  });
+  it('rounds only the coefficient-adjusted fee before adding extras', () => {
+    const fee = calculateCurrentFee(6300.25, 'residential', 123)!;
+    expect(fee.baseFee).toBe(4449237);
+    expect(fee.totalFee).toBe(4449360);
+    expect(Number(fee.averageRate.toFixed(1)) * fee.area).not.toBe(fee.baseFee);
+  });
+  it('uses edited band configuration without changing logic', () => {
+    const config = { ...pricing, currentBands: [{ upTo: 100, fixedFee: 1000 }, { upTo: 200, rate: 20 }] };
+    validateConfig(config);
+    expect(calculateCurrentFee(100, 'residential', 0, config)?.baseFee).toBe(1000);
+    expect(calculateCurrentFee(101, 'retail', 0, config)?.baseFee).toBe(2020);
+    expect(calculateCurrentFee(201, 'retail', 0, config)).toBeNull();
   });
 });

@@ -31,7 +31,7 @@ export function chineseQuotation(name: string, typeId: string, result: FeeResult
     `设计面积：${number(result.area)}㎡`,
     `项目类型：${projectType(typeId).label.zh}（难度系数 ${result.coefficient.toFixed(2)}）`,
     '',
-    '计费方式：最低费用＋阶梯累加（修订方案）。各档单价仅适用于该档新增面积。',
+    `计费方式：${messages.zh.modelName}。${messages.zh.floorNote}`,
     `基础设计费：人民币 ${number(result.baseFee)} 元`,
     `平均设计单价：${number(result.averageRate, 1)} RMB/㎡（基础设计费÷设计面积，不含附加设计费）`,
     `附加设计费：人民币 ${number(result.additionalFee)} 元`,

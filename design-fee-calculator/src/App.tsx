@@ -9,7 +9,7 @@ import { createQuotation, type Quotation } from './quotation';
 const QuotationEditor = lazy(() => import('./QuotationEditor'));
 
 const PAGE_SIZE = 50;
-const APP_RELEASE = '2026.10.14.3';
+const APP_RELEASE = '2026.10.14.4';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('ja');
@@ -31,15 +31,15 @@ export default function App() {
   const computed = useMemo(() => {
     if (parsedArea.value === undefined || parsedAdditional.value === undefined) return { result: null, legacy: null, rangeError: false };
     try {
-      return { result: calculateRevisedFee(parsedArea.value, typeId, parsedAdditional.value),
-        legacy: calculateCurrentFee(parsedArea.value, typeId, parsedAdditional.value), rangeError: false };
+      return { result: calculateCurrentFee(parsedArea.value, typeId, parsedAdditional.value),
+        legacy: calculateRevisedFee(parsedArea.value, typeId, parsedAdditional.value), rangeError: false };
     } catch { return { result: null, legacy: null, rangeError: true }; }
   }, [parsedArea.value, parsedAdditional.value, typeId]);
   const { result, legacy } = computed;
   const rowCount = result ? simulationCount(result.area) : 0;
   const currentPage = Math.min(page, Math.max(0, Math.ceil(rowCount / PAGE_SIZE) - 1));
   const rows = useMemo(() => result ? Array.from(simulationRows(result.area, typeId, currentPage * PAGE_SIZE, PAGE_SIZE)) : [], [result, typeId, currentPage]);
-  const areaError = parsedArea.error ? t.errors[parsedArea.error] : computed.rangeError ? t.errors.range : '';
+  const areaError = parsedArea.error ? t.errors[parsedArea.error] : parsedArea.value !== undefined && parsedArea.value > pricing.currentBands.at(-1)!.upTo ? t.undefinedNote : computed.rangeError ? t.errors.range : '';
   const additionalError = parsedAdditional.error ? t.errors[parsedAdditional.error] : '';
 
   useEffect(() => { document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'ja'; }, [lang]);
@@ -112,7 +112,8 @@ export default function App() {
                 <div><dt>{t.additional}</dt><dd>{result ? fee(result.additionalFee) : '—'}</dd></div>
               </dl>
             </div>
-            <p className="result-note">{result ? t.averageNote : t.empty}</p>
+            <p className="result-note">{result ? (result.band.rate !== undefined ? `${t.rate}：${number(result.band.rate)} RMB/㎡ × ${number(result.area)}㎡ × ${result.coefficient.toFixed(2)}` : `${t.fixed}：${number(result.band.fixedFee)} RMB`) : areaError || t.empty}</p>
+            <p className="small-note">{t.averageNote}</p>
             <div className="copy-actions grid sm:grid-cols-2 gap-2">
               <button type="button" className="button primary" disabled={!result} onClick={() => void copy('result')}>{copyIcon('result')}{copied === 'result' ? t.copied : t.copyResult}</button>
               <button type="button" className="button" disabled={!result} onClick={() => void copy('chinese')}>{copyIcon('chinese')}{copied === 'chinese' ? t.copied : t.copyChinese}</button>
@@ -121,11 +122,12 @@ export default function App() {
             <details className="disclosure breakdown">
               <summary>{t.breakdown}<ChevronDown size={16} /></summary>
               {result ? <div className="disclosure-content">
-                <dl className="detail-lines"><div><dt>{t.minimum}（{number(pricing.includedArea)}㎡{t.included}）</dt><dd>{fee(pricing.minimumFee)}</dd></div>
-                  {result.breakdown.map(row => <div key={row.from}><dt>{number(row.area)}㎡ × {number(row.rate)}<small>{number(row.from)}–{number(row.to)}㎡</small></dt><dd>{fee(row.amount)}</dd></div>)}
-                  <div className="subtotal"><dt>{t.progressive}</dt><dd>{fee(result.subtotal)}</dd></div>
-                  <div><dt>{t.coefficient}</dt><dd>× {result.coefficient.toFixed(2)}</dd></div>
-                  <div><dt>{t.adjusted}</dt><dd>{fee(result.adjustedAmount)}</dd></div>
+                <dl className="detail-lines">
+                  {result.band.fixedFee !== undefined ? <div><dt>{t.fixed}（{number(result.band.upTo)}㎡{t.included}）</dt><dd>{fee(result.band.fixedFee)}</dd></div> : <>
+                    <div><dt>{number(result.area)}㎡ × {number(result.band.rate)} RMB/㎡</dt><dd>{fee(result.subtotal)}</dd></div>
+                    <div><dt>{t.coefficient}</dt><dd>× {result.coefficient.toFixed(2)}</dd></div>
+                    <div><dt>{t.adjusted}</dt><dd>{fee(result.adjustedAmount)}</dd></div>
+                  </>}
                   <div><dt>{t.base}<small>{t.rounded}</small></dt><dd>{fee(result.baseFee)}</dd></div>
                 </dl><p className="small-note">{t.floorNote}</p>
               </div> : <p className="small-note disclosure-content">{t.empty}</p>}
@@ -137,8 +139,8 @@ export default function App() {
           <summary><span>{t.legacy}</span><ChevronDown size={18} /></summary>
           <div className="disclosure-content">
             {result && legacy ? <>
-              <div className="legacy-grid"><div><p>{t.legacyTitle}</p><strong>{fee(legacy.totalFee)}</strong></div><div><p>{t.revisedTitle}</p><strong>{fee(result.totalFee)}</strong></div><div><p>{t.difference}</p><strong>{result.totalFee - legacy.totalFee > 0 ? '+' : ''}{fee(result.totalFee - legacy.totalFee)}</strong></div></div>
-              <p className="small-note">{legacy.band.fixedFee !== undefined ? `${t.fixed}：${number(legacy.band.fixedFee)} RMB` : `${t.rate}：${number(legacy.band.rate)} RMB/㎡ × ${number(result.area)}㎡ × ${type.coefficient.toFixed(2)}`}</p>
+              <div className="legacy-grid"><div><p>{t.legacyTitle}</p><strong>{fee(result.totalFee)}</strong></div><div><p>{t.revisedTitle}</p><strong>{fee(legacy.totalFee)}</strong></div><div><p>{t.difference}</p><strong>{legacy.totalFee - result.totalFee > 0 ? '+' : ''}{fee(legacy.totalFee - result.totalFee)}</strong></div></div>
+              <p className="small-note">{result.band.fixedFee !== undefined ? `${t.fixed}：${number(result.band.fixedFee)} RMB` : `${t.rate}：${number(result.band.rate)} RMB/㎡ × ${number(result.area)}㎡ × ${type.coefficient.toFixed(2)}`}</p>
             </> : <p className="unavailable">{result ? t.undefinedNote : t.empty}</p>}
             <p className="small-note">{t.legacyNote}</p><p className="small-note">{t.legacyExtras}</p>
           </div>
@@ -163,7 +165,7 @@ export default function App() {
 
         <details className="disclosure model-details">
           <summary>{t.settings}<ChevronDown size={18} /></summary>
-          <div className="disclosure-content model-grid"><div><h3>{t.modelName}</h3><p className="small-note">{t.settingsNote}</p><p className="small-note">{t.floorNote}</p></div><dl className="detail-lines"><div><dt>{number(pricing.includedArea)}㎡{t.included}</dt><dd>{fee(pricing.minimumFee)}</dd></div>{pricing.revisedTiers.map((tier, index) => <div key={index}><dt>{number(index ? pricing.revisedTiers[index - 1].upTo! : pricing.includedArea)}{tier.upTo ? `–${number(tier.upTo)}㎡` : `㎡${t.over}`}</dt><dd>{number(tier.rate)} <span className="unit">RMB/㎡</span></dd></div>)}</dl></div>
+          <div className="disclosure-content model-grid"><div><h3>{t.modelName}</h3><p className="small-note">{t.settingsNote}</p><p className="small-note">{t.floorNote}</p></div><dl className="detail-lines">{pricing.currentBands.map((band, index) => <div key={band.upTo}><dt>{index ? `${number(pricing.currentBands[index - 1].upTo)}㎡${t.over}〜` : ''}{number(band.upTo)}㎡{t.included}</dt><dd>{band.fixedFee !== undefined ? fee(band.fixedFee) : <>{number(band.rate)} <span className="unit">RMB/㎡</span></>}</dd></div>)}</dl></div>
         </details>
       </main>}
 
