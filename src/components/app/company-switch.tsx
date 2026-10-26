@@ -24,7 +24,7 @@ function scopedHref(pathname: string, searchParams: { toString(): string }, comp
 }
 
 function navHref(href: string, company: CompanyScope) {
-  return `${href}?company=${href === "/mail-sorter" ? mailSorterCompany : company}`;
+  return `${href === "/banking" ? "/banking/accounts" : href}?company=${href === "/mail-sorter" ? mailSorterCompany : company}`;
 }
 
 function optionsForPath(pathname: string, role?: UserRole) {

@@ -9,6 +9,7 @@ import type { BankEdit, BankRuleInput, CategoryInput } from "@/lib/banking-types
 import type { BankForecastSettings } from "@/lib/banking-types";
 import { saveBankForecastSettings } from "@/lib/bank-forecast";
 import { bankToday } from "@/lib/banking";
+import { saveBankOverview, type BankOverviewInput } from "@/lib/bank-account-overview";
 import { isActiveUser } from "@/lib/user-access";
 import type { CompanyScope } from "@/lib/company";
 import { mutateData, readData } from "@/lib/store";
@@ -17,10 +18,22 @@ function errorMessage(error: unknown) {
   return error instanceof ZodError ? "入力内容を確認してください" : error instanceof Error ? error.message : "保存に失敗しました";
 }
 function revalidateBanking() {
+  revalidatePath("/banking/accounts");
   revalidatePath("/banking");
   revalidatePath("/banking/insights");
   revalidatePath("/banking/reconcile");
   revalidatePath("/banking/forecast");
+}
+export async function saveBankOverviewAction(company: CompanyScope, accountId: string, updatedAt: string, input: BankOverviewInput) {
+  const user = await requireUser();
+  try {
+    await mutateData(user.id, "BANK_OVERVIEW_SETTINGS", "BankAccount", accountId, (data) => {
+      const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
+      if (!live) throw new Error("利用者の権限を確認してください");
+      return saveBankOverview(data, live, company, accountId, updatedAt, input, bankToday());
+    });
+    revalidateBanking(); return { success: true as const };
+  } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
 export async function saveBankEditsAction(company: CompanyScope, edits: BankEdit[]) {
   const user = await requireUser();

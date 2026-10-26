@@ -16,11 +16,11 @@ import { toast } from "@/hooks/use-toast";
 import { todayIso } from "@/lib/format";
 import { EstimateStatusSelect } from "@/components/app/estimate-status-select";
 import type { Estimate } from "@/lib/types";
-import { groupDocuments, orderDocuments } from "@/lib/document-order";
+import { documentCounterpartKey, documentProjectOptions, groupDocuments, orderDocuments, type DocumentProjectOption } from "@/lib/document-order";
 
 const selectClass = "h-11 max-w-full rounded-md border bg-background px-3 text-sm";
 const pageSize = 50;
-type ProjectOption = { value: string; label: string; clientName?: string };
+type ProjectOption = DocumentProjectOption;
 const number = new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 });
 const monthLabel = (month: string) => month === "undated" ? "日付未設定" : month.replace("-", "年") + "月";
 
@@ -38,14 +38,15 @@ function DocumentProjectControl({ row, edit, projects, disabled, onEdit }: {
   row: DocumentRow; edit?: IssuedEdit; projects: ProjectOption[]; disabled: boolean; onEdit: (edit: IssuedEdit) => void;
 }) {
   const value = edit?.projectId ?? row.projectId ?? "";
-  const name = projects.find((p) => p.value === value)?.label || row.projectName || "案件未設定";
+  const options = useMemo(() => documentProjectOptions(projects, value), [projects, value]);
+  const name = options.find((p) => p.value === value)?.label || row.projectName || "案件未設定";
   if (row.kind !== "issued" || !row.editable) return <span className="block break-words font-medium">{name}</span>;
   const paid = (row.paidAmount || 0) > 0;
   return <select aria-label={`${row.title}の案件`} title={paid ? `${name}（入金記録あり・案件変更不可）` : name} value={value} disabled={disabled || paid}
     className="h-11 w-full min-w-0 max-w-full rounded-md border border-transparent bg-transparent px-1 text-sm font-medium hover:border-input focus:border-ring disabled:opacity-70"
     onChange={(e) => onEdit({ ...(edit || editFrom(row)), projectId: e.target.value })}>
-    {!projects.some((p) => p.value === value) ? <option value={value}>{name}</option> : null}
-    {projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+    {!options.some((p) => p.value === value) ? <option value={value}>{name}</option> : null}
+    {options.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
   </select>;
 }
 
@@ -99,7 +100,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled }: {
     ) : <div className="flex h-32 items-center justify-center bg-muted/30 text-sm text-muted-foreground">原本ファイルなし</div>}
     {editable ? <fieldset disabled={disabled} className="grid min-w-0 gap-3">
       <label className="space-y-1 text-xs">請求書番号<Input aria-label="請求書番号" value={current.invoiceNumber} onChange={(e) => update({ invoiceNumber: e.target.value })} /></label>
-      <label className="grid gap-1 text-xs">案件<select aria-label="編集する案件" className={selectClass + " w-full"} value={current.projectId} onChange={(e) => update({ projectId: e.target.value })}>{projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
+      <label className="grid gap-1 text-xs">案件<select aria-label="編集する案件" className={selectClass + " w-full"} value={current.projectId} onChange={(e) => update({ projectId: e.target.value })}>{documentProjectOptions(projects, current.projectId).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
       <div className="text-xs text-muted-foreground break-words">請求先: {current.projectId === row.projectId ? row.counterpart : projects.find((p) => p.value === current.projectId)?.clientName || row.counterpart}{detail?.clientName ? " / OCR請求先: " + detail.clientName : ""}</div>
       <div className="grid min-w-0 grid-cols-2 gap-3">
         <label className="min-w-0 space-y-1 text-xs">発行日<Input aria-label="発行日" type="date" value={current.issueDate} onChange={(e) => update({ issueDate: e.target.value })} /></label>
@@ -135,7 +136,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
   const [category, setCategory] = useState("all");
   const [state, setState] = useState("all");
   const [month, setMonth] = useState("all");
-  const [sort, setSort] = useState("date-desc");
+  const [sort, setSort] = useState(issuedOnly ? "client" : "date-desc");
+  const [counterpart, setCounterpart] = useState("all");
   const [limit, setLimit] = useState(pageSize);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -165,19 +167,21 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     const q = deferredQuery.normalize("NFKC").toLocaleLowerCase();
     return orderDocuments(rows.filter((r) => (kind === "all" || r.kind === kind) && (category === "all" || r.category === category) && (state === "all" || r.state === state) &&
       (paymentFilter === "all" || (!issuedOnly && kind !== "issued") || (r.kind === "issued" && (paymentFilter === "paid" ? r.status === "PAID" : !["PAID", "DRAFT", "CANCELED"].includes(r.status)))) &&
+      (counterpart === "all" || documentCounterpartKey(r) === counterpart) &&
       (month === "all" || r.month === month) && [r.title, r.counterpart, r.projectName, r.billingLabel || "", r.fileName || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q)), sort);
-  }, [rows, deferredQuery, kind, category, state, month, sort, paymentFilter, issuedOnly]);
+  }, [rows, deferredQuery, kind, category, state, month, sort, paymentFilter, issuedOnly, counterpart]);
   const groups = useMemo(() => groupDocuments(filtered, sort, limit), [filtered, sort, limit]);
-  const groupLabel = (key: string, list: DocumentRow[]) => sort === "project" ? list[0]?.projectName || "案件未設定" : monthLabel(key);
+  const groupLabel = (key: string, list: DocumentRow[]) => sort === "client" ? list[0]?.counterpart || "取引先未設定" : sort === "project" ? list[0]?.projectName || "案件未設定" : monthLabel(key);
+  const counterparts = useMemo(() => [...new Map(rows.map((row) => [documentCounterpartKey(row), row.counterpart])).entries()].sort((a, b) => a[1].localeCompare(b[1], "ja")), [rows]);
   const active = rows.find((r) => r.id === activeId);
   const months = [...new Set(rows.map((r) => r.month))].sort().reverse();
   const allSelected = Boolean(filtered.length && filtered.every((r) => selected.has(r.id)));
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const filteredIds = useMemo(() => new Set(filtered.map((row) => row.id)), [filtered]);
   const hiddenSelectedCount = selectedRows.filter((row) => !filteredIds.has(row.id)).length;
-  const hasFilters = Boolean(query || kind !== "all" || category !== "all" || state !== "all" || month !== "all" || paymentFilter !== "all");
+  const hasFilters = Boolean(query || kind !== "all" || category !== "all" || state !== "all" || month !== "all" || paymentFilter !== "all" || counterpart !== "all");
   function resetFilters() {
-    setQuery(""); setKind("all"); setCategory("all"); setMonth("all"); setState("all"); setPaymentFilter("all"); setLimit(pageSize);
+    setQuery(""); setKind("all"); setCategory("all"); setMonth("all"); setState("all"); setPaymentFilter("all"); setCounterpart("all"); setLimit(pageSize);
   }
   const editableSelected = selectedRows.filter((r) => r.kind === "issued" && r.editable);
   const paymentChanges = Object.entries(edits).flatMap(([id, edit]) => {
@@ -235,8 +239,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
   }
   function exportCsv() {
     const csv = (v: unknown) => '"' + String(v ?? "").replace(/^[=+@\-\t\r]/, "'$&").replaceAll('"', '""') + '"';
-    const data = (selectedRows.length ? selectedRows : filtered).map((r) => [r.title, documentKindLabels[r.kind], documentCategoryLabels[r.category], r.counterpart, r.projectName, r.date, r.total, r.statusLabel]);
-    const content = [["書類", "種別", "分類", "取引先", "案件", "日付", "金額", "状態"], ...data].map((r) => r.map(csv).join(",")).join("\r\n");
+    const data = (selectedRows.length ? selectedRows : filtered).map((r) => [r.title, documentKindLabels[r.kind], documentCategoryLabels[r.category], r.counterpart, r.projectName, r.billingLabel, r.date, r.total, r.statusLabel]);
+    const content = [["書類", "種別", "分類", "取引先", "案件", "請求回・内訳", "日付", "金額", "状態"], ...data].map((r) => r.map(csv).join(",")).join("\r\n");
     const url = URL.createObjectURL(new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = "documents-" + company + ".csv"; a.click(); URL.revokeObjectURL(url);
   }
@@ -244,9 +248,10 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="書類を検索" placeholder="書類名・取引先・案件を検索" className="h-11 pl-9 lg:pl-9" value={query} onChange={(e) => { setQuery(e.target.value); setLimit(pageSize); }} /></div>
       <select aria-label="月で絞り込み" className={selectClass} value={month} onChange={(e) => { setMonth(e.target.value); setLimit(pageSize); }}><option value="all">すべての月</option>{months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
+      <select aria-label="取引先で絞り込み" className={selectClass} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">{issuedOnly ? "すべてのクライアント" : "すべての取引先"}</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
       {!issuedOnly ? <select aria-label="書類種別" className={selectClass} value={kind} onChange={(e) => { setKind(e.target.value); setLimit(pageSize); }}><option value="all">すべての書類</option>{Object.entries(documentKindLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}
       {!issuedOnly ? <select aria-label="書類分類" className={selectClass} value={category} onChange={(e) => { setCategory(e.target.value); setLimit(pageSize); }}><option value="all">すべての分類</option>{Object.entries(documentCategoryLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}
-      <select aria-label="並び順" className={selectClass} value={sort} onChange={(e) => setSort(e.target.value)}><option value="date-desc">日付が新しい順</option><option value="date-asc">日付が古い順</option><option value="amount-desc">金額が大きい順</option><option value="name">取引先名順</option><option value="project">案件ごと</option></select>
+      <select aria-label="並び順" className={selectClass} value={sort} onChange={(e) => { setSort(e.target.value); setLimit(pageSize); }}><option value="client">{issuedOnly ? "クライアントごと" : "取引先ごと"}</option><option value="date-desc">日付が新しい順</option><option value="date-asc">日付が古い順</option><option value="amount-desc">金額が大きい順</option><option value="name">取引先名順</option><option value="project">案件ごと</option></select>
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <div role="group" aria-label="確認状態" className="flex flex-wrap gap-1">
@@ -282,7 +287,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                 <div className="grid min-w-0 flex-1 gap-1 text-left text-sm">
                   <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button onClick={() => open(r)} className="min-h-11 break-words text-left text-xs text-muted-foreground hover:underline">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}</button>
                   <span className="break-words text-xs text-muted-foreground">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart}</span>
-                  {r.billingLabel ? <span className="break-words text-xs text-muted-foreground">{r.billingLabel}</span> : null}
+                  {r.billingLabel ? <span className="break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}
                   <DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />
                   {r.needsReview ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
                   <span className="flex flex-wrap items-center gap-2 text-xs"><span>{edits[r.id]?.issueDate || r.date}</span><span className="ml-auto tabular-nums">{r.total === undefined ? "" : number.format(edits[r.id]?.total ?? r.total)}</span></span>
@@ -301,8 +306,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
               <tr className="border-t bg-muted/60"><td colSpan={7} className="p-0"><button className="sticky left-0 flex min-h-10 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button></td></tr>
               {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><tr data-document-id={r.id} className={"border-t align-top " + (activeId === r.id ? "bg-primary/10" : selected.has(r.id) ? "bg-accent/50" : "hover:bg-muted/30")}>
                 <td className="p-3"><input className="size-4" type="checkbox" aria-label={r.title + "を選択"} checked={selected.has(r.id)} onChange={() => {}} onClick={(e) => toggle(r, e.shiftKey)} /></td>
-                <td className="px-2 py-3"><DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button className="min-h-11 w-full text-left text-xs text-muted-foreground hover:underline" onClick={() => open(r)}><span className="block break-words">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button></td>
-                <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span>{r.billingLabel ? <span className="block break-words text-xs text-muted-foreground">{r.billingLabel}</span> : null}</td>
+                <td className="px-2 py-3"><DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button className="min-h-11 w-full text-left text-xs text-muted-foreground hover:underline" onClick={() => open(r)}><span className="block break-words">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button>{r.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}</td>
+                <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span></td>
                 <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</td><td className="px-2 py-3 text-right tabular-nums">{r.total === undefined ? "—" : number.format(edits[r.id]?.total ?? r.total)}</td>
                 <td className="px-2 py-3"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />{r.needsReview ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}</td>
                 <td className="py-2"><DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} /></td>

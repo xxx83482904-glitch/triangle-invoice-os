@@ -331,7 +331,7 @@ export function restoreUndoState(data: AppData, snapshot: unknown) {
           rows[currentIndex] = restored;
         } else if (change.collection === "bankAccounts") {
           const current = rows[currentIndex];
-          rows[currentIndex] = { ...current, forecastSettings: change.before.forecastSettings,
+          rows[currentIndex] = { ...current, forecastSettings: change.before.forecastSettings, overviewSettings: change.before.overviewSettings,
             updatedAt: new Date(Math.max(Date.now(), Date.parse(String(current.updatedAt)) + 1)).toISOString() };
         } else {
           rows[currentIndex] = change.before;

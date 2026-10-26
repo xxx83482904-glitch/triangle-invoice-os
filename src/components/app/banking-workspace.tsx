@@ -1,5 +1,7 @@
 "use client";
 
+import type { BankAccountOption } from "@/lib/bank-account-options";
+
 import { useEffect, useRef, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Bot, ChevronLeft, ChevronRight, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
@@ -20,7 +22,7 @@ const monthName = (value: string) => value ? `${value.slice(0, 4)}年${Number(va
 const editFrom = (row: BankTransaction): BankEdit => ({ id: row.id, updatedAt: row.updatedAt, categoryId: row.categoryId, subCategoryId: row.subCategoryId, treatment: row.treatment, reviewed: row.reviewed, memo: row.memo });
 
 type Props = {
-  company: CompanyScope; rows: BankTransaction[]; accounts: BankAccount[]; categories: AccountingCategory[]; rules: BankRule[];
+  company: CompanyScope; rows: BankTransaction[]; accounts: BankAccount[]; accountOptions: BankAccountOption[]; selectedAccountOption: string; categories: AccountingCategory[]; rules: BankRule[];
   filters: BankFilters; total: number; page: number; months: string[];
   summary: { income: number; expense: number; excluded: number; unclassified: number };
   configured: boolean; sync?: BankSyncState; busy: boolean; admin: boolean;
@@ -252,7 +254,7 @@ export function BankingWorkspace(props: Props) {
         </dl>
         <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-5">
           <select className={`${bankSelectClass} xl:hidden`} aria-label="取引月" value={filters.month} disabled={pending} onChange={(e) => navigate({ month: e.target.value })}><option value="">すべての月</option>{months.map((month) => <option key={month} value={month}>{monthName(month)}</option>)}</select>
-          <select className={bankSelectClass} aria-label="口座で絞り込み" value={filters.account} disabled={pending} onChange={(e) => navigate({ account: e.target.value })}><option value="">すべての口座・カード</option>{accounts.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select>
+          <select className={bankSelectClass} aria-label="口座で絞り込み" value={props.selectedAccountOption} disabled={pending} onChange={(e) => navigate({ account: e.target.value })}><option value="">すべての口座・カード</option>{props.accountOptions.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select>
           <select className={bankSelectClass} aria-label="勘定科目で絞り込み" value={filters.category} disabled={pending} onChange={(e) => navigate({ category: e.target.value })}><option value="">すべての勘定科目</option>{categories.filter((row) => !row.deletedAt && !row.parentId).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
           <select className={bankSelectClass} aria-label="入出金で絞り込み" value={filters.side} disabled={pending} onChange={(e) => navigate({ side: e.target.value })}><option value="">入金・出金すべて</option><option value="INCOME">入金・返金</option><option value="EXPENSE">出金・利用</option></select>
           <select className={bankSelectClass} aria-label="分類状態で絞り込み" value={filters.status} disabled={pending} onChange={(e) => navigate({ status: e.target.value })}><option value="">すべての状態</option><option value="unclassified">未分類</option><option value="unreviewed">未確認</option><option value="reviewed">確認済み</option><option value="transfer">振替・カード精算</option><option value="excluded">対象外</option><option value="missing">元明細なし</option></select>

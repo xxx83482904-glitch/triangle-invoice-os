@@ -818,10 +818,12 @@ export function inferIssuedInvoice(extracted: ExtractedText, analysis: AiDocumen
   const dueDate = (isIsoDate(analysis?.dueDate) ? analysis.dueDate : "") || dateNear(text, [JP.dueDate]);
   const total = optionalNumberFromAi(analysis?.total) ?? amountNear(text, [JP.total, CN.total]);
   const field = (labels: string) => text.match(new RegExp(`(?:^|\\n)[ \\t]*(?:${labels})[ \\t]*[:：][ \\t]*(?:\\r?\\n[ \\t]*)?([^\\r\\n]+)`, "i"))?.[1]?.trim().slice(0, 160) || "";
-  const clientName = [textFromAi(analysis?.clientName), field("請求先(?:会社名)?|ご請求先|宛先|Bill\\s*to|Customer|Client|购买方(?:名称)?|購買方(?:名称)?"),
-    text.match(/(?:^|\n)[ \t]*([^\r\n]{2,100}?)[ \t]*(?:御中|様)[ \t]*(?:\r?\n|$)/)?.[1] || ""].map(recipientName).find(Boolean) || "";
+  const rawClientName = [textFromAi(analysis?.clientName), field("請求先(?:会社名)?|ご請求先|宛先|Bill\\s*to|Customer|Client|购买方(?:名称)?|購買方(?:名称)?"),
+    text.match(/(?:^|\n)[ \t]*([^\r\n]{2,100}?)[ \t]*(?:御中|様)[ \t]*(?:\r?\n|$)/)?.[1] || ""].find((name) => recipientName(name)) || "";
+  const clientName = recipientName(rawClientName);
   const rawProjectName = textFromAi(analysis?.projectHint) || field("案件名|工事名(?:称)?|現場名|物件名|件名|Project(?:\\s*name)?|项目名称|項目名称");
-  const { projectName, billingLabel } = splitBillingProjectName(rawProjectName);
+  const { projectName, billingLabel: projectBillingLabel } = splitBillingProjectName(rawProjectName);
+  const billingLabel = projectBillingLabel || splitBillingProjectName(rawClientName.replace(/\s*(御中|様)$/, "").trim()).billingLabel;
   if (!invoiceNumber) warnings.push("請求書番号を確認してください。");
   if (!issueDate) warnings.push("発行日を確認してください。");
   if (!dueDate) warnings.push("入金期限を確認してください。");

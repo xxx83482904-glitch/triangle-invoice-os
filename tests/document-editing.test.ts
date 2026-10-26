@@ -4,7 +4,7 @@ import { documentItemsFromFormData, documentItemsSchema, documentItemTotals } fr
 import { deleteClient, saveClient, updateProjectBasics } from "../src/lib/partner-project-edits";
 import { recipientName, splitBillingProjectName } from "../src/lib/billing-project-name";
 import { billingProjectGroups, consolidateBillingProject } from "../src/lib/billing-project-cleanup";
-import { groupDocuments, orderDocuments } from "../src/lib/document-order";
+import { documentProjectOptions, groupDocuments, orderDocuments } from "../src/lib/document-order";
 import { documentRows } from "../src/lib/documents";
 import { can } from "../src/lib/rbac";
 import { fixture, admin, manager, timestamp } from "./document-fixture";
@@ -35,6 +35,52 @@ test("client create and edit preserve IDs, relationships, company, order and cre
   assert.equal(result.id, before.id); assert.equal(result.createdAt, before.createdAt); assert.equal(result.company, "JAPAN");
   assert.notEqual(result.updatedAt, before.updatedAt); assert.equal(result.address, "New address");
   assert.deepEqual(data.issuedInvoices, docs); assert.equal(data.projects[0].clientId, before.id);
+});
+
+test("separated installment suffixes are not client identities or numbered business names", () => {
+  for (const name of ["株式会社テスト 1回目", "株式会社テスト（第２回請求）", "株式会社テスト / 二回目", "株式会社テスト 3回目請求書 御中"]) {
+    assert.equal(recipientName(name), "株式会社テスト");
+  }
+  for (const name of ["第2工芸株式会社", "三回堂株式会社", "Studio 1", "第一回堂株式会社"]) assert.equal(recipientName(name), name);
+  assert.throws(() => saveClient(fixture(), billing, "JAPAN", { companyName: "株式会社テスト（2回目）" }));
+});
+
+test("company grouping keeps every installment across months without merging money or project records", () => {
+  const data = roundsFixture();
+  data.issuedInvoices.find((i) => i.id === "round-invoice-0")!.issueDate = "2026-08-01";
+  const before = structuredClone(data);
+  const rows = documentRows(data, admin, "JAPAN").filter((r) => r.kind === "issued");
+  const groups = groupDocuments(orderDocuments(rows, "client"), "client", 50);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0][1].length, rows.length);
+  for (const row of rows.filter((r) => r.sourceId.startsWith("round-"))) {
+    assert.equal(row.projectName, "横浜吉野町ホテルステイ"); assert.ok(row.billingLabel);
+    assert.equal(row.counterpart, "Test customer");
+  }
+  assert.deepEqual(data, before);
+  assert.equal(groupDocuments(orderDocuments(rows, "date-desc"), "date-desc", 50).length, 2);
+});
+
+test("separate registered clients with the same name never share an identity group", () => {
+  const data = fixture();
+  data.clients.push({ ...data.clients[0], id: "second-client" });
+  data.issuedInvoices[1].clientId = "second-client";
+  const rows = documentRows(data, admin, "JAPAN").filter((r) => r.kind === "issued");
+  assert.equal(groupDocuments(orderDocuments(rows, "client"), "client", 50).length, 2);
+});
+
+test("project options collapse rounds only within a client and retain the current stored ID", () => {
+  const projects = [
+    { value: "one", clientId: "client", label: "横浜ホテル 設計初回請求書" },
+    { value: "two", clientId: "client", label: "横浜ホテル 設計二回目請求書" },
+    { value: "other-client", clientId: "other", label: "横浜ホテル 設計初回請求書" },
+    { value: "unknown-one", clientId: "client", label: "設計初回請求書 / 契約金" },
+    { value: "unknown-two", clientId: "client", label: "設計二回目請求書 / PD完了" },
+  ];
+  const before = structuredClone(projects), options = documentProjectOptions(projects, "two");
+  assert.equal(options.length, 4); assert.equal(options[0].value, "two"); assert.equal(options[0].label, "横浜ホテル");
+  assert.ok(options.some((option) => option.value === "other-client"));
+  assert.deepEqual(projects, before);
 });
 
 test("client writes reject duplicates, billing descriptions, missing targets, cross-scope edits and stale edits atomically", () => {

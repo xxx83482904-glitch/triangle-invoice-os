@@ -13,6 +13,13 @@ export type BankAccount = BankEntity & {
   isManual: boolean;
   available: boolean;
   forecastSettings?: BankForecastSettings;
+  overviewSettings?: BankOverviewSettings;
+};
+
+export type BankOverviewSettings = {
+  kind: "UNKNOWN" | "BANK" | "CARD" | "OTHER";
+  balance?: { amount: number; asOf: string; currency: "JPY" };
+  recordedAt: string;
 };
 
 export type BankForecastSettings = {

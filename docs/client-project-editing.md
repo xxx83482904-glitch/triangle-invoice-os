@@ -32,7 +32,24 @@ changes still require an explicit deployment request.
   ignore outside clicks and Escape. The close icon remains available except
   while a controlled save is pending. Successful saves still close normally.
 
-## Verification
+## Company grouping (2026-10-26)
+
+- Issued invoices default to collapsible client groups. A client filter and
+  company grouping are also available in the shared document list; date/month
+  modes remain available. Registered client IDs, not similar names, define groups.
+- Legacy installment project names are separated for display without writing to
+  storage. Invoice numbers, installment labels, payments, originals and project
+  IDs remain intact. CSV exports include a separate installment column.
+- In the document list and preview, the project selector shows one option per
+  client/base project name, retaining the document's current ID. Unidentified
+  project names are not merged. The existing explicit cleanup remains available.
+- OCR recipient names strip separated installment suffixes before matching;
+  manual client creation rejects installment-bearing names.
+- No production data migration is required. Deployment was requested on
+  2026-10-26 through the existing main-branch Synology workflow; the exact commit
+  and completion status are recorded in GitHub Actions.
+
+## Verification commands
 
 ```powershell
 node --conditions=react-server --import tsx --test tests/documents.test.ts tests/estimates.test.ts tests/status-consistency.test.ts tests/document-editing.test.ts

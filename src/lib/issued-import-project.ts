@@ -8,7 +8,7 @@ import type { AppData, Project, User } from "@/lib/types";
 type ImportHints = { projectName: string; clientName: string; text: string; fileName: string };
 const normalizeName = (name: string) => name.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, "");
 const cleanName = (name: string) => name.normalize("NFKC").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 160);
-const clientKey = (name: string) => normalizeName(name).replace(/(?:御中|様)$/, "");
+const clientKey = (name: string) => normalizeName(recipientName(name));
 
 function containsName(text: string, name: string) {
   const key = normalizeName(name);

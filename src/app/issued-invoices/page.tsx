@@ -89,7 +89,7 @@ export default async function IssuedInvoicesPage({
       <div className="space-y-5">
         {params.created && documents.some((row) => row.sourceId === params.created) ? <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">請求書を作成しました</p> : null}
         {can(user, "manage:issuedInvoices") ? <InvoiceDropzone key={`drop:${company}`} company={company} kind="issued" projects={projects.map((p) => ({ value: p.id, label: p.name }))} /> : null}
-        <DocumentsWorkspace key={`${company}:${params.document || params.created || ""}`} company={company} rows={documents} issuedOnly initialId={params.document || (params.created ? `issued:${params.created}` : undefined)} canExport={can(user, "export:csv") || can(user, "export:issuedInvoices")} projects={projects.map((p) => ({ value: p.id, label: p.name, clientName: clients.find((c) => c.id === p.clientId)?.companyName }))} />
+        <DocumentsWorkspace key={`${company}:${params.document || params.created || ""}`} company={company} rows={documents} issuedOnly initialId={params.document || (params.created ? `issued:${params.created}` : undefined)} canExport={can(user, "export:csv") || can(user, "export:issuedInvoices")} projects={projects.map((p) => ({ value: p.id, label: p.name, clientId: p.clientId, clientName: clients.find((c) => c.id === p.clientId)?.companyName }))} />
       </div>
     </AppShell>
   );

@@ -39,7 +39,7 @@ test("workflow tabs preserve bank account/month without carrying stale selection
     const url = new URL(tab.href, "https://test.invalid");
     assert.equal(url.searchParams.get("company"), "CHINA");
     for (const key of ["transaction", "category", "page", "q"]) assert.equal(url.searchParams.has(key), false);
-    if (url.pathname === "/banking/reconcile") assert.equal(url.searchParams.has("account"), false);
+    if (["/banking/reconcile", "/banking/accounts"].includes(url.pathname)) assert.equal(url.searchParams.has("account"), false);
     else assert.equal(url.searchParams.get("account"), "a/b");
   }
   assert.ok(tabs.find((tab) => tab.label === "AI・確認事項")?.href.includes("checkMonth=2026-09"));

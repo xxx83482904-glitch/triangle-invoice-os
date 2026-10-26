@@ -135,6 +135,19 @@ test("issued OCR extracts project and recipient labels without an AI key", () =>
   assert.equal(missing.clientName, ""); assert.equal(missing.projectName, "");
 });
 
+test("recipient installments stay on the invoice while imports reuse the same client", () => {
+  const data = fixture(), clientCount = data.clients.length;
+  for (const label of ["1回目", "２回目", "第三回請求書"]) {
+    const inferred = inferIssuedInvoice({ text: `請求先：Test customer（${label}） 御中\n案件名：Japan project`, engine: "test", warnings: [] });
+    assert.equal(inferred.clientName, "Test customer");
+    assert.equal(inferred.billingLabel, label.normalize("NFKC"));
+    const result = resolveIssuedImportProject(data, manager, "JAPAN", "", hints(inferred.projectName, inferred.clientName));
+    assert.equal(result.project.clientId, "client");
+    assert.equal(result.project.id, "japan");
+  }
+  assert.equal(data.clients.length, clientCount);
+});
+
 test("automatic project resolution matches names and respects manual override", () => {
   const data = fixture();
   assert.equal(resolveIssuedImportProject(data, manager, "JAPAN", "", hints("Ｊａｐａｎ project")).project.id, "japan");

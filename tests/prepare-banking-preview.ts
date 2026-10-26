@@ -5,6 +5,9 @@ import { hashSync } from "bcryptjs";
 import { fixture, timestamp, admin } from "./document-fixture";
 import { mergeBankMasters, mergeBankTransactions, saveBankEdits, saveBankRule, sourceKey } from "../src/lib/banking";
 import type { UserRole } from "../src/lib/types";
+import { saveBankOverview } from "../src/lib/bank-account-overview";
+import { bankToday } from "../src/lib/banking";
+import { recordBankCoverage } from "../src/lib/bank-forecast";
 
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "triangle-banking-preview-"));
@@ -68,6 +71,27 @@ async function main() {
       { id: "match-expense", side: "EXPENSE" as const, amount: 87670, content: "振込 カ)テストセイサク" },
       { id: "match-unknown", side: "INCOME" as const, amount: 12000, content: "振込 タナカ" },
     ].map((row) => ({ ...example, ...row, bankAccountId: account.id, officeCode: account.officeCode, sourceId: row.id, transactionDate: "2026-09-30", sourceMissing: false, treatment: "NORMAL", reviewed: false, categoryId: undefined }));
+  }
+  if (process.argv.includes("--accounts")) {
+    const today = bankToday(), month = today.slice(0, 7);
+    const bank = data.bankAccounts.find((row) => row.sourceSubId === "branch")!;
+    bank.name = "三菱UFJ銀行 / 六本木支店 普通 1238379（テスト）";
+    bank.serviceName = "三菱UFJ銀行";
+    const extra = [
+      { id: "paypay", subId: "business", name: "PayPay銀行 / ビジネス営業部 普通 1237691（テスト）", serviceName: "PayPay銀行", isManual: false },
+      { id: "mizuho", subId: "business", name: "みずほ銀行 / 青山支店 普通 1234567（テスト）", serviceName: "みずほ銀行", isManual: false },
+    ];
+    mergeBankMasters(data, "JAPAN", office, [...data.bankAccounts.map((row) => ({ id: row.sourceId, subId: row.sourceSubId, name: row.name, serviceName: row.serviceName, isManual: row.isManual })), ...extra], []);
+    saveBankOverview(data, admin, "JAPAN", bank.id, bank.updatedAt, { kind: "BANK", balance: { amount: 3284500, asOf: `${month}-01`, currency: "JPY" } }, today);
+    const paypay = data.bankAccounts.find((row) => row.sourceId === "paypay")!;
+    saveBankOverview(data, admin, "JAPAN", paypay.id, paypay.updatedAt, { kind: "BANK", balance: { amount: 865200, asOf: `${month}-01`, currency: "JPY" } }, today);
+    mergeBankTransactions(data, "JAPAN", office, [
+      { id: "overview-income", connected_account_id: "bank", connected_sub_account_id: "branch", date: `${month}-02`, value: 1650000, side: "INCOME", content: "テストデザイン 設計料", journalizing_status: "none" },
+      { id: "overview-expense", connected_account_id: "bank", connected_sub_account_id: "branch", date: `${month}-03`, value: 540000, side: "EXPENSE", content: "テスト制作 外注費", journalizing_status: "none" },
+      { id: "overview-paypay", connected_account_id: "paypay", connected_sub_account_id: "business", date: `${month}-03`, value: 220000, side: "INCOME", content: "テスト商事 入金", journalizing_status: "none" },
+    ], { start: `${month}-01`, end: `${month}-03` });
+    data.bankSyncStates.push({ id: "overview-sync", company: "JAPAN", officeCode: office, officeName: "テスト会社", autoSync: false, status: "SUCCESS", imported: 3, updated: 0, createdAt: timestamp, updatedAt: timestamp, lastSuccessAt: new Date().toISOString() });
+    recordBankCoverage(data.bankSyncStates[0], `${month}-01`, today, data.bankAccounts.map((row) => row.id));
   }
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
   console.log(root);

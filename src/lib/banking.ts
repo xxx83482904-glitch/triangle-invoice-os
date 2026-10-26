@@ -4,6 +4,7 @@ import { assertCan } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankTransaction, CategoryInput } from "@/lib/banking-types";
 import { createBankSuggester } from "@/lib/bank-classification";
+import { bankAccountFilter } from "@/lib/bank-account-options";
 
 export const treatmentLabels = { NORMAL: "通常", TRANSFER: "振替・カード精算", EXCLUDED: "対象外" } as const;
 export const categoryGroups = { EXPENSE: "費用", INCOME: "収益", ASSET: "資産", LIABILITY: "負債", EQUITY: "純資産", OTHER: "その他" } as const;
@@ -251,11 +252,12 @@ export function bankFilters(params: Record<string, string | undefined>): BankFil
 }
 
 export function selectBankTransactions(data: AppData, company: CompanyScope, filters: BankFilters) {
+  const accountFilter = bankAccountFilter(data.bankAccounts, data.bankTransactions, company, filters.account);
   const analysisAccount = filters.analysisThrough ? data.bankAccounts.find((row) => row.company === company && row.id === filters.account) : undefined;
   const all = data.bankTransactions.filter((row) => row.company === company && (!filters.transaction || row.id === filters.transaction)
     && (!filters.analysisThrough || (analysisAccount && row.officeCode === analysisAccount.officeCode && row.transactionDate <= filters.analysisThrough && row.side === "EXPENSE" && row.amount > 0 && row.treatment === "NORMAL" && !row.sourceMissing && row.bankAccountId === filters.account)));
   const query = normalized(filters.query);
-  const rows = all.filter((row) => (!filters.month || row.transactionDate.startsWith(filters.month)) && matchesBankAccount(data, company, filters.account, row.bankAccountId) && (!filters.category || row.categoryId === filters.category || row.subCategoryId === filters.category) && (!filters.side || row.side === filters.side) && (!query || normalized(`${row.content} ${row.memo} ${row.sourceMemo}`).includes(query)) && (!filters.status || (filters.status === "unclassified" && !row.categoryId && row.treatment === "NORMAL") || (filters.status === "unreviewed" && !row.reviewed) || (filters.status === "reviewed" && row.reviewed) || (filters.status === "transfer" && row.treatment === "TRANSFER") || (filters.status === "excluded" && row.treatment === "EXCLUDED") || (filters.status === "missing" && row.sourceMissing)));
+  const rows = all.filter((row) => (!filters.month || row.transactionDate.startsWith(filters.month)) && (!filters.account || accountFilter.memberIds.has(row.bankAccountId)) && (!filters.category || row.categoryId === filters.category || row.subCategoryId === filters.category) && (!filters.side || row.side === filters.side) && (!query || normalized(`${row.content} ${row.memo} ${row.sourceMemo}`).includes(query)) && (!filters.status || (filters.status === "unclassified" && !row.categoryId && row.treatment === "NORMAL") || (filters.status === "unreviewed" && !row.reviewed) || (filters.status === "reviewed" && row.reviewed) || (filters.status === "transfer" && row.treatment === "TRANSFER") || (filters.status === "excluded" && row.treatment === "EXCLUDED") || (filters.status === "missing" && row.sourceMissing)));
   const months = Array.from(new Set(all.map((row) => row.transactionDate.slice(0, 7)))).sort().reverse();
   const direction = filters.sort.endsWith("asc") ? 1 : -1;
   rows.sort((a, b) => direction * (filters.sort.startsWith("amount") ? a.amount - b.amount : a.transactionDate.localeCompare(b.transactionDate)) || a.id.localeCompare(b.id));

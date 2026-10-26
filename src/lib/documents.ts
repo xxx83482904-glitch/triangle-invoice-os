@@ -2,6 +2,7 @@ import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { can, canAccessCompany } from "@/lib/rbac";
 import { estimateStatusLabels } from "@/lib/estimate-values";
 import { invoicePaymentSummary, issuedStatusLabels } from "@/lib/invoice-status";
+import { splitBillingProjectName } from "@/lib/billing-project-name";
 export { issuedStatusLabels } from "@/lib/invoice-status";
 import type { AppData, IssuedInvoice, User } from "@/lib/types";
 
@@ -13,6 +14,7 @@ export type DocumentRow = {
   title: string;
   category: string;
   counterpart: string;
+  counterpartId?: string;
   projectId?: string;
   projectName: string;
   billingLabel?: string;
@@ -68,7 +70,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
   if (can(user, "view:estimates")) for (const e of data.estimates) {
     if (e.deletedAt || !projectMap.has(e.projectId)) continue;
     rows.push({ id: `estimate:${e.id}`, sourceId: e.id, kind: "estimate", title: e.estimateNumber, category: "ESTIMATE",
-      counterpart: clients.get(e.clientId) || "取引先未設定", projectId: e.projectId, projectName: projectMap.get(e.projectId)!.name, billingLabel: e.billingLabel,
+      counterpart: clients.get(e.clientId) || "取引先未設定", counterpartId: `client:${e.clientId}`, projectId: e.projectId, projectName: splitBillingProjectName(projectMap.get(e.projectId)!.name).projectName, billingLabel: e.billingLabel || splitBillingProjectName(projectMap.get(e.projectId)!.name).billingLabel,
       month: month(e.issueDate), date: e.issueDate, dueDate: e.validUntil, total: e.total, status: e.status, statusLabel: estimateStatusLabels[e.status],
       state: e.status === "DRAFT" ? "review" : ["CONVERTED", "DECLINED"].includes(e.status) ? "done" : "open",
       fileUrl: `/api/estimates/${e.id}/pdf`, fileName: `${e.estimateNumber}.pdf`, mimeType: "application/pdf",
@@ -78,7 +80,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
     if (i.deletedAt || !projectMap.has(i.projectId)) continue;
     const payment = invoicePaymentSummary(data, i);
     rows.push({ id: `issued:${i.id}`, sourceId: i.id, kind: "issued", title: i.invoiceNumber, category: "INVOICE",
-      counterpart: clients.get(i.clientId) ?? "請求先未設定", projectId: i.projectId, projectName: projectMap.get(i.projectId)!.name, billingLabel: i.billingLabel,
+      counterpart: clients.get(i.clientId) ?? "請求先未設定", counterpartId: `client:${i.clientId}`, projectId: i.projectId, projectName: splitBillingProjectName(projectMap.get(i.projectId)!.name).projectName, billingLabel: i.billingLabel || splitBillingProjectName(projectMap.get(i.projectId)!.name).billingLabel,
       month: month(i.issueDate), date: i.issueDate, dueDate: i.dueDate, total: i.total, status: payment.status, paidAmount: payment.paid, statusPaymentAmount: payment.statusPaid,
       statusLabel: issuedStatusLabels[payment.status],
       state: ["PAID", "CANCELED"].includes(payment.status) ? "done" : i.needsReview || payment.status === "DRAFT" ? "review" : "open",
@@ -91,7 +93,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
     receivedIds.add(i.id);
     const mail = linkedReceived.get(i.id);
     rows.push({ id: `received:${i.id}`, sourceId: i.id, kind: "received", title: i.originalFileName || mail?.title || "受領請求書",
-      category: mail?.category || "INVOICE", counterpart: vendors.get(i.vendorId) ?? "支払先未設定", projectId: i.projectId, projectName: projectMap.get(i.projectId)!.name,
+      category: mail?.category || "INVOICE", counterpart: vendors.get(i.vendorId) ?? "支払先未設定", counterpartId: `vendor:${i.vendorId}`, projectId: i.projectId, projectName: projectMap.get(i.projectId)!.name,
       month: month(i.folderMonth || mail?.folderMonth || i.issueDate), date: i.issueDate, dueDate: i.dueDate, total: i.total,
       status: i.status, statusLabel: receivedStatusLabels[i.status] ?? i.status,
       state: ["PAID", "ARCHIVED"].includes(i.status) ? "done" : ["REVIEWING", "OCR_PENDING", "APPROVAL_PENDING", "REJECTED"].includes(i.status) ? "review" : "open",
@@ -113,14 +115,14 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
     if (i.deletedAt || linkedReceived.has(i.id) || !project || companyFromParam(project.company) !== company) continue;
     const processed = i.mailProcessed ?? i.status === "PAID";
     rows.push({ id: `received:${i.id}`, sourceId: i.id, kind: "received", title: i.originalFileName || "受領請求書", category: "INVOICE",
-      counterpart: vendors.get(i.vendorId) ?? "支払先未設定", projectName: "", month: month(i.folderMonth || i.issueDate), date: i.issueDate,
+      counterpart: vendors.get(i.vendorId) ?? "支払先未設定", counterpartId: `vendor:${i.vendorId}`, projectName: "", month: month(i.folderMonth || i.issueDate), date: i.issueDate,
       status: processed ? "PROCESSED" : "UNPROCESSED", statusLabel: processed ? "処理済み" : "未処理", state: processed ? "done" : "open",
       fileUrl: i.fileUrl, fileName: i.originalFileName, mimeType: i.mimeType, sourceHref: "/mail-sorter?company=JAPAN", updatedAt: i.updatedAt });
   }
   if (can(user, "view:projects")) for (const p of projects) {
     if (!p.contractFileUrl) continue;
     rows.push({ id: `contract:${p.id}`, sourceId: p.id, kind: "contract", title: p.contractOriginalFileName || `${p.name} 契約書`, category: "CONTRACT",
-      counterpart: clients.get(p.clientId) ?? "", projectId: p.id, projectName: p.name, month: month(p.contractUploadedAt || p.createdAt),
+      counterpart: clients.get(p.clientId) ?? "", counterpartId: `client:${p.clientId}`, projectId: p.id, projectName: p.name, month: month(p.contractUploadedAt || p.createdAt),
       date: (p.contractUploadedAt || p.createdAt).slice(0, 10), status: "STORED", statusLabel: "保管済み", state: "done",
       fileUrl: p.contractFileUrl, fileName: p.contractOriginalFileName, mimeType: p.contractMimeType,
       sourceHref: `/projects/${p.id}?company=${company}`, updatedAt: p.updatedAt });

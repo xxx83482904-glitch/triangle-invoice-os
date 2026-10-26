@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit";
 import { hashSync } from "bcryptjs";
 import { createCanvas } from "@napi-rs/canvas";
 import { fixture, timestamp } from "./document-fixture";
+import { mergeBankMasters, mergeBankTransactions } from "../src/lib/banking";
 
 async function pdf(text: string) {
   return new Promise<Buffer>((resolve) => {
@@ -30,6 +31,24 @@ async function main() {
         memo: "発行請求書OCRから自動作成。案件名・請求先・契約情報要確認。", createdAt: timestamp, updatedAt: timestamp });
       data.issuedInvoices.push({ ...data.issuedInvoices[0], id: `round-invoice-${index}`, projectId: id, invoiceNumber: `ROUND-${index}` });
     }
+  }
+  if (process.argv.includes("--account-options")) {
+    mergeBankMasters(data, "JAPAN", "test-office", [
+      { id: "old", name: "PayPay銀行", serviceName: "PayPay銀行", isManual: false },
+      { id: "old", subId: "branch", name: "PayPay銀行 / テスト支店 普通 1237691", serviceName: "PayPay銀行", isManual: false },
+      { id: "new", name: "PayPay銀行", serviceName: "PayPay銀行", isManual: false },
+      { id: "new", subId: "branch", name: "PayPay銀行 / テスト支店 普通 1237691", serviceName: "PayPay銀行", isManual: false },
+      { id: "new", subId: "other", name: "PayPay銀行 / テスト支店 普通 1232901", serviceName: "PayPay銀行", isManual: false },
+    ], []);
+    mergeBankTransactions(data, "JAPAN", "test-office", [
+      { id: "older", connected_account_id: "old", connected_sub_account_id: "branch", date: "2026-09-01", value: 1000, side: "INCOME", content: "旧連携のテスト明細", journalizing_status: "none" },
+      { id: "current", connected_account_id: "new", connected_sub_account_id: "branch", date: "2026-09-02", value: 2000, side: "INCOME", content: "新連携のテスト明細", journalizing_status: "none" },
+      { id: "other", connected_account_id: "new", connected_sub_account_id: "other", date: "2026-09-03", value: 3000, side: "INCOME", content: "別口座のテスト明細", journalizing_status: "none" },
+    ], { start: "2026-09-01", end: "2026-09-30" });
+    data.clients[0].companyName = "株式会社テストデザイン";
+    data.clients.push({ ...data.clients[0], id: "second-client", companyName: "株式会社サンプル設計" });
+    data.projects.find((project) => project.id === "other")!.clientId = "second-client";
+    data.issuedInvoices.find((invoice) => invoice.projectId === "other")!.clientId = "second-client";
   }
   for (const file of ["issued.pdf", "other.pdf", "china.pdf", "contract.pdf", "old.pdf", "received.pdf"]) await writeFile(path.join(upload, file), await pdf(file));
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
