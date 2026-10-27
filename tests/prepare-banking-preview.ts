@@ -43,6 +43,16 @@ async function main() {
     const candidate = data.bankTransactions.find((row) => row.id === "auto-preview")!;
     data.bankTransactions.push(...Array.from({ length: 151 }, (_, index) => ({ ...candidate, id: `candidate-${String(index).padStart(3, "0")}`, sourceId: `candidate-${index}`, content: `東京電力 テスト候補 ${String(index).padStart(3, "0")}` })));
   }
+  if (process.argv.includes("--classification-labels")) {
+    const base = data.bankTransactions.find((row) => row.id === "unknown-preview")!;
+    const old = { ...base, id: "label-history-old", sourceId: "label-history-old", transactionDate: "2026-09-01", content: "テスト文具 継続購入", categoryId: sourceKey("JAPAN", office, "category", "supplies"), classificationSource: "MANUAL" as const, reviewed: true };
+    data.bankTransactions.push(old,
+      { ...base, id: "label-history-new", sourceId: "label-history-new", transactionDate: "2026-10-26", content: old.content },
+      { ...old, id: "label-confirmed", sourceId: "label-confirmed", transactionDate: "2026-10-26", content: "確認済み テスト文具" },
+      { ...base, id: "label-guess", sourceId: "label-guess", transactionDate: "2026-10-26", content: "用途不明 テスト購入" },
+      { ...base, id: "label-inferred", sourceId: "label-inferred", transactionDate: "2026-10-26", content: "為替手数料 テスト" },
+    );
+  }
   if (process.argv.includes("--classification-ai")) {
     const candidate = data.bankTransactions.find((row) => row.id === "auto-preview")!;
     data.bankTransactions.push(...Array.from({ length: 54 }, (_, index) => ({ ...candidate, id: `ai-test-${String(index).padStart(3, "0")}`, sourceId: `ai-test-${index}`, transactionDate: "2026-10-09", content: `${["JRW SHINKANSEN", "エスライド", "テストコンビニ"][index % 3]} テスト ${String(index).padStart(3, "0")}` })));

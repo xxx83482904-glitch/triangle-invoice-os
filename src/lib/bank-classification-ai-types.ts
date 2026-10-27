@@ -4,7 +4,7 @@ import type { CompanyScope } from "@/lib/company";
 
 export const CLASSIFICATION_AI_BATCH_SIZE = 50;
 export const classificationAiScopeSchema = z.object({
-  ids: z.array(z.string().min(1).max(1000)).min(1).max(500).optional(),
+  ids: z.array(z.string().min(1).max(1000)).min(1).max(10000).optional(),
   batch: z.number().int().min(0).max(10000),
 }).strict();
 export type ClassificationAiScope = z.infer<typeof classificationAiScopeSchema>;

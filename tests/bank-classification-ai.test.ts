@@ -3,6 +3,7 @@ import test from "node:test";
 import { admin, fixture, timestamp } from "./document-fixture";
 import { mergeBankMasters, mergeBankTransactions, saveBankEdits, sourceKey } from "../src/lib/banking";
 import { prepareClassificationAi, validateClassificationAi } from "../src/lib/bank-classification-ai";
+import { bankClassificationLabel } from "../src/lib/bank-classification";
 import { requestClassificationAi, runClassificationAi } from "../src/lib/bank-classification-ai-service";
 import type { ClassificationAiPayload } from "../src/lib/bank-classification-ai-types";
 
@@ -118,9 +119,14 @@ test("missing/duplicate/invented refs, invented evidence and masked evidence rej
 test("all confidence levels retain categories; blank or masked descriptions require uncertain proposals", () => {
   for (const confidence of ["high", "medium", "low", "unknown"] as const) {
     const prepared = prepare(), output = answer(prepared.preview.payload);
+    const before = structuredClone(prepared);
     const result = validateClassificationAi(prepared, { decisions: output.decisions.map((row) => ({ ...row, confidence })) }, "model");
     assert.equal(result.rows.filter((row) => row.categoryId).length, prepared.rows.length);
     assert.equal(result.lowConfidence, confidence === "low" || confidence === "unknown" ? prepared.rows.length : 0);
+    const expected = confidence === "low" || confidence === "unknown" ? "GUESS" : "INFERRED";
+    assert.ok(result.rows.every((row) => row.classificationConfidence === expected && bankClassificationLabel(row).kind === expected));
+    assert.ok(result.rows.every((row) => row.classificationSource === "AUTO" && row.treatment === "NORMAL" && !row.reviewed));
+    assert.deepEqual(prepared, before);
   }
   for (const content of ["", "123456789 contact@example.com"]) {
     const data = setup(); data.bankTransactions[0].content = content;

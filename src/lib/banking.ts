@@ -3,7 +3,7 @@ import type { CompanyScope } from "@/lib/company";
 import { assertCan } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankTransaction, CategoryInput } from "@/lib/banking-types";
-import { createBankSuggester } from "@/lib/bank-classification";
+import { bankClassificationLabel, createBankSuggester } from "@/lib/bank-classification";
 import { bankAccountFilter } from "@/lib/bank-account-options";
 
 export const treatmentLabels = { NORMAL: "通常", TRANSFER: "振替・カード精算", EXCLUDED: "対象外" } as const;
@@ -51,7 +51,7 @@ function categorySelection(data: AppData, company: CompanyScope, categoryId?: st
 
 export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope, input: BankEdit[]) {
   assertBankAccess(user, company);
-  const edits = z.array(z.object({ id: z.string(), updatedAt: z.string(), categoryId: reference, subCategoryId: reference, treatment, reviewed: z.boolean(), memo: z.string().max(2000) })).min(1).max(500).parse(input);
+  const edits = z.array(z.object({ id: z.string(), updatedAt: z.string(), categoryId: reference, subCategoryId: reference, treatment, reviewed: z.boolean(), memo: z.string().max(2000), classificationConfidence: z.enum(["GUESS", "HISTORY", "INFERRED"]).optional(), classificationReason: z.string().max(1000).optional() })).min(1).max(500).parse(input);
   if (new Set(edits.map((row) => row.id)).size !== edits.length) throw new Error("明細が重複しています");
   const byId = new Map(data.bankTransactions.filter((row) => row.company === company).map((row) => [row.id, row]));
   const changes = edits.map((edit) => {
@@ -59,11 +59,21 @@ export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope,
     if (!row) throw new Error("明細が見つかりません");
     if (row.updatedAt !== edit.updatedAt) throw new Error("明細が更新されています。画面を更新して再度保存してください");
     categorySelection(data, company, edit.categoryId, edit.subCategoryId);
+    for (const id of [edit.categoryId, edit.subCategoryId]) {
+      const category = data.accountingCategories.find((item) => item.id === id);
+      if (category?.officeCode && category.officeCode !== row.officeCode) throw new Error("明細と同じ事業者の勘定科目を選択してください");
+    }
     if (edit.reviewed && (row.sourceMissing || (edit.treatment === "NORMAL" && !edit.categoryId))) throw new Error("確認済みにする前に勘定科目と元明細を確認してください");
     return { row, edit };
   });
   // Validate the entire batch before touching any row.
-  for (const { row, edit } of changes) Object.assign(row, edit, { categoryId: edit.categoryId || undefined, subCategoryId: edit.subCategoryId || undefined, classificationSource: "MANUAL", classificationReason: undefined, ruleId: undefined, updatedAt: stamp(row.updatedAt) });
+  for (const { row, edit } of changes) {
+    const sameSelection = row.categoryId === edit.categoryId && row.subCategoryId === edit.subCategoryId && row.treatment === edit.treatment;
+    const legacyConfidence = bankClassificationLabel({ ...row, reviewed: false }).kind;
+    const confidence = edit.classificationConfidence ?? (sameSelection ? row.classificationConfidence ?? (["GUESS", "HISTORY", "INFERRED"].includes(legacyConfidence) ? legacyConfidence : undefined) : undefined);
+    const reason = edit.classificationReason ?? (sameSelection ? row.classificationReason : undefined);
+    Object.assign(row, edit, { categoryId: edit.categoryId || undefined, subCategoryId: edit.subCategoryId || undefined, classificationSource: "MANUAL", classificationConfidence: confidence, classificationReason: reason, ruleId: undefined, updatedAt: stamp(row.updatedAt) });
+  }
   return { count: changes.length };
 }
 
@@ -125,6 +135,10 @@ function ruleFor(data: AppData, transaction: BankTransaction) {
   return data.bankRules.filter((rule) => rule.company === transaction.company && !rule.deletedAt && rule.enabled && matchesBankAccount(data, transaction.company, rule.bankAccountId || "", transaction.bankAccountId) && (rule.side === "ALL" || rule.side === transaction.side))
     .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)).find((rule) => {
       try { categorySelection(data, transaction.company, rule.categoryId, rule.subCategoryId); } catch { return false; }
+      if ([rule.categoryId, rule.subCategoryId].some((id) => {
+        const category = data.accountingCategories.find((row) => row.id === id);
+        return category?.officeCode && category.officeCode !== transaction.officeCode;
+      })) return false;
       const content = normalized(transaction.content), keyword = normalized(rule.keyword);
       return rule.match === "EXACT" ? content === keyword : content.includes(keyword);
     });
@@ -136,37 +150,57 @@ export function classifyBankTransaction(data: AppData, transaction: BankTransact
   const suggestion = rule ? undefined : suggest(transaction);
   if (!rule && !suggestion) {
     if (!["RULE", "HISTORY", "AUTO"].includes(transaction.classificationSource)) return false;
-    Object.assign(transaction, { categoryId: undefined, subCategoryId: undefined, ruleId: undefined, classificationReason: undefined, treatment: "NORMAL", classificationSource: "UNASSIGNED", updatedAt: stamp(transaction.updatedAt) });
+    Object.assign(transaction, { categoryId: undefined, subCategoryId: undefined, ruleId: undefined, classificationReason: undefined, classificationConfidence: undefined, treatment: "NORMAL", classificationSource: "UNASSIGNED", updatedAt: stamp(transaction.updatedAt) });
     return true;
   }
   const next = rule
-    ? { categoryId: rule.categoryId, subCategoryId: rule.subCategoryId, treatment: rule.treatment, classificationSource: "RULE" as const, classificationReason: `ルール: ${rule.name}`, ruleId: rule.id }
+    ? { categoryId: rule.categoryId, subCategoryId: rule.subCategoryId, treatment: rule.treatment, classificationSource: "RULE" as const, classificationConfidence: "INFERRED" as const, classificationReason: `ルール: ${rule.name}`, ruleId: rule.id }
     : { ...suggestion!, ruleId: undefined };
   if (Object.entries(next).every(([key, value]) => transaction[key as keyof BankTransaction] === value)) return false;
   Object.assign(transaction, next, { updatedAt: stamp(transaction.updatedAt) });
   return true;
 }
 
-export function applyBankRules(data: AppData, user: Actor, company: CompanyScope, ids?: string[]) {
+export function applyBankRules(data: AppData, user: Actor, company: CompanyScope, ids?: string[], allowGuesses = false) {
   assertBankAccess(user, company);
   const selected = ids === undefined ? undefined : new Set(z.array(z.string().min(1)).min(1).max(500).parse(ids));
   const rows = data.bankTransactions.filter((row) => row.company === company && (!selected || selected.has(row.id)));
   if (selected && selected.size !== rows.length) throw new Error("明細が見つかりません。画面を更新してください");
-  const suggest = createBankSuggester(data);
+  const suggest = createBankSuggester(data, { allowGuesses });
   let count = 0;
-  for (const row of rows) if (classifyBankTransaction(data, row, suggest)) count++;
+  for (const row of rows) {
+    if (allowGuesses && (row.categoryId || row.treatment !== "NORMAL")) continue;
+    if (classifyBankTransaction(data, row, suggest)) count++;
+  }
   return { count, unclassified: rows.filter((row) => !row.sourceMissing && row.treatment === "NORMAL" && !row.categoryId).length };
 }
 
-export function previewBankRules(data: AppData, user: Actor, company: CompanyScope, ids?: string[]) {
+export function previewBankRules(data: AppData, user: Actor, company: CompanyScope, ids?: string[], allowGuesses = false) {
   assertBankAccess(user, company);
   const originals = new Map(data.bankTransactions.map((row) => [row.id, row]));
   const preview = { ...data, bankTransactions: data.bankTransactions.map((row) => ({ ...row })) };
-  const result = applyBankRules(preview, user, company, ids);
+  const result = applyBankRules(preview, user, company, ids, allowGuesses);
   // Keep the saved version so a later explicit save can reject stale suggestions.
   const rows = preview.bankTransactions.filter((row) => row.updatedAt !== originals.get(row.id)!.updatedAt)
     .map((row) => ({ ...row, updatedAt: originals.get(row.id)!.updatedAt }));
   return { ...result, rows };
+}
+
+export type BankDisplayRow = BankTransaction & { predictionPending?: boolean };
+
+// Display candidates never mutate the source records or count as confirmed history.
+export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDisplayRow[] {
+  const suggest = createBankSuggester(data, { allowGuesses: true });
+  return rows.map((row) => {
+    if (row.categoryId || row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || row.treatment !== "NORMAL") return { ...row };
+    const candidate = { ...row, classificationSource: "UNASSIGNED" as BankTransaction["classificationSource"] };
+    classifyBankTransaction(data, candidate, suggest);
+    if (!candidate.categoryId || candidate.treatment !== "NORMAL") {
+      const fallback = suggest({ ...row, classificationSource: "UNASSIGNED" });
+      if (fallback) Object.assign(candidate, fallback, { ruleId: undefined });
+    }
+    return candidate.categoryId ? { ...candidate, updatedAt: row.updatedAt, predictionPending: true } : { ...row };
+  });
 }
 
 export type ImportedAccount = { id: string; subId?: string; name: string; serviceName: string; isManual: boolean };

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
-import { deleteBankDefinition, previewBankRules, saveAccountingCategory, saveBankEdits, saveBankRule } from "@/lib/banking";
+import { assertBankAccess, bankDisplayRows, bankFilters, deleteBankDefinition, previewBankRules, saveAccountingCategory, saveBankEdits, saveBankRule, selectBankTransactions } from "@/lib/banking";
 import { setBankAutoSync } from "@/lib/banking-sync";
 import type { BankEdit, BankRuleInput, CategoryInput } from "@/lib/banking-types";
 import type { BankForecastSettings } from "@/lib/banking-types";
@@ -13,6 +13,7 @@ import { saveBankOverview, type BankOverviewInput } from "@/lib/bank-account-ove
 import { isActiveUser } from "@/lib/user-access";
 import type { CompanyScope } from "@/lib/company";
 import { mutateData, readData } from "@/lib/store";
+import { bankingDataRevision } from "@/lib/banking-revision";
 
 function errorMessage(error: unknown) {
   return error instanceof ZodError ? "入力内容を確認してください" : error instanceof Error ? error.message : "保存に失敗しました";
@@ -73,7 +74,19 @@ export async function previewBankRulesAction(company: CompanyScope, ids?: string
     const data = await readData();
     const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
     if (!live) throw new Error("利用者の権限を確認してください");
-    return { ...previewBankRules(data, live, company, ids), success: true as const };
+    return { ...previewBankRules(data, live, company, ids, true), success: true as const };
+  } catch (error) { return { success: false as const, error: errorMessage(error) }; }
+}
+export async function loadBankTransactionsAction(company: CompanyScope, params: Record<string, string | undefined>, revision: string) {
+  const user = await requireUser();
+  try {
+    const data = await readData();
+    const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
+    if (!live) throw new Error("利用者の権限を確認してください");
+    assertBankAccess(live, company);
+    if (revision !== bankingDataRevision(data, company)) throw new Error("明細が更新されました。編集内容を保存してから一覧を更新してください");
+    const result = selectBankTransactions(data, company, bankFilters(params));
+    return { rows: bankDisplayRows(data, result.rows), total: result.total, page: result.page, success: true as const };
   } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
 export async function setBankAutoSyncAction(company: CompanyScope, enabled: boolean) {

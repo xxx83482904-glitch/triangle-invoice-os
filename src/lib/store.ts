@@ -325,7 +325,7 @@ export function restoreUndoState(data: AppData, snapshot: unknown) {
           const current = rows[currentIndex];
           const sourceChanged = ["bankAccountId", "transactionDate", "amount", "side", "content", "sourceMemo", "sourceStatus", "sourceMissing"].some((key) => current[key] !== change.before![key]);
           const restored = { ...current };
-          for (const key of ["categoryId", "subCategoryId", "treatment", "classificationSource", "classificationReason", "ruleId", "reviewed", "memo"]) restored[key] = change.before[key];
+          for (const key of ["categoryId", "subCategoryId", "treatment", "classificationSource", "classificationReason", "classificationConfidence", "ruleId", "reviewed", "memo"]) restored[key] = change.before[key];
           if (sourceChanged || current.sourceMissing) restored.reviewed = false;
           restored.updatedAt = new Date(Math.max(Date.now(), Date.parse(String(current.updatedAt)) + 1)).toISOString();
           rows[currentIndex] = restored;

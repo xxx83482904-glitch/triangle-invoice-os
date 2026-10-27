@@ -14,15 +14,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const bankSelectClass = "h-11 w-full min-w-0 max-w-full rounded-md border bg-background px-2 text-sm text-foreground disabled:opacity-50";
 
-export function BankCategoryFields({ categories, categoryId = "", subCategoryId = "", onChange, disabled = false, label = "" }: {
+export function BankCategoryFields({ categories, categoryId = "", subCategoryId = "", onChange, disabled = false, label = "", allowUnclassified = true }: {
   categories: AccountingCategory[]; categoryId?: string; subCategoryId?: string;
-  onChange: (categoryId: string, subCategoryId: string) => void; disabled?: boolean; label?: string;
+  onChange: (categoryId: string, subCategoryId: string) => void; disabled?: boolean; label?: string; allowUnclassified?: boolean;
 }) {
   const parents = categories.filter((row) => !row.parentId && ((row.available && !row.deletedAt) || row.id === categoryId));
   const children = categories.filter((row) => row.parentId === categoryId && ((row.available && !row.deletedAt) || row.id === subCategoryId));
   return <div className="grid min-w-0 gap-1">
     <select className={bankSelectClass} aria-label={`${label}勘定科目`} value={categoryId} disabled={disabled} onChange={(e) => onChange(e.target.value, "")}>
-      <option value="">未分類</option>
+      {allowUnclassified || !categoryId ? <option value="" disabled={!allowUnclassified}>{allowUnclassified ? "未分類" : parents.length ? "科目を選択" : "有効な科目なし"}</option> : null}
       {parents.map((row) => <option key={row.id} value={row.id} disabled={!row.available || Boolean(row.deletedAt)}>{row.name}{!row.available || row.deletedAt ? "（無効）" : ""}</option>)}
     </select>
     {children.length ? <select className={bankSelectClass} aria-label={`${label}補助科目`} value={subCategoryId} disabled={disabled} onChange={(e) => onChange(categoryId, e.target.value)}>

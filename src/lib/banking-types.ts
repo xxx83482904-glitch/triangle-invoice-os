@@ -2,6 +2,7 @@ import type { CompanyScope } from "@/lib/company";
 
 export type BankTreatment = "NORMAL" | "TRANSFER" | "EXCLUDED";
 export type BankClassificationSource = "UNASSIGNED" | "RULE" | "HISTORY" | "AUTO" | "MANUAL";
+export type BankClassificationConfidence = "GUESS" | "HISTORY" | "INFERRED";
 type BankEntity = { id: string; company: CompanyScope; createdAt: string; updatedAt: string };
 
 export type BankAccount = BankEntity & {
@@ -57,6 +58,7 @@ export type BankTransaction = BankEntity & {
   treatment: BankTreatment;
   classificationSource: BankClassificationSource;
   classificationReason?: string;
+  classificationConfidence?: BankClassificationConfidence;
   ruleId?: string;
   reviewed: boolean;
   memo: string;
@@ -102,6 +104,9 @@ export type BankEdit = {
   treatment: BankTreatment;
   reviewed: boolean;
   memo: string;
+  classificationSource?: BankClassificationSource;
+  classificationReason?: string;
+  classificationConfidence?: BankClassificationConfidence;
 };
 
 export type BankRuleInput = Omit<BankRule, "company" | "createdAt" | "id" | "updatedAt" | "deletedAt"> & { id?: string; updatedAt?: string };

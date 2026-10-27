@@ -55,7 +55,7 @@ export function validateClassificationAi(prepared: ReturnType<typeof prepareClas
     const reason = maskBankAiText(decision.reason, 220);
     const index = payload.categories.findIndex((category) => category.ref === decision.categoryRef);
     if (uncertain) lowConfidence++;
-    return { ...row, categoryId: prepared.categories[index].id, subCategoryId: undefined, reviewed: false, classificationSource: "AUTO" as const, ruleId: undefined, classificationReason: `AI候補（${uncertain ? "要確認・推定" : decision.confidence === "high" ? "確度高" : "要確認"}）: ${reason}` };
+    return { ...row, categoryId: prepared.categories[index].id, subCategoryId: undefined, reviewed: false, classificationSource: "AUTO" as const, classificationConfidence: uncertain ? "GUESS" as const : "INFERRED" as const, ruleId: undefined, classificationReason: `AI候補（${uncertain ? "要確認・推定" : decision.confidence === "high" ? "確度高" : "要確認"}）: ${reason}` };
   });
   return { rows, suggested: rows.length, lowConfidence, model };
 }

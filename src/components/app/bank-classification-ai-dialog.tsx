@@ -45,7 +45,7 @@ export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>AIで勘定科目を判定</DialogTitle><DialogDescription>未分類の明細のみが対象です。手動変更・確認済み・ルールで判定できる明細は保護されます。</DialogDescription></DialogHeader>
       <label className="grid min-w-0 gap-1 text-sm">対象<select aria-label="AI分類の対象" className={bankSelectClass} value={scope} disabled={pending} onChange={(e) => { setScope(e.target.value as typeof scope); setPreview(null); setConsent(false); setError(""); }}>
-        {rowIds.length ? <option value="page">表示中のページ（{rowIds.length}件）</option> : null}
+        {rowIds.length ? <option value="page">表示中の明細（{rowIds.length}件）</option> : null}
         {selectedIds.length ? <option value="selected">選択した明細（{selectedIds.length}件）</option> : null}
         <option value="all">{company === "JAPAN" ? "日本" : "中国"}の全期間・全口座</option>
       </select></label>
