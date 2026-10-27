@@ -25,7 +25,7 @@ const prepare = (data = setup()) => prepareClassificationAi(data, "admin", "JAPA
 function answer(payload: ClassificationAiPayload) {
   const travel = payload.categories.find((row) => row.name === "旅費交通費")!.ref;
   const supplies = payload.categories.find((row) => row.name === "消耗品費")!.ref;
-  return { decisions: payload.transactions.map((row) => ({ bankRef: row.ref, categoryRef: row.content.includes("コンビニ") ? supplies : travel, confidence: row.content.includes("コンビニ") ? "low" as const : "medium" as const, reason: row.content.includes("コンビニ") ? "購入内容が不明なため消耗品費と仮定しています。用途は未確認です" : "交通サービスの利用候補です", quote: row.content })) };
+  return { decisions: payload.transactions.map((row) => ({ bankRef: row.ref, categoryRef: row.content.includes("コンビニ") ? supplies : travel, confidence: row.content.includes("コンビニ") ? "low" as const : "medium" as const, reason: row.content.includes("コンビニ") ? "購入内容が不明なため消耗品費と仮定しています。用途は未確認です" : "交通サービスの利用候補です", quote: row.content, historyRef: null as string | null })) };
 }
 
 test("AI classification scopes bank/card rows, protects edits and rules, and only exposes masked minimal data", () => {
@@ -67,6 +67,9 @@ test("AI batches are deterministic, limited to 50 and preserve page/selected bou
   assert.ok(second.rows.every((row) => !first.rows.some((firstRow) => firstRow.id === row.id)));
   assert.deepEqual(prepareClassificationAi(data, "admin", "JAPAN", { ids: [data.bankTransactions[75].id], batch: 0 }).rows.map((row) => row.id), [data.bankTransactions[75].id]);
   assert.equal(prepareClassificationAi(data, "admin", "JAPAN", { batch: 2 }).rows.length, 20);
+  data.bankTransactions = Array.from({ length: 600 }, (_, i) => ({ ...base, id: `large-${String(i).padStart(3, "0")}` }));
+  const large = prepareClassificationAi(data, "admin", "JAPAN", { ids: data.bankTransactions.map((row) => row.id), batch: 11, history: true });
+  assert.equal(large.preview.total, 600); assert.equal(large.rows.length, 50);
 });
 
 test("category availability, office and company are enforced even for a fabricated AI choice", () => {
@@ -164,6 +167,71 @@ function serviceFixture() {
   };
   return { data, input, deps, calls: () => calls, audit: () => audit, during: (fn: () => void) => { during = fn; } };
 }
+
+function historySetup() {
+  const data = setup(), target = data.bankTransactions[0];
+  const category = data.accountingCategories.find((row) => row.name === "旅費交通費")!;
+  target.categoryId = category.id; target.classificationSource = "MANUAL";
+  target.classificationConfidence = "GUESS"; target.classificationReason = "根拠なし。仮候補";
+  data.bankTransactions.push({ ...target, id: "confirmed-history", transactionDate: "2026-09-01", reviewed: true, classificationReason: "手動選択（未確定）" });
+  return { data, target, history: data.bankTransactions.at(-1)! };
+}
+
+test("manual history AI refresh uses only earlier confirmed same-account evidence and never saves", () => {
+  const { data, target, history } = historySetup(), before = JSON.stringify(data);
+  const prepared = prepareClassificationAi(data, "admin", "JAPAN", { ids: [target.id], batch: 0, history: true });
+  assert.equal(prepared.rows.length, 1); assert.equal(prepared.preview.payload.history!.length, 1);
+  const evidence = prepared.preview.payload.history![0];
+  const output = answer(prepared.preview.payload);
+  const result = validateClassificationAi(prepared, { decisions: output.decisions.map((row) => ({ ...row, categoryRef: evidence.categoryRef, historyRef: evidence.ref })) }, "model");
+  assert.equal(result.rows[0].classificationConfidence, "HISTORY");
+  assert.equal(result.rows[0].classificationSource, "HISTORY");
+  assert.match(result.rows[0].classificationReason!, /過去実績 2026-09-01/);
+  assert.equal(result.rows[0].reviewed, false);
+  assert.equal(JSON.stringify(data), before);
+  const text = JSON.stringify(prepared.preview.payload);
+  for (const secret of ["PRIVATE", "confirmed-history", office, "Private card"]) assert.ok(!text.includes(secret));
+  for (const kind of ["unreviewed", "future", "company", "office", "account", "side", "missing", "transfer", "excluded", "invalid-category"] as const) {
+    const variant = structuredClone(data), past = variant.bankTransactions.find((row) => row.id === history.id)!;
+    if (kind === "unreviewed") past.reviewed = false;
+    if (kind === "future") past.transactionDate = "2026-11-01";
+    if (kind === "company") past.company = "CHINA";
+    if (kind === "office") past.officeCode = "foreign";
+    if (kind === "account") past.bankAccountId = "other";
+    if (kind === "side") past.side = "INCOME";
+    if (kind === "missing") past.sourceMissing = true;
+    if (kind === "transfer") past.treatment = "TRANSFER";
+    if (kind === "excluded") past.sourceStatus = "excluded";
+    if (kind === "invalid-category") past.categoryId = "missing";
+    assert.equal(prepareClassificationAi(variant, "admin", "JAPAN", { ids: [target.id], batch: 0, history: true }).preview.payload.history!.length, 0, kind);
+  }
+});
+
+test("history mode protects explicit manual edits, reviewed rows and rules; conflicting examples are excluded", () => {
+  for (const kind of ["manual", "reviewed", "rule"] as const) {
+    const { data, target } = historySetup();
+    if (kind === "manual") target.classificationReason = "手動選択（未確定）";
+    if (kind === "reviewed") target.reviewed = true;
+    if (kind === "rule") target.classificationSource = "RULE";
+    assert.equal(prepareClassificationAi(data, "admin", "JAPAN", { ids: [target.id], batch: 0, history: true }).rows.length, 0, kind);
+  }
+  const { data, target, history } = historySetup();
+  data.bankTransactions.push({ ...history, id: "conflicting", categoryId: data.accountingCategories.find((row) => row.name === "消耗品費")!.id });
+  assert.equal(prepareClassificationAi(data, "admin", "JAPAN", { ids: [target.id], batch: 0, history: true }).preview.payload.history!.length, 0);
+});
+
+test("history references must exist and match the bank/category; guesses stay red even with a real precedent", () => {
+  const { data, target, history } = historySetup();
+  const scoped = { ids: [target.id], batch: 0, history: true };
+  const prepared = prepareClassificationAi(data, "admin", "JAPAN", scoped), example = prepared.preview.payload.history![0];
+  const output = answer(prepared.preview.payload);
+  const decisions = output.decisions.map((row) => ({ ...row, categoryRef: example.categoryRef, historyRef: example.ref }));
+  assert.throws(() => validateClassificationAi(prepared, { decisions: decisions.map((row) => ({ ...row, historyRef: "H999" })) }, "model"));
+  assert.throws(() => validateClassificationAi(prepared, { decisions: decisions.map((row) => ({ ...row, categoryRef: prepared.preview.payload.categories.find((item) => item.ref !== example.categoryRef)!.ref })) }, "model"));
+  assert.equal(validateClassificationAi(prepared, { decisions: decisions.map((row) => ({ ...row, confidence: "low" })) }, "model").rows[0].classificationConfidence, "GUESS");
+  history.reviewed = false;
+  assert.notEqual(prepareClassificationAi(data, "admin", "JAPAN", scoped).preview.revision, prepared.preview.revision);
+});
 
 test("AI service records only bounded usage; records, amounts, invoices, payments and audit evidence are not classified", async () => {
   const f = serviceFixture(), before = structuredClone(f.data);

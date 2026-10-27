@@ -38,6 +38,7 @@ function bankIssue(data: AppData, company: CompanyScope, bank: BankTransaction, 
   if (!account || account.company !== company || account.officeCode !== bank.officeCode || bank.company !== company) return "口座が見つかりません";
   if (["CARD", "OTHER"].includes(account.forecastSettings?.accountKind || "")) return "カード利用・その他口座は銀行入出金として照合できません";
   if (bank.sourceMissing) return "元明細がなくなっています";
+  if ((data.bankTransfers || []).some((link) => !link.deletedAt && [link.outgoingId, link.incomingId].includes(bank.id))) return "口座間の資金移動と照合済みです";
   if (bank.treatment !== "NORMAL") return "振替・対象外の明細です";
   if (!isBankDate(bank.transactionDate) || bank.transactionDate > today || !monetary(bank.amount)) return "取引日・金額を確認してください";
   return "";

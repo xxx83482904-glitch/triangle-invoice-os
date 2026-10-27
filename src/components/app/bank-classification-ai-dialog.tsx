@@ -9,19 +9,21 @@ import { bankSelectClass } from "@/components/app/banking-settings";
 import { CLASSIFICATION_AI_BATCH_SIZE, type ClassificationAiPreview, type ClassificationAiResult } from "@/lib/bank-classification-ai-types";
 import type { CompanyScope } from "@/lib/company";
 
-export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds, selectedIds, initialScope, onResult }: {
+export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds, selectedIds, initialScope, initialHistory = false, onResult }: {
   company: CompanyScope; open: boolean; onOpenChange: (open: boolean) => void;
   rowIds: string[]; selectedIds: string[]; initialScope: "page" | "selected" | "all";
+  initialHistory?: boolean;
   onResult: (result: ClassificationAiResult) => void;
 }) {
   const [scope, setScope] = useState(initialScope), [pending, startTransition] = useTransition();
+  const [history, setHistory] = useState(initialHistory);
   const [preview, setPreview] = useState<(ClassificationAiPreview & { model: string; configured: boolean }) | null>(null);
   const [consent, setConsent] = useState(false), [error, setError] = useState("");
   function prepare(batch = 0) {
     setError(""); setConsent(false); setPreview(null);
     startTransition(async () => {
       try {
-        const response = await prepareClassificationAiAction(company, { ...(scope === "all" ? {} : { ids: scope === "selected" ? selectedIds : rowIds }), batch });
+        const response = await prepareClassificationAiAction(company, { ...(scope === "all" ? {} : { ids: scope === "selected" ? selectedIds : rowIds }), batch, history });
         if (!response.success) { setError(response.error); return; }
         setPreview({ ...response.preview, model: response.model, configured: response.configured });
       } catch { setError("対象を取得できませんでした。画面を更新してください。"); }
@@ -43,7 +45,8 @@ export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds
   const first = preview ? preview.scope.batch * CLASSIFICATION_AI_BATCH_SIZE : 0;
   return <Dialog open={open} onOpenChange={(next) => { if (!pending) onOpenChange(next); }}>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
-      <DialogHeader><DialogTitle>AIで勘定科目を判定</DialogTitle><DialogDescription>未分類の明細のみが対象です。手動変更・確認済み・ルールで判定できる明細は保護されます。</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{history ? "過去実績でAI再判定" : "AIで勘定科目を判定"}</DialogTitle><DialogDescription>{history ? "未確定の予測分類を、確認済みの過去実績で再判定します。手動選択・分類確定・ルールは変更しません。" : "未分類の明細のみが対象です。手動変更・確認済み・ルールで判定できる明細は保護されます。"}</DialogDescription></DialogHeader>
+      <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="size-5 shrink-0 accent-primary" checked={history} disabled={pending} onChange={(e) => { setHistory(e.target.checked); setPreview(null); setConsent(false); }} />確認済みの過去実績を参照して再判定</label>
       <label className="grid min-w-0 gap-1 text-sm">対象<select aria-label="AI分類の対象" className={bankSelectClass} value={scope} disabled={pending} onChange={(e) => { setScope(e.target.value as typeof scope); setPreview(null); setConsent(false); setError(""); }}>
         {rowIds.length ? <option value="page">表示中の明細（{rowIds.length}件）</option> : null}
         {selectedIds.length ? <option value="selected">選択した明細（{selectedIds.length}件）</option> : null}
@@ -54,6 +57,7 @@ export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds
         <div role="status" className="space-y-1 border-l-2 border-primary bg-primary/5 p-3 text-sm">
           <p className="font-medium">AI判定対象 {preview.total.toLocaleString()}件 / 今回 {count ? first + 1 : 0}〜{first + count}件</p>
           <p className="text-xs text-muted-foreground">対象範囲 {preview.scoped.toLocaleString()}件・対象外 {preview.protected.toLocaleString()}件・ルール候補 {preview.ruleCandidates.toLocaleString()}件</p>
+          {history ? <p className="text-xs text-muted-foreground">参照する過去実績 {preview.payload.history?.length || 0}件{!preview.payload.history?.length ? "・確認済み実績なし" : ""}</p> : null}
         </div>
         {preview.total > CLASSIFICATION_AI_BATCH_SIZE ? <nav aria-label="AI送信範囲" className="flex items-center justify-between gap-2 text-sm">
           <Button className="size-11" variant="outline" size="icon" title="前の50件" aria-label="前のAI判定範囲" disabled={pending || preview.scope.batch === 0} onClick={() => prepare(preview.scope.batch - 1)}><ChevronLeft className="size-4" /></Button>
@@ -63,6 +67,7 @@ export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds
         {!preview.configured ? <p role="alert" className="text-sm text-amber-800 dark:text-amber-300">OpenAI APIキーが未設定です。管理者が画面上部の「AI設定」から登録してください。</p> : null}
         {count && preview.payload.categories.length ? <>
           <p className="text-sm">OpenAI API（{preview.model}）に、今回の{count}件の摘要・日付・金額・入出金方向・口座種別と勘定科目名を送信します。利用料金が発生します。原本・社内メモ・口座名や口座番号は送信項目に含めません。摘要等の長い数字やメールアドレスはマスクしますが、完全な匿名化ではありません。</p>
+          {history ? <p className="text-sm">同じ口座・入出金方向の過去の確認済み明細から、最大5件ずつの摘要・日付・金額・勘定科目も送信します。再判定結果は未保存です。</p> : null}
           <details><summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">送信内容</summary><pre className="max-h-52 overflow-auto whitespace-pre-wrap break-all bg-muted p-3 text-xs">{JSON.stringify(preview.payload, null, 2)}</pre></details>
           <p className="text-xs text-muted-foreground">対象の全明細に最も近い勘定科目を付けます。判断材料が不足する候補は「要確認・推定」です。自動保存はしません。会社ごとに1日50回、15秒間隔が上限です。実行回数のみ記録します。</p>
           <label className="flex min-h-11 items-start gap-3 py-2 text-sm"><input type="checkbox" className="mt-1 size-5 shrink-0 accent-primary" checked={consent} disabled={pending || !preview.configured} onChange={(e) => setConsent(e.target.checked)} /><span>この内容をOpenAI APIへ送信し、勘定科目の候補を受け取ることに同意します。</span></label>

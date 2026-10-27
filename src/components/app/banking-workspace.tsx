@@ -6,7 +6,9 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
 import { useRouter } from "next/navigation";
-import { Bot, CircleAlert, Folder, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
+import { Bot, CircleAlert, FileCheck2, Folder, History, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
+import { loadBankLinksAction } from "@/app/banking/link-actions";
+import { BankLinksDialog, type BankLinkData } from "@/components/app/bank-links-dialog";
 import { loadBankTransactionsAction, previewBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
 import { BankingSettings, BankCategoryFields, bankSelectClass } from "@/components/app/banking-settings";
 import { BankAiSettings } from "@/components/app/bank-ai-settings";
@@ -47,6 +49,8 @@ export function BankingWorkspace(props: Props) {
   const [classificationEmpty, setClassificationEmpty] = useState<number | null>(null);
   const [classificationPreview, setClassificationPreview] = useState<BankTransaction[] | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiHistory, setAiHistory] = useState(false);
+  const [linkData, setLinkData] = useState<BankLinkData | null>(null);
   const [aiScope, setAiScope] = useState<"page" | "selected" | "all">("page");
   const [aiResult, setAiResult] = useState<{ suggested: number; lowConfidence: number; model: string } | null>(null);
   const [previewLimit, setPreviewLimit] = useState(BANK_PAGE_SIZE);
@@ -215,8 +219,20 @@ export function BankingWorkspace(props: Props) {
       } catch { setError("通信に失敗しました"); }
     });
   }
-  function openAi(scope: typeof aiScope) {
-    setAiScope(scope); setClassifyOpen(false); setAiOpen(true);
+  function openAi(scope: typeof aiScope, history = false) {
+    setAiScope(scope); setAiHistory(history); setClassifyOpen(false); setAiOpen(true);
+  }
+  function openLinks(row: BankTransaction) {
+    setError(""); startTransition(async () => {
+      try {
+        const result = await loadBankLinksAction(company, row.id);
+        if (!result.success) throw new Error(result.error);
+        setLinkData(result);
+      } catch (error) { setError(error instanceof Error ? error.message : "照合情報を取得できませんでした"); }
+    });
+  }
+  function linkButton(row: BankDisplayRow) {
+    return <Button className="min-h-11 max-w-full whitespace-normal px-2 text-xs" variant="ghost" disabled={pending || Boolean(dirty)} onClick={() => openLinks(row)}><FileCheck2 className="size-4 shrink-0" />{row.linkLabel || (row.side === "INCOME" ? "入金を照合" : "出金を照合")}</Button>;
   }
   async function beginSync() {
     setError(""); setSyncing(true);
@@ -303,6 +319,7 @@ export function BankingWorkspace(props: Props) {
         <SelectionToolbar selection={selection}>
           <Button type="button" className="ml-auto min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => { setClassifyScope(selected.size ? "selected" : "all"); setClassificationEmpty(null); setError(""); setClassifyOpen(true); }}><WandSparkles className="size-4" />自動分類</Button>
           <Button type="button" className="min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => openAi(selected.size ? "selected" : rows.length ? "page" : "all")}><Bot className="size-4" />AI分類</Button>
+          <Button type="button" className="min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => openAi(selected.size ? "selected" : rows.length ? "page" : "all", true)}><History className="size-4" />過去実績でAI再判定</Button>
         </SelectionToolbar>
         {selected.size ? <div className="grid min-w-0 gap-2 bg-muted/40 p-2 sm:grid-cols-3">
           <select className={bankSelectClass} aria-label="選択明細の勘定科目を一括変更" value="" disabled={pending} onChange={(e) => bulk({ categoryId: e.target.value, subCategoryId: undefined, reviewed: false })}><option value="" disabled>勘定科目を一括変更</option>{categories.filter((row) => !row.parentId && row.available && !row.deletedAt && (!row.officeCode || rows.filter((item) => selected.has(item.id)).every((item) => item.officeCode === row.officeCode))).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
@@ -321,7 +338,7 @@ export function BankingWorkspace(props: Props) {
                 <td>{selectionBox(row)}</td><td className="px-2 py-3 text-xs tabular-nums">{row.transactionDate}</td>
                 <td className="break-words px-2 py-3"><div>{row.content || "摘要なし"}</div>{classificationReason(row, value) ? <div className="mt-1 text-xs text-muted-foreground">{classificationReason(row, value)}</div> : null}{row.sourceMemo ? <div className="mt-1 text-xs text-muted-foreground">{row.sourceMemo}</div> : null}</td>
                 <td className="break-words px-2 py-3 text-xs text-muted-foreground">{accountMap.get(row.bankAccountId) || "口座未取得"}</td>
-                <td className={`px-2 py-3 text-right tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}><span className="whitespace-nowrap">{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></td>
+                <td className={`px-2 py-3 text-right tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}><span className="whitespace-nowrap">{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span>{linkButton(row)}</td>
                 <td className="space-y-1.5 px-1 py-2">{controls[0]}{status(row, value)}</td><td className="px-1 py-2">{controls[1]}</td><td className="px-1 py-2">{controls[2]}</td>
                 <td><label className="flex min-h-11 cursor-pointer justify-center py-3"><input type="checkbox" className="size-5 accent-primary" aria-label={`${row.content}を確認済みにする`} checked={value.reviewed} disabled={pending || row.sourceMissing} onChange={(e) => edit(row, { reviewed: e.target.checked })} /></label></td>
               </tr>;
@@ -333,6 +350,7 @@ export function BankingWorkspace(props: Props) {
           {row.sourceMemo ? <div className="break-words text-xs text-muted-foreground">{row.sourceMemo}</div> : null}
           {classificationReason(row, value) ? <div className="break-words text-xs text-muted-foreground">{classificationReason(row, value)}</div> : null}
           <div className="grid min-w-0 gap-2">{fields(row, value)}</div>
+          {linkButton(row)}
           <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-5 accent-primary" aria-label={`${row.content}を確認済みにする`} checked={value.reviewed} disabled={pending || row.sourceMissing} onChange={(e) => edit(row, { reviewed: e.target.checked })} />確認済み</label>
         </article>; })}</div>
         {!rows.length ? <p className="border-b py-12 text-center text-sm text-muted-foreground">{!configured ? "接続待ち" : "該当する明細はありません"}</p> : null}
@@ -359,7 +377,8 @@ export function BankingWorkspace(props: Props) {
       </DialogContent>
     </Dialog>
     <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} />
-    <BankClassificationAiDialog key={aiOpen ? "ai-open" : "ai-closed"} company={company} open={aiOpen} onOpenChange={setAiOpen} rowIds={rows.map((row) => row.id)} selectedIds={rows.filter((row) => selected.has(row.id)).map((row) => row.id)} initialScope={aiScope} onResult={(result) => {
+    {linkData ? <BankLinksDialog key={linkData.bank.id} company={company} initial={linkData} onClose={() => setLinkData(null)} /> : null}
+    <BankClassificationAiDialog key={aiOpen ? "ai-open" : "ai-closed"} company={company} open={aiOpen} onOpenChange={setAiOpen} rowIds={rows.map((row) => row.id)} selectedIds={rows.filter((row) => selected.has(row.id)).map((row) => row.id)} initialScope={aiScope} initialHistory={aiHistory} onResult={(result) => {
       setClassificationPreview(result.rows); setAiResult({ suggested: result.suggested, lowConfidence: result.lowConfidence, model: result.model });
       setDrafts(Object.fromEntries(result.rows.filter((row) => row.categoryId).map((row) => [row.id, editFrom(row)])));
       setError(""); setPreviewLimit(BANK_PAGE_SIZE); setSelected(new Set());

@@ -27,7 +27,7 @@ type Props = {
   aiPreview?: BankAiPreview; aiConfigured: boolean; aiModel: string;
 };
 
-function Confirmation({ company, bank, invoice, onBusy, onComplete }: {
+export function BankReconciliationConfirmation({ company, bank, invoice, onBusy, onComplete }: {
   company: CompanyScope; bank: ReconciliationBank; invoice: ReconciliationInvoice;
   onBusy: (busy: boolean) => void; onComplete: (amount: number) => void;
 }) {
@@ -140,7 +140,7 @@ export function BankReconciliationDesk(props: Props) {
           })}</ul>
           {!chosen && !visible.length ? <p className="py-5 text-sm text-muted-foreground">{query ? "検索に一致する請求書はありません。" : "確かな候補がありません。すべての請求書から選択できます。"}</p> : null}
           {!chosen && visible.length > 100 ? <p className="py-2 text-xs text-muted-foreground">先頭100件を表示。検索で絞り込めます。</p> : null}
-          {chosen ? <Confirmation key={`${selected.id}:${selected.updatedAt}:${selected.remaining}:${chosen.key}:${chosen.updatedAt}:${chosen.payments.map((row) => `${row.id}:${row.available}:${row.updatedAt}`).join()}`} company={company} bank={selected} invoice={chosen} onBusy={setSaving} onComplete={complete} /> : <p className="border-b py-5 text-sm text-muted-foreground">請求書を選択すると照合額を確認できます。</p>}
+          {chosen ? <BankReconciliationConfirmation key={`${selected.id}:${selected.updatedAt}:${selected.remaining}:${chosen.key}:${chosen.updatedAt}:${chosen.payments.map((row) => `${row.id}:${row.available}:${row.updatedAt}`).join()}`} company={company} bank={selected} invoice={chosen} onBusy={setSaving} onComplete={complete} /> : <p className="border-b py-5 text-sm text-muted-foreground">請求書を選択すると照合額を確認できます。</p>}
         </> : !selected.issue && !selected.conflict && !selected.remaining ? <p className="flex items-center gap-2 py-5 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="size-4" />この明細は照合済みです</p> : null}
         {selectedLinks.length ? <section className="border-t py-3"><h3 className="text-xs font-semibold">照合済みの記録</h3><ul className="divide-y">{selectedLinks.map((link) => <li key={link.id} className="py-2 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span className="min-w-0 break-words">{invoices.find((row) => row.key === link.invoiceKey)?.title || "削除・移動された請求書"} / {money(link.amount)}</span><Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => onRemove(link)}><Unlink className="size-4" />照合解除</Button></div>{link.issue ? <p className="text-xs text-destructive">{link.issue}</p> : null}{link.note ? <p className="break-words text-xs text-muted-foreground">{link.note}</p> : null}</li>)}</ul></section> : null}
         {actionable && aiPreview && props.selected?.id === selected.id ? <details className="border-t py-2"><summary className="min-h-11 cursor-pointer content-center text-sm text-muted-foreground">AIで追加確認</summary><BankAiPanel key={aiPreview.revision} company={company} preview={aiPreview} configured={aiConfigured} model={aiModel} onChooseInvoice={(key) => { if (!busy && choices.some((row) => row.key === key)) setSelectedKey(key); }} /></details> : actionable ? <Button variant="ghost" disabled={busy} className="min-h-11 text-sm text-muted-foreground" onClick={() => router.refresh()}>この明細のAI確認を読み込む</Button> : null}

@@ -58,6 +58,8 @@ export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope,
     const row = byId.get(edit.id);
     if (!row) throw new Error("明細が見つかりません");
     if (row.updatedAt !== edit.updatedAt) throw new Error("明細が更新されています。画面を更新して再度保存してください");
+    if ((data.bankTransfers || []).some((link) => !link.deletedAt && [link.outgoingId, link.incomingId].includes(row.id)) && (edit.treatment !== row.treatment || edit.reviewed !== row.reviewed || edit.categoryId !== row.categoryId || edit.subCategoryId !== row.subCategoryId)) throw new Error("資金移動と照合済みです。分類を変える前に資金移動の照合を解除してください");
+    if (edit.treatment !== "NORMAL" && data.bankReconciliations.some((link) => !link.deletedAt && link.transactionId === row.id)) throw new Error("請求書と照合済みです。扱いを変える前に請求書照合を解除してください");
     categorySelection(data, company, edit.categoryId, edit.subCategoryId);
     for (const id of [edit.categoryId, edit.subCategoryId]) {
       const category = data.accountingCategories.find((item) => item.id === id);
@@ -186,11 +188,14 @@ export function previewBankRules(data: AppData, user: Actor, company: CompanySco
   return { ...result, rows };
 }
 
-export type BankDisplayRow = BankTransaction & { predictionPending?: boolean };
+export type BankDisplayRow = BankTransaction & { predictionPending?: boolean; linkLabel?: string };
 
 // Display candidates never mutate the source records or count as confirmed history.
 export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDisplayRow[] {
   const suggest = createBankSuggester(data, { allowGuesses: true });
+  const transfers = new Set((data.bankTransfers || []).filter((link) => !link.deletedAt).flatMap((link) => [link.outgoingId, link.incomingId]));
+  const allocated = new Map<string, number>();
+  for (const link of data.bankReconciliations) if (!link.deletedAt) allocated.set(link.transactionId, (allocated.get(link.transactionId) || 0) + link.amount);
   return rows.map((row) => {
     if (row.categoryId || row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || row.treatment !== "NORMAL") return { ...row };
     const candidate = { ...row, classificationSource: "UNASSIGNED" as BankTransaction["classificationSource"] };
@@ -200,7 +205,7 @@ export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDis
       if (fallback) Object.assign(candidate, fallback, { ruleId: undefined });
     }
     return candidate.categoryId ? { ...candidate, updatedAt: row.updatedAt, predictionPending: true } : { ...row };
-  });
+  }).map((row) => ({ ...row, ...(transfers.has(row.id) ? { linkLabel: "資金移動" } : allocated.has(row.id) ? { linkLabel: Math.round(allocated.get(row.id)! * 100) >= Math.round(row.amount * 100) ? "請求書" : "一部照合" } : {}) }));
 }
 
 export type ImportedAccount = { id: string; subId?: string; name: string; serviceName: string; isManual: boolean };

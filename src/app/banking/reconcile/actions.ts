@@ -15,7 +15,7 @@ function liveActor(data: AppData, id: string) {
   return user;
 }
 function refresh() {
-  for (const path of ["/banking/reconcile", "/banking", "/banking/forecast", "/banking/insights", "/issued-invoices", "/received-invoices", "/mail-sorter", "/documents", "/payments", "/dashboard", "/projects", "/reports"]) revalidatePath(path);
+  for (const path of ["/banking/accounts", "/banking/reconcile", "/banking", "/banking/forecast", "/banking/insights", "/issued-invoices", "/received-invoices", "/mail-sorter", "/documents", "/payments", "/dashboard", "/projects", "/reports"]) revalidatePath(path);
   revalidatePath("/projects/[id]", "page");
 }
 function message(error: unknown, fallback: string) {

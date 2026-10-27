@@ -196,6 +196,7 @@ function seedData(): AppData {
     bankRules: [],
     bankSyncStates: [],
     bankReconciliations: [],
+    bankTransfers: [],
     attachments: [],
     auditLogs: [],
     invoiceNumberSettings: [
@@ -232,6 +233,7 @@ const undoCollectionKeys = [
   "bankRules",
   "bankSyncStates",
   "bankReconciliations",
+  "bankTransfers",
   "attachments",
   "invoiceNumberSettings",
 ] as const;
@@ -305,7 +307,7 @@ function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
 function isLegacySnapshot(value: unknown): value is AppDataSnapshot {
   if (!value || typeof value !== "object") return false;
   const source = value as Record<string, unknown>;
-  const optionalLegacyKeys = new Set<string>(["estimates", "bankAccounts", "bankTransactions", "accountingCategories", "bankRules", "bankSyncStates", "bankReconciliations"]);
+  const optionalLegacyKeys = new Set<string>(["estimates", "bankAccounts", "bankTransactions", "accountingCategories", "bankRules", "bankSyncStates", "bankReconciliations", "bankTransfers"]);
   return undoCollectionKeys.every((key) => (optionalLegacyKeys.has(key) && source[key] === undefined) || Array.isArray(source[key]));
 }
 
@@ -602,6 +604,7 @@ async function normalizeData(data: AppData) {
   if (!Array.isArray(data.bankRules)) { data.bankRules = []; changed = true; }
   if (!Array.isArray(data.bankSyncStates)) { data.bankSyncStates = []; changed = true; }
   if (!Array.isArray(data.bankReconciliations)) { data.bankReconciliations = []; changed = true; }
+  if (!Array.isArray(data.bankTransfers)) { data.bankTransfers = []; changed = true; }
   if (!Array.isArray(data.attachments)) { data.attachments = []; changed = true; }
   if (!Array.isArray(data.auditLogs)) { data.auditLogs = []; changed = true; }
   if (!Array.isArray(data.invoiceNumberSettings)) { data.invoiceNumberSettings = seedData().invoiceNumberSettings; changed = true; }

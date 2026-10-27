@@ -138,3 +138,13 @@ export type BankReconciliation = BankEntity & {
   confirmedById: string;
   deletedAt?: string | null;
 };
+
+export type BankTransfer = BankEntity & {
+  outgoingId: string;
+  incomingId: string;
+  outgoingEvidence: string;
+  incomingEvidence: string;
+  previous: Array<BankEdit & { ruleId?: string }>;
+  confirmedById: string;
+  deletedAt?: string | null;
+};

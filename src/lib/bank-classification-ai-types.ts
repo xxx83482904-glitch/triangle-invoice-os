@@ -6,12 +6,14 @@ export const CLASSIFICATION_AI_BATCH_SIZE = 50;
 export const classificationAiScopeSchema = z.object({
   ids: z.array(z.string().min(1).max(1000)).min(1).max(10000).optional(),
   batch: z.number().int().min(0).max(10000),
+  history: z.boolean().optional(),
 }).strict();
 export type ClassificationAiScope = z.infer<typeof classificationAiScopeSchema>;
 export type ClassificationAiPayload = {
   company: CompanyScope;
   categories: Array<{ ref: string; name: string; group: string }>;
   transactions: Array<{ ref: string; date: string; content: string; amount: number; side: "INCOME" | "EXPENSE"; accountKind: "BANK" | "CARD" | "UNKNOWN"; allowedCategoryRefs: string[] }>;
+  history?: Array<{ ref: string; bankRef: string; date: string; content: string; amount: number; categoryRef: string }>;
 };
 export type ClassificationAiPreview = {
   scope: ClassificationAiScope; revision: string; payload: ClassificationAiPayload;
@@ -22,6 +24,7 @@ export const classificationAiOutputSchema = z.object({
     bankRef: z.string().regex(/^B\d+$/), categoryRef: z.string().regex(/^C\d+$/),
     confidence: z.enum(["high", "medium", "low", "unknown"]),
     reason: z.string().min(1).max(220), quote: z.string().max(120),
+    historyRef: z.string().regex(/^H\d+$/).nullable(),
   }).strict()).max(CLASSIFICATION_AI_BATCH_SIZE),
 }).strict();
 export type ClassificationAiResult = { rows: BankTransaction[]; suggested: number; lowConfidence: number; model: string };

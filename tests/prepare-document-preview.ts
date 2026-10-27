@@ -65,6 +65,25 @@ async function main() {
     mergeBankMasters(data, "JAPAN", "selection-office", [{ id: "bank", name: "Selection test bank", serviceName: "Selection test bank", isManual: false }], [{ id: "expense", name: "消耗品費", group: "EXPENSE", available: true }]);
     mergeBankTransactions(data, "JAPAN", "selection-office", Array.from({ length: 75 }, (_, index) => ({ id: `select-bank-${index}`, connected_account_id: "bank", date: "2026-10-15", value: 1000 + index, side: "EXPENSE" as const, content: `Selection transaction ${String(index).padStart(2, "0")}`, journalizing_status: "none" })), { start: "2026-10-01", end: "2026-10-31" });
   }
+  if (process.argv.includes("--bank-links")) {
+    mergeBankMasters(data, "JAPAN", "link-office", [
+      { id: "from", name: "三菱UFJ銀行 / テスト 1234567", serviceName: "三菱UFJ銀行", isManual: false },
+      { id: "to", name: "PayPay銀行 / テスト 1237691", serviceName: "PayPay銀行", isManual: false },
+    ], [{ id: "expense", name: "旅費交通費", group: "EXPENSE", available: true }, { id: "income", name: "売上高", group: "INCOME", available: true }]);
+    mergeBankTransactions(data, "JAPAN", "link-office", [
+      { id: "invoice-income", connected_account_id: "from", date: "2026-10-26", value: 12000, side: "INCOME", content: "Test customer INV-001", journalizing_status: "none" },
+      { id: "transfer-out", connected_account_id: "from", date: "2026-10-25", value: 100000, side: "EXPENSE", content: "Test internal transfer out", journalizing_status: "none" },
+      { id: "transfer-in", connected_account_id: "to", date: "2026-10-25", value: 100000, side: "INCOME", content: "Test internal transfer in", journalizing_status: "none" },
+      { id: "invoice-expense", connected_account_id: "from", date: "2026-10-24", value: 8000, side: "EXPENSE", content: "Test supplier", journalizing_status: "none" },
+      { id: "history-target", connected_account_id: "from", date: "2026-10-23", value: 1200, side: "EXPENSE", content: "JRW SHINKANSEN", journalizing_status: "none" },
+      { id: "history-source", connected_account_id: "from", date: "2026-09-23", value: 1000, side: "EXPENSE", content: "JRW SHINKANSEN", journalizing_status: "none" },
+    ], { start: "2026-09-01", end: "2026-10-31" });
+    const historical = data.bankTransactions.find((row) => row.sourceId === "history-source")!;
+    Object.assign(historical, { categoryId: data.accountingCategories.find((row) => row.name === "旅費交通費")!.id, reviewed: true, classificationSource: "MANUAL" });
+    data.issuedInvoices[0].status = "ISSUED"; data.issuedInvoices[0].needsReview = false;
+    data.receivedInvoices[0].status = "SCHEDULED"; data.receivedInvoices[0].mailProcessed = false;
+    data.mailDocuments[0].mailProcessed = false;
+  }
   for (const file of ["issued.pdf", "other.pdf", "china.pdf", "contract.pdf", "old.pdf", "received.pdf"]) await writeFile(path.join(upload, file), await pdf(file));
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
   for (let i = 1; i <= 3; i++) await writeFile(path.join(root, `drop-${i}.pdf`), await pdf(`Invoice Number: DROP-00${i}\nInvoice date: 2026-09-15\nDue date: 2026-10-15\nBill to: Test customer\nTotal amount: 12,000`));
