@@ -5,9 +5,9 @@ import { hashSync } from "bcryptjs";
 import { fixture, timestamp, admin } from "./document-fixture";
 import { mergeBankMasters, mergeBankTransactions, saveBankEdits, saveBankRule, sourceKey } from "../src/lib/banking";
 import type { UserRole } from "../src/lib/types";
-import { saveBankOverview } from "../src/lib/bank-account-overview";
+import { bankFiscalYear, saveBankOverview } from "../src/lib/bank-account-overview";
 import { bankToday } from "../src/lib/banking";
-import { recordBankCoverage } from "../src/lib/bank-forecast";
+import { recordBankCoverage, shiftForecastMonth } from "../src/lib/bank-forecast";
 
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "triangle-banking-preview-"));
@@ -92,6 +92,12 @@ async function main() {
     ], { start: `${month}-01`, end: `${month}-03` });
     data.bankSyncStates.push({ id: "overview-sync", company: "JAPAN", officeCode: office, officeName: "テスト会社", autoSync: false, status: "SUCCESS", imported: 3, updated: 0, createdAt: timestamp, updatedAt: timestamp, lastSuccessAt: new Date().toISOString() });
     recordBankCoverage(data.bankSyncStates[0], `${month}-01`, today, data.bankAccounts.map((row) => row.id));
+    const previousStart = `${bankFiscalYear(today) - 2}-09`;
+    const sample = data.bankTransactions.find((row) => row.bankAccountId === bank.id)!;
+    for (let index = 0; index < 12; index++) {
+      const fiscalMonth = shiftForecastMonth(previousStart, index);
+      data.bankTransactions.push(...Array.from({ length: 8 }, (_, day) => ({ ...sample, id: `fiscal-${fiscalMonth}-${day}`, sourceId: `fiscal-${fiscalMonth}-${day}`, transactionDate: `${fiscalMonth}-${String(day + 1).padStart(2, "0")}`, sourceMissing: false, amount: 15000 * (day + 1), side: day % 2 ? "EXPENSE" as const : "INCOME" as const, content: `年度スクロール確認 テスト明細 ${fiscalMonth} ${day + 1}` })));
+    }
   }
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
   console.log(root);

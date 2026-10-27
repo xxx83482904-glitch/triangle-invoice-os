@@ -14,6 +14,6 @@ export default async function BankAccountsPage({ searchParams }: { searchParams:
   if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
   const params = await searchParams, company = companyFromParam(params.company);
   const data = await readDataForRequest(), today = bankToday();
-  const overview = bankAccountOverview(data, company, params.month, today);
-  return <AppShell><BankAccountsWorkspace key={`${company}:${overview.month}`} company={company} today={today} {...overview} /></AppShell>;
+  const overview = bankAccountOverview(data, company, params.month, today, params.fiscalYear);
+  return <AppShell><BankAccountsWorkspace key={company} company={company} today={today} {...overview} /></AppShell>;
 }

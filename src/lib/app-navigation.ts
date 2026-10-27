@@ -67,7 +67,7 @@ export function workflowNavigation(pathname: string, params: URLSearchParams, ro
     if (bank) {
       if (["/banking", "/banking/insights", "/banking/forecast"].includes(path) && params.get("account")) target.set("account", params.get("account")!);
       const month = params.get("month") || params.get("checkMonth");
-      if (month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && (checks || path !== "/banking/forecast" && path !== "/banking/reconcile")) target.set(checks ? "checkMonth" : "month", month);
+      if (path !== "/banking/accounts" && month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && (checks || path !== "/banking/forecast" && path !== "/banking/reconcile")) target.set(checks ? "checkMonth" : "month", month);
     }
     const active = bank ? pathname === path && (path !== "/banking/reconcile" || (params.get("view") === "checks") === checks) : navigationActive(pathname, path);
     return { label: item.label, href: `${path}?${target}`, active };

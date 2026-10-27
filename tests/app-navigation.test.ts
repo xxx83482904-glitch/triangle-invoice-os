@@ -41,8 +41,16 @@ test("workflow tabs preserve bank account/month without carrying stale selection
     for (const key of ["transaction", "category", "page", "q"]) assert.equal(url.searchParams.has(key), false);
     if (["/banking/reconcile", "/banking/accounts"].includes(url.pathname)) assert.equal(url.searchParams.has("account"), false);
     else assert.equal(url.searchParams.get("account"), "a/b");
+    if (url.pathname === "/banking/accounts") assert.equal(url.searchParams.has("month"), false);
   }
   assert.ok(tabs.find((tab) => tab.label === "AI・確認事項")?.href.includes("checkMonth=2026-09"));
+});
+
+test("account overview always opens latest data instead of inheriting an old month or fiscal period", () => {
+  for (const path of ["/banking", "/banking/reconcile", "/banking/accounts"]) {
+    const tabs = workflowNavigation(path, new URLSearchParams("company=JAPAN&month=2026-06&checkMonth=2026-05&fiscalYear=2026"), "ADMIN");
+    assert.equal(tabs.find((tab) => tab.label === "口座一覧")!.href, "/banking/accounts?company=JAPAN");
+  }
 });
 
 test("AI and normal reconciliation tabs have distinct active states", () => {

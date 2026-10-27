@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accountKind, bankAccountOverview, saveBankOverview } from "../src/lib/bank-account-overview";
+import { accountKind, bankAccountOverview, bankFiscalYear, saveBankOverview } from "../src/lib/bank-account-overview";
+import { shiftForecastMonth } from "../src/lib/bank-forecast";
 import { mergeBankMasters, mergeBankTransactions, sourceKey } from "../src/lib/banking";
 import { recordBankCoverage } from "../src/lib/bank-forecast";
 import { restoreUndoState } from "../src/lib/store";
@@ -47,8 +48,8 @@ test("overview deduplicates reconnects and never double counts children under co
   assert.equal(parent.kind, "UNKNOWN"); assert.equal(parent.income, 50);
   assert.equal(report.rows.find((row) => row.id === id("card", ""))!.kind, "CARD");
   assert.equal(report.rows.find((row) => row.id === id("card", ""))!.balance, undefined);
-  assert.equal(bank.latestDate, "2026-10-03"); assert.equal(bank.recent.length, 3);
-  assert.equal(bank.history.at(-2)!.income, 0);
+  assert.equal(bank.latestDate, "2026-10-03"); assert.equal(bank.transactions.length, 3);
+  assert.equal(bank.history.find((point) => point.month === "2026-09")!.income, 0);
   assert.deepEqual(data, before);
 });
 
@@ -69,12 +70,72 @@ test("historical month, zero, negative balances and separate companies remain ex
   const data = setup(), account = data.bankAccounts.find((row) => row.id === id())!;
   for (const amount of [0, -200]) {
     saveBankOverview(data, admin, "JAPAN", account.id, account.updatedAt, { kind: "BANK", balance: { amount, asOf: "2026-10-01", currency: "JPY" } }, today);
-    const report = bankAccountOverview(data, "JAPAN", "2026-09", today).rows.find((row) => row.id === id())!;
-    assert.equal(report.balance?.amount, amount); assert.equal(report.estimatedBalance, undefined); assert.equal(report.count, 0); assert.equal(report.missing, 1);
+    const report = bankAccountOverview(data, "JAPAN", "2026-08", today).rows.find((row) => row.id === id())!;
+    assert.equal(report.balance?.amount, amount); assert.equal(report.estimatedBalance, undefined); assert.equal(report.count, 0); assert.equal(report.missing, 0);
+    assert.equal(report.balanceThrough, "2026-08-31");
   }
   assert.equal(bankAccountOverview(data, "JAPAN", "2026-99", today).month, "2026-10");
   assert.equal(bankAccountOverview(data, "JAPAN", "2026-11", today).month, "2026-10");
   assert.equal(bankAccountOverview(data, "CHINA", "2026-10", today).rows.length, 0);
+});
+
+test("default period follows the latest valid available transaction and excludes other companies, orphans, missing and future data", () => {
+  const data = setup(), sample = data.bankTransactions[0];
+  data.bankTransactions = [
+    { ...sample, id: "june", transactionDate: "2026-06-30" },
+    { ...sample, id: "august", transactionDate: "2026-08-31" },
+    { ...sample, id: "china", company: "CHINA", transactionDate: "2026-10-01" },
+    { ...sample, id: "missing", sourceMissing: true, transactionDate: "2026-10-02" },
+    { ...sample, id: "future", transactionDate: "2026-10-27" },
+    { ...sample, id: "orphan", bankAccountId: "absent", transactionDate: "2026-10-03" },
+    { ...sample, id: "wrong-office", officeCode: "other", transactionDate: "2026-10-04" },
+    { ...sample, id: "invalid", transactionDate: "2026-09-31" },
+  ];
+  const report = bankAccountOverview(data, "JAPAN", undefined, today);
+  assert.equal(report.latestMonth, "2026-08"); assert.equal(report.month, "2026-08");
+  assert.deepEqual(report.period, { year: 2026, start: "2025-09-01", end: "2026-08-31" });
+  assert.equal(report.through, "2026-08-31");
+  assert.deepEqual(report.rows.find((row) => row.id === id())!.transactions.map((row) => row.id), ["august", "june"]);
+  data.bankTransactions.push({ ...sample, id: "latest", transactionDate: "2026-10-20" });
+  const latest = bankAccountOverview(data, "JAPAN", undefined, today);
+  assert.equal(latest.period.year, 2027); assert.equal(latest.latestMonth, "2026-10");
+  assert.equal(bankAccountOverview(data, "JAPAN", "2026-06", today).period.year, 2026);
+  assert.equal(bankAccountOverview(data, "JAPAN", "2026-06", today, "2027").period.year, 2027);
+});
+
+test("August fiscal close covers exactly twelve months and all transactions in descending date order", () => {
+  const data = setup(), sample = data.bankTransactions[0];
+  data.bankTransactions = Array.from({ length: 12 }, (_, index) => {
+    const month = shiftForecastMonth("2025-09", index);
+    return Array.from({ length: 8 }, (_, day) => ({ ...sample, id: `${month}-${day}`, transactionDate: `${month}-${String(day + 1).padStart(2, "0")}`, amount: 100, side: day % 2 ? "EXPENSE" as const : "INCOME" as const }));
+  }).flat();
+  data.bankTransactions.push(
+    { ...sample, id: "before-period", transactionDate: "2025-08-31" },
+    { ...sample, id: "last-day", transactionDate: "2026-08-31", amount: 200 },
+    { ...sample, id: "next-period", transactionDate: "2026-09-01" },
+  );
+  const report = bankAccountOverview(data, "JAPAN", undefined, today, "2026"), bank = report.rows.find((row) => row.id === id())!;
+  assert.equal(bankFiscalYear("2026-08-31"), 2026); assert.equal(bankFiscalYear("2026-09-01"), 2027);
+  assert.equal(bank.history.length, 12); assert.equal(bank.history[0].month, "2025-09"); assert.equal(bank.history.at(-1)!.month, "2026-08");
+  assert.equal(bank.count, 97); assert.equal(bank.transactions.length, 97);
+  assert.equal(bank.transactions[0].id, "last-day"); assert.equal(bank.transactions.at(-1)!.transactionDate, "2025-09-01");
+  assert.equal(bank.income, 5000); assert.equal(bank.expense, 4800); assert.equal(bank.net, 200);
+  assert.equal(bank.history.reduce((sum, point) => sum + point.count, 0), bank.count);
+  assert.deepEqual(bank.transactions.map((row) => row.transactionDate), bank.transactions.map((row) => row.transactionDate).sort().reverse());
+  assert.ok(bank.history.every((point) => !point.future));
+});
+
+test("current fiscal period marks future months and empty or invalid inputs fall back safely", () => {
+  const report = bankAccountOverview(setup(), "JAPAN", undefined, today);
+  assert.equal(report.period.year, 2027); assert.equal(report.through, today);
+  assert.equal(report.rows[0].history.filter((point) => point.future).length, 10);
+  assert.ok(report.rows[0].history.filter((point) => point.future).every((point) => !point.count && !point.covered));
+  assert.deepEqual(report.fiscalYears, [2027, 2026]);
+  const data = setup(); data.bankTransactions = [];
+  for (const [month, year] of [[undefined, undefined], ["0000-01", "0000"], ["2026-99", "invalid"], ["2027-01", "9999"]]) {
+    const empty = bankAccountOverview(data, "JAPAN", month, today, year);
+    assert.equal(empty.period.year, 2027); assert.equal(empty.latestMonth, ""); assert.equal(empty.rows[0].count, 0);
+  }
 });
 
 test("account edits enforce role, company, valid balances, day-end dates and optimistic concurrency", () => {
