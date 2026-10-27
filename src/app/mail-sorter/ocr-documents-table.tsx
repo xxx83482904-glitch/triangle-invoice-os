@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, List, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Search, Square, Trash2, UploadCloud, X } from "lucide-react";
+import { AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, List, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Search, Trash2, UploadCloud, X } from "lucide-react";
+import { useListSelection } from "@/hooks/use-list-selection";
+import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { isSelectionControl } from "@/lib/list-selection";
 import { Fragment, type CSSProperties, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
@@ -630,23 +633,20 @@ export function OcrDocumentsTable({
   const [monthColumn, setMonthColumn] = useState<ColumnMode>("normal");
   const [senderColumn, setSenderColumn] = useState<ColumnMode>("normal");
   const [showEditor, setShowEditor] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
   const [pendingCategoryChange, setPendingCategoryChange] = useState<{ row: OcrDocumentListItem; category: MailDocumentCategory } | null>(null);
-  const lastSelectionAnchorIdRef = useRef<string | null>(null);
   const bulkDeleteFormRef = useRef<HTMLFormElement>(null);
 
-  const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.id)), [rows, selectedIds]);
-  const filteredIds = useMemo(() => new Set(filteredRows.map((row) => row.id)), [filteredRows]);
-  const hiddenSelectedCount = selectedRows.filter((row) => !filteredIds.has(row.id)).length;
   const duplicateRows = useMemo(() => rows.filter(isDuplicate), [rows]);
   const listVisibleRows = useMemo(
     () => listGroups.flatMap(([month, monthRows]) => (collapsedMonths.has(month) ? [] : monthRows)),
     [collapsedMonths, listGroups],
   );
   const selectionScopeRows = viewMode === "list" ? listVisibleRows : activeRows;
-  const selectedScopeCount = selectionScopeRows.filter((row) => selectedIds.has(row.id)).length;
-  const allScopeSelected = selectionScopeRows.length > 0 && selectedScopeCount === selectionScopeRows.length;
+  const selection = useListSelection(selectionScopeRows.map((row) => row.id), { availableIds: rows.map((row) => row.id), disabled: isMoving });
+  const { selected: selectedIds, setSelected: setSelectedIds } = selection;
+  const selectedRows = rows.filter((row) => selectedIds.has(row.id));
+  const hiddenSelectedCount = selection.hiddenCount;
   const monthOptions = useMemo(() => {
     const months = new Set<string>();
     folders.forEach((folder) => months.add(folder.month));
@@ -672,11 +672,6 @@ export function OcrDocumentsTable({
     setActiveMonth(month);
     setActiveRowId(monthRows[0]?.id ?? null);
   };
-
-  const selectionScopeRowsRef = useRef(selectionScopeRows);
-  useEffect(() => {
-    selectionScopeRowsRef.current = viewMode === "list" ? listVisibleRows : activeRows;
-  }, [activeRows, listVisibleRows, viewMode]);
 
   const processingValueForRow = (row: OcrDocumentListItem): ProcessingStatusValue =>
     pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
@@ -713,43 +708,6 @@ export function OcrDocumentsTable({
   const selectedOrSingleRow = (row: OcrDocumentListItem) => (
     selectedIds.has(row.id) && selectedRows.length > 1 ? selectedRows : [row]
   );
-
-  const toggleRowSelection = useCallback((row: OcrDocumentListItem, shiftKey: boolean) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      const scope = selectionScopeRowsRef.current;
-      const anchorIndex = lastSelectionAnchorIdRef.current
-        ? scope.findIndex((candidate) => candidate.id === lastSelectionAnchorIdRef.current)
-        : -1;
-      const targetIndex = scope.findIndex((candidate) => candidate.id === row.id);
-
-      if (shiftKey && anchorIndex >= 0 && targetIndex >= 0) {
-        const from = Math.min(anchorIndex, targetIndex);
-        const to = Math.max(anchorIndex, targetIndex);
-        for (let i = from; i <= to; i++) {
-          const r = scope[i];
-          if (r) next.add(r.id);
-        }
-      } else {
-        if (next.has(row.id)) next.delete(row.id);
-        else next.add(row.id);
-      }
-      return next;
-    });
-    lastSelectionAnchorIdRef.current = row.id;
-  }, []);
-
-  const toggleVisibleSelection = () => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (allScopeSelected) {
-        selectionScopeRows.forEach((row) => next.delete(row.id));
-      } else {
-        selectionScopeRows.forEach((row) => next.add(row.id));
-      }
-      return next;
-    });
-  };
 
   const openDropzone = () => {
     document.getElementById("mail-dropzone")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1020,13 +978,11 @@ export function OcrDocumentsTable({
             </button>)}
           </div>
           {duplicateRows.length || duplicateFilter === "duplicates" ? <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={duplicateFilter === "duplicates"} onChange={(event) => startFilterTransition(() => { setDuplicateFilter(event.target.checked ? "duplicates" : "all"); setVisibleListCount(LIST_BATCH_SIZE); })} />重複候補のみ ({duplicateRows.length})</label> : null}
-          <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={toggleVisibleSelection} disabled={!selectionScopeRows.length}>
-            {allScopeSelected ? <CheckSquare className="size-4" /> : <Square className="size-4" />}{allScopeSelected ? "表示中を解除" : "表示中を選択"}
-          </Button>
           {duplicateRows.length ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={() => setSelectedIds(new Set(filteredRows.filter(isDuplicate).map((row) => row.id)))}><CheckSquare className="size-4" />重複を選択</Button> : null}
           {hasFilters ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
           <LoaderCircle aria-label="絞り込み中" className={`size-4 animate-spin ${isFiltering || query !== deferredQuery ? "opacity-100" : "invisible"}`} />
         </div>
+        <SelectionToolbar selection={selection} />
         <div>
           {selectedRows.length || pendingEdits.length ? (
             <div className="sticky top-16 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-background/95 p-2 shadow-sm backdrop-blur lg:top-2 [&_button]:min-h-11 [&_select]:min-h-11">
@@ -1103,7 +1059,6 @@ export function OcrDocumentsTable({
                 disabled={!selectedRows.length}
                 onClick={() => {
                   setSelectedIds(new Set());
-                  lastSelectionAnchorIdRef.current = null;
                 }}
               >
                 <X className="h-3.5 w-3.5" />
@@ -1212,6 +1167,7 @@ export function OcrDocumentsTable({
                                 return (
                                   <tr
                                     key={row.id}
+                                    {...selection.rowProps(row.id)}
                                     draggable={canEdit}
                                     className={`cursor-pointer border-t transition hover:bg-muted/50 ${
                                       isActive ? "bg-primary/5" : ""
@@ -1221,13 +1177,10 @@ export function OcrDocumentsTable({
                                       isDragging ? "opacity-50" : ""
                                     }`}
                                     onClick={(event) => {
+                                      if (isSelectionControl(event.target, event.currentTarget)) return;
                                       setActiveMonth(month);
                                       setActiveRowId(row.id);
-                                      if (event.shiftKey || event.metaKey || event.ctrlKey) {
-                                        toggleRowSelection(row, event.shiftKey);
-                                      } else {
-                                        setShowEditor(true);
-                                      }
+                                      setShowEditor(true);
                                     }}
                                     onDragStart={(event) => {
                                       handleDragStart(row);
@@ -1239,20 +1192,8 @@ export function OcrDocumentsTable({
                                       setDragOverMonth(null);
                                     }}
                                   >
-                                    <td className="px-3 py-2">
-                                      {canEdit ? (
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          className="h-5 w-5 rounded border-muted-foreground/40"
-                                          aria-label={`${shippingSenderName(row)}を選択`}
-                                          onChange={(event) => event.stopPropagation()}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            toggleRowSelection(row, event.shiftKey);
-                                          }}
-                                        />
-                                      ) : null}
+                                    <td className="p-0">
+                                      <RowSelectionCheckbox selection={selection} id={row.id} label={`${shippingSenderName(row)}を選択`} />
                                     </td>
                                     <td className="max-w-[240px] truncate px-3 py-2 font-medium">{shippingSenderName(row)}</td>
                                     <td className="px-3 py-2">{renderProcessingControl(row)}</td>
@@ -1543,29 +1484,22 @@ export function OcrDocumentsTable({
                     return (
                       <div
                         key={row.id}
+                        {...selection.rowProps(row.id)}
                         role="button"
-                        tabIndex={0}
                         draggable={canEdit}
                         className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"} ${
                           isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"
                         } ${isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""} ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
                         onClick={(event) => {
+                          if (isSelectionControl(event.target, event.currentTarget)) return;
                           setActiveRowId(row.id);
-                          if (event.shiftKey || event.metaKey || event.ctrlKey) {
-                            toggleRowSelection(row, event.shiftKey);
-                          } else {
-                            setShowEditor(true);
-                          }
+                          setShowEditor(true);
                         }}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
+                          if (event.target === event.currentTarget && event.key === "Enter") {
                             event.preventDefault();
                             setActiveRowId(row.id);
-                            if (event.shiftKey || event.metaKey || event.ctrlKey) {
-                              toggleRowSelection(row, event.shiftKey);
-                            } else {
-                              setShowEditor(true);
-                            }
+                            setShowEditor(true);
                           }
                         }}
                         onDragStart={(event) => {
@@ -1576,24 +1510,15 @@ export function OcrDocumentsTable({
                         onDragEnd={() => { setDraggedIds(new Set()); setDragOverMonth(null); }}
                       >
                         <div className="flex items-start gap-2">
-                          {canEdit ? (
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              className="mt-0.5 h-5 w-5 shrink-0 rounded border-muted-foreground/40"
-                              aria-label={`${shippingSenderName(row)}を選択`}
-                              onChange={(e) => { e.stopPropagation(); }}
-                              onClick={(e) => { e.stopPropagation(); toggleRowSelection(row, e.shiftKey); }}
-                            />
-                          ) : null}
+                          <RowSelectionCheckbox selection={selection} id={row.id} label={`${shippingSenderName(row)}を選択`} />
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex min-w-0 flex-col items-start gap-1">
+                              <div className="flex w-full min-w-0 items-center gap-2">
                                 <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
                                 {senderColumn === "normal" ? renderDuplicateBadge(row) : null}
                               </div>
                               {senderColumn === "normal" ? (
-                                <div className="flex shrink-0 items-center gap-1">
+                                <div className="flex max-w-full flex-wrap items-center gap-1">
                                   {renderProcessingControl(row)}
                                   {renderCategoryControl(row)}
                                 </div>

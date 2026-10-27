@@ -1,4 +1,6 @@
 "use client";
+import { useListSelection } from "@/hooks/use-list-selection";
+import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -103,6 +105,7 @@ export function EstimatesWorkspace({ company, estimates, projects, clients, canE
       } catch { failure("削除に失敗しました"); }
     });
   }
+  const selection = useListSelection(filtered.map((row) => row.id), { availableIds: estimates.map((row) => row.id), disabled: pending });
   const actions = (e: Estimate) => [
     { label: "プレビュー", icon: FileText, action: () => setPreview(e) },
     ...(editable(e) ? [{ label: "編集", icon: Pencil, action: () => edit(e) }] : []),
@@ -119,17 +122,19 @@ export function EstimatesWorkspace({ company, estimates, projects, clients, canE
       {canEdit ? <Button className="min-h-11" onClick={() => edit("new")}><Plus className="size-4" />見積書を作成</Button> : null}
     </div>
     <div className="text-xs text-muted-foreground">{filtered.length}件</div>
+    <SelectionToolbar selection={selection} />
     <div className="min-w-0 border-y">
-      <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_110px_145px_44px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground md:grid"><span>案件名 / 見積番号</span><span>取引先</span><span>見積日 / 有効期限</span><span className="text-right">金額・状態</span><span /></div>
+      <div className="hidden grid-cols-[44px_minmax(0,2fr)_minmax(0,1fr)_110px_145px_44px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground md:grid"><span /><span>案件名 / 見積番号</span><span>取引先</span><span>見積日 / 有効期限</span><span className="text-right">金額・状態</span><span /></div>
       {filtered.map((e, index) => <Fragment key={e.id}>
         {sort === "project" && (!index || filtered[index - 1].projectId !== e.projectId) ? <h2 className="break-words border-b bg-muted/60 px-3 py-3 text-sm font-semibold">{projectMap.get(e.projectId) || "案件未設定"}</h2> : null}
         <ContextMenu.Root><ContextMenu.Trigger asChild>
-        <div data-estimate-id={e.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] items-center gap-2 border-b px-3 py-3 last:border-b-0 hover:bg-muted/30 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_110px_145px_44px] md:gap-3">
-          <button type="button" onClick={() => setPreview(e)} className="min-h-11 min-w-0 text-left"><span className="block break-words font-medium hover:underline">{projectMap.get(e.projectId) || "案件未設定"}</span><span className="block break-words text-xs text-muted-foreground">{e.estimateNumber}</span></button>
-          <span className="col-start-1 break-words text-sm md:col-start-auto">{clientMap.get(e.clientId)}</span>
-          <span className="col-start-1 text-xs text-muted-foreground md:col-start-auto">{e.issueDate}<br /><span>{e.validUntil}</span></span>
-          <div className="col-start-1 min-w-0 space-y-1 md:col-start-auto md:text-right"><span className="block break-words font-medium tabular-nums">{money(e.total)}</span><EstimateStatusSelect id={e.id} updatedAt={e.updatedAt} status={e.status} label={e.estimateNumber} company={company} disabled={!editable(e) || pending} onSaved={(next) => { if (preview?.id === next.id) setPreview(next); }} /></div>
-          <div className="col-start-2 row-start-1 md:col-start-auto md:row-start-auto"><DropdownMenu><DropdownMenuTrigger asChild><Button className="size-11" variant="ghost" size="icon" aria-label={`${e.estimateNumber}の操作`} title="見積書の操作"><Ellipsis className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{actions(e).map((action) => <DropdownMenuItem key={action.label} className="min-h-11" disabled={pending} onSelect={action.action}><action.icon className="size-4" />{action.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div>
+        <div {...selection.rowProps(e.id)} data-estimate-id={e.id} className={`grid min-w-0 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 border-b px-3 py-3 last:border-b-0 hover:bg-muted/30 md:grid-cols-[44px_minmax(0,2fr)_minmax(0,1fr)_110px_145px_44px] md:gap-3 ${selection.selected.has(e.id) ? "bg-primary/10" : ""}`}>
+          <RowSelectionCheckbox selection={selection} id={e.id} label={`${e.estimateNumber}を選択`} />
+          <button data-selection-open type="button" onClick={() => setPreview(e)} className="min-h-11 min-w-0 text-left"><span className="block break-words font-medium hover:underline">{projectMap.get(e.projectId) || "案件未設定"}</span><span className="block break-words text-xs text-muted-foreground">{e.estimateNumber}</span></button>
+          <span className="col-start-2 break-words text-sm md:col-start-auto">{clientMap.get(e.clientId)}</span>
+          <span className="col-start-2 text-xs text-muted-foreground md:col-start-auto">{e.issueDate}<br /><span>{e.validUntil}</span></span>
+          <div className="col-start-2 min-w-0 space-y-1 md:col-start-auto md:text-right"><span className="block break-words font-medium tabular-nums">{money(e.total)}</span><EstimateStatusSelect id={e.id} updatedAt={e.updatedAt} status={e.status} label={e.estimateNumber} company={company} disabled={!editable(e) || pending} onSaved={(next) => { if (preview?.id === next.id) setPreview(next); }} /></div>
+          <div className="col-start-3 row-start-1 md:col-start-auto md:row-start-auto"><DropdownMenu><DropdownMenuTrigger asChild><Button className="size-11" variant="ghost" size="icon" aria-label={`${e.estimateNumber}の操作`} title="見積書の操作"><Ellipsis className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{actions(e).map((action) => <DropdownMenuItem key={action.label} className="min-h-11" disabled={pending} onSelect={action.action}><action.icon className="size-4" />{action.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div>
         </div>
       </ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">{actions(e).map((action) => <ContextMenu.Item key={action.label} className={menuClass} disabled={pending} onSelect={action.action}><action.icon />{action.label}</ContextMenu.Item>)}</ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root></Fragment>)}
       {!filtered.length ? <p className="py-16 text-center text-sm text-muted-foreground">{estimates.length ? "該当する見積書がありません" : "見積書はまだありません"}</p> : null}

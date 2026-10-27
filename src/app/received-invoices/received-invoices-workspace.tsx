@@ -1,4 +1,7 @@
 "use client";
+import { useListSelection } from "@/hooks/use-list-selection";
+import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { isSelectionControl } from "@/lib/list-selection";
 
 import Link from "next/link";
 import { ChevronDown, ChevronRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
@@ -217,6 +220,8 @@ export function ReceivedInvoicesWorkspace({
     );
   }, [filteredInvoices]);
 
+  const selection = useListSelection(monthGroups.flatMap(([month, list]) => collapsedMonths.has(month) ? [] : list.map((row) => row.id)), { availableIds: invoices.map((row) => row.id) });
+
   const counts = useMemo(() => {
     return {
       all: invoices.length,
@@ -284,12 +289,14 @@ export function ReceivedInvoicesWorkspace({
           />
         </div>
 
+        <SelectionToolbar selection={selection} />
         {filteredInvoices.length ? (
           <div className="grid min-h-[720px] overflow-hidden rounded-lg border xl:grid-cols-[minmax(0,1fr)_440px]">
             <div className="min-w-0 overflow-x-auto">
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-muted/50 text-xs text-muted-foreground">
                   <tr>
+                    <th className="w-11 p-0"><SelectAllCheckbox selection={selection} label="表示中の受領請求書をすべて選択" /></th>
                     <th className="px-3 py-2 text-left">請求元</th>
                     <th className="px-3 py-2 text-left">案件</th>
                     <th className="px-3 py-2 text-left">請求日</th>
@@ -307,7 +314,7 @@ export function ReceivedInvoicesWorkspace({
                     return (
                       <tbody key={month}>
                         <tr className="border-t bg-muted/30">
-                          <td colSpan={8} className="px-3 py-2">
+                          <td colSpan={9} className="px-3 py-2">
                             <button
                               type="button"
                               className="flex w-full items-center justify-between gap-3 text-left"
@@ -328,9 +335,11 @@ export function ReceivedInvoicesWorkspace({
                           return (
                             <tr
                               key={invoice.id}
-                              className={`cursor-pointer border-t border-l-2 transition hover:bg-muted/40 ${paymentTone(invoice, today)} ${active ? "bg-primary/5" : ""}`}
-                              onClick={() => setActiveId(invoice.id)}
+                              {...selection.rowProps(invoice.id)}
+                              className={`cursor-pointer border-t border-l-2 transition hover:bg-muted/40 ${paymentTone(invoice, today)} ${selection.selected.has(invoice.id) ? "bg-primary/10" : active ? "bg-primary/5" : ""}`}
+                              onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) setActiveId(invoice.id); }}
                             >
+                              <td className="p-0"><RowSelectionCheckbox selection={selection} id={invoice.id} label={`${invoice.vendorName} ${invoice.issueDate}を選択`} /></td>
                               <td className="max-w-[220px] truncate px-3 py-2 font-medium">{invoice.vendorName}</td>
                               <td className="max-w-[220px] truncate px-3 py-2">
                                 <Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline" onClick={(event) => event.stopPropagation()}>

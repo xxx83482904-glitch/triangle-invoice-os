@@ -1,4 +1,7 @@
 "use client";
+import { useListSelection, type ListSelection } from "@/hooks/use-list-selection";
+import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { isSelectionControl } from "@/lib/list-selection";
 
 import Link from "next/link";
 import {
@@ -114,6 +117,7 @@ export function ProjectsWorkspace({
 
   const activeRow = filteredRows.find((row) => row.id === activeId) ?? filteredRows[0] ?? rows.find((row) => row.id === activeId) ?? rows[0];
   const summary = useMemo(() => buildSummary(rows, showFinancials), [rows, showFinancials]);
+  const selection = useListSelection(filteredRows.map((row) => row.id), { availableIds: rows.map((row) => row.id) });
 
   return (
     <div className="space-y-4">
@@ -202,10 +206,12 @@ export function ProjectsWorkspace({
               <span>要対応順</span>
             </div>
             <div className="max-h-[70vh] overflow-y-auto">
+              <SelectionToolbar selection={selection} />
               {filteredRows.map((row) => (
                 <ProjectListItem
                   key={row.id}
                   active={row.id === activeRow?.id}
+                  selection={selection}
                   row={row}
                   showFinancials={showFinancials}
                   onSelect={() => setActiveId(row.id)}
@@ -328,11 +334,13 @@ function CreateProjectForm({
 
 function ProjectListItem({
   active,
+  selection,
   onSelect,
   row,
   showFinancials,
 }: {
   active: boolean;
+  selection: ListSelection;
   onSelect: () => void;
   row: ProjectWorkspaceRow;
   showFinancials: boolean;
@@ -342,22 +350,23 @@ function ProjectListItem({
 
   return (
     <article
+      {...selection.rowProps(row.id)}
       role="button"
-      tabIndex={0}
       className={cn(
         "block w-full border-b px-3 py-3 text-left transition-colors hover:bg-muted/60",
-        active ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : "bg-background",
+        selection.selected.has(row.id) ? "bg-primary/10" : active ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : "bg-background",
       )}
-      onClick={onSelect}
+      onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) onSelect(); }}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.target === event.currentTarget && event.key === "Enter") {
           event.preventDefault();
           onSelect();
         }
       }}
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
+        <RowSelectionCheckbox selection={selection} id={row.id} label={`${row.name}を選択`} />
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">No. {row.index}</span>
             <CompanyBadge company={row.company} />

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SelectableRecordsTable } from "@/components/app/selectable-records-table";
 import { createSelectOption, createVendor, moveClientOption, moveSelectOption, moveVendorOption } from "@/app/actions";
 import { ClientEditButton, ClientForm } from "@/components/app/client-editor";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -51,21 +52,11 @@ export default async function PartnersPage({
           <Card className="min-w-0">
             <CardHeader><CardTitle>クライアント</CardTitle></CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader><TableRow><TableHead className="w-20">順番</TableHead><TableHead>会社名</TableHead><TableHead>担当者</TableHead><TableHead>メール</TableHead><TableHead>登録番号</TableHead>{mayEdit ? <TableHead className="w-12"><span className="sr-only">操作</span></TableHead> : null}</TableRow></TableHeader>
-                <TableBody>
-                  {clients.map((client, index) => (
-                    <TableRow key={client.id}>
-                      <TableCell><MoveButtons action={moveClientOption} id={client.id} disabled={!mayEdit} first={index === 0} last={index === clients.length - 1} /></TableCell>
-                      <TableCell className="font-medium">{client.companyName}</TableCell>
-                      <TableCell>{client.contactName}</TableCell>
-                      <TableCell>{client.email}</TableCell>
-                      <TableCell>{client.invoiceRegistrationNumber}</TableCell>
-                      {mayEdit ? <TableCell><div className="flex"><ClientEditButton company={company} client={client} /><ClientDeleteButton company={company} client={{ id: client.id, companyName: client.companyName, updatedAt: client.updatedAt }} /></div></TableCell> : null}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <SelectableRecordsTable key={`clients-${company}`} headers={["順番", "会社名", "担当者", "メール", "登録番号", ...(mayEdit ? ["操作"] : [])]} rows={clients.map((client, index) => ({ id: client.id, label: client.companyName, cells: [
+                <MoveButtons key="order" action={moveClientOption} id={client.id} disabled={!mayEdit} first={index === 0} last={index === clients.length - 1} />,
+                <span key="name" className="font-medium">{client.companyName}</span>, client.contactName, client.email, client.invoiceRegistrationNumber,
+                ...(mayEdit ? [<div key="actions" className="flex"><ClientEditButton company={company} client={client} /><ClientDeleteButton company={company} client={{ id: client.id, companyName: client.companyName, updatedAt: client.updatedAt }} /></div>] : []),
+              ] }))} />
             </CardContent>
           </Card>
           {mayEdit ? (
@@ -80,20 +71,10 @@ export default async function PartnersPage({
           <Card>
             <CardHeader><CardTitle>支払先</CardTitle></CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader><TableRow><TableHead className="w-20">順番</TableHead><TableHead>会社名</TableHead><TableHead>担当者</TableHead><TableHead>メール</TableHead><TableHead>銀行</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {vendors.map((vendor, index) => (
-                    <TableRow key={vendor.id}>
-                      <TableCell><MoveButtons action={moveVendorOption} id={vendor.id} disabled={!mayEdit} first={index === 0} last={index === vendors.length - 1} /></TableCell>
-                      <TableCell className="font-medium">{vendor.companyName}</TableCell>
-                      <TableCell>{vendor.contactName}</TableCell>
-                      <TableCell>{vendor.email}</TableCell>
-                      <TableCell>{vendor.bankName} {vendor.branchName}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <SelectableRecordsTable key={`vendors-${company}`} headers={["順番", "会社名", "担当者", "メール", "銀行"]} rows={vendors.map((vendor, index) => ({ id: vendor.id, label: vendor.companyName, cells: [
+                <MoveButtons key="order" action={moveVendorOption} id={vendor.id} disabled={!mayEdit} first={index === 0} last={index === vendors.length - 1} />,
+                <span key="name" className="font-medium">{vendor.companyName}</span>, vendor.contactName, vendor.email, `${vendor.bankName || ""} ${vendor.branchName || ""}`,
+              ] }))} />
             </CardContent>
           </Card>
           {mayEdit ? (

@@ -50,6 +50,21 @@ async function main() {
     data.projects.find((project) => project.id === "other")!.clientId = "second-client";
     data.issuedInvoices.find((invoice) => invoice.projectId === "other")!.clientId = "second-client";
   }
+  if (process.argv.includes("--selection")) {
+    for (let index = 0; index < 8; index++) {
+      const suffix = String(index).padStart(2, "0"), month = index < 4 ? "2026-10" : "2026-09";
+      const clientId = `select-client-${suffix}`, vendorId = `select-vendor-${suffix}`, projectId = `select-project-${suffix}`;
+      data.clients.push({ ...data.clients[0], id: clientId, companyName: `Selection client ${suffix}` });
+      data.vendors.push({ ...data.vendors[0], id: vendorId, companyName: `Selection vendor ${suffix}` });
+      data.projects.push({ ...data.projects[0], id: projectId, clientId, name: `Selection project ${suffix}`, contractFileUrl: undefined });
+      data.issuedInvoices.push({ ...data.issuedInvoices[0], id: `select-issued-${suffix}`, clientId, projectId, invoiceNumber: `SEL-INV-${suffix}`, issueDate: `${month}-15` });
+      data.receivedInvoices.push({ ...data.receivedInvoices[0], id: `select-received-${suffix}`, vendorId, projectId, issueDate: `${month}-15`, folderMonth: month, status: "REVIEWING", mailProcessed: false });
+      data.mailDocuments.push({ ...data.mailDocuments[0], id: `select-mail-${suffix}`, title: `Selection mail ${suffix}`, senderName: `Selection sender ${suffix}`, folderMonth: month, relatedReceivedInvoiceId: undefined, mailProcessed: false });
+      data.estimates.push({ id: `select-estimate-${suffix}`, estimateNumber: `SEL-EST-${suffix}`, clientId, projectId, issueDate: `${month}-15`, validUntil: "2026-11-30", status: "DRAFT", items: [{ id: `item-${suffix}`, description: "Test design", quantity: 1, unitPrice: 12000, taxRate: 0, amount: 12000 }], subtotal: 12000, taxTotal: 0, total: 12000, createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
+    }
+    mergeBankMasters(data, "JAPAN", "selection-office", [{ id: "bank", name: "Selection test bank", serviceName: "Selection test bank", isManual: false }], [{ id: "expense", name: "消耗品費", group: "EXPENSE", available: true }]);
+    mergeBankTransactions(data, "JAPAN", "selection-office", Array.from({ length: 75 }, (_, index) => ({ id: `select-bank-${index}`, connected_account_id: "bank", date: "2026-10-15", value: 1000 + index, side: "EXPENSE" as const, content: `Selection transaction ${String(index).padStart(2, "0")}`, journalizing_status: "none" })), { start: "2026-10-01", end: "2026-10-31" });
+  }
   for (const file of ["issued.pdf", "other.pdf", "china.pdf", "contract.pdf", "old.pdf", "received.pdf"]) await writeFile(path.join(upload, file), await pdf(file));
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));
   for (let i = 1; i <= 3; i++) await writeFile(path.join(root, `drop-${i}.pdf`), await pdf(`Invoice Number: DROP-00${i}\nInvoice date: 2026-09-15\nDue date: 2026-10-15\nBill to: Test customer\nTotal amount: 12,000`));
