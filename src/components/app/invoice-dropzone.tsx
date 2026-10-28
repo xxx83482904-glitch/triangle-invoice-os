@@ -2,15 +2,15 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, FileUp, LoaderCircle, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileUp, LoaderCircle, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 
 type Result = { fileName: string; id?: string; error?: string; duplicate?: boolean; warnings?: string[]; projectId?: string; projectName?: string; projectCreated?: boolean; projectMatch?: string };
-type Props = { company: CompanyScope; kind: "issued" | "received"; projects?: Array<{ value: string; label: string }> };
+type Props = { company: CompanyScope; kind: "issued" | "received"; projects?: Array<{ value: string; label: string }>; compact?: boolean };
 
-export function InvoiceDropzone({ company, kind, projects = [] }: Props) {
+export function InvoiceDropzone({ company, kind, projects = [], compact = false }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
   const router = useRouter();
@@ -19,6 +19,7 @@ export function InvoiceDropzone({ company, kind, projects = [] }: Props) {
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [results, setResults] = useState<Result[]>([]);
   const [error, setError] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const label = kind === "issued" ? "発行請求書" : "受領請求書";
 
   async function upload(files: FileList | File[]) {
@@ -55,20 +56,21 @@ export function InvoiceDropzone({ company, kind, projects = [] }: Props) {
     } finally { busy.current = false; setProgress(null); }
   }
 
-  return <section aria-label={label + "取込"} className="space-y-3 border-y py-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+  return <section aria-label={label + "取込"} className={compact ? "space-y-2" : "space-y-3 border-y py-4"}>
+    {compact ? <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">OCR取込</h2><Button variant="ghost" className="min-h-11" disabled={Boolean(progress)} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}><Settings2 className="size-4" />{projectId ? "取込先を指定中" : "取込設定"}</Button></div> : null}
+    {!compact || settingsOpen ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <h2 className="shrink-0 font-semibold">{label}を取り込む</h2>
-      {kind === "issued" ? <select aria-label="取込先の案件" className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm sm:max-w-md" value={projectId} disabled={Boolean(progress)} onChange={(e) => { setProjectId(e.target.value); setError(""); }}>
+      {kind === "issued" ? <select aria-label="取込先の案件" className="h-11 w-full min-w-0 rounded-md border bg-background px-3 text-sm sm:max-w-md" value={projectId} disabled={Boolean(progress)} onChange={(e) => { setProjectId(e.target.value); setError(""); }}>
         <option value="">自動判定・なければ新規案件</option>
         {projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
       </select> : null}
-    </div>
+    </div> : null}
     <button type="button" disabled={Boolean(progress)} aria-label={label + "ファイルを選択"} aria-busy={Boolean(progress)}
       onClick={() => input.current?.click()}
       onDragOver={(e) => { e.preventDefault(); if (!busy.current && e.dataTransfer.types.includes("Files")) setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={(e) => { e.preventDefault(); setDragging(false); void upload(e.dataTransfer.files); }}
-      className={"flex min-h-24 w-full flex-wrap items-center justify-center gap-3 rounded-md border border-dashed px-4 py-5 text-left transition-colors disabled:cursor-wait " + (dragging ? "border-primary bg-accent" : "bg-background hover:bg-muted/50")}>
+      className={`flex w-full flex-wrap items-center justify-center gap-3 rounded-md border border-dashed px-4 text-left transition-colors disabled:cursor-wait ${compact ? "min-h-11 py-2" : "min-h-24 py-5"} ` + (dragging ? "border-primary bg-accent" : "bg-background hover:bg-muted/50")}>
       {progress ? <LoaderCircle aria-hidden className="size-6 animate-spin" /> : <FileUp aria-hidden className="size-6 text-muted-foreground" />}
       <span className="min-w-0 break-words">{progress ? "OCR取込中 " + progress.current + " / " + progress.total : "ファイルをドロップ / 選択"}</span>
       <span className="text-xs text-muted-foreground">PDF・JPEG・PNG / 10MB</span>

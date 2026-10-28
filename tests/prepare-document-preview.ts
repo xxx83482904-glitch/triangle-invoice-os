@@ -6,6 +6,7 @@ import { hashSync } from "bcryptjs";
 import { createCanvas } from "@napi-rs/canvas";
 import { fixture, timestamp } from "./document-fixture";
 import { mergeBankMasters, mergeBankTransactions } from "../src/lib/banking";
+import { recordBankCoverage } from "../src/lib/bank-forecast";
 
 async function pdf(text: string) {
   return new Promise<Buffer>((resolve) => {
@@ -83,6 +84,47 @@ async function main() {
     data.issuedInvoices[0].status = "ISSUED"; data.issuedInvoices[0].needsReview = false;
     data.receivedInvoices[0].status = "SCHEDULED"; data.receivedInvoices[0].mailProcessed = false;
     data.mailDocuments[0].mailProcessed = false;
+  }
+  if (process.argv.includes("--bank-balances")) {
+    const office = "balance-office";
+    mergeBankMasters(data, "JAPAN", office, [
+      { id: "ufj", name: "三菱UFJ銀行 / 残高テスト 1234567", serviceName: "三菱UFJ銀行", isManual: false },
+      { id: "paypay", name: "PayPay銀行 / 残高テスト 1237691", serviceName: "PayPay銀行", isManual: false },
+      { id: "aplus", name: "アプラス / テストカード 1234", serviceName: "アプラス", isManual: false },
+    ], [{ id: "expense", name: "消耗品費", group: "EXPENSE", available: true }]);
+    mergeBankTransactions(data, "JAPAN", office, [
+      { id: "snapshot-day", connected_account_id: "ufj", date: "2026-09-30", value: 1000, side: "INCOME", content: "残高に含まれる当日の入金", journalizing_status: "none" },
+      { id: "income", connected_account_id: "ufj", date: "2026-10-01", value: 200000, side: "INCOME", content: "テスト売上入金", journalizing_status: "none" },
+      { id: "expense", connected_account_id: "ufj", date: "2026-10-02", value: 5000, side: "EXPENSE", content: "テスト文具", journalizing_status: "none" },
+      { id: "transfer-out", connected_account_id: "ufj", date: "2026-10-03", value: 50000, side: "EXPENSE", content: "自社口座へ振替", journalizing_status: "none" },
+      { id: "transfer-in", connected_account_id: "paypay", date: "2026-10-03", value: 50000, side: "INCOME", content: "自社口座から振替", journalizing_status: "none" },
+      { id: "aplus-debit", connected_account_id: "ufj", date: "2026-10-27", value: 120000, side: "EXPENSE", content: "口座振替4 APアプラス", journalizing_status: "none" },
+      { id: "card-one", connected_account_id: "aplus", date: "2026-09-05", value: 70000, side: "EXPENSE", content: "アプラス テスト備品購入", journalizing_status: "none" },
+      { id: "card-two", connected_account_id: "aplus", date: "2026-09-10", value: 50000, side: "EXPENSE", content: "アプラス テスト備品購入", journalizing_status: "none" },
+    ], { start: "2026-09-01", end: "2026-10-31" });
+    for (const account of data.bankAccounts.filter((row) => row.officeCode === office)) {
+      account.overviewSettings = account.sourceId === "aplus" ? { kind: "CARD", recordedAt: timestamp } : { kind: "BANK", balance: { amount: account.sourceId === "ufj" ? 1000000 : 300000, asOf: "2026-09-30", currency: "JPY" }, recordedAt: timestamp };
+    }
+    for (const row of data.bankTransactions.filter((row) => row.officeCode === office && row.sourceId.startsWith("transfer-"))) Object.assign(row, { treatment: "TRANSFER", classificationSource: "MANUAL", reviewed: true });
+    // Model an older automatic guess so the new settlement proposal can be reviewed before saving.
+    Object.assign(data.bankTransactions.find((row) => row.officeCode === office && row.sourceId === "aplus-debit")!, { treatment: "NORMAL", categoryId: data.accountingCategories.find((row) => row.officeCode === office)!.id, classificationSource: "AUTO", reviewed: false });
+    data.bankSyncStates.push({ id: "balance-sync", company: "JAPAN", officeCode: office, officeName: "残高テスト", autoSync: false, status: "SUCCESS", imported: 8, updated: 0, createdAt: timestamp, updatedAt: timestamp, lastSuccessAt: "2026-10-28T01:00:00Z" });
+    recordBankCoverage(data.bankSyncStates.at(-1)!, "2026-09-01", "2026-10-28", data.bankAccounts.filter((row) => row.officeCode === office && row.sourceId !== "paypay").map((row) => row.id));
+  }
+  if (process.argv.includes("--estimates")) {
+    for (let index = 0; index < 75; index++) {
+      const suffix = String(index).padStart(2, "0"), month = index < 40 ? "2026-10" : "2026-09";
+      data.estimates.push({ id: `estimate-list-${suffix}`, estimateNumber: `LIST-EST-${suffix}`, projectId: "japan", clientId: "client", issueDate: `${month}-15`, validUntil: "2026-11-30", status: "DRAFT",
+        items: [{ id: `list-item-${suffix}`, description: "Test design", details: "Initial design\nTwo revisions", quantity: 1, unitPrice: 10000, amount: 10000, taxRate: 10 }],
+        subtotal: 10000, taxTotal: 1000, total: 11000, createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
+    }
+  }
+  if (process.argv.includes("--issued-list")) {
+    for (let index = 0; index < 75; index++) {
+      const suffix = String(index).padStart(2, "0"), month = index < 40 ? "2026-10" : "2026-09";
+      data.issuedInvoices.push({ ...data.issuedInvoices[0], id: `issued-list-${suffix}`, invoiceNumber: `LIST-INV-${suffix}`, issueDate: `${month}-15`, dueDate: "2026-11-30", status: "ISSUED", needsReview: index % 3 === 0 });
+    }
+    for (const [id, amount] of [["issued-list-00", 12000], ["issued-list-01", 3000]] as const) data.payments.push({ id: `payment-${id}`, type: "INCOME", issuedInvoiceId: id, amount, paymentDate: "2026-10-20", createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
   }
   for (const file of ["issued.pdf", "other.pdf", "china.pdf", "contract.pdf", "old.pdf", "received.pdf"]) await writeFile(path.join(upload, file), await pdf(file));
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));

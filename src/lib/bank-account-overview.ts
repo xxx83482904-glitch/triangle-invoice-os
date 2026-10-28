@@ -38,11 +38,19 @@ export function saveBankOverview(data: AppData, actor: Pick<User, "id" | "role">
 
 type Movement = { month: string; income: number; expense: number; count: number; covered: boolean; future: boolean };
 export type BankFiscalPeriod = { year: number; start: string; end: string };
+// Derived from acquired cash movements after the saved day-end baseline, never a bank-reported balance.
+export type BankBalanceCalculation = {
+  amount: number; income: number; expense: number; count: number; through: string;
+  /** Coverage is continuous for every reconnect member, with no missing or invalid source rows. */
+  complete: boolean;
+  /** Source-missing rows strictly after the baseline and through today; excluded from the amount. */
+  missing: number;
+};
 type OverviewTransaction = Pick<BankTransaction, "id" | "transactionDate" | "amount" | "side" | "content" | "reviewed">;
 export type AccountOverviewRow = {
   id: string; name: string; serviceName: string; updatedAt: string; kind: BankOverviewSettings["kind"];
   available: boolean; unspecified: boolean; memberCount: number;
-  balance?: BankOverviewSettings["balance"]; estimatedBalance?: number; balanceThrough: string;
+  balance?: BankOverviewSettings["balance"]; balanceCalculation?: BankBalanceCalculation;
   income: number; expense: number; net: number; count: number; unreviewed: number; missing: number; covered: boolean;
   latestDate?: string; lastSyncAt?: string; history: Movement[];
   transactions: OverviewTransaction[];
@@ -51,13 +59,14 @@ export type AccountOverviewRow = {
 const endOfMonth = (month: string) => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
 const nextDate = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
 export const bankFiscalYear = (month: string) => Number(month.slice(0, 4)) + (Number(month.slice(5, 7)) >= 9 ? 1 : 0);
+const validMovement = (row: BankTransaction) => isBankDate(row.transactionDate) && Number.isSafeInteger(row.amount) && row.amount >= 0 && (row.side === "INCOME" || row.side === "EXPENSE");
 
 export function bankAccountOverview(data: AppData, company: CompanyScope, requestedMonth: string | undefined, today: string, requestedYear?: string) {
   if (!isBankDate(today)) throw new Error("基準日が不正です");
   const accounts = data.bankAccounts.filter((account) => account.company === company);
   const byId = new Map(accounts.map((row) => [row.id, row]));
-  const relevant = data.bankTransactions.filter((row) => row.company === company && row.officeCode === byId.get(row.bankAccountId)?.officeCode && isBankDate(row.transactionDate));
-  const validTransactions = relevant.filter((row) => !row.sourceMissing && row.transactionDate <= today);
+  const relevant = data.bankTransactions.filter((row) => row.company === company && byId.has(row.bankAccountId) && row.officeCode === byId.get(row.bankAccountId)!.officeCode);
+  const validTransactions = relevant.filter((row) => validMovement(row) && !row.sourceMissing && row.transactionDate <= today);
   const latestDate = validTransactions.reduce((latest, row) => row.transactionDate > latest ? row.transactionDate : latest, "");
   const latestMonth = latestDate.slice(0, 7);
   const currentYear = bankFiscalYear(today);
@@ -66,7 +75,7 @@ export function bankAccountOverview(data: AppData, company: CompanyScope, reques
     ? Number(requestedYear) : bankFiscalYear(legacyMonth || latestMonth || today);
   const period: BankFiscalPeriod = { year, start: `${year - 1}-09-01`, end: `${year}-08-31` };
   const through = period.end < today ? period.end : today;
-  const inPeriod = (row: BankTransaction) => row.transactionDate >= period.start && row.transactionDate <= through;
+  const inPeriod = (row: BankTransaction) => isBankDate(row.transactionDate) && row.transactionDate >= period.start && row.transactionDate <= through;
   const periodLatestDate = validTransactions.filter(inPeriod).reduce((latest, row) => row.transactionDate > latest ? row.transactionDate : latest, "");
   const month = (periodLatestDate || through).slice(0, 7);
   const fiscalYears = [...new Set([currentYear, currentYear - 1, year, ...validTransactions.map((row) => bankFiscalYear(row.transactionDate))])].sort((a, b) => b - a);
@@ -87,7 +96,7 @@ export function bankAccountOverview(data: AppData, company: CompanyScope, reques
     const kind = unspecified ? "UNKNOWN" : settings?.kind ?? accountKind(account);
     const balance = !unspecified && kind === "BANK" ? settings?.balance : undefined;
     const all = ids.flatMap((id) => byAccount.get(id) || []);
-    const valid = all.filter((row) => !row.sourceMissing && row.transactionDate <= today);
+    const valid = all.filter((row) => validMovement(row) && !row.sourceMissing && row.transactionDate <= today);
     const state = data.bankSyncStates.find((row) => row.company === company && row.officeCode === account.officeCode);
     const covered = (start: string, end: string) => ids.every((id) => bankPeriodCovered(state, id, start, end));
     const history: Movement[] = Array.from({ length: 12 }, (_, i) => {
@@ -98,12 +107,20 @@ export function bankAccountOverview(data: AppData, company: CompanyScope, reques
     });
     const selected = valid.filter(inPeriod).sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || a.id.localeCompare(b.id));
     const income = history.reduce((sum, point) => sum + point.income, 0), expense = history.reduce((sum, point) => sum + point.expense, 0);
-    let estimatedBalance: number | undefined;
-    if (balance && balance.asOf < through && covered(nextDate(balance.asOf), through) && !all.some((row) => row.sourceMissing && row.transactionDate > balance.asOf && row.transactionDate <= through)) {
-      estimatedBalance = balance.amount + valid.filter((row) => row.transactionDate > balance.asOf && row.transactionDate <= through).reduce((sum, row) => sum + (row.side === "INCOME" ? row.amount : -row.amount), 0);
+    let balanceCalculation: BankBalanceCalculation | undefined;
+    if (balance && settingsSchema.safeParse({ kind, balance }).success && balance.asOf <= today) {
+      // This interval is independent of the fiscal view. Transfers/exclusions are cash, not extra ledger entries.
+      const afterSnapshot = (row: BankTransaction) => isBankDate(row.transactionDate) && row.transactionDate > balance.asOf && row.transactionDate <= today;
+      const movements = valid.filter(afterSnapshot);
+      const income = movements.filter((row) => row.side === "INCOME").reduce((sum, row) => sum + row.amount, 0);
+      const expense = movements.filter((row) => row.side === "EXPENSE").reduce((sum, row) => sum + row.amount, 0);
+      const missing = all.filter((row) => row.sourceMissing && afterSnapshot(row)).length;
+      const invalid = all.some((row) => !isBankDate(row.transactionDate) || afterSnapshot(row) && !validMovement(row));
+      balanceCalculation = { amount: balance.amount + income - expense, income, expense, count: movements.length, through: today,
+        complete: balance.asOf === today || covered(nextDate(balance.asOf), today) && missing === 0 && !invalid, missing };
     }
     return { id: account.id, name: unspecified ? `${account.serviceName} / 口座未特定` : account.name, serviceName: account.serviceName, updatedAt: account.updatedAt,
-      kind, available: option.available, unspecified, memberCount: ids.length, balance, estimatedBalance, balanceThrough: through,
+      kind, available: option.available, unspecified, memberCount: ids.length, balance, balanceCalculation,
       income, expense, net: income - expense, count: selected.length, covered: covered(period.start, through),
       unreviewed: selected.filter((row) => !row.reviewed).length, missing: all.filter((row) => row.sourceMissing && inPeriod(row)).length,
       latestDate: selected[0]?.transactionDate, lastSyncAt: state?.lastSuccessAt, history,

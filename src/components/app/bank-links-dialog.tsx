@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, Check, FileCheck2, LoaderCircle, Search, Unlink } from "lucide-react";
+import { ArrowLeftRight, Check, CreditCard, FileCheck2, LoaderCircle, Search, Unlink } from "lucide-react";
 import { confirmBankTransferAction, loadBankLinksAction, removeBankTransferAction } from "@/app/banking/link-actions";
 import { removeBankReconciliationAction } from "@/app/banking/reconcile/actions";
 import { BankReconciliationConfirmation } from "@/components/app/bank-reconciliation-desk";
@@ -21,12 +21,12 @@ const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase(
 export function BankLinksDialog({ company, initial, onClose }: { company: CompanyScope; initial: BankLinkData; onClose: () => void }) {
   const [data, setData] = useState(initial), [pending, startTransition] = useTransition();
   const [saving, setSaving] = useState(false), [error, setError] = useState("");
-  const [tab, setTab] = useState(initial.transfer.link ? "transfer" : "invoice");
+  const [tab, setTab] = useState(initial.transfer.link ? "transfer" : initial.links.length ? "invoice" : initial.settlement ? "card" : "invoice");
   const [query, setQuery] = useState(""), [chosenKey, setChosenKey] = useState("");
   const [counterpartId, setCounterpartId] = useState(""), [acknowledged, setAcknowledged] = useState(false);
   const [removing, setRemoving] = useState("");
   const router = useRouter();
-  const { bank, invoices, links, transfer } = data;
+  const { bank, invoices, links, transfer, settlement, settlementSaved } = data;
   const busy = pending || saving;
   const candidates = useMemo(() => new Map(reconciliationCandidates(bank, invoices, invoices.length).map((row) => [row.key, row])), [bank, invoices]);
   const choices = invoices.filter((row) => row.eligible && !row.conflict && (row.outstanding > 0 || row.payments.some((payment) => payment.available > 0)));
@@ -54,9 +54,18 @@ export function BankLinksDialog({ company, initial, onClose }: { company: Compan
       <div className="flex flex-wrap justify-between gap-3 border-b pb-3"><p className="min-w-0 flex-1 break-words text-sm">{bank.content}</p><strong className="break-all tabular-nums">{money(bank.amount)}</strong></div>
       <Tabs value={tab} onValueChange={(next) => { if (!busy) { setTab(next); setQuery(""); setRemoving(""); } }}>
         <TabsList className="w-full min-h-12" aria-label="明細の照合方法">
-          <TabsTrigger value="invoice" disabled={busy} className="min-h-11"><FileCheck2 />請求書照合</TabsTrigger>
-          <TabsTrigger value="transfer" disabled={busy} className="min-h-11"><ArrowLeftRight />資金移動</TabsTrigger>
+          {settlement ? <TabsTrigger value="card" disabled={busy} className="min-h-11 min-w-0 px-2 text-xs sm:text-sm"><CreditCard />カード精算</TabsTrigger> : null}
+          <TabsTrigger value="invoice" disabled={busy} className="min-h-11 min-w-0 px-2 text-xs sm:text-sm"><FileCheck2 />請求書照合</TabsTrigger>
+          <TabsTrigger value="transfer" disabled={busy} className="min-h-11 min-w-0 px-2 text-xs sm:text-sm"><ArrowLeftRight />資金移動</TabsTrigger>
         </TabsList>
+        {settlement ? <TabsContent value="card" className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b py-3"><h3 className="text-sm font-semibold">{settlement.provider}の月次カード精算</h3><span className="text-xs text-muted-foreground">{settlement.conflict ? "保存済み分類・照合を要確認" : settlementSaved ? "振替扱い・保存済み" : "振替候補・未保存"}</span></div>
+          {settlement.conflict ? <p role="alert" className="border-l-2 border-amber-500 p-3 text-sm">{settlement.conflict}</p> : null}
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 text-sm"><dt className="text-muted-foreground">引落日</dt><dd>{bank.date}</dd><dt className="text-muted-foreground">銀行の出金</dt><dd className="break-all tabular-nums">{money(bank.amount)}</dd><dt className="text-muted-foreground">経費集計</dt><dd className="break-words">{settlement.conflict ? "既存の分類・照合との整合性を要確認" : settlementSaved ? "精算額は対象外・カード利用側で分類" : "振替候補の保存後に精算額を対象外・カード利用側で分類"}</dd><dt className="text-muted-foreground">銀行残高</dt><dd>引落額を差し引く</dd><dt className="text-muted-foreground">利用明細・請求期間</dt><dd>未照合</dd></dl>
+          <h4 className="border-t pt-3 text-sm font-medium">アプラスのカード口座</h4>
+          {settlement.accounts.length ? <ul className="divide-y">{settlement.accounts.map((account) => <li key={account.id}><Link className="flex min-h-11 items-center gap-2 py-3 text-sm text-primary underline-offset-4 hover:underline" href={`/banking?${new URLSearchParams({ company, account: account.id })}`} target="_blank" rel="noopener noreferrer"><CreditCard className="size-4 shrink-0" /><span className="min-w-0 break-words">{account.name}</span></Link></li>)}</ul> : <p className="text-sm text-muted-foreground">同じ事業者のアプラスカード口座は未取得です。</p>}
+          <p className="text-xs text-muted-foreground">引落月と利用月は異なる場合があります。請求期間・利用明細の組み合わせは自動確定していません。</p>
+        </TabsContent> : null}
         <TabsContent value="invoice" className="min-w-0 space-y-3">
           <p className="flex flex-wrap justify-between gap-2 text-sm"><span>照合済み {money(bank.allocated)}</span><strong>未照合 {money(bank.remaining)}</strong></p>
           {bank.issue || bank.conflict ? <p role="alert" className="border-l-2 border-amber-500 p-3">{bank.issue || "照合後に元データが変わっています。照合を解除して再確認してください"}</p> : bank.remaining > 0 ? <>

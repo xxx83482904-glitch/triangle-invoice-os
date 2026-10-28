@@ -93,7 +93,7 @@ export function PageHeader({
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {children ? (
-        <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 md:max-w-[60%]">
+        <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2 md:max-w-[60%]">
           <div className="flex min-w-0 flex-wrap gap-2">{children}</div>
         </div>
       ) : null}

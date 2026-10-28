@@ -1,5 +1,6 @@
 import type { AppData } from "@/lib/types";
 import type { AccountingCategory, BankClassificationConfidence, BankTransaction } from "@/lib/banking-types";
+import { bankSettlementClassificationProtected, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 
 type Selection = Pick<BankTransaction, "categoryId" | "subCategoryId" | "treatment">;
 export type BankSuggestion = Selection & {
@@ -51,7 +52,7 @@ export function createBankSuggester(data: AppData, { allowGuesses = false }: { a
   for (const row of data.bankTransactions) {
     // Preview can learn from explicitly reviewed candidates with preserved provenance.
     // Import/sync retain their existing manual-history-only policy.
-    if ((!allowGuesses && row.classificationSource !== "MANUAL") || !row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || !normalize(row.content)) continue;
+    if ((!allowGuesses && row.classificationSource !== "MANUAL") || !row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || !normalize(row.content) || knownBankCardSettlement(data, row)) continue;
     const key = historyKey(row);
     const previous = history.get(key);
     if (!valid(row) || previous === null || (previous && selectionKey(previous) !== selectionKey(row))) {
@@ -62,6 +63,11 @@ export function createBankSuggester(data: AppData, { allowGuesses = false }: { a
   }
 
   return (row: BankTransaction): BankSuggestion | undefined => {
+    const settlement = knownBankCardSettlement(data, row);
+    if (settlement) {
+      if (row.sourceMissing || row.sourceStatus === "excluded" || bankSettlementClassificationProtected(data, row)) return;
+      return { categoryId: undefined, subCategoryId: undefined, treatment: "TRANSFER", classificationSource: "AUTO", classificationConfidence: "INFERRED", classificationReason: settlement.reason };
+    }
     if (allowGuesses && (row.categoryId || row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || row.classificationSource === "MANUAL" || row.treatment !== "NORMAL")) return;
     const content = normalize(row.content);
     const matches = row.company === "JAPAN" ? patterns.flatMap((pattern) => {

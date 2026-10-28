@@ -5,6 +5,7 @@ import { shiftForecastMonth } from "../src/lib/bank-forecast";
 import { mergeBankMasters, mergeBankTransactions, sourceKey } from "../src/lib/banking";
 import { recordBankCoverage } from "../src/lib/bank-forecast";
 import { restoreUndoState } from "../src/lib/store";
+import type { BankTransaction } from "../src/lib/banking-types";
 import { fixture, admin, timestamp } from "./document-fixture";
 
 const office = "0000-0001", today = "2026-10-26";
@@ -36,12 +37,21 @@ function setup() {
   return data;
 }
 
+function register(data: ReturnType<typeof setup>, amount = 10000, asOf = "2026-10-01", accountId = id()) {
+  const account = data.bankAccounts.find((row) => row.id === accountId)!;
+  return saveBankOverview(data, admin, "JAPAN", accountId, account.updatedAt, { kind: "BANK", balance: { amount, asOf, currency: "JPY" } }, today);
+}
+
+function calculation(data: ReturnType<typeof setup>, accountId = id(), year?: string) {
+  return bankAccountOverview(data, "JAPAN", undefined, today, year).rows.find((row) => row.id === accountId)!.balanceCalculation;
+}
+
 test("overview deduplicates reconnects and never double counts children under connection headers", () => {
   const data = setup(), before = structuredClone(data), report = bankAccountOverview(data, "JAPAN", "2026-10", today);
   assert.equal(report.rows.length, 4);
   const bank = report.rows.find((row) => row.id === id())!;
   assert.equal(bank.memberCount, 2); assert.equal(bank.income, 5300); assert.equal(bank.expense, 200); assert.equal(bank.count, 3);
-  assert.equal(bank.balance, undefined); assert.equal(bank.estimatedBalance, undefined);
+  assert.equal(bank.balance, undefined); assert.equal(bank.balanceCalculation, undefined);
   assert.equal(report.rows.reduce((sum, row) => sum + row.income, 0), 5950);
   assert.equal(report.rows.reduce((sum, row) => sum + row.expense, 0), 900);
   const parent = report.rows.find((row) => row.unspecified)!;
@@ -53,17 +63,19 @@ test("overview deduplicates reconnects and never double counts children under co
   assert.deepEqual(data, before);
 });
 
-test("confirmed balance is never replaced by movement or a forecast; estimate only uses later covered movement", () => {
+test("calculated balance always uses acquired later movement, with explicit coverage and missing-source status", () => {
   const data = setup(), account = data.bankAccounts.find((row) => row.id === id())!;
   saveBankOverview(data, admin, "JAPAN", account.id, account.updatedAt, { kind: "BANK", balance: { amount: 10000, asOf: "2026-10-01", currency: "JPY" } }, today);
   const report = bankAccountOverview(data, "JAPAN", "2026-10", today).rows.find((row) => row.id === id())!;
-  assert.equal(report.balance?.amount, 10000); assert.equal(report.estimatedBalance, 10100);
-  assert.equal(report.balanceThrough, today);
+  const baseline = structuredClone(account.overviewSettings);
+  assert.equal(report.balance?.amount, 10000);
+  assert.deepEqual(report.balanceCalculation, { amount: 10100, income: 300, expense: 200, count: 2, through: today, complete: true, missing: 0 });
   data.bankSyncStates[0].coverage = [];
-  assert.equal(bankAccountOverview(data, "JAPAN", "2026-10", today).rows.find((row) => row.id === id())!.estimatedBalance, undefined);
+  assert.deepEqual(calculation(data), { ...report.balanceCalculation, complete: false });
   recordBankCoverage(data.bankSyncStates[0], "2026-10-01", today, data.bankAccounts.map((row) => row.id));
   data.bankTransactions.find((row) => row.sourceId === "older")!.sourceMissing = true;
-  assert.equal(bankAccountOverview(data, "JAPAN", "2026-10", today).rows.find((row) => row.id === id())!.estimatedBalance, undefined);
+  assert.deepEqual(calculation(data), { amount: 9800, income: 0, expense: 200, count: 1, through: today, complete: false, missing: 1 });
+  assert.deepEqual(account.overviewSettings, baseline);
 });
 
 test("historical month, zero, negative balances and separate companies remain explicit", () => {
@@ -71,12 +83,230 @@ test("historical month, zero, negative balances and separate companies remain ex
   for (const amount of [0, -200]) {
     saveBankOverview(data, admin, "JAPAN", account.id, account.updatedAt, { kind: "BANK", balance: { amount, asOf: "2026-10-01", currency: "JPY" } }, today);
     const report = bankAccountOverview(data, "JAPAN", "2026-08", today).rows.find((row) => row.id === id())!;
-    assert.equal(report.balance?.amount, amount); assert.equal(report.estimatedBalance, undefined); assert.equal(report.count, 0); assert.equal(report.missing, 0);
-    assert.equal(report.balanceThrough, "2026-08-31");
+    assert.equal(report.balance?.amount, amount); assert.equal(report.balanceCalculation?.amount, amount + 100); assert.equal(report.count, 0); assert.equal(report.missing, 0);
+    assert.equal(report.balanceCalculation?.through, today);
   }
   assert.equal(bankAccountOverview(data, "JAPAN", "2026-99", today).month, "2026-10");
   assert.equal(bankAccountOverview(data, "JAPAN", "2026-11", today).month, "2026-10");
   assert.equal(bankAccountOverview(data, "CHINA", "2026-10", today).rows.length, 0);
+});
+
+test("day-end baseline excludes its own day and earlier rows, includes today, and ignores tomorrow", () => {
+  const data = setup(), sample = data.bankTransactions[0];
+  register(data, 0);
+  data.bankTransactions = [
+    { ...sample, id: "before", transactionDate: "2026-09-30", amount: 900 },
+    { ...sample, id: "snapshot-income", transactionDate: "2026-10-01", amount: 800 },
+    { ...sample, id: "snapshot-expense", transactionDate: "2026-10-01", amount: 600, side: "EXPENSE" },
+    { ...sample, id: "next-day", transactionDate: "2026-10-02", amount: 200 },
+    { ...sample, id: "today", transactionDate: today, amount: 300, side: "EXPENSE" },
+    { ...sample, id: "zero", transactionDate: today, amount: 0 },
+    { ...sample, id: "tomorrow", transactionDate: "2026-10-27", amount: 1000 },
+  ];
+  assert.deepEqual(calculation(data), { amount: -100, income: 200, expense: 300, count: 3, through: today, complete: true, missing: 0 });
+  register(data, -500, today);
+  data.bankSyncStates = [];
+  assert.deepEqual(calculation(data), { amount: -500, income: 0, expense: 0, count: 0, through: today, complete: true, missing: 0 });
+});
+
+test("a baseline without subsequent movements stays visible even without sync coverage", () => {
+  const data = setup();
+  register(data, 0);
+  data.bankTransactions = [];
+  data.bankSyncStates = [];
+  assert.deepEqual(calculation(data), { amount: 0, income: 0, expense: 0, count: 0, through: today, complete: false, missing: 0 });
+  data.bankSyncStates = setup().bankSyncStates;
+  assert.equal(calculation(data)?.complete, true);
+});
+
+test("coverage gaps and missing reconnect coverage remain provisional until the entire interval is acquired", () => {
+  const data = setup(), state = data.bankSyncStates[0], ids = [id(), id("old")];
+  register(data);
+  state.coverage = [];
+  recordBankCoverage(state, "2026-10-02", "2026-10-05", ids);
+  recordBankCoverage(state, "2026-10-07", today, ids);
+  assert.equal(calculation(data)?.amount, 10100); assert.equal(calculation(data)?.complete, false);
+  recordBankCoverage(state, "2026-10-06", "2026-10-06", [id()]);
+  assert.equal(calculation(data)?.complete, false);
+  recordBankCoverage(state, "2026-10-06", "2026-10-06", [id("old")]);
+  assert.equal(calculation(data)?.complete, true);
+  state.coverage = [{ start: "2026-10-02", end: "2026-10-25", accountIds: ids }];
+  assert.equal(calculation(data)?.complete, false);
+  recordBankCoverage(state, today, today, ids);
+  assert.equal(calculation(data)?.complete, true);
+});
+
+test("missing-source status is scoped to after the snapshot through today, independently of fiscal history", () => {
+  const data = setup(), sample = data.bankTransactions[0];
+  register(data);
+  data.bankTransactions.push(
+    { ...sample, id: "missing-snapshot", sourceMissing: true, transactionDate: "2026-10-01" },
+    { ...sample, id: "missing-future", sourceMissing: true, transactionDate: "2026-10-27" },
+  );
+  assert.equal(calculation(data)?.complete, true); assert.equal(calculation(data)?.missing, 0);
+  data.bankTransactions.find((row) => row.sourceId === "expense")!.sourceMissing = true;
+  const historical = bankAccountOverview(data, "JAPAN", undefined, today, "2026").rows.find((row) => row.id === id())!;
+  assert.equal(historical.missing, 0);
+  assert.deepEqual(historical.balanceCalculation, { amount: 10300, income: 300, expense: 0, count: 1, through: today, complete: false, missing: 1 });
+});
+
+test("sync additions, corrections, disappearance and reappearance recalculate without rewriting the baseline", () => {
+  const data = setup(), account = data.bankAccounts.find((row) => row.id === id())!;
+  register(data);
+  const saved = structuredClone(account.overviewSettings), savedUpdatedAt = account.updatedAt;
+  const item = { id: "synced", connected_account_id: "bank", connected_sub_account_id: "branch", date: "2026-10-10", value: 400, side: "INCOME" as const, content: "Sync", journalizing_status: "none" };
+  const range = { start: item.date, end: item.date };
+  mergeBankTransactions(data, "JAPAN", office, [item], range);
+  assert.equal(calculation(data)?.amount, 10500); assert.equal(calculation(data)?.count, 3);
+  mergeBankTransactions(data, "JAPAN", office, [item], range);
+  assert.equal(calculation(data)?.amount, 10500); assert.equal(calculation(data)?.count, 3);
+  mergeBankTransactions(data, "JAPAN", office, [{ ...item, value: 600, side: "EXPENSE" }], range);
+  assert.equal(calculation(data)?.amount, 9500); assert.equal(calculation(data)?.expense, 800);
+  mergeBankTransactions(data, "JAPAN", office, [], range);
+  assert.equal(calculation(data)?.amount, 10100); assert.equal(calculation(data)?.missing, 1); assert.equal(calculation(data)?.complete, false);
+  mergeBankTransactions(data, "JAPAN", office, [item], range);
+  assert.equal(calculation(data)?.amount, 10500); assert.equal(calculation(data)?.missing, 0); assert.equal(calculation(data)?.complete, true);
+  mergeBankTransactions(data, "JAPAN", office, [{ ...item, date: "2026-10-01" }], { start: "2026-10-01", end: "2026-10-01" });
+  assert.equal(calculation(data)?.amount, 10100); assert.equal(calculation(data)?.count, 2);
+  assert.deepEqual(account.overviewSettings, saved); assert.equal(account.updatedAt, savedUpdatedAt);
+});
+
+test("bank transfers conserve total cash and card purchases, invoices, payments and link records are not counted again", () => {
+  const data = setup(), sample = data.bankTransactions[0];
+  register(data, 10000); register(data, 2000, "2026-10-01", id("bank", "other"));
+  const outgoing = { ...sample, id: "transfer-out", transactionDate: "2026-10-02", amount: 650, side: "EXPENSE" as const, treatment: "TRANSFER" as const };
+  const incoming = { ...sample, id: "transfer-in", bankAccountId: id("bank", "other"), transactionDate: "2026-10-02", amount: 650, treatment: "TRANSFER" as const };
+  const card = data.bankTransactions.find((row) => row.sourceId === "card")!;
+  data.bankTransactions = [outgoing, incoming, card];
+  const beforeLinks = [calculation(data), calculation(data, incoming.bankAccountId)];
+  assert.equal(beforeLinks[0]?.amount, 9350); assert.equal(beforeLinks[1]?.amount, 2650);
+  assert.equal(beforeLinks.reduce((sum, row) => sum + row!.amount, 0), 12000);
+  data.bankTransfers = [{ id: "transfer", company: "JAPAN", outgoingId: outgoing.id, incomingId: incoming.id, outgoingEvidence: "out", incomingEvidence: "in", previous: [], confirmedById: admin.id, createdAt: timestamp, updatedAt: timestamp }];
+  data.payments = [{ id: "payment", type: "EXPENSE", receivedInvoiceId: "received-1", amount: 650, paymentDate: "2026-10-02", createdById: admin.id, createdAt: timestamp, updatedAt: timestamp }];
+  data.bankReconciliations = [{ id: "link", company: "JAPAN", transactionId: outgoing.id, invoiceKind: "received", invoiceId: "received-1", paymentId: "payment", amount: 650, createdPayment: false, bankEvidence: "bank", invoiceEvidence: "invoice", paymentEvidence: "payment", note: "", confirmedById: admin.id, createdAt: timestamp, updatedAt: timestamp }];
+  assert.deepEqual([calculation(data), calculation(data, incoming.bankAccountId)], beforeLinks);
+  assert.equal(calculation(data, id("card", "")), undefined);
+  data.bankTransactions.push({ ...outgoing, id: "card-settlement", amount: 700, sourceStatus: "excluded", treatment: "EXCLUDED" });
+  assert.equal(calculation(data)?.amount, 8650); assert.equal(calculation(data)?.expense, 1350); assert.equal(calculation(data)?.count, 2);
+  assert.equal(calculation(data)!.amount + calculation(data, incoming.bankAccountId)!.amount, 11300);
+});
+
+test("UFJ/APLUS monthly settlement and PayPay transfer produce current bank cash independently of classification", () => {
+  const data = setup(), through = "2026-10-28", sample = data.bankTransactions[0];
+  data.bankAccounts = data.bankAccounts.filter((account) => account.sourceId !== "old");
+  const ufj = data.bankAccounts.find((account) => account.id === id())!;
+  ufj.name = "UFJ / 1234567"; ufj.serviceName = "UFJ";
+  register(data, 1000000, "2026-09-30");
+  register(data, 300000, "2026-09-30", id("bank", "other"));
+  data.bankTransactions = [
+    { ...sample, id: "receipt", transactionDate: "2026-10-01", amount: 200000 },
+    { ...sample, id: "fee", transactionDate: "2026-10-02", amount: 5000, side: "EXPENSE" },
+    { ...sample, id: "ap-out", transactionDate: "2026-10-03", amount: 50000, side: "EXPENSE", treatment: "TRANSFER", content: "AP self transfer" },
+    { ...sample, id: "ap-in", bankAccountId: id("bank", "other"), transactionDate: "2026-10-03", amount: 50000, treatment: "TRANSFER" },
+    { ...sample, id: "aplus-settlement", transactionDate: "2026-10-27", amount: 120000, side: "EXPENSE", treatment: "TRANSFER", content: "APアプラス" },
+    { ...sample, id: "card-purchase", bankAccountId: id("card", ""), transactionDate: "2026-10-10", amount: 120000, side: "EXPENSE" },
+  ];
+  data.bankSyncStates[0].coverage = [{ start: "2026-10-01", end: through, accountIds: [id()] }];
+  for (const treatment of ["NORMAL", "TRANSFER", "EXCLUDED"] as const) {
+    data.bankTransactions.find((row) => row.id === "aplus-settlement")!.treatment = treatment;
+    data.bankTransactions.find((row) => row.id === "ap-out")!.treatment = treatment;
+    const rows = bankAccountOverview(data, "JAPAN", undefined, through, "2026").rows;
+    assert.deepEqual(rows.find((row) => row.id === id())!.balanceCalculation,
+      { amount: 1025000, income: 200000, expense: 175000, count: 4, through, complete: true, missing: 0 });
+    assert.deepEqual(rows.find((row) => row.id === id("bank", "other"))!.balanceCalculation,
+      { amount: 350000, income: 50000, expense: 0, count: 1, through, complete: false, missing: 0 });
+    assert.equal(rows.find((row) => row.kind === "CARD")!.balanceCalculation, undefined);
+    assert.equal(rows.reduce((sum, row) => sum + (row.balanceCalculation?.amount ?? 0), 0), 1375000);
+    assert.ok(rows.every((row) => row.count === 0));
+  }
+});
+
+test("changing the snapshot resets the calculation interval, and clearing it removes the calculation", () => {
+  const data = setup();
+  register(data);
+  assert.equal(calculation(data)?.amount, 10100);
+  register(data, 20000, "2026-10-02");
+  assert.deepEqual(calculation(data), { amount: 19800, income: 0, expense: 200, count: 1, through: today, complete: true, missing: 0 });
+  register(data, 0, "2026-10-03");
+  assert.equal(calculation(data)?.amount, 0); assert.equal(calculation(data)?.count, 0);
+  const account = data.bankAccounts.find((row) => row.id === id())!;
+  saveBankOverview(data, admin, "JAPAN", id(), account.updatedAt, { kind: "BANK" }, today);
+  assert.equal(calculation(data), undefined);
+});
+
+test("balance spans fiscal years through today while history and selected movements remain fiscal", () => {
+  const data = setup(), sample = data.bankTransactions[0];
+  register(data, 1000, "2025-09-30");
+  data.bankTransactions = [
+    { ...sample, id: "old-year", transactionDate: "2025-10-01", amount: 100 },
+    { ...sample, id: "closing-day", transactionDate: "2026-08-31", amount: 200 },
+    { ...sample, id: "new-year", transactionDate: "2026-09-01", amount: 500 },
+    { ...sample, id: "current", transactionDate: today, amount: 50, side: "EXPENSE" },
+  ];
+  recordBankCoverage(data.bankSyncStates[0], "2025-10-01", today, [id(), id("old")]);
+  const before = structuredClone(data);
+  const previous = bankAccountOverview(data, "JAPAN", undefined, today, "2026"), current = bankAccountOverview(data, "JAPAN", undefined, today, "2027");
+  const previousBank = previous.rows.find((row) => row.id === id())!, currentBank = current.rows.find((row) => row.id === id())!;
+  assert.equal(previous.through, "2026-08-31"); assert.equal(current.through, today);
+  assert.equal(previousBank.income, 300); assert.equal(previousBank.count, 2);
+  assert.equal(currentBank.income, 500); assert.equal(currentBank.expense, 50); assert.equal(currentBank.count, 2);
+  assert.deepEqual(previousBank.balanceCalculation, { amount: 1750, income: 800, expense: 50, count: 4, through: today, complete: true, missing: 0 });
+  assert.deepEqual(previousBank.balanceCalculation, currentBank.balanceCalculation);
+  assert.deepEqual(calculation(data, id(), "2025"), currentBank.balanceCalculation);
+  assert.deepEqual(data, before);
+});
+
+test("reconnected account uses the newest saved baseline once, without leaking across account, company or office", () => {
+  const data = setup(), account = data.bankAccounts.find((row) => row.id === id())!, sample = data.bankTransactions[0];
+  const old = register(data, 1000, "2026-10-01", id("old"));
+  old.recordedAt = "2026-10-01T00:00:00Z";
+  register(data, 2000, "2026-10-02");
+  const otherOffice = "0000-0002", otherId = sourceKey("JAPAN", otherOffice, "account", "bank", "branch");
+  data.bankAccounts.push({ ...structuredClone(account), id: otherId, officeCode: otherOffice, overviewSettings: { kind: "BANK", balance: { amount: 9000, asOf: "2026-10-01", currency: "JPY" }, recordedAt: timestamp } });
+  const chinaId = sourceKey("CHINA", office, "account", "bank", "branch");
+  data.bankAccounts.push({ ...structuredClone(account), id: chinaId, company: "CHINA" });
+  data.bankTransactions.push(
+    { ...sample, id: "wrong-company", company: "CHINA", transactionDate: today, amount: 99999 },
+    { ...sample, id: "wrong-office", officeCode: otherOffice, transactionDate: today, amount: 99999 },
+    { ...sample, id: "other-office", bankAccountId: otherId, officeCode: otherOffice, transactionDate: today, amount: 500 },
+    { ...sample, id: "china", company: "CHINA", bankAccountId: chinaId, transactionDate: today, amount: 600 },
+    { ...sample, id: "orphan", bankAccountId: "unknown", transactionDate: today, amount: 99999 },
+  );
+  const report = bankAccountOverview(data, "JAPAN", undefined, today), bank = report.rows.find((row) => row.id === id())!;
+  assert.equal(bank.memberCount, 2); assert.equal(bank.balance?.amount, 2000); assert.equal(bank.balanceCalculation?.amount, 1800);
+  assert.equal(report.rows.filter((row) => row.id === id("old")).length, 0);
+  assert.equal(calculation(data, otherId)?.amount, 9500); assert.equal(calculation(data, otherId)?.complete, false);
+  assert.equal(bank.balanceCalculation?.complete, true);
+  assert.equal(report.rows.find((row) => row.unspecified)?.balanceCalculation, undefined);
+  assert.equal(bankAccountOverview(data, "CHINA", undefined, today).rows[0].balanceCalculation?.amount, 2600);
+});
+
+test("invalid dates, amounts and directions cannot affect calculated cash or fiscal totals", () => {
+  const data = setup(), sample = data.bankTransactions[0];
+  register(data);
+  const invalid: Partial<BankTransaction>[] = [
+    { transactionDate: "2026-09-31" }, { transactionDate: "invalid" }, { amount: NaN }, { amount: Infinity },
+    { amount: -200 }, { amount: 0.5 }, { amount: Number.MAX_SAFE_INTEGER + 1 }, { side: "INVALID" as BankTransaction["side"] },
+  ];
+  data.bankTransactions.push(...invalid.map((patch, index) => ({ ...sample, id: `invalid-${index}`, transactionDate: today, amount: 99999, ...patch })));
+  const bank = bankAccountOverview(data, "JAPAN", undefined, today).rows.find((row) => row.id === id())!;
+  assert.deepEqual(bank.balanceCalculation, { amount: 10100, income: 300, expense: 200, count: 2, through: today, complete: false, missing: 0 });
+  assert.equal(bank.income, 5300); assert.equal(bank.expense, 200); assert.equal(bank.count, 3);
+  assert.equal(bank.latestDate, "2026-10-03");
+});
+
+test("invalid persisted or future baselines never produce a present-day calculated balance", () => {
+  for (const balance of [
+    { amount: NaN, asOf: "2026-10-01", currency: "JPY" as const },
+    { amount: 100, asOf: "2026-09-31", currency: "JPY" as const },
+    { amount: 100, asOf: "2026-10-27", currency: "JPY" as const },
+  ]) {
+    const data = setup(), account = data.bankAccounts.find((row) => row.id === id())!;
+    account.overviewSettings = { kind: "BANK", balance, recordedAt: timestamp };
+    const before = structuredClone(data);
+    assert.equal(calculation(data), undefined);
+    assert.deepEqual(data, before);
+  }
 });
 
 test("default period follows the latest valid available transaction and excludes other companies, orphans, missing and future data", () => {

@@ -19,6 +19,7 @@ function errorMessage(error: unknown) {
   return error instanceof ZodError ? "入力内容を確認してください" : error instanceof Error ? error.message : "保存に失敗しました";
 }
 function revalidateBanking() {
+  revalidatePath("/dashboard");
   revalidatePath("/banking/accounts");
   revalidatePath("/banking");
   revalidatePath("/banking/insights");

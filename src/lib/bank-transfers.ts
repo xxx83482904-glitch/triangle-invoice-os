@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { assertBankAccess, bankToday, isBankDate } from "@/lib/banking";
 import { bankAccountFilter } from "@/lib/bank-account-options";
+import { APLUS_SETTLEMENT_LINK_ISSUE, bankCardSettlementConflict, bankCardSettlementDetail, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 import type { BankTransaction, BankTransfer } from "@/lib/banking-types";
 import type { AppData, User } from "@/lib/types";
 import type { CompanyScope } from "@/lib/company";
@@ -15,6 +16,7 @@ const invoiced = (data: AppData, id: string) => data.bankReconciliations.some((l
 function rowIssue(data: AppData, company: CompanyScope, row: BankTransaction, today: string) {
   const account = data.bankAccounts.find((item) => item.id === row.bankAccountId && item.company === company && item.officeCode === row.officeCode);
   if (!account || row.company !== company) return "同じ会社・事業者の口座を選択してください";
+  if (knownBankCardSettlement(data, row)) return bankCardSettlementConflict(data, row) || APLUS_SETTLEMENT_LINK_ISSUE;
   const kind = account.overviewSettings?.kind || account.forecastSettings?.accountKind;
   if (kind === "CARD" || kind === "OTHER" || (!kind || kind === "UNKNOWN") && /カード|card|upsider/i.test(account.serviceName)) return "銀行口座間の資金移動のみ対象です。カード利用とは照合できません";
   if (row.sourceMissing || row.sourceStatus === "excluded" || row.treatment === "EXCLUDED") return "元明細なし・対象外の明細は選択できません";
@@ -93,7 +95,7 @@ export function bankTransferDetail(data: AppData, company: CompanyScope, id: str
   const link = active(data).find((item) => item.company === company && [item.outgoingId, item.incomingId].includes(id));
   const display = (item: BankTransaction) => ({ id: item.id, updatedAt: item.updatedAt, date: item.transactionDate, amount: item.amount, side: item.side, content: item.content, account: data.bankAccounts.find((account) => account.id === item.bankAccountId)?.name || "口座不明" });
   const counterpart = link && data.bankTransactions.find((item) => item.id === (link.outgoingId === id ? link.incomingId : link.outgoingId));
-  return { row: display(row), issue: link ? bankTransferIssue(data, link, today) : rowIssue(data, company, row, today),
+  return { row: display(row), issue: link ? bankTransferIssue(data, link, today) : rowIssue(data, company, row, today), settlement: bankCardSettlementDetail(data, row),
     link: link ? { id: link.id, updatedAt: link.updatedAt, counterpart: counterpart ? display(counterpart) : undefined } : undefined,
     candidates: link ? [] : data.bankTransactions.filter((other) => other.company === company && other.officeCode === row.officeCode && other.side !== row.side && cents(other.amount) === cents(row.amount) && !linked(data, other.id) && !pairIssue(data, company, row, other, today))
       .sort((a, b) => Math.abs(Date.parse(a.transactionDate) - Date.parse(row.transactionDate)) - Math.abs(Date.parse(b.transactionDate) - Date.parse(row.transactionDate)) || b.transactionDate.localeCompare(a.transactionDate)).map(display),

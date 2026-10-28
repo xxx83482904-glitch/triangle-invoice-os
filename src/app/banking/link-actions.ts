@@ -17,7 +17,7 @@ function actor(data: AppData, id: string, company: CompanyScope) {
 }
 const message = (error: unknown) => error instanceof Error ? error.message : "照合情報を取得できませんでした";
 function refresh() {
-  for (const path of ["/banking", "/banking/accounts", "/banking/reconcile", "/banking/forecast", "/banking/insights"]) revalidatePath(path);
+  for (const path of ["/dashboard", "/banking", "/banking/accounts", "/banking/reconcile", "/banking/forecast", "/banking/insights"]) revalidatePath(path);
 }
 
 export async function loadBankLinksAction(company: CompanyScope, id: string) {
@@ -25,11 +25,13 @@ export async function loadBankLinksAction(company: CompanyScope, id: string) {
   try {
     const data = await readData(); actor(data, user.id, company);
     const transfer = bankTransferDetail(data, company, id);
+    const transaction = data.bankTransactions.find((row) => row.company === company && row.id === id)!;
+    const settlement = transfer.settlement;
     const overview = bankReconciliationOverview(data, company);
     const bank = overview.banks.find((row) => row.id === id)!;
     const links = overview.links.filter((row) => row.transactionId === id);
     const invoices = overview.invoices.filter((row) => (bank.side === "INCOME" ? row.kind === "issued" : row.kind === "received") && (row.eligible || links.some((link) => link.invoiceKey === row.key)));
-    return { success: true as const, bank, links, invoices, transfer };
+    return { success: true as const, bank, links, invoices, transfer, settlement, settlementSaved: transaction.treatment === "TRANSFER" };
   } catch (error) { return { success: false as const, error: message(error) }; }
 }
 

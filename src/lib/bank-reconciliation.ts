@@ -3,6 +3,7 @@ import { assertBankAccess, bankToday, isBankDate } from "@/lib/banking";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { invoiceAccountScopeIssue } from "@/lib/bank-reconciliation-accounts";
+import { APLUS_SETTLEMENT_LINK_ISSUE, bankCardSettlementConflict, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 import type { BankReconciliation, BankTransaction } from "@/lib/banking-types";
 import type { AppData, IssuedInvoice, Payment, ReceivedInvoice, User } from "@/lib/types";
 import { normalizeReconciliationName } from "@/lib/bank-reconciliation-matching";
@@ -36,6 +37,7 @@ function eligibleInvoice(kind: Kind, invoice: IssuedInvoice | ReceivedInvoice) {
 function bankIssue(data: AppData, company: CompanyScope, bank: BankTransaction, today: string, index?: ReconciliationIndex) {
   const account = index ? index.accounts.get(bank.bankAccountId) : data.bankAccounts.find((row) => row.id === bank.bankAccountId);
   if (!account || account.company !== company || account.officeCode !== bank.officeCode || bank.company !== company) return "口座が見つかりません";
+  if (knownBankCardSettlement(data, bank)) return bankCardSettlementConflict(data, bank) || APLUS_SETTLEMENT_LINK_ISSUE;
   if (["CARD", "OTHER"].includes(account.forecastSettings?.accountKind || "")) return "カード利用・その他口座は銀行入出金として照合できません";
   if (bank.sourceMissing) return "元明細がなくなっています";
   if ((data.bankTransfers || []).some((link) => !link.deletedAt && [link.outgoingId, link.incomingId].includes(bank.id))) return "口座間の資金移動と照合済みです";

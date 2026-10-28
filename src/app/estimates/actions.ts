@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
-import type { EstimateInput } from "@/lib/estimate-values";
-import { convertEstimate, deleteEstimate, saveEstimate, updateEstimateStatus, type EstimateStatusUpdate, type EstimateConversion, type EstimateTarget } from "@/lib/estimates";
+import type { EstimateInput, EstimateListEdit } from "@/lib/estimate-values";
+import { convertEstimate, deleteEstimate, deleteEstimates, saveEstimate, saveEstimateListEdits, updateEstimateStatus, type EstimateStatusUpdate, type EstimateConversion, type EstimateTarget } from "@/lib/estimates";
 import { mutateData } from "@/lib/store";
 
 function refresh() {
@@ -41,5 +41,21 @@ export async function updateEstimateStatusAction(company: CompanyScope, input: E
   try {
     const estimate = await mutateData(user.id, "UPDATE_ESTIMATE_STATUS", "Estimate", input.id, (data) => updateEstimateStatus(data, user, company, input));
     refresh(); return { estimate };
+  } catch (error) { return { error: message(error) }; }
+}
+
+export async function saveEstimateListEditsAction(company: CompanyScope, input: EstimateListEdit[]) {
+  const user = await requireUser();
+  try {
+    await mutateData(user.id, "UPDATE_ESTIMATES", "Estimate", "batch", (data) => saveEstimateListEdits(data, user, company, input));
+    refresh(); return { success: true };
+  } catch (error) { return { error: message(error) }; }
+}
+
+export async function deleteEstimatesAction(company: CompanyScope, input: EstimateTarget[]) {
+  const user = await requireUser();
+  try {
+    await mutateData(user.id, "DELETE_ESTIMATES", "Estimate", "batch", (data) => deleteEstimates(data, user, company, input));
+    refresh(); return { success: true };
   } catch (error) { return { error: message(error) }; }
 }

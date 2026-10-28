@@ -5,6 +5,7 @@ import type { AppData, User } from "@/lib/types";
 import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankTransaction, CategoryInput } from "@/lib/banking-types";
 import { bankClassificationLabel, createBankSuggester } from "@/lib/bank-classification";
 import { bankAccountFilter } from "@/lib/bank-account-options";
+import { APLUS_SETTLEMENT_LABEL, bankCardSettlementConflict, bankSettlementClassificationProtected, hasConfirmedBankLink, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 
 export const treatmentLabels = { NORMAL: "通常", TRANSFER: "振替・カード精算", EXCLUDED: "対象外" } as const;
 export const categoryGroups = { EXPENSE: "費用", INCOME: "収益", ASSET: "資産", LIABILITY: "負債", EQUITY: "純資産", OTHER: "その他" } as const;
@@ -147,7 +148,8 @@ function ruleFor(data: AppData, transaction: BankTransaction) {
 }
 
 export function classifyBankTransaction(data: AppData, transaction: BankTransaction, suggest = createBankSuggester(data)) {
-  if (transaction.classificationSource === "MANUAL" || transaction.reviewed || transaction.sourceMissing || transaction.sourceStatus === "excluded") return false;
+  if (transaction.classificationSource === "MANUAL" || transaction.reviewed || transaction.sourceMissing || transaction.sourceStatus === "excluded" || hasConfirmedBankLink(data, transaction)) return false;
+  if (knownBankCardSettlement(data, transaction) && bankSettlementClassificationProtected(data, transaction)) return false;
   const rule = ruleFor(data, transaction);
   const suggestion = rule ? undefined : suggest(transaction);
   if (!rule && !suggestion) {
@@ -171,7 +173,7 @@ export function applyBankRules(data: AppData, user: Actor, company: CompanyScope
   const suggest = createBankSuggester(data, { allowGuesses });
   let count = 0;
   for (const row of rows) {
-    if (allowGuesses && (row.categoryId || row.treatment !== "NORMAL")) continue;
+    if (allowGuesses && (row.categoryId || row.treatment !== "NORMAL") && !knownBankCardSettlement(data, row)) continue;
     if (classifyBankTransaction(data, row, suggest)) count++;
   }
   return { count, unclassified: rows.filter((row) => !row.sourceMissing && row.treatment === "NORMAL" && !row.categoryId).length };
@@ -184,11 +186,11 @@ export function previewBankRules(data: AppData, user: Actor, company: CompanySco
   const result = applyBankRules(preview, user, company, ids, allowGuesses);
   // Keep the saved version so a later explicit save can reject stale suggestions.
   const rows = preview.bankTransactions.filter((row) => row.updatedAt !== originals.get(row.id)!.updatedAt)
-    .map((row) => ({ ...row, updatedAt: originals.get(row.id)!.updatedAt }));
+    .map((row) => ({ ...row, updatedAt: originals.get(row.id)!.updatedAt, predictionPending: true as const }));
   return { ...result, rows };
 }
 
-export type BankDisplayRow = BankTransaction & { predictionPending?: boolean; linkLabel?: string };
+export type BankDisplayRow = BankTransaction & { predictionPending?: boolean; linkLabel?: string; settlementConflict?: string };
 
 // Display candidates never mutate the source records or count as confirmed history.
 export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDisplayRow[] {
@@ -197,15 +199,19 @@ export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDis
   const allocated = new Map<string, number>();
   for (const link of data.bankReconciliations) if (!link.deletedAt) allocated.set(link.transactionId, (allocated.get(link.transactionId) || 0) + link.amount);
   return rows.map((row) => {
-    if (row.categoryId || row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || row.treatment !== "NORMAL") return { ...row };
-    const candidate = { ...row, classificationSource: "UNASSIGNED" as BankTransaction["classificationSource"] };
-    classifyBankTransaction(data, candidate, suggest);
-    if (!candidate.categoryId || candidate.treatment !== "NORMAL") {
+    const settlement = knownBankCardSettlement(data, row);
+    if (row.classificationSource === "MANUAL" || row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || hasConfirmedBankLink(data, row)
+      || (!settlement && (row.categoryId || row.treatment !== "NORMAL"))) return { ...row };
+    const candidate = { ...row };
+    const changed = classifyBankTransaction(data, candidate, suggest);
+    if (!settlement && !candidate.categoryId && candidate.treatment === "NORMAL") {
       const fallback = suggest({ ...row, classificationSource: "UNASSIGNED" });
       if (fallback) Object.assign(candidate, fallback, { ruleId: undefined });
     }
-    return candidate.categoryId ? { ...candidate, updatedAt: row.updatedAt, predictionPending: true } : { ...row };
-  }).map((row) => ({ ...row, ...(transfers.has(row.id) ? { linkLabel: "資金移動" } : allocated.has(row.id) ? { linkLabel: Math.round(allocated.get(row.id)! * 100) >= Math.round(row.amount * 100) ? "請求書" : "一部照合" } : {}) }));
+    return changed && (candidate.categoryId || candidate.treatment !== "NORMAL") ? { ...candidate, updatedAt: row.updatedAt, predictionPending: true } : { ...row };
+  }).map((row) => ({ ...row, ...(knownBankCardSettlement(data, row)
+    ? { linkLabel: APLUS_SETTLEMENT_LABEL, settlementConflict: bankCardSettlementConflict(data, row) }
+    : transfers.has(row.id) ? { linkLabel: "資金移動" } : allocated.has(row.id) ? { linkLabel: Math.round(allocated.get(row.id)! * 100) >= Math.round(row.amount * 100) ? "請求書" : "一部照合" } : {}) }));
 }
 
 export type ImportedAccount = { id: string; subId?: string; name: string; serviceName: string; isManual: boolean };
@@ -274,7 +280,8 @@ export function mergeBankTransactions(data: AppData, company: CompanyScope, offi
   }
   // Build history only after source corrections and missing rows invalidate review.
   const suggest = createBankSuggester(data);
-  for (const row of importedRows) classifyBankTransaction(data, row, suggest);
+  // Known settlements remain display/preview candidates until the user explicitly saves.
+  for (const row of importedRows) if (!knownBankCardSettlement(data, row)) classifyBankTransaction(data, row, suggest);
   return { imported, updated };
 }
 

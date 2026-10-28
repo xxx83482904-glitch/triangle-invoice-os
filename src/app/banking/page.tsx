@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
 import { BankingWorkspace } from "@/components/app/banking-workspace";
 import { getCurrentUser } from "@/lib/auth";
-import { bankDisplayRows, bankFilters, selectBankTransactions } from "@/lib/banking";
+import { bankDisplayRows, bankFilters, bankToday, selectBankTransactions } from "@/lib/banking";
+import { bankAccountOverview } from "@/lib/bank-account-overview";
 import { bankAccountFilter } from "@/lib/bank-account-options";
 import { bankSyncBusy } from "@/lib/banking-sync";
 import { companyFromParam } from "@/lib/company";
@@ -21,6 +22,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
   const data = await readDataForRequest();
   const filters = bankFilters({ ...params, page: "1" });
   const accountFilter = bankAccountFilter(data.bankAccounts, data.bankTransactions, company, filters.account);
+  const balanceRow = accountFilter.selectedId ? bankAccountOverview(data, company, undefined, bankToday()).rows.find((row) => row.id === accountFilter.selectedId) : undefined;
   const result = selectBankTransactions(data, company, filters);
   const sync = data.bankSyncStates.find((state) => state.company === company);
   const ai = await effectiveOcrConfig();
@@ -30,6 +32,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
     accounts={data.bankAccounts.filter((row) => row.company === company)}
     accountOptions={accountFilter.options}
     selectedAccountOption={accountFilter.selectedId}
+    selectedBalance={balanceRow ? { id: balanceRow.id, name: balanceRow.name, kind: balanceRow.kind, unspecified: balanceRow.unspecified, balance: balanceRow.balance, balanceCalculation: balanceRow.balanceCalculation } : undefined}
     categories={data.accountingCategories.filter((row) => row.company === company).sort((a, b) => a.name.localeCompare(b.name, "ja"))}
     rules={data.bankRules.filter((row) => row.company === company && !row.deletedAt)}
     configured={Boolean(moneyForwardConfig(company))} sync={sync} busy={bankSyncBusy(sync)} admin={user.role === "ADMIN"}

@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { authorizeBankAi, maskBankAiText } from "@/lib/bank-ai";
 import { previewBankRules } from "@/lib/banking";
+import { hasConfirmedBankLink, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 import { CLASSIFICATION_AI_BATCH_SIZE, classificationAiOutputSchema, classificationAiScopeSchema, type ClassificationAiPayload, type ClassificationAiPreview, type ClassificationAiResult } from "@/lib/bank-classification-ai-types";
 import type { AppData } from "@/lib/types";
 import type { CompanyScope } from "@/lib/company";
@@ -15,6 +16,7 @@ export function prepareClassificationAi(data: AppData, userId: string, company: 
   const rules = previewBankRules(data, actor, company);
   const ruleRows = new Map(rules.rows.map((row) => [row.id, row]));
   const eligible = scoped.filter((row) => !row.reviewed && !row.sourceMissing && row.sourceStatus !== "excluded" && row.treatment === "NORMAL"
+    && !knownBankCardSettlement(data, row) && !hasConfirmedBankLink(data, row)
     && (scope.history ? row.classificationSource !== "RULE" && (row.classificationSource !== "MANUAL" || Boolean(row.classificationConfidence && row.classificationReason && !/^(手動選択|ルール:)/.test(row.classificationReason))) : row.classificationSource !== "MANUAL" && !row.categoryId));
   const candidates = eligible.filter((row) => scope.history ? ruleRows.get(row.id)?.classificationSource !== "RULE" : !ruleRows.get(row.id)?.categoryId && (!ruleRows.has(row.id) || ruleRows.get(row.id)!.treatment === "NORMAL"))
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || a.id.localeCompare(b.id));
@@ -45,7 +47,7 @@ export function prepareClassificationAi(data: AppData, userId: string, company: 
     const normalized = (value: string) => value.normalize("NFKC").replace(/\s+/g, "").toLocaleLowerCase("ja");
     for (const [index, row] of rows.entries()) {
       const historical = data.bankTransactions.filter((past) => past.id !== row.id && past.company === company && past.officeCode === row.officeCode && past.bankAccountId === row.bankAccountId && past.side === row.side
-        && past.transactionDate < row.transactionDate && past.reviewed && !past.sourceMissing && past.sourceStatus !== "excluded" && past.treatment === "NORMAL"
+        && past.transactionDate < row.transactionDate && past.reviewed && !past.sourceMissing && past.sourceStatus !== "excluded" && past.treatment === "NORMAL" && !knownBankCardSettlement(data, past)
         && categoryRefs.has(past.categoryId || "") && payload.transactions[index].allowedCategoryRefs.includes(categoryRefs.get(past.categoryId || "")!) && maskBankAiText(past.content, 240).replace(/\[[A-Z]+\]/g, "").trim().length > 2);
       // Conflicting confirmed categories must not teach a false rule.
       const categorySets = new Map<string, Set<string>>();

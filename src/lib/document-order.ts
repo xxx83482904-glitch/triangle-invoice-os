@@ -28,7 +28,7 @@ export function compareProjects(a: { projectId?: string; projectName?: string },
 
 export function orderDocuments(rows: DocumentRow[], sort: string) {
   return [...rows].sort((a, b) => (sort === "project" ? compareProjects(a, b) :
-    sort === "amount-desc" ? (b.total || 0) - (a.total || 0) :
+    sort === "amount-desc" ? (b.total || 0) - (a.total || 0) : sort === "amount-asc" ? (a.total || 0) - (b.total || 0) :
     sort === "name" || sort === "client" ? a.counterpart.localeCompare(b.counterpart, "ja") || documentCounterpartKey(a).localeCompare(documentCounterpartKey(b)) : 0) ||
     (sort === "date-asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)) || a.id.localeCompare(b.id));
 }

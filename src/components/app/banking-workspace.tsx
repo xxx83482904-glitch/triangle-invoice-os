@@ -6,7 +6,10 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
 import { useRouter } from "next/navigation";
-import { Bot, CircleAlert, FileCheck2, Folder, History, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
+import { Bot, CircleAlert, FileCheck2, History, LoaderCircle, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
+import { RecordMonthNavigation, RecordSaveBar } from "@/components/app/record-list-controls";
+import Link from "next/link";
+import { BankBalanceSummary, type BankBalanceSummaryProps } from "@/components/app/bank-balance-summary";
 import { loadBankLinksAction } from "@/app/banking/link-actions";
 import { BankLinksDialog, type BankLinkData } from "@/components/app/bank-links-dialog";
 import { loadBankTransactionsAction, previewBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
@@ -32,6 +35,7 @@ type Props = {
   filters: BankFilters; total: number; page: number; months: string[]; revision: string;
   summary: { income: number; expense: number; excluded: number; unclassified: number };
   configured: boolean; sync?: BankSyncState; busy: boolean; admin: boolean;
+  selectedBalance?: BankBalanceSummaryProps["row"] & { id: string; name: string };
   aiSettings?: { configured: boolean; model: string; keyFromEnv: boolean; modelFromEnv: boolean };
 };
 
@@ -232,7 +236,7 @@ export function BankingWorkspace(props: Props) {
     });
   }
   function linkButton(row: BankDisplayRow) {
-    return <Button className="min-h-11 max-w-full whitespace-normal px-2 text-xs" variant="ghost" disabled={pending || Boolean(dirty)} onClick={() => openLinks(row)}><FileCheck2 className="size-4 shrink-0" />{row.linkLabel || (row.side === "INCOME" ? "入金を照合" : "出金を照合")}</Button>;
+    return <div><Button className="min-h-11 max-w-full whitespace-normal px-2 text-xs" variant="ghost" disabled={pending || Boolean(dirty)} onClick={() => openLinks(row)}><FileCheck2 className="size-4 shrink-0" />{row.linkLabel || (row.side === "INCOME" ? "入金を照合" : "出金を照合")}</Button>{row.settlementConflict ? <p className="mt-1 max-w-full break-words text-xs text-amber-700 dark:text-amber-400" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}</div>;
   }
   async function beginSync() {
     setError(""); setSyncing(true);
@@ -286,13 +290,16 @@ export function BankingWorkspace(props: Props) {
       }} />自動同期（6時間ごと）</label>
     </div>
     {error || sync?.error ? <div role="alert" className="flex items-start gap-2 border-l-2 border-destructive bg-destructive/5 p-3 text-sm"><CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" /><span className="min-w-0 break-words">{error || sync?.error}</span>{error ? <Button size="icon" variant="ghost" className="ml-auto size-11 shrink-0" aria-label="エラーを閉じる" title="閉じる" onClick={() => setError("")}><X className="size-4" /></Button> : null}</div> : null}
+    {props.selectedBalance?.kind === "BANK" && !props.selectedBalance.unspecified ? <section aria-label="選択口座の計算残高" className="flex min-w-0 flex-wrap items-start justify-between gap-4 border-y py-3">
+      <div className="min-w-0 flex-1 basis-56"><h2 className="mb-2 break-words text-sm font-medium">{props.selectedBalance.name}</h2><BankBalanceSummary row={props.selectedBalance} /></div>
+      <div className="min-w-0 space-y-2 text-xs text-muted-foreground">
+        {props.selectedBalance.balanceCalculation ? <dl className="grid grid-cols-2 gap-x-4 gap-y-1"><dt>基準日後の入金</dt><dd className="text-right tabular-nums text-emerald-700 dark:text-emerald-400">+{money.format(props.selectedBalance.balanceCalculation.income)}</dd><dt>基準日後の出金</dt><dd className="text-right tabular-nums">−{money.format(props.selectedBalance.balanceCalculation.expense)}</dd></dl> : null}
+        <p>残高は全明細が対象・下の絞り込みとは別</p>
+        <Button asChild variant="outline" className="min-h-11"><Link href={`/banking/accounts?company=${company}`}><Settings2 className="size-4" />基準残高を確認・変更</Link></Button>
+      </div>
+    </section> : null}
     <div className={classificationPreview ? "min-w-0" : "grid min-w-0 gap-4 xl:grid-cols-[168px_minmax(0,1fr)]"}>
-      {!classificationPreview ? <aside className="hidden border-r pr-3 xl:block">
-        <h2 className="mb-2 text-sm font-medium">取引月</h2>
-        <nav aria-label="取引月" className="max-h-[65vh] space-y-1 overflow-y-auto">
-          {["", ...months].map((month) => <button key={month} className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm ${filters.month === month ? "bg-primary/10 font-medium text-primary" : "hover:bg-muted"}`} aria-current={filters.month === month ? "page" : undefined} onClick={() => navigate({ month })}><Folder className="size-4 shrink-0" /><span>{monthName(month)}</span></button>)}
-        </nav>
-      </aside> : null}
+      {!classificationPreview ? <RecordMonthNavigation label="取引月" months={months} value={filters.month} disabled={pending} onChange={(month) => navigate({ month })} /> : null}
       <section className="min-w-0 space-y-3">
         {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><div className="min-w-0"><h2 className="text-base font-semibold">{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}</h2>{aiResult ? <p className="mt-1 break-words text-xs text-muted-foreground">候補 {aiResult.suggested}件・うち低確度の推定 {aiResult.lowConfidence}件 / {aiResult.model}</p> : null}</div><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
         {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
@@ -364,7 +371,7 @@ export function BankingWorkspace(props: Props) {
         </div>
       </section>
     </div>
-    {saveCount ? <div className="sticky bottom-20 z-10 flex flex-wrap items-center justify-between gap-2 border bg-background px-3 py-2 shadow-sm lg:bottom-2"><span className="text-sm">未保存 {saveCount}件{candidates.length ? `（予測 ${candidates.length}件）` : ""}{pending && savedCount ? ` / 保存済み ${savedCount}件` : ""}</span><Button className="min-h-11" disabled={pending} onClick={() => save()}><Save className="size-4" />すべて保存</Button></div> : null}
+    {saveCount ? <RecordSaveBar label={`未保存 ${saveCount}件${candidates.length ? `（予測 ${candidates.length}件）` : ""}${pending && savedCount ? ` / 保存済み ${savedCount}件` : ""}`} disabled={pending} saving={pending} onSave={() => save()} /> : null}
     <Dialog open={Boolean(leaveUrl)} onOpenChange={(open) => { if (!open && !pending) setLeaveUrl(null); }}>
       <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
         <DialogHeader><DialogTitle>未保存の変更があります</DialogTitle><DialogDescription>{dirty}件の編集内容が未保存です。</DialogDescription></DialogHeader>

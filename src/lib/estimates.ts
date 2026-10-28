@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
-import { documentDateSchema, estimateSchema, estimateTotals, type EstimateInput } from "@/lib/estimate-values";
+import { documentDateSchema, estimateListEditSchema, estimateSchema, estimateTotals, type EstimateInput, type EstimateListEdit } from "@/lib/estimate-values";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, Estimate, IssuedInvoice, User } from "@/lib/types";
 
@@ -104,11 +104,45 @@ export function convertEstimate(data: AppData, user: Actor, company: CompanyScop
 }
 
 export function deleteEstimate(data: AppData, user: Actor, company: CompanyScope, input: EstimateTarget) {
+  return deleteEstimates(data, user, company, [input])[0];
+}
+
+export function deleteEstimates(data: AppData, user: Actor, company: CompanyScope, input: EstimateTarget[]) {
   const ids = projectScope(data, user, company);
-  const parsed = targetSchema.parse(input);
-  const estimate = findEstimate(data, ids, parsed.id);
-  assertVersion(estimate, parsed.updatedAt);
-  if (estimate.invoiceId || estimate.status === "CONVERTED") throw new Error("請求書に変換済みの見積書は削除できません");
-  estimate.deletedAt = timestampAfter(estimate.updatedAt); estimate.updatedAt = estimate.deletedAt;
-  return { id: estimate.id };
+  const parsed = z.array(targetSchema).min(1).max(1000).parse(input);
+  assertUniqueTargets(parsed);
+  const targets = parsed.map((target) => {
+    const estimate = findEstimate(data, ids, target.id);
+    assertVersion(estimate, target.updatedAt);
+    if (estimate.invoiceId || estimate.status === "CONVERTED") throw new Error("請求書に変換済みの見積書は削除できません");
+    return estimate;
+  });
+  return targets.map((estimate) => {
+    estimate.deletedAt = timestampAfter(estimate.updatedAt); estimate.updatedAt = estimate.deletedAt;
+    return { id: estimate.id };
+  });
+}
+
+function assertUniqueTargets(targets: EstimateTarget[]) {
+  if (new Set(targets.map((target) => target.id)).size !== targets.length) throw new Error("見積書が重複しています");
+}
+
+export function saveEstimateListEdits(data: AppData, user: Actor, company: CompanyScope, input: EstimateListEdit[]) {
+  const ids = projectScope(data, user, company);
+  const parsed = z.array(estimateListEditSchema).min(1).max(1000).parse(input);
+  assertUniqueTargets(parsed);
+  // Validate the whole batch before changing any records, including project/client reassignment.
+  const changes = parsed.map((edit) => {
+    const estimate = findEstimate(data, ids, edit.id);
+    assertVersion(estimate, edit.updatedAt);
+    if (estimate.invoiceId || estimate.status === "CONVERTED") throw new Error("請求書に変換済みの見積書は編集できません");
+    if (!ids.has(edit.projectId)) throw new Error("この案件には見積書を移動できません");
+    const clientId = edit.projectId === estimate.projectId ? estimate.clientId : data.projects.find((p) => p.id === edit.projectId)!.clientId;
+    if (!data.clients.some((c) => c.id === clientId && !c.deletedAt && partnerMatchesCompany(c, company))) throw new Error("同じ会社の有効な取引先を選択してください");
+    return { estimate, edit, clientId };
+  });
+  return changes.map(({ estimate, edit, clientId }) => {
+    Object.assign(estimate, { ...edit, clientId, updatedAt: timestampAfter(estimate.updatedAt) });
+    return estimate;
+  });
 }

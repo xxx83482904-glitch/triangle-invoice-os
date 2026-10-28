@@ -16,3 +16,16 @@ export const estimateSchema = z.object({
   items: documentItemsSchema,
 }).refine((v) => v.validUntil >= v.issueDate, { message: "有効期限は見積日以降にしてください", path: ["validUntil"] });
 export type EstimateInput = z.input<typeof estimateSchema>;
+
+export const estimateListEditSchema = z.object({
+  id: z.string().min(1), updatedAt: z.string().min(1),
+  projectId: z.string().min(1, "案件を選択してください"),
+  issueDate: documentDateSchema, validUntil: documentDateSchema,
+  status: z.enum(["DRAFT", "SENT", "ACCEPTED", "DECLINED"]),
+}).refine((v) => v.validUntil >= v.issueDate, { message: "有効期限は見積日以降にしてください", path: ["validUntil"] });
+export type EstimateListEdit = z.infer<typeof estimateListEditSchema>;
+export function estimateListEditFrom(estimate: Estimate): EstimateListEdit {
+  return { id: estimate.id, updatedAt: estimate.updatedAt, projectId: estimate.projectId,
+    issueDate: estimate.issueDate, validUntil: estimate.validUntil,
+    status: estimate.status === "CONVERTED" ? "DRAFT" : estimate.status };
+}

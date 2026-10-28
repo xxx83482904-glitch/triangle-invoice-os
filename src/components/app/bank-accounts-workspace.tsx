@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Landmark, List, LoaderCircle, Pencil, Save, Search, Wallet, X } from "lucide-react";
 import { saveBankOverviewAction } from "@/app/banking/actions";
 import { bankSelectClass } from "@/components/app/banking-settings";
+import { BankBalanceSummary } from "@/components/app/bank-balance-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,13 +32,16 @@ export function BankAccountsWorkspace({ company, today, month, latestMonth, peri
   const filtered = useMemo(() => {
     const terms = query.normalize("NFKC").toLocaleLowerCase("ja").trim().split(/\s+/);
     return rows.filter((row) => terms.every((term) => row.name.normalize("NFKC").toLocaleLowerCase("ja").includes(term))).sort((a, b) => {
-      if (sort === "balance") return (b.balance?.amount ?? -Infinity) - (a.balance?.amount ?? -Infinity) || a.name.localeCompare(b.name, "ja");
+      if (sort === "balance") return (b.balanceCalculation?.amount ?? -Infinity) - (a.balanceCalculation?.amount ?? -Infinity) || a.name.localeCompare(b.name, "ja");
       if (sort === "income" || sort === "expense" || sort === "net") return b[sort] - a[sort] || a.name.localeCompare(b.name, "ja");
       if (sort === "latest") return (b.latestDate || "").localeCompare(a.latestDate || "") || a.name.localeCompare(b.name, "ja");
       return a.name.localeCompare(b.name, "ja");
     });
   }, [rows, query, sort]);
   const banks = rows.filter((row) => row.kind === "BANK"), registered = banks.filter((row) => row.balance);
+  const calculations = registered.flatMap((row) => row.balanceCalculation ? [row.balanceCalculation] : []);
+  const provisional = calculations.filter((calculation) => !calculation.complete).length;
+  const missingSources = calculations.reduce((sum, calculation) => sum + calculation.missing, 0);
   const bankIncome = banks.reduce((sum, row) => sum + row.income, 0), bankExpense = banks.reduce((sum, row) => sum + row.expense, 0);
   const url = (row?: AccountOverviewRow, extra: Record<string, string> = {}) => `/banking?${new URLSearchParams({ company, month, ...(row ? { account: row.id } : {}), ...extra })}`;
   const currentYear = Number(today.slice(0, 4)) + (Number(today.slice(5, 7)) >= 9 ? 1 : 0);
@@ -64,10 +68,10 @@ export function BankAccountsWorkspace({ company, today, month, latestMonth, peri
         <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => navigateYear()} title={latestMonth ? `最新取引月: ${monthName(latestMonth)}` : "最新の決算期"}><CalendarDays className="size-4" />最新</Button>
         {pending ? <LoaderCircle aria-label="読み込み中" className="size-4 animate-spin" /> : null}
       </div>
-      <div className="text-xs leading-relaxed text-muted-foreground"><p>決算期間: {period.start} 〜 {period.end}</p><p>集計: {through}まで / 最新取引月: {latestMonth ? monthName(latestMonth) : "未取得"}</p></div>
+      <div className="text-xs leading-relaxed text-muted-foreground"><p>決算期間: {period.start} 〜 {period.end}</p><p>期内入出金: {through}まで / 最新取引月: {latestMonth ? monthName(latestMonth) : "未取得"}</p><p>計算残高: {today}まで（決算期に関係なく現在）</p></div>
     </div>
     <dl className="grid grid-cols-2 gap-x-5 gap-y-4 border-b pb-5 lg:grid-cols-4">
-      <div className="min-w-0"><dt className="text-xs text-muted-foreground">登録残高の合計 / 銀行</dt><dd className="mt-1 break-all text-2xl font-semibold tabular-nums">{registered.length ? money(registered.reduce((sum, row) => sum + row.balance!.amount, 0)) : "未登録"}</dd><dd className="mt-1 text-xs text-muted-foreground">{registered.length} / {banks.length}口座・各確認日時点</dd></div>
+      <div className="min-w-0"><dt className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">計算残高の合計 / 銀行{calculations.length > 0 && (provisional > 0 || calculations.length < banks.length) ? <span className="rounded border border-amber-500/40 px-1.5 py-0.5 text-amber-700 dark:text-amber-400">暫定</span> : null}</dt><dd className="mt-1 break-all text-2xl font-semibold tabular-nums">{calculations.length ? money(calculations.reduce((sum, calculation) => sum + calculation.amount, 0)) : registered.length ? "計算不可" : "未登録"}</dd><dd className="mt-1 text-xs text-muted-foreground">{today}まで / 計算 {calculations.length} / {banks.length}口座</dd><dd className="mt-1 text-xs text-muted-foreground">基準残高未登録 {banks.length - registered.length}口座 / 暫定 {provisional}口座 / 元明細なし {missingSources}件{registered.length > calculations.length ? ` / 計算不可 ${registered.length - calculations.length}口座` : ""}</dd></div>
       <div className="hidden min-w-0 md:block"><dt className="text-xs text-muted-foreground">期内の銀行入金</dt><dd className={`mt-1 break-all text-2xl font-semibold tabular-nums ${incomeColor}`}>{money(bankIncome)}</dd><dd className="mt-1 text-xs text-muted-foreground">振替・返金を含む</dd></div>
       <div className="hidden min-w-0 md:block"><dt className="text-xs text-muted-foreground">期内の銀行出金</dt><dd className={`mt-1 break-all text-2xl font-semibold tabular-nums ${expenseColor}`}>{money(bankExpense)}</dd><dd className="mt-1 text-xs text-muted-foreground">カード引落・振替を含む</dd></div>
       <div className="min-w-0"><dt className="text-xs text-muted-foreground">期内の銀行入出金差額</dt><dd className="mt-1 break-all text-2xl font-semibold tabular-nums">{money(bankIncome - bankExpense)}</dd><dd className="mt-1 text-xs text-muted-foreground">取得済み明細 / 残高とは別</dd></div>
@@ -75,7 +79,7 @@ export function BankAccountsWorkspace({ company, today, month, latestMonth, peri
     <div className="flex flex-wrap items-end gap-3">
       <label className="relative min-w-0 flex-1 basis-56"><Search aria-hidden className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input aria-label="銀行名・口座番号を検索" placeholder="銀行名・口座番号" className="h-11 pl-9 lg:h-11 lg:pl-9" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <div className="flex w-full items-center gap-3 sm:w-auto"><select aria-label="口座の並び順" className={`${bankSelectClass} min-w-0 flex-1 sm:w-48`} value={sort} onChange={(event) => setSort(event.target.value)}>
-        <option value="name">銀行・口座名順</option><option value="balance">登録残高が多い順</option><option value="income">入金が多い順</option><option value="expense">出金が多い順</option><option value="net">差額が大きい順</option><option value="latest">最新取引順</option>
+        <option value="name">銀行・口座名順</option><option value="balance">計算残高が多い順</option><option value="income">入金が多い順</option><option value="expense">出金が多い順</option><option value="net">差額が大きい順</option><option value="latest">最新取引順</option>
       </select>
       <span role="status" className="shrink-0 py-3 text-xs text-muted-foreground">{filtered.length} / {rows.length}口座</span></div>
     </div>
@@ -86,7 +90,7 @@ export function BankAccountsWorkspace({ company, today, month, latestMonth, peri
       return <section key={kind} aria-labelledby={`account-kind-${kind}`}>
         <h2 id={`account-kind-${kind}`} className="flex items-center gap-2 border-b bg-muted/40 px-3 py-3 text-sm font-semibold"><Icon className="size-4" />{kinds[kind]}<span className="font-normal text-muted-foreground">{group.length}</span></h2>
         <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_repeat(3,minmax(0,1fr))_44px] gap-4 border-b px-3 py-2 text-right text-xs text-muted-foreground xl:grid" aria-hidden>
-          <span className="text-left">口座 / 取引件数</span><span className="text-left">{kind === "BANK" ? "登録残高 / 確認日" : "口座情報"}</span><span>{kind === "CARD" ? "返金・精算" : "入金"}</span><span>{kind === "CARD" ? "利用・出金" : "出金"}</span><span>差額</span><span />
+          <span className="text-left">口座 / 期内取引件数</span><span className="text-left">{kind === "BANK" ? "計算残高 / 登録した基準残高" : "口座情報"}</span><span>{kind === "CARD" ? "期内返金・精算" : "期内入金"}</span><span>{kind === "CARD" ? "期内利用・出金" : "期内出金"}</span><span>期内差額</span><span />
         </div>
         {group.map((row) => <Fragment key={row.id}>
           <article className={`grid min-w-0 grid-cols-2 items-start gap-x-4 gap-y-3 border-b px-3 py-3 md:grid-cols-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_repeat(3,minmax(0,1fr))_44px] ${expanded === row.id ? "bg-primary/5" : "hover:bg-muted/20"}`}>
@@ -95,12 +99,11 @@ export function BankAccountsWorkspace({ company, today, month, latestMonth, peri
             </div>
             <div className="col-span-2 min-w-0 md:col-span-2 xl:col-span-1">
               <button className="flex min-h-11 w-full items-start gap-2 rounded-md text-left hover:bg-muted disabled:opacity-60" disabled={row.unspecified} title="口座情報・残高を編集" aria-label={`${row.name}の口座情報・残高を編集`} onClick={() => setEditing(row)}>
-                <span className="min-w-0 flex-1"><span className="block break-all text-lg font-semibold tabular-nums">{kind === "BANK" ? row.balance ? money(row.balance.amount) : "残高未登録" : row.unspecified ? "口座未特定" : "預金残高の対象外"}</span><span className="block text-xs text-muted-foreground">{row.balance ? `${row.balance.asOf} 終日 / 手動登録` : kind === "BANK" ? "確認日付きで登録" : kinds[kind]}</span></span>
+                <span className="min-w-0 flex-1"><BankBalanceSummary row={row} /></span>
                 {!row.unspecified ? <Pencil className="mt-1 size-3.5 shrink-0 text-muted-foreground" /> : null}
               </button>
-              {row.estimatedBalance !== undefined ? <p className="mt-1 break-words text-xs text-muted-foreground">参考 {money(row.estimatedBalance)} / {row.balanceThrough}</p> : null}
             </div>
-            {[{ label: kind === "CARD" ? "返金・精算" : "入金", value: row.income, color: incomeColor }, { label: kind === "CARD" ? "利用・出金" : "出金", value: row.expense, color: expenseColor }, { label: "差額", value: row.net, color: "" }].map((item) => <dl key={item.label} className="min-w-0 xl:pt-2 xl:text-right"><dt className="text-xs text-muted-foreground xl:sr-only">{item.label}</dt><dd className={`break-all text-sm font-semibold tabular-nums ${item.color}`}>{money(item.value)}</dd></dl>)}
+            {[{ label: kind === "CARD" ? "期内返金・精算" : "期内入金", value: row.income, color: incomeColor }, { label: kind === "CARD" ? "期内利用・出金" : "期内出金", value: row.expense, color: expenseColor }, { label: "期内差額", value: row.net, color: "" }].map((item) => <dl key={item.label} className="min-w-0 xl:pt-2 xl:text-right"><dt className="text-xs text-muted-foreground xl:sr-only">{item.label}</dt><dd className={`break-all text-sm font-semibold tabular-nums ${item.color}`}>{money(item.value)}</dd></dl>)}
             <Button variant="ghost" size="icon" className="size-11 justify-self-end" title={expanded === row.id ? "動きを閉じる" : "動きを表示"} aria-label={`${row.name}の動きを${expanded === row.id ? "閉じる" : "開く"}`} aria-expanded={expanded === row.id} aria-controls={`activity-${row.id}`} onClick={() => toggle(row.id)}><ChevronDown className={`size-4 transition-transform ${expanded === row.id ? "rotate-180" : ""}`} /></Button>
           </article>
           {expanded === row.id ? <AccountActivity key={`${row.id}:${period.year}`} row={row} period={period} company={company} /> : null}
@@ -108,7 +111,7 @@ export function BankAccountsWorkspace({ company, today, month, latestMonth, peri
       </section>;
     })}
     {!filtered.length ? <div className="border-y py-12 text-center text-sm text-muted-foreground">{rows.length ? "該当する口座はありません" : "連携口座はまだありません"}{!rows.length ? <div className="mt-3"><Link href={url()} className={linkClass}>明細・同期へ<ArrowUpRight className="size-4" /></Link></div> : null}</div> : null}
-    <p className="border-t pt-3 text-xs leading-relaxed text-muted-foreground">残高は銀行で確認した日付時点の登録額です（自動取得ではありません）。参考残高は、確認日の翌日から取得範囲を確認できた明細のみで計算します。入出金は振替・対象外を含み、元明細なし・未来日は除外。カード利用額は銀行残高に合算しません。</p>
+    <p className="border-t pt-3 text-xs leading-relaxed text-muted-foreground">計算残高は手動登録の基準残高と翌日から本日までの取得済み入出金による計算値で、銀行照会の実残高ではありません。取得範囲の不足・元明細なし等がある場合は暫定です。振替・対象外は含み、元明細なし・未来日・不正な明細は除外。カード利用額と基準残高未登録の口座は残高合計に含みません。</p>
     {editing ? <AccountBalanceDialog key={`${editing.id}:${editing.updatedAt}`} row={editing} company={company} today={today} onClose={() => setEditing(null)} /> : null}
   </div>;
 }
@@ -174,9 +177,9 @@ function AccountBalanceDialog({ row, company, today, onClose }: { row: AccountOv
     <form className="min-w-0 space-y-4" onSubmit={(event) => { event.preventDefault(); save(); }}>
       <label className="grid gap-1 text-sm">口座の種類<select className={bankSelectClass} value={kind} disabled={pending} onChange={(event) => setKind(event.target.value as typeof kind)}>{Object.entries(kinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       {kind === "BANK" ? <>
-        <label className="grid gap-1 text-sm">銀行で確認した残高（円）<Input type="number" inputMode="numeric" step="1" min="-1000000000000" max="1000000000000" className="h-11 lg:h-11" value={amount} placeholder="未登録" disabled={pending} onChange={(event) => setAmount(event.target.value)} /></label>
+        <label className="grid gap-1 text-sm">基準残高（銀行で確認した額・円）<Input type="number" inputMode="numeric" step="1" min="-1000000000000" max="1000000000000" className="h-11 lg:h-11" value={amount} placeholder="未登録" disabled={pending} onChange={(event) => setAmount(event.target.value)} /></label>
         <label className="grid gap-1 text-sm">残高確認日（その日の終日時点）<Input type="date" className="h-11 lg:h-11" required={Boolean(amount.trim())} value={date} max={today} disabled={pending} onChange={(event) => setDate(event.target.value)} /></label>
-        <p className="text-xs text-muted-foreground">銀行残高の自動取得は未対応です。登録後の参考残高には確認日の翌日以降の明細を使います。</p>
+        <p className="text-xs text-muted-foreground">基準は確認日の終日残高です。計算対象は翌日から本日までの入出金で、登録額は同期で上書きされません。0円・マイナスも登録可能です。</p>
       </> : <p className="text-xs text-muted-foreground">銀行以外は預金残高の集計対象に含まれません。</p>}
       {row.balance && (kind !== "BANK" || !amount.trim()) ? <p className="text-sm text-amber-700 dark:text-amber-400">保存すると登録済み残高を解除します。</p> : null}
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
