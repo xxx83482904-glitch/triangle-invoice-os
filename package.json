@@ -35,7 +35,7 @@
     "dotenv": "^17.4.2",
     "jose": "^6.2.3",
     "lucide-react": "^1.14.0",
-    "next": "16.3.8",
+    "next": "16.4.3",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.18.0",
     "pg": "^8.21.0",
@@ -54,7 +54,7 @@
   },
   "devDependencies": {
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.3",
     "tsx": "^4.23.13"
   },
   "overrides": {
