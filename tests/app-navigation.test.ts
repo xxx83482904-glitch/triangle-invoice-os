@@ -33,11 +33,11 @@ test("navigation matches nested routes but not similarly named paths", () => {
 });
 
 test("workflow tabs preserve bank account/month without carrying stale selection filters", () => {
-  const tabs = workflowNavigation("/banking", new URLSearchParams("company=CHINA&account=a%2Fb&month=2026-09&transaction=secret&category=c&page=5&q=private"), "ACCOUNTING");
+  const tabs = workflowNavigation("/banking", new URLSearchParams("company=JAPAN&account=a%2Fb&month=2026-09&transaction=secret&category=c&page=5&q=private"), "ACCOUNTING");
   assert.equal(tabs.filter((tab) => tab.active).length, 1);
   for (const tab of tabs) {
     const url = new URL(tab.href, "https://test.invalid");
-    assert.equal(url.searchParams.get("company"), "CHINA");
+    assert.equal(url.searchParams.get("company"), "JAPAN");
     for (const key of ["transaction", "category", "page", "q"]) assert.equal(url.searchParams.has(key), false);
     if (["/banking/reconcile", "/banking/accounts"].includes(url.pathname)) assert.equal(url.searchParams.has("account"), false);
     else assert.equal(url.searchParams.get("account"), "a/b");
@@ -68,7 +68,7 @@ test("sales and receiving workflow tabs stay scoped and respect permissions", ()
   assert.equal(sales.find((tab) => tab.active)?.label, "案件");
   const mail = workflowNavigation("/received-invoices", new URLSearchParams("company=CHINA"), "ADMIN");
   assert.equal(mail[0].href, "/mail-sorter?company=JAPAN");
-  assert.equal(mail[1].href, "/received-invoices?company=CHINA");
+  assert.equal(mail[1].href, "/received-invoices?company=JAPAN");
   assert.deepEqual(workflowNavigation("/users", new URLSearchParams(), "ADMIN"), []);
 });
 

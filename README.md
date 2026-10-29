@@ -102,6 +102,12 @@ Use the same setup on Alibaba Cloud ECS, XServer VPS, or another Ubuntu VPS with
 
 ## Synology Deployment
 
+The production application is Japan-only at `https://invoice.kuremasato.com`.
+China is independently deployed at `https://invoice-cn.kuremasato.com`.
+Chinese records were migrated with backups on 2026-10-29. Do not share data
+volumes or restore the old mixed-company data file into either live application.
+See [migration and verification notes](docs/china-data-split-2026-10-29.md).
+
 Synology DSM can run this app with Container Manager as a Docker Compose project.
 
 ```bash

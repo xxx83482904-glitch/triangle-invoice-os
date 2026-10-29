@@ -9,6 +9,7 @@ import { Pool } from "pg";
 import { cache } from "react";
 import { runtimeDataDir } from "@/lib/runtime-paths";
 import { defaultSelectOptions } from "@/lib/select-options";
+import { assertJapanData } from "@/lib/japan-storage";
 import type {
   AppData,
   AuditLog,
@@ -177,12 +178,13 @@ function seedData(): AppData {
   ];
 
   return {
+    appEdition: "JAPAN",
     seedVersion: DATA_VERSION,
     users,
-    clients,
-    vendors,
+    clients: clients.filter((row) => row.company === "JAPAN"),
+    vendors: vendors.filter((row) => row.company === "JAPAN"),
     selectOptions: defaultSelectOptions(createdAt),
-    projects,
+    projects: projects.filter((row) => row.company === "JAPAN"),
     estimates: [],
     issuedInvoices: [],
     issuedInvoiceItems: [],
@@ -456,6 +458,7 @@ async function readRawData() {
 }
 
 function migrateLegacyDataFile() {
+  if (existsSync(DATA_FILE) && JSON.parse(readFileSync(DATA_FILE, "utf8")).appEdition === "JAPAN") return;
   if (path.resolve(DATA_FILE) === path.resolve(LEGACY_DATA_FILE) || !existsSync(LEGACY_DATA_FILE)) return;
   if (!existsSync(DATA_FILE) || statSync(LEGACY_DATA_FILE).mtimeMs > statSync(DATA_FILE).mtimeMs) {
     copyFileSync(LEGACY_DATA_FILE, DATA_FILE);
@@ -585,6 +588,7 @@ function normalizeReleaseUsers(data: AppData) {
 }
 
 async function normalizeData(data: AppData) {
+  assertJapanData(data);
   let changed = data.seedVersion !== DATA_VERSION;
   data.seedVersion = DATA_VERSION;
   if (!Array.isArray(data.users)) { data.users = seedData().users; changed = true; }
@@ -626,7 +630,7 @@ async function normalizeData(data: AppData) {
       client.company = "JAPAN";
       changed = true;
     } else if (!client.company) {
-      client.company = "CHINA";
+      client.company = "JAPAN";
       changed = true;
     }
     if (!client.sortOrder) {
@@ -636,7 +640,7 @@ async function normalizeData(data: AppData) {
   }
   for (const vendor of data.vendors) {
     if (!vendor.company) {
-      vendor.company = "CHINA";
+      vendor.company = "JAPAN";
       changed = true;
     }
     if (!vendor.sortOrder) {
@@ -657,6 +661,8 @@ export async function readData(): Promise<AppData> {
 export const readDataForRequest = cache(readData);
 
 export async function writeData(data: AppData) {
+  assertJapanData(data);
+  data.appEdition = "JAPAN";
   await writeRawData(data);
 }
 
@@ -764,10 +770,10 @@ export function projectMoney(data: AppData, projectId: string): ProjectMoney {
 
 export function scopedProjectsForUser(data: AppData, user: Pick<User, "id" | "role">) {
   if (user.role === "BILLING_EDITOR") return visibleProjects(data, user);
-  if (user.role === "ADMIN" || user.role === "ACCOUNTING") return active(data.projects);
+  if (user.role === "ADMIN" || user.role === "ACCOUNTING") return active(data.projects).filter((project) => project.company === "JAPAN");
   if (user.role === "GUEST") return [];
   return active(data.projects).filter(
-    (projectItem) => projectItem.managerId === user.id || projectItem.memberIds.includes(user.id),
+    (projectItem) => projectItem.company === "JAPAN" && (projectItem.managerId === user.id || projectItem.memberIds.includes(user.id)),
   );
 }
 

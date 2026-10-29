@@ -43,6 +43,7 @@ export async function setBankAutoSync(user: Actor, company: CompanyScope, enable
 }
 
 export async function queueBankSync(company: CompanyScope, input: BankSyncRequest, user?: Actor) {
+  if (company !== "JAPAN") throw new Error("日本版では中国の同期を実行できません");
   if (user) assertBankAccess(user, company);
   const request = requestSchema.parse(input);
   if (request.mode === "range" && (!request.start || !request.end || !isBankDate(request.start) || !isBankDate(request.end) || request.start > request.end || request.end > bankToday())) throw new MoneyForwardError("取得期間を確認してください");
@@ -71,6 +72,7 @@ export async function queueBankSync(company: CompanyScope, input: BankSyncReques
 
 export async function runBankSync(job: Awaited<ReturnType<typeof queueBankSync>>) {
   const { company, runId, request, userId } = job;
+  if (company !== "JAPAN") throw new Error("日本版では中国の同期を実行できません");
   const update = <T>(action: string, callback: (data: AppData, state: BankSyncState) => T) => mutateData(userId, action, "BankSyncState", company, (data) => {
     const state = data.bankSyncStates.find((row) => row.company === company && row.runId === runId);
     if (!state) throw new MoneyForwardError("同期処理が変更されています");
@@ -119,10 +121,10 @@ export async function runBankSync(job: Awaited<ReturnType<typeof queueBankSync>>
 
 const scheduler = globalThis as typeof globalThis & { triangleBankTimer?: ReturnType<typeof setTimeout> };
 export function startBankScheduler() {
-  if (scheduler.triangleBankTimer || !(["JAPAN", "CHINA"] as const).some((company) => moneyForwardConfig(company))) return;
+  if (scheduler.triangleBankTimer || !moneyForwardConfig("JAPAN")) return;
   const tick = async () => {
     try {
-      for (const company of ["JAPAN", "CHINA"] as const) {
+      for (const company of ["JAPAN"] as const) {
         if (!moneyForwardConfig(company)) continue;
         const state = (await readData()).bankSyncStates.find((row) => row.company === company);
         if (!state?.autoSync || bankSyncBusy(state)) continue;

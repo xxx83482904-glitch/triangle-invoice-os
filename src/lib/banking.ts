@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CompanyScope } from "@/lib/company";
-import { assertCan } from "@/lib/rbac";
+import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankTransaction, CategoryInput } from "@/lib/banking-types";
 import { bankClassificationLabel, createBankSuggester } from "@/lib/bank-classification";
@@ -41,6 +41,7 @@ export function monthRanges(start: string, end: string) {
 
 export function assertBankAccess(user: Actor, company: CompanyScope) {
   companySchema.parse(company);
+  assertCompanyAccess(user, company);
   assertCan(user, "manage:banking");
 }
 

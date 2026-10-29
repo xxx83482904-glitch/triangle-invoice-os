@@ -187,8 +187,7 @@ test("automatic matching never exposes or attaches other companies or unassigned
   const data = fixture();
   const result = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("Other project"));
   assert.notEqual(result.project.id, "other"); assert.equal(result.project.managerId, manager.id);
-  const china = resolveIssuedImportProject(data, manager, "CHINA", "", hints("Japan project"));
-  assert.equal(china.project.company, "CHINA"); assert.notEqual(china.project.clientId, "client");
+  assert.throws(() => resolveIssuedImportProject(data, manager, "CHINA", "", hints("Japan project")), /日本版/);
   assert.throws(() => resolveIssuedImportProject(fixture(), manager, "JAPAN", "other", hints()));
   assert.throws(() => resolveIssuedImportProject(fixture(), manager, "JAPAN", "china", hints()));
   assert.throws(() => resolveIssuedImportProject(fixture(), { id: "mail", role: "MAIL_EDITOR" }, "JAPAN", "", hints()));
@@ -237,5 +236,5 @@ test("billing settings are limited to Japan invoice status and tax options", () 
   assert.equal(canEditOptionGroup(billing, "RECEIVED_INVOICE_STATUS"), false);
   assert.equal(canEditOptionGroup(billing, "ISSUED_INVOICE_STATUS"), true);
   assert.equal(canEditOptionGroup(billing, "TAX_RATE"), true);
-  assert.equal(canAccessCompany(admin, "CHINA"), true);
+  assert.equal(canAccessCompany(admin, "CHINA"), false);
 });

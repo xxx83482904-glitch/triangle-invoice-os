@@ -118,7 +118,7 @@ test("mail counts linked received invoices only once and isolates the company", 
   data.receivedInvoices[0].mailProcessed = false; data.receivedInvoices[0].status = "RECEIVED";
   data.mailDocuments.push({ ...data.mailDocuments[0], id: "duplicate-mail" }, { ...data.mailDocuments[0], id: "unlinked", relatedReceivedInvoiceId: undefined, mailProcessed: false }, { ...data.mailDocuments[0], id: "foreign", company: "CHINA", relatedReceivedInvoiceId: undefined, mailProcessed: false });
   assert.equal(summary(data).pendingMail, 2);
-  assert.equal(dashboardSummary(data, admin, "CHINA", today).pendingMail, 0);
+  assert.throws(() => dashboardSummary(data, admin, "CHINA", today), /日本版/);
   data.receivedInvoices[0].mailProcessed = true;
   assert.equal(summary(data).pendingMail, 1);
 });

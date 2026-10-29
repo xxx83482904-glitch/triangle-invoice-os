@@ -14,6 +14,8 @@ test("sync commits complete months, resumes safely and serializes concurrent edi
     process.env.MONEYFORWARD_JAPAN_API_KEY = "synthetic-test-key"; process.env.MONEYFORWARD_JAPAN_OFFICE_CODE = "0000-0001";
     process.env.MONEYFORWARD_CHINA_API_KEY = "synthetic-test-key"; process.env.MONEYFORWARD_CHINA_OFFICE_CODE = "0000-0001";
     const data = fixture();
+    data.projects = data.projects.filter((row) => row.company === "JAPAN");
+    data.issuedInvoices = data.issuedInvoices.filter((row) => data.projects.some((project) => project.id === row.projectId));
     data.users.push({ ...admin, name: "Test admin", email: "admin@example.invalid", passwordHash: "unused-test-hash", createdAt: timestamp, updatedAt: timestamp });
     await writeFile(path.join(root, "app-data.json"), JSON.stringify(data));
     const { queueBankSync, runBankSync, setBankAutoSync, bankSyncBusy } = await import("../src/lib/banking-sync");
@@ -55,7 +57,7 @@ test("sync commits complete months, resumes safely and serializes concurrent edi
     assert.deepEqual(saved.bankSyncStates[0].coverage, [{ start: "2020-08-01", end: "2020-09-30", accountIds: [saved.bankAccounts[0].id] }]);
     await runBankSync(await queueBankSync("JAPAN", request, admin));
     assert.equal((await readData()).bankTransactions.length, 2);
-    await assert.rejects(queueBankSync("CHINA", request, admin), /別の会社/);
+    await assert.rejects(queueBankSync("CHINA", request, admin), /日本版/);
     await assert.rejects(setBankAutoSync({ id: "accountant", role: "ACCOUNTING" }, "JAPAN", true), /管理者/);
     await setBankAutoSync(admin, "JAPAN", true); assert.equal((await readData()).bankSyncStates[0].autoSync, true);
     const events: string[] = [];

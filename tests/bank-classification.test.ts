@@ -131,7 +131,7 @@ test("bulk classification validates selection and permissions atomically and sta
   const before = JSON.stringify(data);
   assert.throws(() => applyBankRules(data, admin, "JAPAN", [data.bankTransactions[0].id, "unknown"]), /見つかりません/);
   assert.equal(JSON.stringify(data), before);
-  assert.throws(() => applyBankRules(data, admin, "CHINA", [data.bankTransactions[0].id]), /見つかりません/);
+  assert.throws(() => applyBankRules(data, admin, "CHINA", [data.bankTransactions[0].id]), /日本版/);
   for (const role of ["BILLING_EDITOR", "MAIL_EDITOR", "DESIGNER"] as const) assert.throws(() => applyBankRules(data, { id: "staff", role }, "JAPAN"), /権限/);
   assert.throws(() => applyBankRules(data, admin, "JAPAN", []));
   assert.deepEqual(applyBankRules(data, admin, "JAPAN", [data.bankTransactions[0].id]), { count: 1, unclassified: 0 });
@@ -201,7 +201,7 @@ test("previews protect existing edits and reject unauthorized or foreign selecti
   const before = JSON.stringify(data), ids = data.bankTransactions.slice(0, 5).map((row) => row.id);
   assert.deepEqual(previewBankRules(data, admin, "JAPAN", ids).rows.map((row) => row.sourceId), ["candidate"]);
   for (const role of ["BILLING_EDITOR", "MAIL_EDITOR", "DESIGNER"] as const) assert.throws(() => previewBankRules(data, { id: "staff", role }, "JAPAN"), /権限/);
-  assert.throws(() => previewBankRules(data, admin, "CHINA", ids), /見つかりません/);
+  assert.throws(() => previewBankRules(data, admin, "CHINA", ids), /日本版/);
   assert.throws(() => previewBankRules(data, admin, "JAPAN", [ids[0], "unknown"]), /見つかりません/);
   assert.throws(() => previewBankRules(data, admin, "JAPAN", []));
   assert.equal(JSON.stringify(data), before);

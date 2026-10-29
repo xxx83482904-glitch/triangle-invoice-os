@@ -336,6 +336,7 @@ export type InvoiceNumberSetting = {
 };
 
 export type AppData = {
+  appEdition?: "JAPAN" | "CHINA";
   seedVersion?: number;
   users: User[];
   clients: Client[];

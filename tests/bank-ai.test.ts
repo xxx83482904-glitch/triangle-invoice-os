@@ -38,7 +38,8 @@ test("AI context includes bank, invoice and postal evidence but not secrets, mem
 test("permission gate allows active accounting/admin only and rejects forged company", () => {
   const data = setup(); assert.equal(authorizeBankAi(data, "admin", "JAPAN").id, "admin");
   for (const role of ["MAIL_EDITOR", "BILLING_EDITOR", "PROJECT_MANAGER", "GUEST"] as const) { data.users[0].role = role; assert.throws(() => authorizeBankAi(data, "admin", "JAPAN")); }
-  data.users[0].role = "ACCOUNTING"; assert.ok(authorizeBankAi(data, "admin", "CHINA"));
+  data.users[0].role = "ACCOUNTING"; assert.ok(authorizeBankAi(data, "admin", "JAPAN"));
+  assert.throws(() => authorizeBankAi(data, "admin", "CHINA"), /日本版/);
   data.users[0].deletedAt = timestamp; assert.throws(() => authorizeBankAi(data, "admin", "JAPAN"));
   data.users[0].deletedAt = undefined; data.users[0].accessStatus = "PENDING"; assert.throws(() => authorizeBankAi(data, "admin", "JAPAN"));
   assert.throws(() => authorizeBankAi(data, "missing", "JAPAN"));

@@ -1,5 +1,5 @@
 import type { User, UserRole } from "@/lib/types";
-import { companyFromParam, type CompanyScope } from "@/lib/company";
+import type { CompanyScope } from "@/lib/company";
 
 const permissions = {
   ADMIN: [
@@ -119,16 +119,18 @@ export function assertCan(user: Pick<User, "role"> | null, permission: string) {
   if (!can(user, permission)) throw new Error("権限がありません");
 }
 
-export function canAccessCompany(user: Pick<User, "role">, company: CompanyScope) {
-  return user.role !== "BILLING_EDITOR" || company === "JAPAN";
+export function canAccessCompany(_user: Pick<User, "role">, company: CompanyScope) {
+  return company === "JAPAN";
 }
 
-export function companyForUser(user: Pick<User, "role">, value?: string | null): CompanyScope {
-  return user.role === "BILLING_EDITOR" ? "JAPAN" : companyFromParam(value);
+export function companyForUser(_user: Pick<User, "role">, _value?: string | null): CompanyScope {
+  void _user;
+  void _value;
+  return "JAPAN";
 }
 
 export function assertCompanyAccess(user: Pick<User, "role">, company: CompanyScope) {
-  if (!canAccessCompany(user, company)) throw new Error("日本の発行請求書と関連取引先のみ操作できます");
+  if (!canAccessCompany(user, company)) throw new Error("日本版では日本のデータのみ操作できます");
 }
 
 export function canEditOptionGroup(user: Pick<User, "role">, group: string) {
