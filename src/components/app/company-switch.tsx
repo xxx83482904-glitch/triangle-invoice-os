@@ -184,11 +184,21 @@ export function AppNav({ role }: { role: UserRole }) {
   );
 }
 
-export function WorkflowNav({ role }: { role: UserRole }) {
+export function DesktopAppNav({ role }: { role: UserRole }) {
+  const pathname = usePathname(), searchParams = useSearchParams();
+  const company = navigationCompany(role, searchParams.get("company"));
+  return <nav aria-label="メインメニュー" className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
+    {navigationGroups(role).flatMap((group) => group.items).map((item) => <Link key={item.href} href={navHref(item.href, company)} prefetch={false}
+      aria-current={navigationActive(pathname, item.href) ? "page" : undefined}
+      className="inline-flex min-h-11 items-center border-b-2 border-transparent px-2 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-[current=page]:border-primary aria-[current=page]:font-semibold aria-[current=page]:text-primary">{item.label}</Link>)}
+  </nav>;
+}
+
+export function WorkflowNav({ role, compact = false }: { role: UserRole; compact?: boolean }) {
   const pathname = usePathname(), searchParams = useSearchParams();
   const items = workflowNavigation(pathname, new URLSearchParams(searchParams.toString()), role);
   if (items.length < 2) return null;
-  return <nav aria-label="関連画面" className="mb-5 flex min-w-0 flex-wrap gap-x-4 border-b">
+  return <nav aria-label="関連画面" className={`${compact ? "" : "mb-5"} flex min-w-0 flex-wrap gap-x-4 border-b`}>
     {items.map((item) => <Link key={item.href} href={item.href} prefetch={false} aria-current={item.active ? "page" : undefined}
       className={`relative inline-flex min-h-11 items-center gap-1 border-b-2 px-1 text-sm transition focus-visible:outline-2 focus-visible:outline-ring ${item.active ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"}`}>
       {item.label}<NavLinkPending />

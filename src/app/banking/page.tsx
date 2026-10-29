@@ -26,7 +26,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
   const result = selectBankTransactions(data, company, filters);
   const sync = data.bankSyncStates.find((state) => state.company === company);
   const ai = await effectiveOcrConfig();
-  return <AppShell><BankingWorkspace key={`${company}:${JSON.stringify(filters)}`} company={company} filters={filters} {...result}
+  return <AppShell banking><BankingWorkspace key={`${company}:${JSON.stringify(filters)}`} role={user.role} company={company} filters={filters} {...result}
     rows={bankDisplayRows(data, result.rows)}
     revision={bankingDataRevision(data, company)}
     accounts={data.bankAccounts.filter((row) => row.company === company)}

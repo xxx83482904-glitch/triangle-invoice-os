@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { deleteBankDefinitionAction, saveAccountingCategoryAction, saveBankRuleAction } from "@/app/banking/actions";
 import { categoryGroups, treatmentLabels } from "@/lib/banking";
+import { bankCategorySection, bankCategorySections } from "@/lib/bank-category-catalog";
 import type { AccountingCategory, BankAccount, BankRule, BankRuleInput, CategoryInput } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,10 @@ export function BankCategoryFields({ categories, categoryId = "", subCategoryId 
   return <div className="grid min-w-0 gap-1">
     <select className={bankSelectClass} aria-label={`${label}勘定科目`} value={categoryId} disabled={disabled} onChange={(e) => onChange(e.target.value, "")}>
       {allowUnclassified || !categoryId ? <option value="" disabled={!allowUnclassified}>{allowUnclassified ? "未分類" : parents.length ? "科目を選択" : "有効な科目なし"}</option> : null}
-      {parents.map((row) => <option key={row.id} value={row.id} disabled={!row.available || Boolean(row.deletedAt)}>{row.name}{!row.available || row.deletedAt ? "（無効）" : ""}</option>)}
+      {bankCategorySections.map((section) => {
+        const members = parents.filter((row) => bankCategorySection(row.group).id === section.id);
+        return members.length ? <optgroup key={section.id} label={section.label}>{members.map((row) => <option key={row.id} value={row.id} disabled={!row.available || Boolean(row.deletedAt)}>{row.name}{!row.available || row.deletedAt ? "（無効）" : ""}</option>)}</optgroup> : null;
+      })}
     </select>
     {children.length ? <select className={bankSelectClass} aria-label={`${label}補助科目`} value={subCategoryId} disabled={disabled} onChange={(e) => onChange(categoryId, e.target.value)}>
       <option value="">補助科目なし</option>
@@ -68,15 +72,18 @@ export function BankingSettings({ company, accounts, categories, rules, open, on
           <label className="grid min-w-0 gap-1">親科目<select className={bankSelectClass} value={category.parentId || ""} disabled={pending || Boolean(category.id)} onChange={(e) => setCategory({ ...category, parentId: e.target.value || undefined })}><option value="">なし（勘定科目）</option>{parents.filter((row) => row.available).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
           <div className="flex items-end gap-2"><Button className="min-h-11" disabled={pending}><Save className="size-4" />保存</Button><Button type="button" variant="ghost" className="min-h-11" disabled={pending} onClick={() => setCategory(null)}>キャンセル</Button></div>
         </form> : null}
-        <ul className="divide-y">
-          {categories.filter((row) => !row.deletedAt).map((row) => <li key={row.id} className="flex min-w-0 items-center justify-between gap-2 py-2">
+        {bankCategorySections.map((section) => {
+          const members = categories.filter((row) => !row.deletedAt && bankCategorySection(row.group).id === section.id);
+          return members.length ? <section key={section.id}><h3 className={`border-b py-3 text-sm font-semibold ${section.tone}`}>{section.label}<span className="ml-2 font-normal text-muted-foreground">{members.length}</span></h3><ul className="divide-y">
+          {members.map((row) => <li key={row.id} className="flex min-w-0 items-center justify-between gap-2 py-2">
             <div className={`min-w-0 break-words ${row.parentId ? "pl-4" : "font-medium"}`}><span>{row.parentId ? `${parents.find((item) => item.id === row.parentId)?.name || ""} / ` : ""}{row.name}</span><span className="ml-2 text-xs font-normal text-muted-foreground">{row.sourceId ? "MF" : "独自"}{!row.available ? "・無効" : ""}</span></div>
             {!row.sourceId ? <div className="flex shrink-0">
               <Button type="button" variant="ghost" size="icon" className="size-11" title="科目を編集" aria-label={`${row.name}を編集`} disabled={pending} onClick={() => setCategory(row)}><Pencil className="size-4" /></Button>
               <Button type="button" variant="ghost" size="icon" className="size-11" title="科目を削除" aria-label={`${row.name}を削除`} disabled={pending} onClick={() => { if (window.confirm(`「${row.name}」を削除しますか？`)) run(() => deleteBankDefinitionAction(company, "category", row.id, row.updatedAt)); }}><Trash2 className="size-4" /></Button>
             </div> : null}
           </li>)}
-        </ul>
+        </ul></section> : null;
+        })}
         {!categories.length ? <p className="py-6 text-center text-muted-foreground">勘定科目はまだありません</p> : null}
       </TabsContent>
       <TabsContent value="rules" className="space-y-4">
