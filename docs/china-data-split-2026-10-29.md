@@ -91,6 +91,18 @@ China HTTPS login and its 12 active projects were verified after restart.
 Japan HTTPS returned 200 after startup. Its downloaded live file exactly
 matched the migration report's SHA-256, contained zero Chinese scoped records,
 and retained every reported Japan collection hash. Existing Japan credentials
-also matched the preflight snapshot. The Japan-only code deployment follows.
+also matched the preflight snapshot.
+
+Japan-only code commit `05ce1d22e7d1943b4cbc958505dbaaf2670b5706` was deployed
+successfully by GitHub Actions run `40802368569`; production health passed at
+2026-10-29 10:53 JST. The runtime build and restart both used this commit.
+Authenticated production checks confirmed 25 Japanese projects and no China
+navigation link on desktop and mobile. The mobile document had no horizontal
+overflow. Old China page URLs returned HTTP 307 to Japan with record filters
+cleared, and China-scoped API requests returned HTTP 403. China remained
+available with its 12 projects, 2 clients and 3 vendors; deleted invoices stayed
+absent from the active list. Temporary browser viewport overrides were reset.
+
+The one-time DSM migration task remains disabled for scheduled execution.
 Local verification passed 335 TypeScript tests, 6 migration tests, ESLint and
 the Next.js production build.
