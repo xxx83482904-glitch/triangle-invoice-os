@@ -29,7 +29,14 @@ jobs:
           fi
 
           DEPLOY_URL="${DEPLOY_URL%/}"
-          status="$(curl -skS -o deploy-response.json -w "%{http_code}" \
+          preflight_status="$(curl -sS --connect-timeout 10 --max-time 30 -o deploy-preflight.json -w "%{http_code}" \
+            "${DEPLOY_URL}/api/admin/deploy")"
+          if [ "$preflight_status" != "403" ] || ! python3 -c 'import json,sys; sys.exit(0 if json.load(open("deploy-preflight.json")).get("error") == "Invalid deploy token" else 1)'; then
+            echo "Deployment destination could not be verified. No token was sent." >&2
+            exit 1
+          fi
+
+          status="$(curl -sS --connect-timeout 10 --max-time 30 -o deploy-response.json -w "%{http_code}" \
             -X POST \
             -H "x-deploy-token: ${DEPLOY_TOKEN}" \
             "${DEPLOY_URL}/api/admin/deploy")"
@@ -45,7 +52,7 @@ jobs:
           echo "Waiting for self deploy build..."
           SHORT_SHA="${GITHUB_SHA::7}"
           for attempt in $(seq 1 120); do
-            deploy_status="$(curl -skS -o deploy-status.json -w "%{http_code}" \
+            deploy_status="$(curl -sS --connect-timeout 10 --max-time 30 -o deploy-status.json -w "%{http_code}" \
               -H "x-deploy-token: ${DEPLOY_TOKEN}" \
               "${DEPLOY_URL}/api/admin/deploy" || true)"
 
@@ -85,7 +92,7 @@ jobs:
 
           echo "Waiting for production to return..."
           for attempt in $(seq 1 90); do
-            health_status="$(curl -skS -o /dev/null -w "%{http_code}" "${DEPLOY_URL}/login" || true)"
+            health_status="$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w "%{http_code}" "${DEPLOY_URL}/login" || true)"
             if [ "$health_status" = "200" ]; then
               echo "Production is healthy."
               exit 0

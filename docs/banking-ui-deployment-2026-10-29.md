@@ -57,6 +57,14 @@ renewal; do not infer payment status from registry expiration alone:
 
 ## Resume Safely
 
+The user subsequently confirmed renewal. Registry delegation returned to
+`anderson.ns.cloudflare.com` / `anna.ns.cloudflare.com`. A strict-TLS request
+to the authoritative Cloudflare address returned HTTP 200 and the Invoice OS
+login. Recursive DNS caches still briefly returned the old address.
+The deployment workflow now verifies TLS, uses bounded connection/request
+timeouts, and requires the expected unauthenticated deployment-endpoint response
+before sending its token. Deployment completion must still be verified below.
+
 1. Confirm the registrar status and restoration of the intended Cloudflare DNS.
 2. Check strict-TLS HTTPS and verify the intended Invoice OS application responds.
    Never send a deployment secret to the current expiry destination.
