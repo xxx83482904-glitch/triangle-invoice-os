@@ -6,7 +6,8 @@ import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/com
 import Link from "next/link";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Download, ExternalLink, FileText, LoaderCircle, Save, Search, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Download, ExternalLink, FileText, LoaderCircle, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
+import { ReviewStatusTag } from "@/components/app/review-status-tag";
 import { RecordMonthNavigation, RecordSaveBar, recordMonthLabel, recordSelectClass } from "@/components/app/record-list-controls";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { groupIssuedDocuments, issuedListSummary, issuedRowAmounts, type IssuedGrouping } from "@/lib/issued-list";
@@ -79,8 +80,8 @@ function IssuedAmounts({ row }: { row: DocumentRow }) {
   </div>;
 }
 
-function IssuedReviewControl({ row, edit, disabled, onEdit }: { row: DocumentRow; edit?: IssuedEdit; disabled: boolean; onEdit: (edit: IssuedEdit) => void }) {
-  return row.imported ? <label className="flex min-h-11 items-center justify-center gap-2 py-2"><input type="checkbox" className="size-5 accent-primary" aria-label={`${row.title}の原本を確認済みにする`} checked={!(edit?.needsReview ?? row.needsReview)} disabled={disabled || !row.editable} onChange={(event) => onEdit({ ...(edit || editFrom(row)), needsReview: !event.target.checked })} /><span className="text-xs md:hidden">原本確認済み（任意）</span></label> : <span className="block p-2 text-center text-xs text-muted-foreground">作成済み</span>;
+function IssuedReviewStatus({ row, edit }: { row: DocumentRow; edit?: IssuedEdit }) {
+  return row.imported ? <ReviewStatusTag reviewed={!(edit?.needsReview ?? row.needsReview)} /> : <span className="block p-2 text-center text-xs text-muted-foreground">作成済み</span>;
 }
 
 function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view = "all" }: {
@@ -126,7 +127,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       <label className="space-y-1 text-xs">請求金額<Input aria-label="請求金額" type="number" min="0" step="0.01" readOnly={!row.imported || (row.paidAmount || 0) > 0} value={current.total} onChange={(e) => update({ total: Number(e.target.value) })} /></label>
       <label className="grid gap-1 text-xs">状態<DocumentStatusControl row={row} edit={edit} onEdit={onEdit} company={company} disabled={disabled} /></label>
       <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums" title="保存済みの入金記録"><span>入金額 {number.format(issuedRowAmounts(row).paid)}</span><span>未入金額 {number.format(issuedRowAmounts(row).outstanding)}</span></div>
-      {row.imported ? <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-5" checked={!current.needsReview} onChange={(e) => update({ needsReview: !e.target.checked })} />原本と内容を確認済み（任意）</label> : null}
+      {row.imported ? <div className="flex min-h-11 flex-wrap items-center gap-2"><ReviewStatusTag reviewed={!current.needsReview} /><Button type="button" variant="outline" onClick={() => update({ needsReview: !current.needsReview })}>{current.needsReview ? <Check className="size-4" /> : <RotateCcw className="size-4" />}{current.needsReview ? "原本を確認" : "未確認に戻す"}</Button></div> : null}
     </fieldset> : <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2 text-sm">
       <dt className="text-muted-foreground">取引先</dt><dd className="break-words">{row.counterpart || "未設定"}</dd>
       <dt className="text-muted-foreground">案件</dt><dd className="break-words">{row.projectName || "未設定"}</dd>
@@ -270,7 +271,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     const a = document.createElement("a"); a.href = url; a.download = "documents-" + company + ".csv"; a.click(); URL.revokeObjectURL(url);
   }
   return <section aria-label={issuedOnly ? "発行請求書一覧" : "全書類一覧"} className="min-w-0 space-y-3">
-    <div className={issuedOnly ? "grid min-w-0 gap-4 xl:grid-cols-[168px_minmax(0,1fr)]" : "min-w-0"}>
+    <div className="min-w-0 space-y-3">
     {issuedOnly ? <RecordMonthNavigation label="請求月" months={months} value={month === "all" ? "" : month} disabled={saving || deleting} onChange={(value) => { setMonth(value || "all"); setLimit(pageSize); }} /> : null}
     <div className="min-w-0 space-y-3">
     {issuedOnly ? <>
@@ -281,8 +282,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
         <div className="min-w-0"><dt className="text-xs text-muted-foreground">未入金</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.outstanding)}</dd></div>
         <div><dt className="text-xs text-muted-foreground">OCR要確認</dt><dd className="font-semibold text-amber-700 dark:text-amber-400">{summary.review}件</dd></div>
       </dl> : null}
-      <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-5">
-        <select aria-label="請求月" className={`${recordSelectClass} xl:hidden`} value={month} disabled={saving || deleting} onChange={(e) => { setMonth(e.target.value); setLimit(pageSize); }}><option value="all">すべての月</option>{months.map((m) => <option key={m} value={m}>{recordMonthLabel(m)}</option>)}</select>
+      <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
         <select aria-label="取引先で絞り込み" className={recordSelectClass} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">すべてのクライアント</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
         <select aria-label="請求書の状態で絞り込み" className={recordSelectClass} value={invoiceStatus} onChange={(e) => { setInvoiceStatus(e.target.value); setLimit(pageSize); }}><option value="all">すべての状態</option><option value="review">OCR要確認</option>{Object.entries(issuedStatusLabels).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select>
         <select aria-label="入金状態で絞り込み" className={recordSelectClass} value={paymentFilter} onChange={(e) => { setPaymentFilter(e.target.value); setLimit(pageSize); }}><option value="all">すべての入金状態</option><option value="unpaid">入金未完了（一部入金含む）</option><option value="paid">入金完了</option></select>
@@ -327,10 +327,9 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
         const projectId = event.target.value; if (!projectId) return;
         setEdits((old) => { const next = { ...old }; for (const r of editableSelected.filter((row) => !(row.paidAmount || 0))) next[r.id] = { ...(old[r.id] || editFrom(r)), projectId }; return next; });
       }}><option value="">未入金の{editableSelected.filter((r) => !(r.paidAmount || 0)).length}件の案件を変更</option>{documentProjectOptions(projects, "").map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select> : null}
-      {issuedOnly && editableSelected.some((r) => r.imported) ? <select aria-label="選択した発行請求書の原本確認を一括変更" disabled={saving || deleting} className={selectClass} value="" onChange={(event) => {
-        const needsReview = event.target.value !== "yes";
+      {editableSelected.some((r) => r.imported) ? <>{[false, true].map((needsReview) => <Button key={String(needsReview)} type="button" variant="outline" disabled={saving || deleting} title={needsReview ? "選択した原本を未確認に戻す" : "選択した原本を一括確認"} onClick={() => {
         setEdits((old) => { const next = { ...old }; for (const r of editableSelected.filter((row) => row.imported)) next[r.id] = { ...(old[r.id] || editFrom(r)), needsReview }; return next; });
-      }}><option value="">原本確認を一括変更</option><option value="yes">確認済み</option><option value="no">未確認</option></select> : null}
+      }}>{needsReview ? <RotateCcw className="size-4" /> : <Check className="size-4" />}{needsReview ? "未確認に戻す" : "確認"}</Button>)}</> : null}
     </div> : null}
     <div className={active && !issuedOnly ? "grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]" : "min-w-0"}>
       <div className="min-w-0">
@@ -348,7 +347,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                   {(edits[r.id]?.needsReview ?? r.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
                   <span className="flex flex-wrap items-center gap-2 text-xs"><span>{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</span><span className="ml-auto tabular-nums">{r.total === undefined ? "" : number.format(edits[r.id]?.total ?? r.total)}</span></span>
                   {edits[r.id] ? <span className="text-xs text-amber-700 dark:text-amber-300">未保存</span> : null}
-                  {issuedOnly ? <><IssuedAmounts row={r} /><IssuedReviewControl row={r} edit={edits[r.id]} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /></> : null}
+                  {issuedOnly ? <><IssuedAmounts row={r} /><IssuedReviewStatus row={r} edit={edits[r.id]} /></> : null}
                 </div>
                 <DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} />
               </div></DocumentContextMenu>) : null}
@@ -367,7 +366,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                 <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span></td>
                 <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}{issuedOnly ? <span className="mt-1 block text-muted-foreground">{(edits[r.id]?.dueDate ?? r.dueDate) || "期限未設定"}</span> : null}</td><td className="space-y-1 px-2 py-3 text-right tabular-nums">{r.total === undefined ? "—" : number.format(edits[r.id]?.total ?? r.total)}{issuedOnly ? <IssuedAmounts row={r} /> : null}</td>
                 <td className="px-2 py-3"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />{(edits[r.id]?.needsReview ?? r.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}</td>
-                {issuedOnly ? <td><IssuedReviewControl row={r} edit={edits[r.id]} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /></td> : null}
+                {issuedOnly ? <td><IssuedReviewStatus row={r} edit={edits[r.id]} /></td> : null}
                 <td className="py-2"><DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} /></td>
               </tr></DocumentContextMenu>) : null}
             </Fragment>)}</tbody>

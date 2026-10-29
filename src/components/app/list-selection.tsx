@@ -30,7 +30,7 @@ export function SelectAllCheckbox({ selection, label = "表示中をすべて選
 }
 
 export function SelectionToolbar({ selection, children }: { selection: ListSelection; children?: ReactNode }) {
-  return <div className="flex min-w-0 flex-wrap items-center gap-2 border-y py-1 text-sm" aria-label="一覧の選択操作">
+  return <div className={`flex min-w-0 flex-wrap items-center gap-2 border-y py-1 text-sm ${selection.selected.size ? "bg-primary/5" : ""}`} aria-label="一覧の選択操作">
     <div className="flex items-center"><SelectAllCheckbox selection={selection} /><span>表示中を選択</span></div>
     <span role="status" className="text-muted-foreground">{selection.selected.size}件選択{selection.hiddenCount ? `（表示外 ${selection.hiddenCount}件）` : ""}</span>
     {selection.selected.size ? <Button type="button" variant="ghost" className="size-11" size="icon" title="選択解除" aria-label="選択解除" disabled={selection.disabled} onClick={selection.clear}><X className="size-4" /></Button> : null}

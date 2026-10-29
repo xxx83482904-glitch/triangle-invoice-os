@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { logoutAction } from "@/app/actions";
-import { AppNav, CompanySwitch, DesktopAppNav, MobileAppNav, MobileCompanySwitch, ScopedBrandLink, WorkflowNav } from "@/components/app/company-switch";
+import { DesktopAppNav, MobileAppNav, MobileCompanySwitch, ScopedBrandLink, WorkflowNav } from "@/components/app/company-switch";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { UndoButton } from "@/components/app/undo-button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { can, roleLabel } from "@/lib/rbac";
@@ -19,50 +18,19 @@ export async function AppShell({ children, banking = false }: { children: React.
   const canUndo = Boolean(data?.auditLogs.some((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson));
 
   return (
-    <div className={`min-h-screen bg-background ${banking ? "banking-ledger-shell" : ""}`}>
+    <div className={`workspace-shell min-h-screen bg-background ${banking ? "banking-ledger-shell" : ""}`}>
       <a href="#main-content" className="sr-only fixed left-3 top-3 z-50 rounded-md bg-background p-3 text-sm focus:not-sr-only">本文へ移動</a>
-      {banking ? <header className="banking-desktop-header hidden items-center gap-3 border-b px-5 lg:flex">
+      <header className="workspace-desktop-header hidden items-center gap-3 border-b px-5 lg:flex">
         <ScopedBrandLink role={user.role} />
         <MobileCompanySwitch role={user.role} />
         <DesktopAppNav role={user.role} />
         <div className="flex shrink-0 items-center gap-1">
           <ThemeToggle compact />
           {canUndoChanges ? <UndoButton compact disabled={!canUndo} /> : null}
-          <form action={logoutAction}><Button variant="ghost" size="icon" title={`${user.name} / ログアウト`} aria-label="ログアウト"><LogOut className="size-4" /></Button></form>
+          <form action={logoutAction}><Button variant="ghost" size="icon" title={`${user.name} / ${roleLabel(user.role)} / ログアウト`} aria-label="ログアウト"><LogOut className="size-4" /></Button></form>
         </div>
-      </header> : <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] border-r bg-background px-4 py-5 lg:flex lg:flex-col">
-        <ScopedBrandLink role={user.role} />
-        <div className="mt-4 w-full">
-          <CompanySwitch role={user.role} />
-        </div>
-        <div className="mt-4 min-h-0 w-full flex-1 overflow-y-auto">
-          <AppNav role={user.role} />
-        </div>
-        <div className="mt-auto w-full space-y-2">
-          <ThemeToggle />
-          {canUndoChanges ? <UndoButton disabled={!canUndo} /> : null}
-          <div className="flex w-full items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <Avatar className="h-10 w-10 ring-4 ring-primary/10">
-                <AvatarFallback>{user.name.slice(0, 2)}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{user.name}</div>
-                <div className="truncate text-xs text-muted-foreground" title={`${user.name} / ${roleLabel(user.role)}`}>
-                  {roleLabel(user.role)}
-                </div>
-              </div>
-            </div>
-            <form action={logoutAction}>
-              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="ログアウト">
-                <LogOut className="h-5 w-5" />
-                <span className="sr-only">ログアウト</span>
-              </Button>
-            </form>
-          </div>
-        </div>
-      </aside>}
-      <div className={banking ? "" : "lg:pl-[248px]"}>
+      </header>
+      <div>
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
           <ScopedBrandLink compact role={user.role} />
           <div className="flex min-w-0 items-center gap-2">
@@ -77,7 +45,7 @@ export async function AppShell({ children, banking = false }: { children: React.
             </form>
           </div>
         </header>
-        <main id="main-content" tabIndex={-1} className={banking ? "banking-main mx-auto w-full px-3 py-3 pb-24 outline-none lg:px-5 lg:pb-20" : "mx-auto w-full max-w-[1760px] px-3 py-4 pb-24 outline-none sm:px-7 sm:py-6 lg:px-8 lg:pb-6"}>{!banking ? <WorkflowNav role={user.role} /> : null}{children}</main>
+        <main id="main-content" tabIndex={-1} className={`workspace-main mx-auto w-full px-3 py-3 pb-28 outline-none lg:px-5 lg:pb-8 ${banking ? "banking-main" : ""}`}>{!banking ? <WorkflowNav role={user.role} compact /> : null}{children}</main>
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
           <MobileAppNav role={user.role} />
         </div>
@@ -96,7 +64,7 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="mb-5 flex min-w-0 flex-wrap items-start justify-between gap-3 border-b pb-4">
+    <div className="workspace-page-header mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b py-3">
       <div className="min-w-0">
         <h1 className="break-words text-xl font-semibold tracking-normal">{title}</h1>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}

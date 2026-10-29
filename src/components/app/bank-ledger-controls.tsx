@@ -33,8 +33,4 @@ export function BankSelectionReview({ count, amount, reviewedCount, disabled, on
   </section>;
 }
 
-export function BankReviewTag({ reviewed, missing }: { reviewed: boolean; missing: boolean }) {
-  return <span className={`bank-review-tag ${reviewed ? "is-reviewed" : ""}`}>
-    {reviewed ? <Check className="size-3 shrink-0" /> : null}{missing ? "元明細なし" : reviewed ? "確認済み" : "未確認"}
-  </span>;
-}
+export { ReviewStatusTag as BankReviewTag } from "@/components/app/review-status-tag";

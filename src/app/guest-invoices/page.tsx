@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { FileText, LogOut } from "lucide-react";
 import { createGuestIssuedInvoice, logoutAction } from "@/app/actions";
 import { CompanySwitch } from "@/components/app/company-switch";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import { DocumentItemsEditor } from "@/components/app/document-items-editor";
 import { StatusBadge } from "@/components/app/status-badge";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
@@ -45,14 +46,15 @@ export default async function GuestInvoicesPage({
   const today = todayIso();
 
   return (
-    <main className="min-h-screen bg-muted/20">
+    <main className="workspace-shell min-h-screen bg-background">
       <header className="border-b bg-background">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+        <div className="mx-auto flex min-h-15 flex-wrap items-center justify-between gap-3 px-4">
           <div>
             <div className="text-sm font-semibold">TRIANGLE Invoice OS</div>
             <div className="text-xs text-muted-foreground">ゲスト請求書発行</div>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle compact />
             <div className="hidden w-56 sm:block">
               <CompanySwitch />
             </div>
@@ -66,23 +68,23 @@ export default async function GuestInvoicesPage({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 xl:grid-cols-[1fr_430px]">
+      <div className="workspace-main mx-auto grid min-w-0 gap-5 px-4 py-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="space-y-5">
           <div className="sm:hidden">
             <CompanySwitch />
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">請求書だけを発行</h1>
+            <h1 className="text-xl font-semibold tracking-normal">請求書だけを発行</h1>
             <p className="mt-1 text-sm text-muted-foreground">案件を選んで明細を入力すると、発行済み請求書とPDFが作成されます。</p>
           </div>
 
           {params.created ? (
-            <Card className="border-emerald-200 bg-emerald-50">
+            <Card variant="section" className="border-emerald-200 bg-emerald-50">
               <CardContent className="py-3 text-sm text-emerald-800">請求書を作成しました。左の一覧からPDFを確認できます。</CardContent>
             </Card>
           ) : null}
 
-          <Card>
+          <Card variant="section">
             <CardHeader><CardTitle>自分が発行した請求書</CardTitle></CardHeader>
             <CardContent>
               <Table>
@@ -128,7 +130,7 @@ export default async function GuestInvoicesPage({
           </Card>
         </section>
 
-        <Card>
+        <Card variant="section">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />

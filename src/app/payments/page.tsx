@@ -47,7 +47,7 @@ export default async function PaymentsPage({
       <PageHeader title="入金・支払い管理" description="発行請求書への入金、受領請求書への支払いを複数回に分けて記録できます。">{can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}</PageHeader>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card variant="section">
           <CardHeader><CardTitle>未入金一覧</CardTitle></CardHeader>
           <CardContent>
             <Table>
@@ -56,7 +56,7 @@ export default async function PaymentsPage({
             </Table>
           </CardContent>
         </Card>
-        <Card>
+        <Card variant="section">
           <CardHeader><CardTitle>未払い・支払い予定</CardTitle></CardHeader>
           <CardContent>
             <Table>
@@ -69,7 +69,7 @@ export default async function PaymentsPage({
 
       <section className="mt-6 grid gap-6 xl:grid-cols-2">
         {mayIncome ? (
-          <Card>
+          <Card variant="section">
             <CardHeader><CardTitle>入金登録</CardTitle></CardHeader>
             <CardContent>
               <form action={recordIncomePayment} className="space-y-4">
@@ -83,7 +83,7 @@ export default async function PaymentsPage({
           </Card>
         ) : null}
         {mayExpense ? (
-          <Card>
+          <Card variant="section">
             <CardHeader><CardTitle>支払い登録</CardTitle></CardHeader>
             <CardContent>
               <form action={recordExpensePayment} className="space-y-4">

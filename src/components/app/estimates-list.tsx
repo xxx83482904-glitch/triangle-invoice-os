@@ -4,13 +4,14 @@ import Link from "next/link";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ContextMenu } from "radix-ui";
-import { ArrowRightLeft, ChevronDown, ChevronRight, Ellipsis, ExternalLink, FileText, LoaderCircle, Pencil, Plus, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, ChevronRight, Ellipsis, ExternalLink, FileText, LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { deleteEstimatesAction, saveEstimateListEditsAction } from "@/app/estimates/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { RecordMonthNavigation, RecordSaveBar } from "@/components/app/record-list-controls";
 import type { ProjectBasicOption } from "@/components/app/editable-project-select";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { toast } from "@/hooks/use-toast";
@@ -163,7 +164,6 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-0 flex-1 basis-56"><Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="見積書を検索" placeholder="番号・取引先・案件で検索" className="h-11 pl-9 lg:h-11 lg:pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} /></div>
-      <select aria-label="月で絞り込み" className={selectClass} value={month} onChange={(event) => { setMonth(event.target.value); setLimit(50); }}><option value="all">すべての月</option>{months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
       <select aria-label="取引先で絞り込み" className={selectClass} value={client} onChange={(event) => { setClient(event.target.value); setLimit(50); }}><option value="all">すべてのクライアント</option>{counterparts.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
       <select aria-label="見積書の並び順" className={selectClass} value={sort} onChange={(event) => { setSort(event.target.value); setLimit(50); }}><option value="client">クライアントごと</option><option value="date-desc">日付が新しい順</option><option value="date-asc">日付が古い順</option><option value="amount-desc">金額が大きい順</option><option value="project">案件ごと</option></select>
     </div>
@@ -172,6 +172,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
       <span role="status" className="text-xs text-muted-foreground">{filtered.length} / {rows.length}件</span>
       {hasFilters ? <Button className="min-h-11" variant="ghost" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
     </div>
+    <RecordMonthNavigation label="見積月" months={months} value={month === "all" ? "" : month} disabled={busy} onChange={(value) => { setMonth(value || "all"); setLimit(50); }} />
     <SelectionToolbar selection={selection} />
     {selected.length ? <div aria-label="選択した見積書の一括操作" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
       <span className="mr-auto text-sm">{selected.length}件選択{selection.hiddenCount ? `（表示外 ${selection.hiddenCount}件を含む）` : ""}</span>
@@ -180,10 +181,6 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
         setEdits((old) => { const next = { ...old }; for (const e of editableSelected) next[e.id] = { ...(old[e.id] || estimateListEditFrom(e)), status: value }; return next; });
       }}><option value="">見積 {editableSelected.length}件を一括変更</option>{Object.entries(estimateStatusLabels).filter(([key]) => key !== "CONVERTED").map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select> : null}
       {editableSelected.length === selected.length ? <Button variant="outline" className="min-h-11 text-destructive" disabled={busy} onClick={() => askDelete(selected)}><Trash2 className="size-4" />選択した{selected.length}件を削除</Button> : null}
-    </div> : null}
-    {changes ? <div role="status" className="sticky top-14 z-20 flex flex-wrap items-center gap-2 border-y border-amber-500/30 bg-background p-3 lg:top-0">
-      <span className="mr-auto text-sm">{changes}件の未保存変更</span><Button variant="outline" className="min-h-11" disabled={busy} onClick={() => { if (window.confirm("未保存の変更を破棄しますか？")) { setEdits({}); setError(""); } }}><RotateCcw className="size-4" />元に戻す</Button>
-      <Button className="min-h-11" disabled={busy} onClick={saveAll}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存</Button>
     </div> : null}
     {error && !deleteTargets.length ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
     <div className={active ? "grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]" : "min-w-0"}>
@@ -230,6 +227,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
         {active.internalMemo ? <div className="border-t pt-3 text-sm"><h3 className="font-medium">社内メモ</h3><p className="whitespace-pre-wrap break-words text-muted-foreground">{active.internalMemo}</p></div> : null}
       </aside> : null}
     </div>
+    {changes ? <RecordSaveBar label={`未保存 ${changes}件`} disabled={busy} saving={saving} onSave={saveAll} onReset={() => { if (window.confirm("未保存の変更を破棄しますか？")) { setEdits({}); setError(""); } }} /> : null}
     <Dialog open={deleteTargets.length > 0} onOpenChange={(open) => { if (!open && !busy) setDeleteTargets([]); }}><DialogContent showCloseButton={!busy} onInteractOutside={(event) => { if (busy) event.preventDefault(); }} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
       <DialogHeader><DialogTitle>見積書を削除しますか？</DialogTitle><DialogDescription>{deleteTargets.length}件を一覧から削除します。履歴は保持されます。</DialogDescription></DialogHeader>
       <ul className="max-h-40 overflow-auto break-all text-sm">{deleteTargets.map((e) => <li key={e.id}>{e.estimateNumber}</li>)}</ul>

@@ -72,7 +72,7 @@
   --chart-3: oklch(0.58 0.16 265);
   --chart-4: oklch(0.64 0.12 196);
   --chart-5: oklch(0.54 0.08 250);
-  --radius: 0.625rem;
+  --radius: 0.5rem;
   --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.3 0.06 255);
   --sidebar-primary: oklch(0.56 0.19 255);
@@ -164,8 +164,8 @@
   outline-offset: -2px;
 }
 
-/* The wide ledger is opt-in; other application screens retain their shell. */
-.banking-ledger-shell {
+/* Shared ledger palette also reaches dialogs rendered outside the app shell. */
+:root {
   --background: oklch(0.998 0 0);
   --muted: oklch(0.963 0.003 250);
   --muted-foreground: oklch(0.48 0.016 248);
@@ -173,7 +173,7 @@
   --input: oklch(0.88 0.01 248);
   --primary: oklch(0.53 0.21 257);
 }
-.dark .banking-ledger-shell {
+.dark {
   --background: oklch(0.18 0.002 250);
   --foreground: oklch(0.95 0.003 250);
   --card: oklch(0.22 0.003 250);
@@ -183,10 +183,33 @@
   --input: oklch(0.38 0.008 248);
   --primary: oklch(0.68 0.17 255);
   --primary-foreground: oklch(0.14 0.005 250);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.22 0.003 250);
+  --popover-foreground: var(--foreground);
 }
-.banking-desktop-header { min-height: 60px; }
-.banking-desktop-header > a { flex-shrink: 0; }
-.banking-desktop-header > a > div:first-child { width: 32px; height: 32px; border-radius: 6px; box-shadow: none; }
+.workspace-desktop-header { min-height: 60px; }
+.workspace-desktop-header > a { flex-shrink: 0; }
+.workspace-desktop-header > a > div:first-child { width: 32px; height: 32px; border-radius: 6px; box-shadow: none; }
+.workspace-main > nav[aria-label="関連画面"] { margin-bottom: 4px; }
+.workspace-shell [data-slot="tabs-list"][data-orientation="horizontal"] { flex-wrap: wrap; height: auto; }
+.workspace-shell [data-slot="tabs-list"] { max-width: 100%; flex-wrap: wrap; justify-content: flex-start; height: auto; padding: 0; gap: 4px; border-radius: 0; border-bottom: 1px solid var(--border); background: transparent; }
+.workspace-shell [data-slot="tabs-trigger"] { flex: 0 1 auto; min-height: 44px; height: auto; white-space: normal; border-radius: 0; padding: 8px 12px; box-shadow: none; }
+.workspace-shell [data-slot="tabs-trigger"][data-state="active"] { color: var(--primary); background: transparent; border-color: transparent transparent var(--primary); box-shadow: none; }
+.workspace-shell [data-slot="table-header"] { background: var(--background); }
+.workspace-shell [data-slot="table-head"] { font-size: 12px; height: 40px; font-weight: 500; }
+.workspace-shell [data-slot="table-cell"] { font-size: 13px; }
+.workspace-shell [data-selection-id][data-selected="true"] { background: color-mix(in oklch, var(--primary) 9%, var(--background)); box-shadow: inset 2px 0 var(--primary); }
+.record-month-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-block: 8px; border-bottom: 1px solid var(--border); }
+.record-month-navigation button { min-height: 44px; padding: 6px 12px; border-radius: 5px; font-size: 13px; }
+.record-month-navigation button[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+.record-savebar { border-inline: 0; box-shadow: none; }
+[data-slot="card"][data-variant="section"] { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
+[data-slot="card"][data-variant="section"] > [data-slot="card-header"],
+[data-slot="card"][data-variant="section"] > [data-slot="card-content"] { padding-inline: 0; border-radius: 0; }
+@media (min-width: 1024px) {
+  .workspace-main [data-slot="button"], .workspace-main [data-slot="select-trigger"] { min-height: 36px; }
+  .record-month-navigation button { min-height: 36px; }
+}
 .bank-account-filter { width: 270px; max-width: 100%; }
 .bank-ledger-header > div:first-child { flex: 1 1 450px; }
 .bank-workflow-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; border-bottom: 1px solid var(--border); }

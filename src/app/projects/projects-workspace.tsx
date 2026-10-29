@@ -137,7 +137,7 @@ export function ProjectsWorkspace({
         )}
       </section>
 
-      <section className="rounded-lg border bg-card text-card-foreground">
+      <section className="min-w-0 border-y text-foreground">
         <div className="border-b p-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-1 flex-col gap-2 md:flex-row">
@@ -171,7 +171,7 @@ export function ProjectsWorkspace({
               </Button>
             ) : null}
           </div>
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-3 flex flex-wrap gap-2 pb-1">
             {filterOptions(showFinancials).map((option) => (
               <button
                 key={option.value}
@@ -428,7 +428,7 @@ function ProjectDetailPanel({
 
   return (
     <div className="sticky top-0 space-y-4 p-3 lg:max-h-[calc(100vh-96px)] lg:overflow-y-auto">
-      <div className="rounded-lg border bg-background p-4">
+      <div className="border-b pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -473,7 +473,7 @@ function ProjectDetailPanel({
       </div>
 
       {showFinancials ? (
-        <Card>
+        <Card variant="section">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <CircleDollarSign className="h-4 w-4" />
@@ -496,7 +496,7 @@ function ProjectDetailPanel({
         </Card>
       ) : null}
 
-      <Card>
+      <Card variant="section">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
             <FileText className="h-4 w-4" />
@@ -538,7 +538,7 @@ function ProjectDetailPanel({
       </Card>
 
       {canEdit ? (
-        <Card>
+        <Card variant="section">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">案件編集</CardTitle>
           </CardHeader>
@@ -547,7 +547,7 @@ function ProjectDetailPanel({
           </CardContent>
         </Card>
       ) : (
-        <Card>
+        <Card variant="section">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">案件情報</CardTitle>
           </CardHeader>

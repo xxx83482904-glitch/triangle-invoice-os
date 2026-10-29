@@ -46,7 +46,7 @@ export default async function ReportsPage({
       </PageHeader>
 
       <section className="grid min-w-0 gap-6">
-        <Card>
+        <Card variant="section">
           <CardHeader><CardTitle>月別集計（税込）</CardTitle></CardHeader>
           <CardContent>
             <Table>
@@ -55,7 +55,7 @@ export default async function ReportsPage({
             </Table>
           </CardContent>
         </Card>
-        <Card>
+        <Card variant="section">
           <CardHeader><CardTitle>案件別 請求差額・入出金（税込）</CardTitle></CardHeader>
           <CardContent>
             <Table>
@@ -67,7 +67,7 @@ export default async function ReportsPage({
             </Table>
           </CardContent>
         </Card>
-        <Card>
+        <Card variant="section">
           <CardHeader><CardTitle>クライアント別売上</CardTitle></CardHeader>
           <CardContent>
             <Table>
@@ -79,7 +79,7 @@ export default async function ReportsPage({
             </Table>
           </CardContent>
         </Card>
-        <Card>
+        <Card variant="section">
           <CardHeader><CardTitle>支払先別支払い額</CardTitle></CardHeader>
           <CardContent>
             <Table>

@@ -49,12 +49,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             ["請求差額（税込）", money.grossProfit],
             ["入出金差額", money.paidIncomeAmount - money.paidExpenseAmount],
           ].map(([label, value]) => (
-            <Card key={label as string}>
+            <Card variant="section" key={label as string}>
               <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
               <CardContent className="text-xl font-semibold">{yen.format(value as number)}</CardContent>
             </Card>
           ))}
-          <Card>
+          <Card variant="section">
             <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">請求差額率</CardTitle></CardHeader>
             <CardContent className="text-xl font-semibold">{money.invoicedAmount > 0 ? percent(money.grossProfitRate) : "-"}</CardContent>
           </Card>
@@ -63,7 +63,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
-          <Card>
+          <Card variant="section">
             <CardHeader><CardTitle>発行請求書一覧</CardTitle></CardHeader>
             <CardContent>
               <Table>
@@ -72,7 +72,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               </Table>
             </CardContent>
           </Card>
-          {showTotals ? <Card>
+          {showTotals ? <Card variant="section">
             <CardHeader><CardTitle>受領請求書・支払い状況</CardTitle></CardHeader>
             <CardContent>
               <Table>
@@ -83,7 +83,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </Card> : null}
         </div>
         <div className="space-y-6">
-          <Card>
+          <Card variant="section">
             <CardHeader><CardTitle>案件基本情報</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between gap-4"><span className="text-muted-foreground">クライアント</span><span>{client?.companyName}</span></div>
@@ -114,7 +114,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <p className="whitespace-pre-wrap text-muted-foreground">{project.memo || "メモはありません。"}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card variant="section">
             <CardHeader><CardTitle>変更履歴</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               {logs.slice(0, 8).map((log) => <div key={log.id} className="text-sm"><div className="font-medium">{log.action}</div><div className="text-xs text-muted-foreground">{formatDate(log.createdAt)} / {data.users.find((user) => user.id === log.userId)?.name}</div></div>)}

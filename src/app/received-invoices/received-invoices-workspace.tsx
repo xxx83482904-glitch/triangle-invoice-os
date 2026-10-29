@@ -244,7 +244,7 @@ export function ReceivedInvoicesWorkspace({
   };
 
   return (
-    <Card>
+    <Card variant="section">
       <CardHeader className="gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <CardTitle>受領請求書一覧</CardTitle>

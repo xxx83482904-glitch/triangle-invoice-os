@@ -49,7 +49,7 @@ export default async function PartnersPage({
         </TabsList>
 
         <TabsContent value="clients" className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
-          <Card className="min-w-0">
+          <Card variant="section" className="min-w-0">
             <CardHeader><CardTitle>クライアント</CardTitle></CardHeader>
             <CardContent>
               <SelectableRecordsTable key={`clients-${company}`} headers={["順番", "会社名", "担当者", "メール", "登録番号", ...(mayEdit ? ["操作"] : [])]} rows={clients.map((client, index) => ({ id: client.id, label: client.companyName, cells: [
@@ -60,7 +60,7 @@ export default async function PartnersPage({
             </CardContent>
           </Card>
           {mayEdit ? (
-            <Card>
+            <Card variant="section">
               <CardHeader><CardTitle>クライアント追加</CardTitle></CardHeader>
               <CardContent><ClientForm company={company} /></CardContent>
             </Card>
@@ -68,7 +68,7 @@ export default async function PartnersPage({
         </TabsContent>
 
         {!billingOnly ? <TabsContent value="vendors" className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
-          <Card>
+          <Card variant="section">
             <CardHeader><CardTitle>支払先</CardTitle></CardHeader>
             <CardContent>
               <SelectableRecordsTable key={`vendors-${company}`} headers={["順番", "会社名", "担当者", "メール", "銀行"]} rows={vendors.map((vendor, index) => ({ id: vendor.id, label: vendor.companyName, cells: [
@@ -78,7 +78,7 @@ export default async function PartnersPage({
             </CardContent>
           </Card>
           {mayEdit ? (
-            <Card>
+            <Card variant="section">
               <CardHeader><CardTitle>支払先追加</CardTitle></CardHeader>
               <CardContent><VendorForm company={company} /></CardContent>
             </Card>
@@ -128,7 +128,7 @@ function OptionGroupCard({
   options: Array<{ id: string; label: string; value: string }>;
 }) {
   return (
-    <Card>
+    <Card variant="section">
       <CardHeader><CardTitle>{optionGroupLabels[group]}</CardTitle></CardHeader>
       <CardContent className="grid gap-5 xl:grid-cols-[1fr_320px]">
         <Table>
