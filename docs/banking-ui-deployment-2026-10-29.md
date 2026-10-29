@@ -2,10 +2,23 @@
 
 ## Status
 
-Deployment requested on 2026-10-29 after approval of the ledger redesign and
-dark theme. Release preparation passed; production deployment has NOT started.
-Do not claim the UI is live or trigger the workflow until the hostname is
-confirmed to point to the intended application again.
+Deployment completed on 2026-10-29 after domain renewal. Runtime release:
+`1c29c25efc50e7b3f8906e0b7abc6097bfb9790b`, including UI commit `53a435d`.
+GitHub Actions run `40852971657`, job `123376786533`, succeeded.
+
+The log confirmed the exact commit, completed build and restart at 09:54:56 UTC.
+The workflow health check returned before the restart completed; independent
+checks observed HTTP 502 during restart, then HTTP 200 after startup. The new
+CSS asset `/_next/static/css/9c231ee58720d4ae.css` returned HTTP 200 and contained
+the ledger, review tags, category rail and dark-theme selectors.
+
+Independent checks used strict TLS and the authoritative Cloudflare address
+`104.21.84.95` with the original hostname/SNI. Some recursive DNS caches still
+returned the expired destination, so user connectivity can lag deployment.
+No production bank records were edited. Authenticated production interactions
+were not re-tested; functional browser checks used the isolated local fixture.
+Install logs reported three low-severity dependency warnings, not resolved by
+this UI release. China was not deployed.
 
 ## Prepared Scope
 
@@ -29,7 +42,7 @@ confirmed to point to the intended application again.
 - Last successful production workflow found: `40802368569`, commit
   `05ce1d22e7d1943b4cbc958505dbaaf2670b5706`.
 
-## Deployment Blocker
+## Initial Deployment Blocker (Resolved)
 
 Read-only checks at about 2026-10-29 09:43 UTC:
 
