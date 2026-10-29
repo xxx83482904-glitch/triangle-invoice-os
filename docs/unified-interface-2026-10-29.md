@@ -1,7 +1,28 @@
 # Shared workspace interface
 
 Date: 2026-10-29
-Status: implemented and verified locally; Japan deployment requested and pending.
+Status: Japan deployment completed on 2026-10-29. China was not deployed.
+
+## Production release
+
+- Runtime commit: e8942500fcfccd2e550d1803325faa79efe2ec15.
+- GitHub Actions run: 40859471144; deploy job: 123398721455; success.
+- The NAS log confirms HEAD at e894250, completed compilation/type checking,
+  standalone asset copy, and application restart. Workflow completion was
+  2026-10-29 10:45:35 UTC.
+- Independent strict-TLS checks observed HTTP 502 during restart, followed by
+  HTTP 200 at https://invoice.kuremasato.com/login.
+- Deployed CSS /_next/static/css/641931c22a84be52.css returned HTTP 200 and contains
+  workspace-desktop-header, workspace-shell, record-month-navigation,
+  record-savebar, section-variant styling, and bank-review-tag.
+- Registry delegation and authoritative Cloudflare DNS are restored. This PC's
+  recursive DNS still returned the expired destination during verification.
+  Checks therefore used the authoritative address 104.21.84.95 with the original
+  hostname and strict TLS; no certificate checks were disabled.
+- Authenticated production UI was not re-tested because this browser's DNS
+  connection timed out. Functional UI checks used the isolated local fixture.
+- Three existing low-severity dependency warnings remain; this UI deployment
+  does not claim to resolve them. No production financial records were edited.
 
 ## Design baseline
 
