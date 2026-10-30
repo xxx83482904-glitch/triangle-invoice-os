@@ -26,7 +26,7 @@ export function canExportSection(user: Pick<User, "role"> | null, scope: ExportS
 }
 
 export type ExportDocument = DocumentRow & { exportDate: string; dateLabel: string; fileType: "原本" | "生成PDF" | "原本なし"; warning: string; archivePath?: string; sha256?: string; fileError?: string };
-export type ExportBankRow = { id: string; date: string; account: string; side: string; amount: number; content: string; category: string; subCategory: string; treatment: string; reviewed: string; classification: string; sourceMissing: boolean; memo: string; documents: string; transfer: string };
+export type ExportBankRow = { id: string; date: string; accountId: string; account: string; side: string; amount: number; content: string; category: string; subCategory: string; treatment: string; reviewed: string; classification: string; sourceMissing: boolean; memo: string; documents: string; transfer: string };
 export type SectionExport = { query: ExportQuery; documents: ExportDocument[]; bank: ExportBankRow[]; generatedAt: string; excludedUndated: number };
 function exportedFileType(r: DocumentRow): ExportDocument["fileType"] {
   const generated = r.kind === "estimate" || r.kind === "issued" && !r.imported && (!r.fileUrl || r.fileUrl.startsWith("/api/issued-invoices/"));
@@ -78,7 +78,7 @@ export function sectionExport(data: AppData, user: Pick<User, "id" | "role">, in
       if (dated && (t.transactionDate < q.start || t.transactionDate > q.end)) continue;
       const links = data.bankReconciliations.filter((l) => !l.deletedAt && l.company === q.company && l.transactionId === t.id && byId.has(`${l.invoiceKind}:${l.invoiceId}`));
       const transfer = data.bankTransfers?.find((l) => !l.deletedAt && l.company === q.company && (l.incomingId === t.id || l.outgoingId === t.id));
-      bank.push({ id: t.id, date: dated ? t.transactionDate : "", account: account.name, side: t.side === "INCOME" ? "入金" : "出金", amount: t.amount,
+      bank.push({ id: t.id, date: dated ? t.transactionDate : "", accountId: account.id, account: account.name, side: t.side === "INCOME" ? "入金" : "出金", amount: t.amount,
         content: t.content, category: categories.get(t.categoryId || "") || "未保存・未分類", subCategory: categories.get(t.subCategoryId || "") || "",
         treatment: { NORMAL: "通常", TRANSFER: "資金移動", EXCLUDED: "集計対象外" }[t.treatment], reviewed: t.reviewed ? "確認済み" : "未確認",
         classification: t.classificationSource, sourceMissing: t.sourceMissing, memo: t.memo,
@@ -107,16 +107,33 @@ export function exportCsv(rows: unknown[][]) {
 
 export function documentExportCsv(bundle: SectionExport, archived = false) {
   return exportCsv([
-    ["書類ID", "種類", "分類", "番号・件名", "取引先", "案件", "請求回", "対象日", "日付基準", "書類日", "フォルダー月", "期限", "金額", "現在の状態", "原本区分", "原本ファイル名", "原本参照", "ファイル確認", "SHA256", "注意事項"],
+    ["書類ID", "種類", "分類", "番号・件名", "取引先", "案件", "請求回", "対象日", "日付基準", "書類日", "フォルダー月", "期限", "金額", "現在の状態", "原本区分", "原本ファイル名", "書き出しファイル名", "原本参照", "ファイル確認", "SHA256", "注意事項"],
     ...bundle.documents.map((r) => [r.id, documentKindLabels[r.kind], documentCategoryLabels[r.category] || r.category, r.title, r.counterpart, r.projectName, r.billingLabel,
       r.exportDate, r.dateLabel, r.date, r.month, r.dueDate, r.total, r.statusLabel, r.fileType, r.fileName,
-      archived ? r.archivePath : r.fileUrl, r.fileError || (archived ? "同梱済み" : "書き出し時点では未検証"), r.sha256, r.warning]),
+      archived ? r.archivePath?.split("/").at(-1) : "", archived ? r.archivePath : r.fileUrl, r.fileError || (archived ? "同梱済み" : "書き出し時点では未検証"), r.sha256, r.warning]),
   ]);
 }
 
+export function bankExportGroups(bundle: SectionExport) {
+  const byAccount = new Map<string, ExportBankRow[]>();
+  for (const row of bundle.bank) {
+    const rows = byAccount.get(row.accountId);
+    if (rows) rows.push(row); else byAccount.set(row.accountId, [row]);
+  }
+  return [...byAccount.entries()]
+    .sort(([idA, a], [idB, b]) => a[0].account.localeCompare(b[0].account, "ja") || idA.localeCompare(idB))
+    .map(([accountId, rows], index) => ({
+      accountId, account: rows[0].account,
+      archivePath: `bank-accounts/${String(index + 1).padStart(6, "0")}_${safeExportName(rows[0].account.trim() || "口座名未設定")}.csv`,
+      rows: [...rows].sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || a.id.localeCompare(b.id)),
+    }));
+}
+
 export function bankExportCsv(bundle: SectionExport) {
-  return exportCsv([["明細ID", "取引日", "口座・カード", "入出金", "金額", "摘要", "勘定科目（保存済み）", "補助科目", "扱い", "確認状態", "分類根拠", "連携元欠落", "メモ", "照合済み書類IDと金額", "資金移動ID"],
-    ...bundle.bank.map((r) => [r.id, r.date, r.account, r.side, r.amount, r.content, r.category, r.subCategory, r.treatment, r.reviewed, r.classification, r.sourceMissing ? "要確認" : "", r.memo, r.documents, r.transfer])]);
+  const rows = bankExportGroups(bundle).flatMap((g) => g.rows);
+  return exportCsv([["取引日", "口座・カード", "入金額（円）", "出金額（円）", "入金先口座", "摘要（振込人・取引先等）", "勘定科目（保存済み）", "補助科目", "扱い", "確認状態", "メモ", "照合済み書類IDと金額", "資金移動ID", "連携元欠落", "分類根拠", "口座ID", "明細ID"],
+    ...rows.map((r) => [r.date, r.account, r.side === "入金" ? r.amount : "", r.side === "出金" ? r.amount : "", r.side === "入金" ? r.account : "",
+      r.content, r.category, r.subCategory, r.treatment, r.reviewed, r.memo, r.documents, r.transfer, r.sourceMissing ? "要確認" : "", r.classification, r.accountId, r.id])]);
 }
 
 export function safeExportName(value: string) {

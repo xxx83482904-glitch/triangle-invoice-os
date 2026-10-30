@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { createHash } from "node:crypto";
 import { readUploadedFile } from "@/lib/files";
 import { createEstimatePdf, createIssuedInvoicePdf } from "@/lib/issued-invoice-pdf";
-import { bankExportCsv, documentExportCsv, exportScopes, safeExportName, type ExportDocument, type SectionExport } from "@/lib/section-export";
+import { bankExportCsv, bankExportGroups, documentExportCsv, exportScopes, safeExportName, type ExportDocument, type SectionExport } from "@/lib/section-export";
 import type { AppData } from "@/lib/types";
 
 export function exportUploadName(url: string) {
@@ -36,6 +36,11 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 export function exportIndexHtml(bundle: SectionExport) {
   const title = `${exportScopes[bundle.query.scope]} ${bundle.query.start} - ${bundle.query.end}`;
   return `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>${escapeHtml(title)}</title><style>body{font:14px system-ui,sans-serif;margin:24px;color:#202124}h1{font-size:22px}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid #ccc;padding:10px;overflow-wrap:anywhere}th{background:#f3f4f5}a{color:#0068b7}.scroll{overflow:auto}td{min-width:80px}</style><h1>${escapeHtml(title)}</h1><p>作成日時 ${escapeHtml(bundle.generatedAt)} / 書類 ${bundle.documents.length}件 / 口座明細 ${bundle.bank.length}件</p><p>状態・分類は書き出し時点の保存済みデータです。原本なし・読込失敗・期間未判定は要確認。見積・下書き・取消・添付書類は確定売上を表しません。取引明細と請求書を合算しないでください。</p><div class="scroll"><table><thead><tr><th>ID</th><th>対象日</th><th>番号・件名</th><th>取引先 / 案件</th><th>金額</th><th>状態</th><th>原本</th><th>注意事項</th></tr></thead><tbody>${bundle.documents.map((r) => `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(r.exportDate || "期間未判定")}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.counterpart)}<br>${escapeHtml(r.projectName)}</td><td>${escapeHtml(r.total)}</td><td>${escapeHtml(r.statusLabel)}</td><td>${r.archivePath ? `<a href="${r.archivePath.split("/").map(encodeURIComponent).join("/")}">${escapeHtml(r.fileType)}</a>` : escapeHtml(r.fileError || "原本なし")}</td><td>${escapeHtml(r.warning)}</td></tr>`).join("")}</tbody></table></div></html>`;
+}
+
+function bankIndexHtml(bundle: SectionExport) {
+  const groups = bankExportGroups(bundle);
+  return `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>口座別明細一覧</title><style>body{font:14px system-ui,sans-serif;margin:24px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:12px;border-bottom:1px solid #ccc;text-align:left;overflow-wrap:anywhere}th{background:#f3f4f5}.scroll{overflow:auto}a{color:#0068b7}</style><h1>口座別明細一覧</h1><p>${escapeHtml(bundle.query.start)} - ${escapeHtml(bundle.query.end)} / ${groups.length}口座 / ${bundle.bank.length}件</p><p>保存済み明細のみ。入金先は受取口座、振込人・取引先の情報は元の摘要に記載しています。カードは入金額が返金等、出金額が利用等です。資金移動・カード引落と利用明細を重複集計しないでください。</p><p><a href="bank-transactions.csv">全口座のCSV</a> / <a href="index.html">原本付き書類一覧</a></p><div class="scroll"><table><thead><tr><th>口座・カード</th><th>入金・返金件数</th><th>出金・利用件数</th><th>明細</th></tr></thead><tbody>${groups.map((g) => `<tr><td>${escapeHtml(g.account)}</td><td>${g.rows.filter((r) => r.side === "入金").length}</td><td>${g.rows.filter((r) => r.side === "出金").length}</td><td><a href="${g.archivePath.split("/").map(encodeURIComponent).join("/")}">口座別CSV</a></td></tr>`).join("")}</tbody></table></div></html>`;
 }
 
 // Append one original at a time and respect output backpressure. No archive or
@@ -70,15 +75,26 @@ export function sectionArchive(bundle: SectionExport, data: AppData, signal?: Ab
         bytes += file.data.length;
         if (bytes > 2 * 1024 ** 3) throw new Error("原本が2GBを超えました。期間を分けて書き出してください");
         const extension = { "application/pdf": ".pdf", "image/png": ".png", "image/jpeg": ".jpg" }[file.mimeType] || ".bin";
-        row.archivePath = `files/${row.exportDate.slice(0, 7) || "undated"}/${row.kind}/${String(index + 1).padStart(6, "0")}_${safeExportName(row.title)}${extension}`;
+        const company = safeExportName(row.counterpart.trim() || "会社名未設定");
+        const amount = typeof row.total === "number" && Number.isFinite(row.total)
+          ? `${row.total.toLocaleString("ja-JP", { maximumFractionDigits: 20 })}円` : "金額未設定";
+        const date = safeExportName(row.exportDate || "日付未設定");
+        row.archivePath = `files/${safeExportName(row.exportDate.slice(0, 7) || "undated")}/${row.kind}/${company}_${amount}_${date}_${String(index + 1).padStart(6, "0")}${extension}`;
         row.sha256 = createHash("sha256").update(file.data).digest("hex");
         await append(file.data, row.archivePath);
         if (key) files.set(key, { archivePath: row.archivePath, sha256: row.sha256 });
       }
       await append(documentExportCsv(bundle, true), "documents.csv");
-      if (bundle.query.scope === "all" || bundle.query.scope === "banking") await append(bankExportCsv(bundle), "bank-transactions.csv");
+      const bankGroups = bankExportGroups(bundle);
+      if (bundle.query.scope === "all" || bundle.query.scope === "banking") {
+        await append(bankExportCsv(bundle), "bank-transactions.csv");
+        for (const group of bankGroups) await append(bankExportCsv({ ...bundle, bank: group.rows }), group.archivePath);
+        await append(bankIndexHtml(bundle), "bank-accounts.html");
+        await append("口座別の一覧は bank-accounts.html を開いてください。\nbank-accounts/ に各口座のCSV、bank-transactions.csv に全口座の同じ明細を収録しています。両方を重複集計しないでください。\n各CSVは取引日順（古い順、日付未設定は最後）。入金額・出金額を別列にし、該当しない列は空欄です。入金先口座は受け取った口座を示します。振込人・取引先は元の摘要を参照してください。\nカードの入金・出金は返金・利用等に相当します。資金移動・カード決済の二重計上に注意してください。\n", "bank-accounts-README.txt");
+      }
       await append(exportIndexHtml(bundle), "index.html");
       await append(JSON.stringify({ query: bundle.query, generatedAt: bundle.generatedAt, excludedUndated: bundle.excludedUndated,
+        bankAccounts: bankGroups.map(({ accountId, account, archivePath, rows }) => ({ accountId, account, archivePath, count: rows.length })),
         files: bundle.documents.map(({ id, archivePath, sha256, fileType, fileError, warning }) => ({ id, archivePath, sha256, fileType, fileError, warning })) }, null, 2), "manifest.json");
       await append(`書き出し対象: ${exportScopes[bundle.query.scope]}\n期間: ${bundle.query.start} - ${bundle.query.end}\n日付基準: ${bundle.query.basis}\n日付未設定: ${bundle.query.undated === "1" ? "期間未判定として含む" : "除外"}\n除外した日付未設定: ${bundle.excludedUndated}件\n原本なし・読込失敗: ${bundle.documents.filter((r) => r.fileError).length}件\n\nZIPを展開してindex.htmlを開くと一覧から同梱ファイルを参照できます。\nアップロード原本は無加工。生成PDFは書き出し時点の保存内容です。SHA256はmanifest.jsonとdocuments.csvに記録しています。\n状態・入出金照合・勘定科目は保存済みの現在値です。決算日時点の残高や税務上の確定仕訳を示すものではありません。\n日付未設定・OCR要確認・下書き・取消を確認してください。郵便物と連携受領請求書は一行に統合し、同じ原本参照は一つのファイルを共有します。\n口座CSVは資金移動・カード利用・連携元欠落も区分付きで収録しています。請求書金額と銀行・カード明細金額を合算しないでください。\n銀行明細は取得済みの保存データのみです。未同期期間の明細は含まれません。\n`, "README.txt");
       await archive.finalize();
