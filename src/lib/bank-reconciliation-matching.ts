@@ -32,10 +32,11 @@ export function reconciliationCandidates(bank: ReconciliationBank, invoices: Rec
     const nameMatch = row.party !== "取引先未設定" && party.length >= 3 && description.includes(party);
     const holderMatch = holder.length >= 3 && description.includes(holder);
     const historyMatch = row.confirmedNames.some((name) => name.accountId === bank.accountId && name.content === description);
+    const aliasMatch = row.bankAliases.some((name) => name.accountId === bank.accountId && name.content === description);
     const number = row.title.normalize("NFKC").toLocaleLowerCase("ja").trim();
     const escaped = number.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const numberMatch = row.kind === "issued" && number.length >= 4 && new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`, "i").test(bank.content.normalize("NFKC").toLocaleLowerCase("ja"));
-    const identity = nameMatch || holderMatch || historyMatch || numberMatch;
+    const identity = nameMatch || holderMatch || historyMatch || aliasMatch || numberMatch;
     const matchingPayments = available.filter((payment) => cents(payment.available) === cents(bank.remaining));
     const dates = [...matchingPayments.map((payment) => payment.date), row.dueDate || row.date];
     const distances = dates.map((date) => dayDistance(date, bank.date)).filter((value): value is number => value !== undefined);
@@ -44,10 +45,11 @@ export function reconciliationCandidates(bank: ReconciliationBank, invoices: Rec
     if (exact) reasons.push(matchingPayments.length ? "登録済みの支払い額と一致" : "未入金・未払い額と一致");
     if (numberMatch) { reasons.push("請求書番号が摘要に一致"); score += 65; }
     // Alternative evidence of the same counterparty is counted once, not three times.
-    if (nameMatch || holderMatch || historyMatch) score += 40;
+    if (nameMatch || holderMatch || historyMatch || aliasMatch) score += 40;
     if (nameMatch) reasons.push("取引先名が摘要に一致");
     if (holderMatch) reasons.push("振込口座名義が摘要に一致");
     if (historyMatch) reasons.push("同じ口座・摘要の確定済み照合と一致");
+    if (aliasMatch) reasons.push("確認済みの名義対応と一致（照合は未確定）");
     if (distance !== undefined && distance <= 14) { reasons.push("期日・記録日と14日以内"); score += 15; }
     else if (distance !== undefined && distance <= 45) score += 5;
     else if (distance !== undefined && distance > 90) { warnings.push("期日・記録日から90日超"); score -= 25; }

@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { outstandingAmount } from "@/lib/accounting-summary";
 
@@ -248,6 +249,7 @@ type UndoPatch = {
     id: string;
     index: number;
     before: UndoEntity | null;
+    afterHash?: string;
   }>;
 };
 
@@ -300,6 +302,7 @@ function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
         id,
         index: beforeItem?.index ?? 0,
         before: beforeItem?.row ?? null,
+        afterHash: createHash("sha256").update(JSON.stringify(afterItem ?? null)).digest("hex"),
       });
     }
   }
@@ -329,7 +332,7 @@ export function restoreUndoState(data: AppData, snapshot: unknown) {
           const current = rows[currentIndex];
           const sourceChanged = ["bankAccountId", "transactionDate", "amount", "side", "content", "sourceMemo", "sourceStatus", "sourceMissing"].some((key) => current[key] !== change.before![key]);
           const restored = { ...current };
-          for (const key of ["categoryId", "subCategoryId", "treatment", "classificationSource", "classificationReason", "classificationConfidence", "ruleId", "reviewed", "memo"]) restored[key] = change.before[key];
+          for (const key of ["categoryId", "subCategoryId", "treatment", "classificationSource", "classificationReason", "classificationConfidence", "ruleId", "reviewed", "memo", "bookkeeping"]) restored[key] = change.before[key];
           if (sourceChanged || current.sourceMissing) restored.reviewed = false;
           restored.updatedAt = new Date(Math.max(Date.now(), Date.parse(String(current.updatedAt)) + 1)).toISOString();
           rows[currentIndex] = restored;
@@ -345,7 +348,7 @@ export function restoreUndoState(data: AppData, snapshot: unknown) {
       }
     }
     const removedCategories = new Set(snapshot.changes.filter((change) => change.collection === "accountingCategories" && (change.before === null || change.before.deletedAt)).map((change) => change.id));
-    if (data.bankTransactions.some((row) => removedCategories.has(row.categoryId || "") || removedCategories.has(row.subCategoryId || "")) || data.bankRules.some((row) => !row.deletedAt && (removedCategories.has(row.categoryId || "") || removedCategories.has(row.subCategoryId || "")))) {
+    if (data.bankTransactions.some((row) => removedCategories.has(row.categoryId || "") || removedCategories.has(row.subCategoryId || "") || row.bookkeeping?.splits?.some((part) => removedCategories.has(part.categoryId) || removedCategories.has(part.subCategoryId || ""))) || data.bankRules.some((row) => !row.deletedAt && (removedCategories.has(row.categoryId || "") || removedCategories.has(row.subCategoryId || "")))) {
       throw new Error("同期後の明細・ルールで使用中の勘定科目は元に戻せません");
     }
     return;
@@ -367,7 +370,8 @@ function normalizeAuditHistory(data: AppData) {
   let retainedPatches = 0;
   for (const log of data.auditLogs) {
     if (!log.beforeStateJson) continue;
-    if (log.action === "UNDO_ACTION" || log.undoneAt || retainedPatches >= MAX_UNDO_PATCHES) {
+    const retainBankAudit = /^BANK_(CLASSIFY|BOOKKEEPING)/.test(log.action) && isUndoPatch(log.beforeStateJson);
+    if (log.action === "UNDO_ACTION" || (log.undoneAt && !retainBankAudit) || retainedPatches >= MAX_UNDO_PATCHES) {
       delete log.beforeStateJson;
       changed = true;
       continue;

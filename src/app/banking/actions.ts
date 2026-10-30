@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
 import { assertBankAccess, bankDisplayRows, bankFilters, deleteBankDefinition, previewBankRules, saveAccountingCategory, saveBankEdits, saveBankRule, selectBankTransactions } from "@/lib/banking";
 import { setBankAutoSync } from "@/lib/banking-sync";
@@ -78,16 +78,33 @@ export async function previewBankRulesAction(company: CompanyScope, ids?: string
     return { ...previewBankRules(data, live, company, ids, true), success: true as const };
   } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
-export async function loadBankTransactionsAction(company: CompanyScope, params: Record<string, string | undefined>, revision: string) {
+export async function loadBankTransactionsAction(company: CompanyScope, params: Record<string, string | undefined>, revision: string, allMatching = false, refresh = false) {
   const user = await requireUser();
   try {
     const data = await readData();
     const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
     if (!live) throw new Error("利用者の権限を確認してください");
     assertBankAccess(live, company);
-    if (revision !== bankingDataRevision(data, company)) throw new Error("明細が更新されました。編集内容を保存してから一覧を更新してください");
-    const result = selectBankTransactions(data, company, bankFilters(params));
-    return { rows: bankDisplayRows(data, result.rows), total: result.total, page: result.page, success: true as const };
+    const currentRevision = bankingDataRevision(data, company);
+    if (!refresh && revision !== currentRevision) return { success: false as const, code: "STALE" as const, error: "明細が更新されました。選択・編集は保持されています。一覧を更新して再確認してください" };
+    const result = selectBankTransactions(data, company, bankFilters(params), { all: allMatching });
+    if (allMatching && result.total > 5000) throw new Error("対象が5,000件を超えています。月・口座・検索条件で絞り込んでください");
+    return { rows: bankDisplayRows(data, result.rows), total: result.total, page: result.page, revision: currentRevision, success: true as const };
+  } catch (error) { return { success: false as const, code: "LOAD" as const, error: errorMessage(error) }; }
+}
+
+// Persisted values only: preview and post-save verification must not use display predictions.
+export async function loadBankDraftRowsAction(company: CompanyScope, ids: string[]) {
+  const user = await requireUser();
+  try {
+    const selected = new Set(z.array(z.string().min(1).max(1000)).min(1).max(500).parse(ids));
+    const data = await readData();
+    const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
+    if (!live) throw new Error("利用者の権限を確認してください");
+    assertBankAccess(live, company);
+    const rows = data.bankTransactions.filter((row) => row.company === company && selected.has(row.id));
+    if (rows.length !== selected.size) throw new Error("対象の明細が見つかりません。選択範囲を確認してください");
+    return { success: true as const, rows, displayRows: bankDisplayRows(data, rows) };
   } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
 export async function setBankAutoSyncAction(company: CompanyScope, enabled: boolean) {

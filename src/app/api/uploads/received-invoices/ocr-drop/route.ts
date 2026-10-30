@@ -98,6 +98,7 @@ export async function POST(request: Request) {
       subtotal: inferred.subtotal,
       taxTotal: inferred.taxTotal,
       total: inferred.total,
+      ...{ grossAmount: inferred.grossAmount, withholdingAmount: inferred.withholdingAmount },
       status: "REVIEWING",
       fileUrl: receivedInvoiceFileUrl(safeName),
       originalFileName: file.name,

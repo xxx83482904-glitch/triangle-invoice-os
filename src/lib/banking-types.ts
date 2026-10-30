@@ -1,4 +1,5 @@
 import type { CompanyScope } from "@/lib/company";
+import type { BankBookkeeping } from "@/lib/bank-bookkeeping";
 
 export type BankTreatment = "NORMAL" | "TRANSFER" | "EXCLUDED";
 export type BankClassificationSource = "UNASSIGNED" | "RULE" | "HISTORY" | "AUTO" | "MANUAL";
@@ -62,6 +63,7 @@ export type BankTransaction = BankEntity & {
   ruleId?: string;
   reviewed: boolean;
   memo: string;
+  bookkeeping?: BankBookkeeping;
 };
 
 export type BankRule = BankEntity & {
@@ -118,6 +120,8 @@ export type BankFilters = {
   side: string;
   status: string;
   query: string;
+  queryMode?: "contains" | "exact";
+  excludeQuery?: string;
   sort: string;
   page: number;
   transaction?: string;

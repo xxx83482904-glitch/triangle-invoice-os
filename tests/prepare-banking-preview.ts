@@ -12,6 +12,9 @@ import { recordBankCoverage, shiftForecastMonth } from "../src/lib/bank-forecast
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "triangle-banking-preview-"));
   const data = fixture(), office = "0000-0001";
+  data.appEdition = "JAPAN";
+  data.projects = data.projects.filter((row) => row.company === "JAPAN");
+  data.issuedInvoices = data.issuedInvoices.filter((row) => data.projects.some((project) => project.id === row.projectId));
   data.users = (["ADMIN", "ACCOUNTING", "BILLING_EDITOR", "MAIL_EDITOR"] as UserRole[]).map((role) => ({ id: role === "ADMIN" ? "admin" : role.toLowerCase(), name: `Local test ${role}`, email: `${role.toLowerCase()}@example.invalid`, role, passwordHash: hashSync("local-banking-test-only", 10), createdAt: timestamp, updatedAt: timestamp }));
   mergeBankMasters(data, "JAPAN", office, [
     { id: "bank", name: "テスト銀行", serviceName: "テスト銀行", isManual: false },

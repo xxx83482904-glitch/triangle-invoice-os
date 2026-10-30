@@ -16,6 +16,8 @@ const invoiced = (data: AppData, id: string) => data.bankReconciliations.some((l
 function rowIssue(data: AppData, company: CompanyScope, row: BankTransaction, today: string) {
   const account = data.bankAccounts.find((item) => item.id === row.bankAccountId && item.company === company && item.officeCode === row.officeCode);
   if (!account || row.company !== company) return "同じ会社・事業者の口座を選択してください";
+  if (row.bookkeeping?.hold) return "保留中の明細です。記帳詳細で保留を解消してから資金移動を照合してください";
+  if (row.bookkeeping?.splits?.length) return "科目分割済みの明細です。記帳詳細で分割を解除してから資金移動を照合してください";
   if (knownBankCardSettlement(data, row)) return bankCardSettlementConflict(data, row) || APLUS_SETTLEMENT_LINK_ISSUE;
   const kind = account.overviewSettings?.kind || account.forecastSettings?.accountKind;
   if (kind === "CARD" || kind === "OTHER" || (!kind || kind === "UNKNOWN") && /カード|card|upsider/i.test(account.serviceName)) return "銀行口座間の資金移動のみ対象です。カード利用とは照合できません";

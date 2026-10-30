@@ -4,6 +4,7 @@ import { isBankDate } from "@/lib/banking";
 import type { BankTransaction } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
 import type { AppData } from "@/lib/types";
+import { bankCategoryAllocations } from "@/lib/bank-bookkeeping";
 
 const normalize = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("ja");
 const sum = (rows: BankTransaction[]) => rows.reduce((total, row) => total + row.amount, 0);
@@ -47,10 +48,10 @@ export function bankSpendingInsights(data: AppData, company: CompanyScope, accou
   const percent = delta !== null && previous.amount > 0 ? delta / previous.amount * 100 : null;
   const categories = new Map<string, { id: string; name: string; amount: number; previous: number; count: number; unreviewed: number }>();
   const categoryNames = new Map(data.accountingCategories.filter((row) => row.company === company).map((row) => [row.id, row.name]));
-  for (const [rows, prior] of [[selected, false], [periodRows(previous.month), true]] as const) for (const row of rows) {
-    const key = row.categoryId || "", value = categories.get(key) || { id: key, name: key ? categoryNames.get(key) || "削除済み科目" : "未分類", amount: 0, previous: 0, count: 0, unreviewed: 0 };
-    if (prior) value.previous += row.amount;
-    else { value.amount += row.amount; value.count++; if (!row.reviewed) value.unreviewed++; }
+  for (const [rows, prior] of [[selected, false], [periodRows(previous.month), true]] as const) for (const row of rows) for (const part of bankCategoryAllocations(row)) {
+    const key = part.categoryId || "", value = categories.get(key) || { id: key, name: key ? categoryNames.get(key) || "削除済み科目" : "未分類", amount: 0, previous: 0, count: 0, unreviewed: 0 };
+    if (prior) value.previous += part.amount;
+    else { value.amount += part.amount; value.count++; if (!row.reviewed) value.unreviewed++; }
     categories.set(key, value);
   }
   const groups = new Map<string, BankTransaction[]>();
@@ -101,7 +102,7 @@ export function bankSpendingInsights(data: AppData, company: CompanyScope, accou
     comparisonConfirmed: current.covered && previous.covered,
     categories: [...categories.values()].map((row) => ({ ...row, delta: comparable ? row.amount - row.previous : null, share: current.amount ? row.amount / current.amount * 100 : 0 })).sort((a, b) => (b.delta ?? b.amount) - (a.delta ?? a.amount) || b.amount - a.amount || a.name.localeCompare(b.name)),
     alerts: alerts.slice(0, 50), alertCount: alerts.length,
-    unclassified: { count: selected.filter((row) => !row.categoryId).length, amount: sum(selected.filter((row) => !row.categoryId)) },
+    unclassified: { count: selected.filter((row) => bankCategoryAllocations(row).some((part) => !part.categoryId)).length, amount: selected.flatMap(bankCategoryAllocations).filter((part) => !part.categoryId).reduce((total, part) => total + part.amount, 0) },
     unreviewed: selected.filter((row) => !row.reviewed).length,
     excluded: { transfer: sum(selectedOther.filter((row) => row.treatment === "TRANSFER")), excluded: sum(selectedOther.filter((row) => row.treatment === "EXCLUDED")), missing: scoped.filter((row) => row.sourceMissing && row.transactionDate >= start && row.side === "EXPENSE").length },
     lastSyncAt: state?.lastSuccessAt,

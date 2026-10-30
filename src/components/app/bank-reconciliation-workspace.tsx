@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { bankSelectClass } from "@/components/app/banking-settings";
 import { BankReconciliationDesk } from "@/components/app/bank-reconciliation-desk";
+import { BankReconciliationInstallments } from "@/components/app/bank-reconciliation-installments";
 import { BankAiSettings } from "@/components/app/bank-ai-settings";
 import { BankReviewPanel } from "@/components/app/bank-review-panel";
 import type { BankAiPreview } from "@/lib/bank-ai-types";
@@ -19,7 +20,7 @@ import type { ReconciliationBank, ReconciliationInvoice, ReconciliationOverview 
 import type { CompanyScope } from "@/lib/company";
 
 const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
-const stateLabels: Record<string, string> = { unmatched: "未照合・一部照合", matched: "照合済み", conflict: "要再確認", excluded: "対象外" };
+const stateLabels: Record<string, string> = { unmatched: "未照合・一部照合", matched: "照合済み", conflict: "要再確認", not_required: "請求書不要（経費集計に残る）", excluded: "振替・対象外" };
 const touch = "min-h-11";
 type Props = {
   company: CompanyScope; filters: { account: string; month: string; status: string; query: string; invoice: string };
@@ -105,6 +106,8 @@ export function BankReconciliationWorkspace({ company, filters, rows, selected, 
           </div>
         </div>
         <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">{[["請求額", row.total], ["入金・支払い登録済み", row.paid], ["銀行照合済み", row.matched], ["未入金・未払い", row.outstanding]].map(([label, amount]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="break-all font-medium tabular-nums">{money(Number(amount))}</dd></div>)}</dl>
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs"><span>書類処理: {row.kind === "received" ? row.processed ? "処理済み" : "未処理" : row.status}</span><span>実際の入金・支払い: {row.paid >= row.total && row.total > 0 ? "全額登録済み" : row.paid > 0 ? "一部登録済み" : "未登録"}</span><span>銀行照合: {row.conflict ? "要再確認" : row.matched >= row.total && row.total > 0 ? "全額照合済み" : row.matched > 0 ? "一部照合" : "未照合"}</span></p>
+        {row.kind === "issued" && row.eligible ? <BankReconciliationInstallments key={`${row.key}:${row.updatedAt}`} company={company} invoice={row} /> : null}
         <p className="text-xs text-amber-800 dark:text-amber-300">{[row.conflict ? "照合後にデータ変更あり" : "", row.stateMismatch ? "支払記録と請求書・郵便物の状態が不一致" : "", row.overpaid ? `請求額より多い支払い ${money(row.overpaid)}` : "", row.overdue ? "期限超過" : "", !row.eligible ? "下書き・保留・金額などを確認後に照合" : "", row.recordedUnmatched > 0 ? `登録済みのうち銀行未照合 ${money(row.recordedUnmatched)}` : ""].filter(Boolean).join(" / ")}</p>
       </li>)}</ul>{!invoiceRows.length ? <p className="py-4 text-sm text-muted-foreground">該当する請求書はありません。</p> : null}
     </section>}

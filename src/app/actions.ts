@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
 import { signIn, signOut, requireUser } from "@/lib/auth";
-import { companyClientId, companyFromParam, mailSorterCompany, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
+import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, assertCompanyAccess, can, canEditOptionGroup, defaultPathForRole } from "@/lib/rbac";
 import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, withDataMutationLock, writeData } from "@/lib/store";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
+import { applyReceivedInvoiceFields } from "@/lib/received-invoice-edits";
+import { receivedAmountsFromForm, validateReceivedAmounts } from "@/lib/received-invoice-review";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
 import { saveClient } from "@/lib/partner-project-edits";
@@ -831,30 +833,13 @@ export async function updateReceivedInvoiceInline(formData: FormData) {
 
   const id = value(formData, "receivedInvoiceId");
   const company = companyFromParam(value(formData, "company"));
-  const vendorId = value(formData, "vendorId");
-  const projectId = value(formData, "projectId");
   const status = receivedInvoiceStatus(value(formData, "status"));
   const timestamp = now();
   const data = await readData();
   const before = data.receivedInvoices.find((item) => item.id === id);
 
   await mutateData(user.id, "UPDATE_RECEIVED_INVOICE_INLINE", "ReceivedInvoice", id, (draft) => {
-    const invoice = draft.receivedInvoices.find((item) => item.id === id && !item.deletedAt);
-    if (!invoice) throw new Error("受領請求書が見つかりません");
-
-    const project = draft.projects.find((item) => item.id === projectId && !item.deletedAt);
-    const vendor = draft.vendors.find((item) => item.id === vendorId && !item.deletedAt);
-    if (!project || !matchesCompany(project, company)) throw new Error("案件が見つかりません");
-    if (!vendor || !partnerMatchesCompany(vendor, company)) throw new Error("支払先が見つかりません");
-
-    invoice.vendorId = vendor.id;
-    invoice.projectId = project.id;
-    invoice.issueDate = value(formData, "issueDate") || invoice.issueDate;
-    invoice.dueDate = value(formData, "dueDate") || invoice.dueDate;
-    invoice.subtotal = money(formData, "subtotal");
-    invoice.taxTotal = money(formData, "taxTotal");
-    invoice.total = money(formData, "total");
-    invoice.memo = optional(formData, "memo");
+    const invoice = applyReceivedInvoiceFields(draft, user, company, id, formData);
     if (status === "PAID") {
       markReceivedInvoicePaid(draft, invoice, user.id, timestamp);
     } else {
@@ -902,15 +887,14 @@ export async function updateOcrDocumentInline(formData: FormData) {
     }
 
     if (receivedInvoice) {
+      const amounts = validateReceivedAmounts(receivedAmountsFromForm(formData, receivedInvoice), paidForReceived(draft, receivedInvoice.id));
       const vendorId = value(formData, "vendorId");
       const projectId = value(formData, "projectId");
       if (draft.vendors.some((vendor) => vendor.id === vendorId && !vendor.deletedAt)) receivedInvoice.vendorId = vendorId;
       if (draft.projects.some((project) => project.id === projectId && !project.deletedAt)) receivedInvoice.projectId = projectId;
       receivedInvoice.issueDate = value(formData, "issueDate") || receivedInvoice.issueDate;
       receivedInvoice.dueDate = value(formData, "dueDate") || receivedInvoice.dueDate;
-      if (formData.has("subtotal")) receivedInvoice.subtotal = money(formData, "subtotal");
-      if (formData.has("taxTotal")) receivedInvoice.taxTotal = money(formData, "taxTotal");
-      receivedInvoice.total = money(formData, "total");
+      Object.assign(receivedInvoice, amounts);
       const status = receivedInvoiceStatus(value(formData, "status"));
       receivedInvoice.memo = optional(formData, "memo");
       if (status === "PAID") {

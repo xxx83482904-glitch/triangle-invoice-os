@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
 import { allowedUploadTypes, maxUploadSize, receivedInvoiceFileUrl, saveReceivedInvoiceFile } from "@/lib/files";
 import { can } from "@/lib/rbac";
+import { receivedAmountsFromForm, validateReceivedDates } from "@/lib/received-invoice-review";
 import { mutateData, newId, readData } from "@/lib/store";
 import type { ReceivedInvoice } from "@/lib/types";
 
@@ -37,6 +38,16 @@ export async function POST(request: Request) {
   }
 
   const data = await readData();
+  let amounts;
+  try {
+    amounts = receivedAmountsFromForm(formData);
+    validateReceivedDates(field(formData, "issueDate"), field(formData, "dueDate"));
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "金額・日付を確認してください" }, { status: 400 });
+  }
+  if (!data.vendors.some((vendor) => !vendor.deletedAt && vendor.id === field(formData, "vendorId") && companyFromParam(vendor.company) === company)) {
+    return NextResponse.json({ error: "請求元を選択してください" }, { status: 400 });
+  }
   if (!visibleProjects(data, user).some((p) => p.id === field(formData, "projectId") && companyFromParam(p.company) === company)) {
     return NextResponse.json({ error: "登録できる案件を選択してください" }, { status: 403 });
   }
@@ -59,8 +70,6 @@ export async function POST(request: Request) {
   await saveReceivedInvoiceFile(safeName, Buffer.from(await file.arrayBuffer()), file.type);
 
   const timestamp = new Date().toISOString();
-  const subtotal = numeric(formData, "subtotal");
-  const taxTotal = numeric(formData, "taxTotal");
   const invoice: ReceivedInvoice = {
     id,
     vendorId: field(formData, "vendorId"),
@@ -68,9 +77,7 @@ export async function POST(request: Request) {
     receivedDate: timestamp.slice(0, 10),
     issueDate: field(formData, "issueDate"),
     dueDate: field(formData, "dueDate"),
-    subtotal,
-    taxTotal,
-    total: numeric(formData, "total") || subtotal + taxTotal,
+    ...amounts,
     status: "RECEIVED",
     fileUrl: receivedInvoiceFileUrl(safeName),
     originalFileName: file.name,

@@ -80,7 +80,7 @@ export function BankLinksDialog({ company, initial, onClose }: { company: Compan
               </li>)}</ul>
               {!visible.length ? <p className="py-3 text-muted-foreground">対応する請求書がありません。</p> : null}
             </>}
-            {chosen ? <BankReconciliationConfirmation key={`${bank.id}:${chosen.key}:${chosen.updatedAt}:${bank.remaining}`} company={company} bank={bank} invoice={chosen} onBusy={setSaving} onComplete={completed} /> : null}
+            {chosen ? <BankReconciliationConfirmation key={`${bank.id}:${chosen.key}`} company={company} bank={bank} invoice={chosen} invoices={choices} onBusy={setSaving} onComplete={completed} /> : null}
           </> : <p className="flex items-center gap-2 py-2 text-primary"><Check className="size-4" />照合済み</p>}
           {links.length ? <ul aria-label="照合済みの請求書" className="divide-y border-t">{links.map((link) => {
             const invoice = invoices.find((row) => row.key === link.invoiceKey);
@@ -93,6 +93,7 @@ export function BankLinksDialog({ company, initial, onClose }: { company: Compan
           {transfer.issue ? <p role="alert" className="border-l-2 border-amber-500 p-3">{transfer.issue}</p> : null}
           {transfer.link ? <>
             <h3 className="text-sm font-semibold">資金移動の照合済み</h3><p className="break-words">{transfer.link.counterpart?.account} / {transfer.link.counterpart?.date}</p><p className="break-words text-muted-foreground">{transfer.link.counterpart?.content}</p>
+            {transfer.link.counterpart ? <Link className="inline-flex min-h-11 items-center gap-2 text-sm text-primary underline" href={`/banking?${new URLSearchParams({ company, transaction: transfer.link.counterpart.id })}`} target="_blank" rel="noreferrer"><ArrowLeftRight className="size-4" />相手側の明細 / {money(transfer.link.counterpart.amount)}</Link> : null}
             {removing === transfer.link.id ? <div className="space-y-2 border-l-2 border-destructive p-3"><p>両側の振替扱いを照合前に戻します。</p><Button className="min-h-11" variant="destructive" disabled={busy} onClick={() => run(() => removeBankTransferAction(company, transfer.link!.id, transfer.link!.updatedAt))}>資金移動の照合解除を確定</Button><Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => setRemoving("")}>キャンセル</Button></div> : <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => setRemoving(transfer.link!.id)}><Unlink className="size-4" />資金移動の照合を解除</Button>}
           </> : !transfer.issue ? <>
             <h3 className="text-sm font-semibold">{bank.side === "INCOME" ? "移動元の出金明細" : "移動先の入金明細"}</h3>

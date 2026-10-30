@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { admin, fixture, timestamp } from "./document-fixture";
-import { bankReconciliationOverview, confirmBankReconciliation, reconciliationCandidates, reconciliationIssue, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput } from "../src/lib/bank-reconciliation";
+import { bankReconciliationOverview, confirmBankReconciliation, confirmBankReconciliationBatch, saveReconciliationAlias, saveReconciliationInstallments, reconciliationCandidates, reconciliationIssue, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput, type ReconciliationBatchInput } from "../src/lib/bank-reconciliation";
+import { allocationPreview, type AllocationDraft } from "../src/lib/bank-reconciliation-allocation";
+import { confirmBankTransfer } from "../src/lib/bank-transfers";
+import { bankCategoryAllocations } from "../src/lib/bank-bookkeeping";
 import { restoreUndoState } from "../src/lib/store";
 import { invoiceAccountScopeIssue } from "../src/lib/bank-reconciliation-accounts";
 import { normalizeReconciliationName, reconciliationPaymentOptions } from "../src/lib/bank-reconciliation-matching";
@@ -24,6 +27,191 @@ function input(data: ReturnType<typeof setup>, overrides: Partial<ReconcileInput
   return { transactionId: bank.id, transactionUpdatedAt: bank.updatedAt, invoiceKind: kind, invoiceId: id, invoiceUpdatedAt: invoice.updatedAt, amount: Math.min(bank.amount, invoice.total), mode: "new", acknowledged: true, ...overrides };
 }
 const confirm = (data: ReturnType<typeof setup>, overrides: Partial<ReconcileInput> = {}) => confirmBankReconciliation(data, admin, "JAPAN", input(data, overrides), today);
+
+function batch(data: ReturnType<typeof setup>, allocations: Partial<ReconcileInput>[]): ReconciliationBatchInput {
+  const first = input(data, allocations[0]);
+  return { transactionId: first.transactionId, transactionUpdatedAt: first.transactionUpdatedAt, acknowledged: true,
+    allocations: allocations.map((row) => input(data, row)),
+  };
+}
+
+test("one batch atomically allocates multiple invoices and leaves explicit bank and invoice remainders", () => {
+  const data = setup(); data.bankTransactions[0].amount = 25000;
+  const beforeBanks = structuredClone(data.bankTransactions);
+  const request = batch(data, [{ amount: 12000 }, { invoiceId: "issued-2", amount: 8000 }]);
+  const result = confirmBankReconciliationBatch(data, admin, "JAPAN", request, today);
+  assert.equal(result.allocations.length, 2); assert.equal(result.amount, 20000);
+  assert.equal(data.payments.length, 2); assert.equal(data.issuedInvoices[1].status, "PARTIALLY_PAID");
+  const view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.equal(view.banks[0].remaining, 5000); assert.equal(view.invoices.find((row) => row.id === "issued-2")!.outstanding, 4000);
+  assert.deepEqual(data.bankTransactions, beforeBanks);
+  const saved = structuredClone(data);
+  assert.throws(() => confirmBankReconciliationBatch(data, admin, "JAPAN", request, today)); assert.deepEqual(data, saved);
+});
+
+test("late batch failure rolls back every payment, invoice and related mail change", () => {
+  for (const patch of [{ amount: 12001 }, { invoiceUpdatedAt: "stale" }, { invoiceId: "issued-cn" }, { invoiceKind: "received" as const }, { amount: 0.001 }]) {
+    const data = setup(); data.bankTransactions[0].amount = 30000;
+    const request = batch(data, [{ amount: 12000 }, { invoiceId: "issued-2", amount: 5000 }]);
+    Object.assign(request.allocations[1], patch);
+    const before = structuredClone(data);
+    assert.throws(() => confirmBankReconciliationBatch(data, admin, "JAPAN", request, today)); assert.deepEqual(data, before);
+  }
+  const data = setup(); data.bankTransactions[1].amount = 16000;
+  data.receivedInvoices.push({ ...data.receivedInvoices[0], id: "received-2" });
+  const request = batch(data, [{ invoiceKind: "received", amount: 8000 }, { invoiceKind: "received", invoiceId: "received-2", amount: 8001 }]);
+  const before = structuredClone(data);
+  assert.throws(() => confirmBankReconciliationBatch(data, admin, "JAPAN", request, today)); assert.deepEqual(data, before);
+});
+
+test("batch validates combined bank capacity, duplicate rows, acknowledgement and authority", () => {
+  for (const kind of ["over", "duplicate", "ack", "actor", "company"] as const) {
+    const data = setup(), request = batch(data, [{ amount: 8000 }, { invoiceId: "issued-2", amount: 8000 }]);
+    if (kind === "duplicate") request.allocations[1] = { ...request.allocations[0] };
+    if (kind === "ack") request.acknowledged = false as true;
+    const before = structuredClone(data);
+    assert.throws(() => confirmBankReconciliationBatch(data, kind === "actor" ? { id: "guest", role: "GUEST" } : admin, kind === "company" ? "CHINA" : "JAPAN", request, today));
+    assert.deepEqual(data, before);
+  }
+});
+
+test("batch can link distinct existing payments for one invoice without creating payments", () => {
+  const data = setup();
+  data.payments = ["p1", "p2"].map((id) => ({ id, type: "INCOME", issuedInvoiceId: "issued-1", amount: 6000, paymentDate: today, createdById: "admin", createdAt: timestamp, updatedAt: timestamp }));
+  const request = batch(data, data.payments.map((payment) => ({ mode: "existing", paymentId: payment.id, paymentUpdatedAt: payment.updatedAt, amount: 6000 })));
+  const payments = structuredClone(data.payments);
+  confirmBankReconciliationBatch(data, admin, "JAPAN", request, today);
+  assert.deepEqual(data.payments, payments); assert.equal(data.bankReconciliations.length, 2);
+  assert.equal(bankReconciliationOverview(data, "JAPAN", today).invoices[0].matched, 12000);
+});
+
+test("duplicate payment warning requires explicit extra acknowledgement but never bypasses remaining amounts", () => {
+  const data = setup();
+  data.payments.push({ id: "manual", type: "INCOME", issuedInvoiceId: "issued-1", amount: 4000, paymentDate: today, createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
+  const before = structuredClone(data);
+  assert.throws(() => confirm(data, { amount: 4000 }), /別の実際の支払い/); assert.deepEqual(data, before);
+  confirm(data, { amount: 4000, duplicateAcknowledged: true });
+  assert.equal(data.payments.length, 2);
+  const saved = structuredClone(data);
+  assert.throws(() => confirm(data, { amount: 5000, duplicateAcknowledged: true })); assert.deepEqual(data, saved);
+});
+
+test("future payment records cannot stand in for actual bank evidence", () => {
+  const data = setup(); data.payments.push({ id: "future", type: "INCOME", issuedInvoiceId: "issued-1", amount: 12000, paymentDate: "2027-01-01", createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
+  const before = structuredClone(data);
+  assert.throws(() => confirm(data, { mode: "existing", paymentId: "future", paymentUpdatedAt: timestamp }), /将来日/); assert.deepEqual(data, before);
+});
+
+test("installment schedules stay planned even after their dates; only actual partial receipts affect paid state", () => {
+  const data = setup(), paymentBefore = structuredClone(data.payments), statusBefore = data.issuedInvoices[0].status;
+  const installments = [{ id: "past", dueDate: "2026-01-01", amount: 4000 }, { id: "future", dueDate: "2027-01-01", amount: 8000, note: "planned" }];
+  saveReconciliationInstallments(data, admin, "JAPAN", { invoiceId: "issued-1", invoiceUpdatedAt: timestamp, installments });
+  assert.deepEqual(data.payments, paymentBefore); assert.equal(data.issuedInvoices[0].status, statusBefore);
+  const view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.equal(view.invoices[0].paid, 0); assert.deepEqual(view.invoices[0].installmentSchedule, installments);
+  confirm(data, { amount: 4000 }); assert.equal(data.issuedInvoices[0].status, "PARTIALLY_PAID");
+  assert.deepEqual(data.issuedInvoices[0].installmentSchedule, installments);
+});
+
+test("installment edits reject invalid amounts, dates, duplicate IDs, stale versions and foreign company", () => {
+  for (const installments of [[{ id: "a", dueDate: "2026-02-30", amount: 1 }], [{ id: "a", dueDate: today, amount: 12001 }], [{ id: "a", dueDate: today, amount: 0.001 }], [{ id: "a", dueDate: today, amount: 1 }, { id: "a", dueDate: today, amount: 1 }]]) {
+    const data = setup(), before = structuredClone(data);
+    assert.throws(() => saveReconciliationInstallments(data, admin, "JAPAN", { invoiceId: "issued-1", invoiceUpdatedAt: timestamp, installments })); assert.deepEqual(data, before);
+  }
+  const data = setup(), before = structuredClone(data);
+  assert.throws(() => saveReconciliationInstallments(data, admin, "JAPAN", { invoiceId: "issued-1", invoiceUpdatedAt: "stale", installments: [] }));
+  assert.throws(() => saveReconciliationInstallments(data, admin, "CHINA", { invoiceId: "issued-1", invoiceUpdatedAt: timestamp, installments: [] })); assert.deepEqual(data, before);
+});
+
+test("initial reviewed payer aliases improve candidates without recording or confirming payment", () => {
+  const data = setup(); data.clients[0].companyName = "株式会社設計会社"; data.bankTransactions[0].content = "振込 ｶ)ｾｯｹｲｶﾞｲｼｬ";
+  const request = { transactionId: "bank-income", transactionUpdatedAt: timestamp, invoiceKind: "issued" as const, invoiceId: "issued-1", invoiceUpdatedAt: timestamp, acknowledged: true as const };
+  const before = structuredClone({ invoices: data.issuedInvoices, payments: data.payments, links: data.bankReconciliations });
+  saveReconciliationAlias(data, admin, "JAPAN", request);
+  const view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.ok(reconciliationCandidates(view.banks[0], view.invoices).some((row) => row.reasons.includes("確認済みの名義対応と一致（照合は未確定）")));
+  assert.deepEqual({ invoices: data.issuedInvoices, payments: data.payments, links: data.bankReconciliations }, before);
+  assert.ok(!reconciliationCandidates({ ...view.banks[0], accountId: "other" }, view.invoices).some((row) => row.reasons.includes("確認済みの名義対応と一致（照合は未確定）")));
+  saveReconciliationAlias(data, admin, "JAPAN", { ...request, removeId: data.clients[0].bankAliases![0].id }); assert.equal(data.clients[0].bankAliases!.length, 0);
+});
+
+test("payer alias validation rejects conflicting identities, generic descriptions, stale and unauthorized requests", () => {
+  const data = setup(); data.bankTransactions[0].content = "振込 テストメイギ";
+  const request = { transactionId: "bank-income", transactionUpdatedAt: timestamp, invoiceKind: "issued" as const, invoiceId: "issued-1", invoiceUpdatedAt: timestamp, acknowledged: true as const };
+  saveReconciliationAlias(data, admin, "JAPAN", request);
+  data.clients.push({ ...data.clients[0], id: "other", bankAliases: [] }); data.issuedInvoices[1].clientId = "other";
+  const before = structuredClone(data);
+  assert.throws(() => saveReconciliationAlias(data, admin, "JAPAN", { ...request, invoiceId: "issued-2" }), /別の取引先/);
+  assert.throws(() => saveReconciliationAlias(data, admin, "JAPAN", { ...request, transactionUpdatedAt: "stale" }));
+  assert.throws(() => saveReconciliationAlias(data, { id: "guest", role: "GUEST" }, "JAPAN", request)); assert.deepEqual(data, before);
+  const generic = setup(); generic.bankTransactions[0].content = "振込"; assert.throws(() => saveReconciliationAlias(generic, admin, "JAPAN", request), /識別/);
+});
+
+test("no-invoice-needed differs from excluded and cannot silently allocate an invoice", () => {
+  const data = setup(); data.bankTransactions[1].bookkeeping = { invoiceRequirement: "NOT_REQUIRED" };
+  const before = structuredClone(data);
+  const bank = bankReconciliationOverview(data, "JAPAN", today).banks[1];
+  assert.equal(bank.state, "not_required"); assert.match(bank.issue, /経費集計には残/);
+  assert.equal(data.bankTransactions[1].treatment, "NORMAL");
+  assert.equal(bankCategoryAllocations(data.bankTransactions[1]).reduce((sum, row) => sum + row.amount, 0), 8000);
+  assert.throws(() => confirm(data, { invoiceKind: "received" }), /請求書不要/); assert.deepEqual(data, before);
+});
+
+test("holds block both single and batch confirmations without invalidating existing payment evidence", () => {
+  const data = setup(); confirm(data, { amount: 4000 });
+  data.bankTransactions[0].bookkeeping = { hold: { reason: "AMOUNT_MISMATCH", question: "Confirm remaining allocation" } };
+  const before = structuredClone(data);
+  assert.throws(() => confirm(data, { amount: 2000 }), /保留中/);
+  assert.throws(() => confirmBankReconciliationBatch(data, admin, "JAPAN", batch(data, [{ amount: 2000 }]), today), /保留中/);
+  assert.deepEqual(data, before);
+  assert.equal(reconciliationIssue(data, data.bankReconciliations[0], today), "");
+  const overview = bankReconciliationOverview(data, "JAPAN", today);
+  assert.equal(overview.invoices[0].matched, 4000); assert.match(overview.banks[0].issue, /保留中/);
+  assert.deepEqual(reconciliationCandidates(overview.banks[0], overview.invoices), []);
+});
+
+test("batch confirmation and unlink preserve split bookkeeping and expense allocations exactly", () => {
+  const data = setup();
+  data.bankTransactions[1].bookkeeping = { invoiceRequirement: "REQUIRED", splits: [
+    { id: "rent", categoryId: "rent", amount: 7000, memo: "rent" },
+    { id: "fee", categoryId: "fee", amount: 1000, memo: "fee" },
+  ] };
+  const beforeBank = structuredClone(data.bankTransactions), beforeAllocation = bankCategoryAllocations(data.bankTransactions[1]);
+  confirmBankReconciliationBatch(data, admin, "JAPAN", batch(data, [{ invoiceKind: "received", amount: 8000 }]), today);
+  assert.deepEqual(data.bankTransactions, beforeBank); assert.deepEqual(bankCategoryAllocations(data.bankTransactions[1]), beforeAllocation);
+  const link = data.bankReconciliations[0]; removeBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt);
+  assert.deepEqual(data.bankTransactions, beforeBank); assert.deepEqual(bankCategoryAllocations(data.bankTransactions[1]), beforeAllocation);
+});
+
+test("card settlements and transfer counterpart links remain visible without inventing invoice payments", () => {
+  const data = setup();
+  data.bankAccounts.push({ ...data.bankAccounts[0], id: "other-bank", sourceId: "other-bank", name: "Other bank", serviceName: "Other bank" });
+  data.bankTransactions[0].bankAccountId = "other-bank"; data.bankTransactions[0].amount = 8000;
+  confirmBankTransfer(data, admin, "JAPAN", { transactionId: "bank-income", transactionUpdatedAt: timestamp, counterpartId: "bank-expense", counterpartUpdatedAt: timestamp, acknowledged: true }, today);
+  let view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.equal(view.banks[0].transferCounterpart?.id, "bank-expense");
+  assert.equal(view.banks[1].transferCounterpart?.id, "bank-income");
+  assert.equal(data.payments.length, 0);
+  const cardData = setup(); cardData.bankTransactions[1].content = "口座振替 APアプラス";
+  cardData.bankAccounts.push({ ...cardData.bankAccounts[0], id: "card", name: "アプラスカード", serviceName: "アプラスカード" });
+  view = bankReconciliationOverview(cardData, "JAPAN", today);
+  assert.equal(view.banks[1].settlement?.provider, "アプラス"); assert.equal(view.banks[1].settlement?.accounts[0].id, "card");
+  assert.throws(() => confirm(cardData, { invoiceKind: "received" }), /カード精算/); assert.equal(cardData.payments.length, 0);
+});
+
+test("allocation preview balances in cents, retains remainders and requires duplicate acknowledgement", () => {
+  const data = setup(); data.bankTransactions[0].amount = 20000;
+  const view = bankReconciliationOverview(data, "JAPAN", today);
+  const rows: AllocationDraft[] = [{ id: "a", invoiceKey: "issued:issued-1", mode: "new", paymentId: "", amount: "12000", duplicateAcknowledged: false }, { id: "b", invoiceKey: "issued:issued-2", mode: "new", paymentId: "", amount: "7000.01", duplicateAcknowledged: false }];
+  const preview = allocationPreview(view.banks[0], view.invoices, rows);
+  assert.equal(preview.valid, true); assert.equal(preview.bankRemaining, 999.99); assert.equal(preview.outstanding(view.invoices[1]), 4999.99);
+  assert.equal(allocationPreview(view.banks[0], view.invoices, [...rows, rows[0]]).valid, false);
+  assert.equal(allocationPreview(view.banks[0], view.invoices, [{ ...rows[0], amount: "NaN" }]).valid, false);
+  view.invoices[0].status = "PAID";
+  assert.equal(allocationPreview(view.banks[0], view.invoices, rows).valid, false);
+  assert.equal(allocationPreview(view.banks[0], view.invoices, [{ ...rows[0], duplicateAcknowledged: true }, rows[1]]).valid, true);
+  assert.equal(view.invoices[0].originalHref, "/api/files/issued.pdf");
+});
 
 test("confirmed income registers one payment and updates issued invoice without changing bank source", () => {
   const data = setup(), before = JSON.stringify(data.bankTransactions);
@@ -178,7 +366,8 @@ test("paid status alone is not bank evidence and inconsistent mail status is vis
   const data = setup(); data.receivedInvoices[0].status = "PAID"; data.mailDocuments[0].mailProcessed = true;
   let row = bankReconciliationOverview(data, "JAPAN", today).invoices.find((item) => item.kind === "received")!;
   assert.equal(row.stateMismatch, true); assert.equal(row.matched, 0); assert.equal(row.outstanding, 8000);
-  confirm(data, { invoiceKind: "received" }); data.mailDocuments[0].mailProcessed = false;
+  assert.throws(() => confirm(data, { invoiceKind: "received" }), /別の実際の支払い/);
+  confirm(data, { invoiceKind: "received", duplicateAcknowledged: true }); data.mailDocuments[0].mailProcessed = false;
   row = bankReconciliationOverview(data, "JAPAN", today).invoices.find((item) => item.kind === "received")!;
   assert.equal(row.stateMismatch, true);
   const before = JSON.stringify(data.payments);

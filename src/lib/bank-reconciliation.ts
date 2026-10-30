@@ -3,7 +3,7 @@ import { assertBankAccess, bankToday, isBankDate } from "@/lib/banking";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
 import { invoiceAccountScopeIssue } from "@/lib/bank-reconciliation-accounts";
-import { APLUS_SETTLEMENT_LINK_ISSUE, bankCardSettlementConflict, knownBankCardSettlement } from "@/lib/bank-card-settlement";
+import { APLUS_SETTLEMENT_LINK_ISSUE, bankCardSettlementConflict, bankCardSettlementDetail, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 import type { BankReconciliation, BankTransaction } from "@/lib/banking-types";
 import type { AppData, IssuedInvoice, Payment, ReceivedInvoice, User } from "@/lib/types";
 import { normalizeReconciliationName } from "@/lib/bank-reconciliation-matching";
@@ -40,8 +40,10 @@ function bankIssue(data: AppData, company: CompanyScope, bank: BankTransaction, 
   if (knownBankCardSettlement(data, bank)) return bankCardSettlementConflict(data, bank) || APLUS_SETTLEMENT_LINK_ISSUE;
   if (["CARD", "OTHER"].includes(account.forecastSettings?.accountKind || "")) return "カード利用・その他口座は銀行入出金として照合できません";
   if (bank.sourceMissing) return "元明細がなくなっています";
+  if (bank.sourceStatus === "excluded") return "連携元で対象外の明細です";
   if ((data.bankTransfers || []).some((link) => !link.deletedAt && [link.outgoingId, link.incomingId].includes(bank.id))) return "口座間の資金移動と照合済みです";
   if (bank.treatment !== "NORMAL") return "振替・対象外の明細です";
+  if (bank.bookkeeping?.invoiceRequirement === "NOT_REQUIRED") return "請求書不要（経費集計には残ります）。照合する場合は明細の請求書要否を変更してください";
   if (!isBankDate(bank.transactionDate) || bank.transactionDate > today || !monetary(bank.amount)) return "取引日・金額を確認してください";
   return "";
 }
@@ -85,6 +87,7 @@ export const reconcileSchema = z.object({
   mode: z.enum(["existing", "new"]), paymentId: z.string().optional(), paymentUpdatedAt: z.string().optional(),
   amount: z.number().refine(monetary, "金額は正の数で小数点以下2桁までにしてください"),
   acknowledged: z.literal(true), note: z.string().trim().max(1000).default(""),
+  duplicateAcknowledged: z.boolean().optional(),
 });
 export type ReconcileInput = z.input<typeof reconcileSchema>;
 
@@ -94,6 +97,7 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
   const bank = data.bankTransactions.find((row) => row.company === company && row.id === value.transactionId);
   if (!bank || bank.updatedAt !== value.transactionUpdatedAt) throw new Error("銀行明細が更新されています。画面を更新してください");
   const problem = bankIssue(data, company, bank, today); if (problem) throw new Error(problem);
+  if (bank.bookkeeping?.hold) throw new Error("保留中の明細です。確認事項を解決して保留を解除してから照合してください");
   const scopeIssue = invoiceAccountScopeIssue(data.bankAccounts.find((row) => row.id === bank.bankAccountId)!);
   if (scopeIssue) throw new Error(scopeIssue);
   if (bank.side !== (value.invoiceKind === "issued" ? "INCOME" : "EXPENSE")) throw new Error("請求書と入出金の方向が異なります");
@@ -108,12 +112,18 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
   if (value.mode === "existing") {
     const found = data.payments.find((row) => row.id === value.paymentId);
     if (!found || !paymentMatches(found, value.invoiceKind, invoice.id) || found.updatedAt !== value.paymentUpdatedAt || !monetary(found.amount)) throw new Error("入金・支払い記録が更新されています");
+    if (!isBankDate(found.paymentDate) || found.paymentDate > today) throw new Error("将来日・不正な日付の支払い記録は実際の銀行照合に使用できません");
     const reserved = links.filter((row) => row.paymentId === found.id).reduce((total, row) => total + cents(row.amount), 0);
     if (amount > cents(found.amount) - reserved) throw new Error("既存の支払い記録はすでに照合済みです");
     payment = found;
   } else {
-    const paid = data.payments.filter((row) => paymentMatches(row, value.invoiceKind, invoice.id)).reduce((total, row) => total + cents(row.amount), 0);
+    const recorded = data.payments.filter((row) => paymentMatches(row, value.invoiceKind, invoice.id));
+    const paid = recorded.reduce((total, row) => total + cents(row.amount), 0);
     if (amount > cents(invoice.total) - paid) throw new Error("未入金・未払い額を超えています。登録済みの支払いがある場合は既存記録に紐づけてください");
+    const possibleDuplicate = invoice.status === "PAID" || recorded.some((payment) =>
+      cents(payment.amount) > links.filter((link) => link.paymentId === payment.id).reduce((sum, link) => sum + cents(link.amount), 0) ||
+      (payment.paymentDate === bank.transactionDate && cents(payment.amount) === amount));
+    if (possibleDuplicate && !value.duplicateAcknowledged) throw new Error("支払い済み・未照合の記録があります。既存記録との照合、または別の実際の支払いであることを確認してください");
     const timestamp = new Date().toISOString();
     payment = { id: crypto.randomUUID(), source: "BANK_RECONCILIATION", type: bank.side,
       ...(value.invoiceKind === "issued" ? { issuedInvoiceId: invoice.id } : { receivedInvoiceId: invoice.id }),
@@ -130,6 +140,94 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
   data.bankReconciliations ||= [];
   data.bankReconciliations.unshift(link);
   return { id: link.id, paymentId: payment.id, createdPayment: link.createdPayment };
+}
+
+export const reconciliationBatchSchema = z.object({
+  transactionId: z.string().min(1).max(1000), transactionUpdatedAt: z.string(),
+  acknowledged: z.literal(true),
+  allocations: z.array(reconcileSchema.omit({ transactionId: true, transactionUpdatedAt: true, acknowledged: true })).min(1).max(100),
+});
+export type ReconciliationBatchInput = z.input<typeof reconciliationBatchSchema>;
+
+export function confirmBankReconciliationBatch(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: ReconciliationBatchInput, today = bankToday()) {
+  assertBankAccess(actor, company);
+  const value = reconciliationBatchSchema.parse(input);
+  const keys = new Set<string>();
+  for (const row of value.allocations) {
+    const key = `${row.invoiceKind}:${row.invoiceId}:${row.mode === "new" ? "new" : row.paymentId}`;
+    if (keys.has(key)) throw new Error("同じ請求書の新規支払い・既存記録が重複しています。1行にまとめてください");
+    keys.add(key);
+    const { invoice } = targetInvoice(data, company, row.invoiceKind, row.invoiceId);
+    if (invoice.updatedAt !== row.invoiceUpdatedAt) throw new Error("請求書が更新されています。画面を更新してください");
+  }
+  // Publish nothing until every allocation passes, including mail/status side effects.
+  const draft = structuredClone(data);
+  const results = value.allocations.map((row) => confirmBankReconciliation(draft, actor, company, {
+    ...row, transactionId: value.transactionId, transactionUpdatedAt: value.transactionUpdatedAt, acknowledged: true,
+    invoiceUpdatedAt: targetInvoice(draft, company, row.invoiceKind, row.invoiceId).invoice.updatedAt,
+  }, today));
+  data.payments = draft.payments;
+  data.bankReconciliations = draft.bankReconciliations;
+  data.issuedInvoices = draft.issuedInvoices;
+  data.receivedInvoices = draft.receivedInvoices;
+  data.mailDocuments = draft.mailDocuments;
+  return { allocations: results, amount: value.allocations.reduce((sum, row) => sum + cents(row.amount), 0) / 100 };
+}
+
+const aliasSchema = z.object({ transactionId: z.string().min(1), transactionUpdatedAt: z.string(), invoiceKind: z.enum(["issued", "received"]), invoiceId: z.string().min(1), invoiceUpdatedAt: z.string(), acknowledged: z.literal(true), removeId: z.string().optional() });
+export type ReconciliationAliasInput = z.input<typeof aliasSchema>;
+export function saveReconciliationAlias(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: ReconciliationAliasInput) {
+  assertBankAccess(actor, company);
+  const value = aliasSchema.parse(input);
+  const bank = data.bankTransactions.find((row) => row.id === value.transactionId && row.company === company);
+  const account = bank && data.bankAccounts.find((row) => row.id === bank.bankAccountId && row.company === company && row.officeCode === bank.officeCode);
+  if (!bank || !account || bank.sourceMissing || bank.updatedAt !== value.transactionUpdatedAt) throw new Error("銀行明細が更新されています");
+  if (bank.side !== (value.invoiceKind === "issued" ? "INCOME" : "EXPENSE")) throw new Error("取引先と明細の方向が異なります");
+  const { invoice } = targetInvoice(data, company, value.invoiceKind, value.invoiceId);
+  if (invoice.updatedAt !== value.invoiceUpdatedAt) throw new Error("請求書が更新されています");
+  const parties = value.invoiceKind === "issued" ? data.clients : data.vendors;
+  const partyId = value.invoiceKind === "issued" ? (invoice as IssuedInvoice).clientId : (invoice as ReceivedInvoice).vendorId;
+  const party = parties.find((row) => row.id === partyId && !row.deletedAt && partnerMatchesCompany(row, company));
+  if (!party) throw new Error("取引先が見つかりません");
+  if (value.removeId) {
+    const alias = party.bankAliases?.find((row) => row.id === value.removeId && row.company === company && row.accountId === bank.bankAccountId);
+    if (!alias) throw new Error("名義の対応が更新されています");
+    party.bankAliases = party.bankAliases!.filter((row) => row.id !== alias.id);
+  } else {
+    const content = normalizeReconciliationName(bank.content);
+    if (content.length < 4 || /^(振込|振替|入金|出金|送金|振込入金|振込出金)$/.test(content)) throw new Error("取引先を識別できる名義を確認してください");
+    const conflictingHistory = activeLinks(data, company).some((link) => {
+      if (link.invoiceKind !== value.invoiceKind || reconciliationIssue(data, link)) return false;
+      const source = data.bankTransactions.find((row) => row.id === link.transactionId);
+      if (!source || source.bankAccountId !== bank.bankAccountId || source.side !== bank.side || normalizeReconciliationName(source.content) !== content) return false;
+      const target = targetInvoice(data, company, link.invoiceKind, link.invoiceId).invoice;
+      return (link.invoiceKind === "issued" ? (target as IssuedInvoice).clientId : (target as ReceivedInvoice).vendorId) !== party.id;
+    });
+    if (conflictingHistory) throw new Error("この口座・名義の確定済み照合は別の取引先です。既存の照合を確認してください");
+    if (parties.some((row) => !row.deletedAt && row.id !== party.id && partnerMatchesCompany(row, company) && row.bankAliases?.some((alias) => alias.company === company && alias.accountId === bank.bankAccountId && alias.content === content))) throw new Error("この口座・名義は別の取引先に登録されています。既存の対応を確認してください");
+    if (!party.bankAliases?.some((row) => row.company === company && row.accountId === bank.bankAccountId && row.content === content)) {
+      party.bankAliases = [...(party.bankAliases || []), { id: crypto.randomUUID(), company, accountId: bank.bankAccountId, content, confirmedById: actor.id, createdAt: new Date().toISOString() }];
+    }
+  }
+  party.updatedAt = stamp(party.updatedAt);
+  return { partyId: party.id, bankAliases: (party.bankAliases || []).filter((row) => row.company === company && row.accountId === bank.bankAccountId) };
+}
+
+const installmentSchema = z.object({ invoiceId: z.string().min(1), invoiceUpdatedAt: z.string(),
+  installments: z.array(z.object({ id: z.string().min(1).max(100), dueDate: z.string().refine(isBankDate), amount: z.number().refine(monetary), note: z.string().trim().max(500).optional() })).max(100),
+});
+export type ReconciliationInstallmentsInput = z.input<typeof installmentSchema>;
+export function saveReconciliationInstallments(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: ReconciliationInstallmentsInput) {
+  assertBankAccess(actor, company);
+  const value = installmentSchema.parse(input);
+  const { invoice } = targetInvoice(data, company, "issued", value.invoiceId);
+  if (invoice.updatedAt !== value.invoiceUpdatedAt) throw new Error("請求書が更新されています。画面を更新してください");
+  if (!eligibleInvoice("issued", invoice)) throw new Error("先に請求書の金額・状態を確定してください");
+  if (new Set(value.installments.map((row) => row.id)).size !== value.installments.length) throw new Error("予定行が重複しています");
+  if (value.installments.reduce((sum, row) => sum + cents(row.amount), 0) > cents(invoice.total)) throw new Error("分割予定の合計が請求額を超えています");
+  (invoice as IssuedInvoice).installmentSchedule = value.installments.toSorted((a, b) => a.dueDate.localeCompare(b.dueDate));
+  invoice.updatedAt = stamp(invoice.updatedAt);
+  return { invoiceId: invoice.id, count: value.installments.length };
 }
 
 export function removeBankReconciliation(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, id: string, updatedAt: string) {
@@ -207,6 +305,10 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     return [{ key, kind, id: invoice.id, updatedAt: invoice.updatedAt, title: kind === "issued" ? (invoice as IssuedInvoice).invoiceNumber : (invoice as ReceivedInvoice).originalFileName || mail[0]?.title || "受領請求書",
       party: party?.companyName || "取引先未設定", partyId: party?.id || "", accountHolder: party && "accountHolder" in party && typeof party.accountHolder === "string" ? party.accountHolder : "",
       confirmedNames: [] as Array<{ accountId: string; content: string }>,
+      bankAliases: (party?.bankAliases || []).filter((row) => row.company === company),
+      installmentSchedule: kind === "issued" ? (invoice as IssuedInvoice).installmentSchedule || [] : [],
+      processed: kind === "received" ? Boolean((invoice as ReceivedInvoice).mailProcessed) : undefined,
+      originalHref: invoice.fileUrl || (kind === "issued" ? `/api/issued-invoices/${encodeURIComponent(invoice.id)}/pdf` : ""),
       project: project.name, total: invoice.total, date: invoice.issueDate, dueDate: invoice.dueDate,
       paid: paid / 100, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, matched: matched / 100, unmatched: Math.max(0, cents(invoice.total) - matched) / 100,
       recordedUnmatched: Math.max(0, paid - matched) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,
@@ -240,12 +342,17 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const allocated = (linkedBank.get(row.id) || 0) / 100, sourceIssue = bankIssue(data, company, row, today, index);
     const account = index.accounts.get(row.bankAccountId);
     const scopeIssue = account ? invoiceAccountScopeIssue(account) : "";
-    const issue = sourceIssue || scopeIssue;
+    const issue = sourceIssue || (row.bookkeeping?.hold ? "保留中の明細です。確認事項を解決して保留を解除してから照合してください" : "") || scopeIssue;
     // A new matching scope must not invalidate previously confirmed payment evidence.
     const matched = !sourceIssue && allocated > 0 && cents(allocated) >= cents(row.amount);
+    const transfer = (data.bankTransfers || []).find((link) => link.company === company && !link.deletedAt && [link.outgoingId, link.incomingId].includes(row.id));
+    const counterpart = transfer && index.banks.get(transfer.outgoingId === row.id ? transfer.incomingId : transfer.outgoingId);
+    const transferCounterpart = counterpart?.company === company ? { id: counterpart.id, date: counterpart.transactionDate, content: counterpart.content, amount: counterpart.amount, account: index.accounts.get(counterpart.bankAccountId)?.name || "" } : undefined;
+    const settlement = bankCardSettlementDetail(data, row);
     return { id: row.id, updatedAt: row.updatedAt, accountId: row.bankAccountId, date: row.transactionDate, side: row.side, content: row.content, amount: row.amount,
+      invoiceRequirement: row.bookkeeping?.invoiceRequirement || "UNDECIDED", transferCounterpart, settlement,
       remaining: Math.max(0, cents(row.amount) - cents(allocated)) / 100, allocated, issue, conflict: conflictBank.has(row.id),
-      state: conflictBank.has(row.id) ? "conflict" : matched ? "matched" : issue ? "excluded" : "unmatched" };
+      state: conflictBank.has(row.id) ? "conflict" : matched ? "matched" : row.treatment === "NORMAL" && !row.sourceMissing && row.bookkeeping?.invoiceRequirement === "NOT_REQUIRED" ? "not_required" : issue ? "excluded" : "unmatched" };
   });
   return { banks, invoices, unlinkedMailCount, links: links.map((row) => ({ id: row.id, updatedAt: row.updatedAt, transactionId: row.transactionId, invoiceKey: `${row.invoiceKind}:${row.invoiceId}`, amount: row.amount, createdPayment: row.createdPayment, issue: issues.get(row.id) || "", note: row.note, createdAt: row.createdAt })) };
 }

@@ -1,5 +1,6 @@
 import { bankFiscalYear } from "@/lib/bank-account-overview";
 import type { BankEdit, BankTransaction } from "@/lib/banking-types";
+import { bankSplitValidation } from "@/lib/bank-bookkeeping";
 
 export function bankLedgerMonths(year: number) {
   return Array.from({ length: 12 }, (_, index) => {
@@ -22,7 +23,10 @@ export function reviewBankDrafts(rows: Array<BankTransaction & { linkLabel?: str
     const value = drafts[row.id] || row;
     if (value.reviewed === reviewed) continue;
     if (row.linkLabel === "資金移動") throw new Error("資金移動と照合済みです。確認状態を変える前に照合を解除してください");
-    if (reviewed && (row.sourceMissing || (value.treatment === "NORMAL" && !value.categoryId))) throw new Error("確認前に、選択した明細の勘定科目と元明細を確認してください");
+    if (reviewed && row.bookkeeping?.hold) throw new Error("保留を解消してから確認済みにしてください");
+    const splitIssue = bankSplitValidation(row, row.bookkeeping?.splits || []).issue;
+    if (reviewed && splitIssue) throw new Error(splitIssue);
+    if (reviewed && (row.sourceMissing || (value.treatment === "NORMAL" && !value.categoryId && !row.bookkeeping?.splits?.length))) throw new Error("確認前に、選択した明細の勘定科目と元明細を確認してください");
   }
   const next = { ...drafts };
   for (const row of rows) {

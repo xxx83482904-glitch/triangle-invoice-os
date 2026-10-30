@@ -12,7 +12,8 @@ const colors = {
 
 export function BankClassificationBadge({ row }: { row: BankTransaction }) {
   const state = bankClassificationLabel(row);
-  return <span data-classification={state.kind} title={row.classificationReason} className={`inline-flex max-w-full items-center rounded border px-1.5 py-0.5 text-xs font-medium leading-5 ${colors[state.kind]}`}>
-    {row.sourceMissing ? "元明細なし" : state.kind === "NOT_APPLICABLE" && row.treatment === "TRANSFER" ? "振替・カード精算" : state.kind === "UNAVAILABLE" ? "有効な科目なし" : state.label}
+  const conflict = !row.reviewed && /競合|食い違|矛盾/.test(row.classificationReason || "");
+  return <span data-classification={state.kind} title={row.classificationReason} aria-label={`${state.label}${row.classificationReason ? `：${row.classificationReason}` : ""}`} className={`inline-flex max-w-full items-center rounded border px-1.5 py-0.5 text-xs font-medium leading-5 ${colors[state.kind]}`}>
+    {conflict ? "履歴競合・要確認" : row.sourceMissing ? "元明細なし" : state.kind === "NOT_APPLICABLE" && row.treatment === "TRANSFER" ? "振替・カード精算" : state.kind === "UNAVAILABLE" ? "有効な科目なし" : state.label}
   </span>;
 }

@@ -8,6 +8,7 @@ import { companyFromParam, matchesCompany, type CompanyScope } from "@/lib/compa
 import { effectiveOcrConfig } from "@/lib/ocr-settings";
 import type { AppData, MailDocumentCategory } from "@/lib/types";
 import { recipientName, splitBillingProjectName } from "@/lib/billing-project-name";
+import { receivedInvoiceEvidence, receivedInvoiceWarnings, type ReceivedInvoiceAmounts } from "@/lib/received-invoice-review";
 
 export type ExtractedText = {
   confidence?: number;
@@ -16,7 +17,7 @@ export type ExtractedText = {
   warnings: string[];
 };
 
-type InferredInvoice = {
+type InferredInvoice = ReceivedInvoiceAmounts & {
   confidence: number;
   dueDate: string;
   issueDate: string;
@@ -71,6 +72,8 @@ type AiDocumentAnalysis = {
   subtotal?: number;
   taxTotal?: number;
   total?: number;
+  grossAmount?: number;
+  withholdingAmount?: number;
   vendorName?: string;
   clientName?: string;
   invoiceNumber?: string;
@@ -126,11 +129,11 @@ const AI_SYSTEM_PROMPT =
   "documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. " +
   "Required fields: senderName, contentSummary, amountSummary, paymentDestination, confidence, reason, warnings. " +
   "senderName: aggressively find the company or organization that sent, issued, billed, sold, mailed, or requests payment. Never use the recipient, bill-to company, client, delivery destination, project owner, or file name as senderName. " +
-  "For Japanese documents prefer labels meaning sender, issuer, biller, seller, payee, transfer destination, receipt issuer. For Chinese documents prefer seller, invoice issuer, payee, account holder, supplier. " +
+  "Prefer explicit issuer, biller, seller, supplier or receipt issuer labels. Never use the remittance bank, branch or account holder as issuer merely because they appear in payment instructions. " +
   "contentSummary: summarize the document in one short Japanese sentence and include item, service, contract, project, or notice topic when visible. " +
   "amountSummary: extract the actual billed, payable, contract, or tax-included amount and tax if visible. " +
   "paymentDestination: strongly search transfer/payment destination: bank name, branch, account type, account number, account holder. If absent, return an empty string. " +
-  "For invoices, vendorName should normally be the sender or issuer. Extract issueDate from invoice date or issue date labels. Extract dueDate from payment due or transfer deadline labels. Extract total from amount due, tax-included total, grand total, or Chinese tax-included total labels. " +
+  "For invoices, vendorName is the issuer, not the remittance bank. Extract issueDate ONLY from invoice date or issue date labels, dueDate ONLY from payment due or transfer deadline labels; leave unknown dates empty. Extract subtotal (fees before consumption tax), taxTotal (consumption tax), grossAmount (subtotal plus consumption tax), withholdingAmount (positive deduction), and total (NET payable after withholding). Preserve explicit net payable even when the breakdown conflicts; warn instead of inventing tax or replacing net with gross. Never infer a tax rate or withholding rate. " +
   "Never use bank account numbers, phone numbers, postal codes, registration numbers, invoice numbers, project numbers, or delivery numbers as money values. Dates must be YYYY-MM-DD. Money values must be integer JPY or CNY values without commas. Include bankName, bankBranch, bankAccountType, bankAccountNumber, bankAccountHolder when visible.";
 
 let cachedGoogleToken: { accessToken: string; expiresAt: number } | null = null;
@@ -183,12 +186,6 @@ function toIsoDate(year: string, month: string, day: string) {
 
 function isIsoDate(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
-}
-
-function addDays(date: string, days: number) {
-  const value = new Date(`${date}T00:00:00`);
-  value.setDate(value.getDate() + days);
-  return value.toISOString().slice(0, 10);
 }
 
 function extractDates(text: string) {
@@ -582,7 +579,7 @@ function bestMatch<T extends { id: string }>(text: string, items: T[], names: (i
   return best && best.score > 0 ? best : null;
 }
 
-function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedText, company: CompanyScope | undefined, analysis: AiDocumentAnalysis | null): InferredInvoice {
+export function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedText, company: CompanyScope | undefined, analysis: AiDocumentAnalysis | null): InferredInvoice {
   const scope = companyFromParam(company);
   const activeVendors = data.vendors.filter((vendor) => !vendor.deletedAt && companyFromParam(vendor.company) === scope);
   const activeProjects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, scope));
@@ -591,42 +588,30 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
   const aiSenderName = textFromAi(analysis?.senderName) || textFromAi(analysis?.senderOrganization);
   const aiVendorName = textFromAi(analysis?.vendorName) || aiSenderName;
   const aiProjectHint = textFromAi(analysis?.projectHint);
+  const evidence = receivedInvoiceEvidence(extracted.text);
   const matchingText = [extracted.text, aiSenderName, aiVendorName, aiProjectHint, textFromAi(analysis?.registrationNumber)].filter(Boolean).join("\n");
 
-  const vendorMatch = bestMatch(matchingText, activeVendors, (vendor) => [vendor.companyName, vendor.contactName, vendor.invoiceRegistrationNumber]);
+  const issuerCandidate = evidence.issuer || aiVendorName;
+  const bankCandidate = /銀行|信用金庫|信用組合|bank|开户行/i.test(issuerCandidate) && evidence.issuer !== issuerCandidate;
+  const issuerText = bankCandidate ? evidence.issuerText : issuerCandidate || evidence.issuerText;
+  const vendorCandidates = activeVendors
+    .filter((vendor) => !/銀行|信用金庫|信用組合|bank|开户行/i.test(vendor.companyName) || evidence.issuer === vendor.companyName)
+    .map((vendor) => bestMatch(issuerText, [vendor], (item) => [item.companyName, item.invoiceRegistrationNumber]))
+    .filter((match) => match && match.score >= 8)
+    .sort((a, b) => b!.score - a!.score);
+  const vendorMatch = vendorCandidates.length === 1 || (vendorCandidates[0]?.score ?? 0) > (vendorCandidates[1]?.score ?? 0) ? vendorCandidates[0] : null;
   const projectMatch = bestMatch(matchingText, activeProjects, (project) => {
     const client = activeClients.find((item) => item.id === project.clientId);
     return [project.name, client?.companyName];
   });
 
-  const fallbackDates = extractDates(extracted.text);
-  const fallbackAmounts = extractAmounts(extracted.text);
-  const issueDate =
-    (isIsoDate(analysis?.issueDate) ? analysis.issueDate : "") ||
-    dateNear(extracted.text, [JP.issueDate, CN.issueDate]) ||
-    fallbackDates[0] ||
-    new Date().toISOString().slice(0, 10);
-  const dueDate =
-    (isIsoDate(analysis?.dueDate) ? analysis.dueDate : "") ||
-    dateNear(extracted.text, [JP.dueDate]) ||
-    fallbackDates.find((date) => date > issueDate) ||
-    addDays(issueDate, 30);
-  const aiSubtotal = optionalNumberFromAi(analysis?.subtotal);
-  const aiTaxTotal = optionalNumberFromAi(analysis?.taxTotal);
-  const aiTotal = optionalNumberFromAi(analysis?.total);
-  let subtotal = aiSubtotal ?? fallbackAmounts.subtotal;
-  let taxTotal = aiTaxTotal ?? fallbackAmounts.taxTotal;
-  let total = aiTotal ?? fallbackAmounts.total;
-  if (!total && subtotal + taxTotal > 0) total = subtotal + taxTotal;
-  if (total && !subtotal && taxTotal) subtotal = Math.max(total - taxTotal, 0);
-  if (total && !taxTotal && aiTaxTotal === undefined) {
-    taxTotal = Math.round(total / 11);
-    subtotal = subtotal || total - taxTotal;
-  }
-  if (total && subtotal + taxTotal > 0 && Math.abs(subtotal + taxTotal - total) > Math.max(10, Math.round(total * 0.05))) {
-    taxTotal = Math.round(total / 11);
-    subtotal = total - taxTotal;
-  }
+  const issueDate = evidence.issueDate || (isIsoDate(analysis?.issueDate) ? analysis.issueDate : "");
+  const dueDate = evidence.dueDate || (isIsoDate(analysis?.dueDate) ? analysis.dueDate : "");
+  const subtotal = evidence.amounts.subtotal ?? optionalNumberFromAi(analysis?.subtotal) ?? 0;
+  const taxTotal = evidence.amounts.taxTotal ?? optionalNumberFromAi(analysis?.taxTotal) ?? 0;
+  const withholdingAmount = evidence.amounts.withholdingAmount ?? optionalNumberFromAi(analysis?.withholdingAmount);
+  const grossAmount = evidence.amounts.grossAmount ?? optionalNumberFromAi(analysis?.grossAmount) ?? (subtotal + taxTotal || undefined);
+  const total = evidence.amounts.total ?? optionalNumberFromAi(analysis?.total) ?? Math.max(0, (grossAmount ?? 0) - (withholdingAmount ?? 0));
 
   const vendor = vendorMatch?.item;
   const project = projectMatch?.item;
@@ -634,7 +619,11 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
   if (!vendorMatch) warnings.push("支払先は既存リストと一致しませんでした。発送元名で自動登録、または確認待ちになります。");
   if (!projectMatch) warnings.push("案件は既存リストと一致しませんでした。確認待ち案件に入ります。");
   if (!total) warnings.push("金額を抽出できませんでした。内容を確認してください。");
-  if (!fallbackDates.length && !isIsoDate(analysis?.issueDate)) warnings.push("請求日を抽出できませんでした。今日の日付を仮入力しました。");
+  if (bankCandidate) warnings.push("AIの請求元候補は振込先銀行の可能性があるため採用しませんでした。");
+  if (evidence.issueDate && analysis?.issueDate && evidence.issueDate !== analysis.issueDate) warnings.push(`AI請求日 ${analysis.issueDate} と原本の請求日 ${evidence.issueDate} が不一致です。原本のラベル付き日付を採用しました。`);
+  if (evidence.dueDate && analysis?.dueDate && evidence.dueDate !== analysis.dueDate) warnings.push(`AI支払期限 ${analysis.dueDate} と原本の支払期限 ${evidence.dueDate} が不一致です。`);
+  warnings.push(...receivedInvoiceWarnings({ subtotal, taxTotal, grossAmount, withholdingAmount, total, issueDate, dueDate,
+    vendorName: vendor?.companyName || (bankCandidate ? "" : issuerCandidate), ocrText: extracted.text }));
 
   const confidence = Math.min(
     100,
@@ -655,6 +644,7 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
       `OCR engine: ${extracted.engine}`,
       analysis ? `AI model: ${process.env.OCR_AI_MODEL || "gpt-5.4-mini"}` : "AI analysis: fallback rules",
       textFromAi(analysis?.memo),
+      ...Object.entries(evidence.snippets).map(([field, snippet]) => `OCR evidence [${field}]: ${snippet}`),
     ]
       .filter(Boolean)
       .join("\n"),
@@ -663,8 +653,10 @@ function inferReceivedInvoiceFromAnalysis(data: AppData, extracted: ExtractedTex
     subtotal,
     taxTotal,
     total,
+    grossAmount,
+    withholdingAmount,
     vendorId: vendor?.id ?? "",
-    vendorName: vendor?.companyName ?? aiVendorName ?? "支払先確認待ち",
+    vendorName: vendor?.companyName || (bankCandidate ? "" : issuerCandidate) || "支払先確認待ち",
     warnings,
   };
 }

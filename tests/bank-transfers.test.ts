@@ -8,6 +8,7 @@ import { bankReconciliationOverview, confirmBankReconciliation } from "../src/li
 import type { BankEdit } from "../src/lib/banking-types";
 import { restoreUndoState } from "../src/lib/store";
 import { bankingDataRevision } from "../src/lib/banking-revision";
+import { saveBankBookkeeping, type BankBookkeeping } from "../src/lib/bank-bookkeeping";
 
 const today = "2026-10-27";
 function setup() {
@@ -21,6 +22,82 @@ function input(data: ReturnType<typeof setup>): TransferInput {
   return { transactionId: "from", transactionUpdatedAt: data.bankTransactions[0].updatedAt, counterpartId: "to", counterpartUpdatedAt: data.bankTransactions[1].updatedAt, acknowledged: true };
 }
 const confirm = (data: ReturnType<typeof setup>) => confirmBankTransfer(data, admin, "JAPAN", input(data), today);
+
+const splitBookkeeping: BankBookkeeping = { splits: [
+  { id: "principal", categoryId: "category", amount: 10000, memo: "principal" },
+  { id: "fee", categoryId: "category", amount: 2000, memo: "fee" },
+] };
+const heldBookkeeping: BankBookkeeping = { hold: { reason: "AMOUNT_MISMATCH", question: "Confirm the amount before linking" } };
+
+test("split and held rows on either side are not transfer candidates and fail atomically", () => {
+  for (const bookkeeping of [splitBookkeeping, heldBookkeeping, { ...splitBookkeeping, ...heldBookkeeping }, { splits: splitBookkeeping.splits!.slice(0, 1) }]) {
+    for (const index of [0, 1]) {
+      const data = setup(), blocked = data.bankTransactions[index], other = data.bankTransactions[1 - index];
+      blocked.bookkeeping = structuredClone(bookkeeping);
+      const before = JSON.stringify(data);
+      const pattern = bookkeeping.hold ? /保留/ : /分割/;
+      assert.match(bankTransferDetail(data, "JAPAN", blocked.id, today).issue, pattern);
+      assert.deepEqual(bankTransferDetail(data, "JAPAN", blocked.id, today).candidates, []);
+      assert.deepEqual(bankTransferDetail(data, "JAPAN", other.id, today).candidates, []);
+      assert.throws(() => confirm(data), pattern);
+      const request = input(data);
+      assert.throws(() => confirmBankTransfer(data, admin, "JAPAN", {
+        transactionId: request.counterpartId, transactionUpdatedAt: request.counterpartUpdatedAt,
+        counterpartId: request.transactionId, counterpartUpdatedAt: request.transactionUpdatedAt, acknowledged: true,
+      }, today), pattern);
+      assert.equal(JSON.stringify(data), before);
+    }
+  }
+});
+
+test("resolving bookkeeping allows transfers only with fresh versions and preserves remaining metadata", () => {
+  for (const bookkeeping of [splitBookkeeping, heldBookkeeping, { ...splitBookkeeping, ...heldBookkeeping }]) {
+    for (const index of [0, 1]) {
+      const data = setup(), row = data.bankTransactions[index];
+      row.bookkeeping = structuredClone(bookkeeping);
+      const stale = input(data);
+      const saved = saveBankBookkeeping(data, admin, "JAPAN", {
+        id: row.id, updatedAt: row.updatedAt, splits: [], hold: null,
+        invoiceRequirement: "NOT_REQUIRED", memo: "Resolved explicitly", reviewed: false,
+      }).transaction;
+      assert.notEqual(saved.updatedAt, stale.transactionUpdatedAt);
+      const before = JSON.stringify(data);
+      assert.throws(() => confirmBankTransfer(data, admin, "JAPAN", stale, today), /更新/);
+      assert.equal(JSON.stringify(data), before);
+      assert.equal(bankTransferDetail(data, "JAPAN", row.id, today).candidates.length, 1);
+      confirm(data);
+      assert.equal(data.bankTransfers!.length, 1);
+      assert.ok(data.bankTransactions.every((item) => item.reviewed && item.treatment === "TRANSFER"));
+      assert.equal(row.bookkeeping?.invoiceRequirement, "NOT_REQUIRED");
+      assert.equal(row.memo, "Resolved explicitly");
+    }
+  }
+});
+
+test("empty splits and invoice requirements alone do not block transfers", () => {
+  const data = setup();
+  data.bankTransactions[0].bookkeeping = { splits: [], invoiceRequirement: "NOT_REQUIRED" };
+  data.bankTransactions[1].bookkeeping = { invoiceRequirement: "REQUIRED" };
+  assert.equal(bankTransferDetail(data, "JAPAN", "from", today).issue, "");
+  confirm(data);
+  assert.equal(data.bankTransfers!.length, 1);
+});
+
+test("existing links with conflicting bookkeeping are flagged without deleting evidence", () => {
+  for (const bookkeeping of [splitBookkeeping, heldBookkeeping]) {
+    for (const index of [0, 1]) {
+      const data = setup(); confirm(data);
+      data.bankTransactions[index].bookkeeping = structuredClone(bookkeeping);
+      const before = JSON.stringify(data);
+      const pattern = bookkeeping.hold ? /保留/ : /分割/;
+      assert.match(bankTransferIssue(data, data.bankTransfers![0], today), pattern);
+      const detail = bankTransferDetail(data, "JAPAN", "from", today);
+      assert.match(detail.issue, pattern);
+      assert.equal(detail.link?.id, data.bankTransfers![0].id);
+      assert.equal(JSON.stringify(data), before);
+    }
+  }
+});
 
 test("confirmed transfers exclude both sides from operating totals but retain account cash movements", () => {
   const data = setup(), source = data.bankTransactions.map((row) => [row.amount, row.transactionDate, row.content]);

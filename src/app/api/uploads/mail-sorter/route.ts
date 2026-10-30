@@ -307,8 +307,8 @@ export async function POST(request: Request) {
       await mutateData(user.id, "SORT_MAIL_DOCUMENT", "MailDocument", mailDocument.id, (draft) => {
         const vendor = inferred.vendorId
           ? draft.vendors.find((item) => item.id === inferred.vendorId && !item.deletedAt) ?? ensureReviewVendor(draft, company, timestamp)
-          : senderName !== "発送元確認待ち"
-            ? ensureVendorByName(draft, company, senderName, timestamp)
+          : inferred.vendorName !== "支払先確認待ち"
+            ? ensureVendorByName(draft, company, inferred.vendorName, timestamp)
             : ensureReviewVendor(draft, company, timestamp);
         const project = inferred.projectId
           ? draft.projects.find((item) => item.id === inferred.projectId && !item.deletedAt) ?? ensureReviewProject(draft, company, timestamp)
@@ -364,9 +364,10 @@ export async function POST(request: Request) {
           receivedDate: timestamp.slice(0, 10),
           issueDate: inferred.issueDate,
           dueDate: inferred.dueDate,
-          subtotal: 0,
-          taxTotal: 0,
+          subtotal: inferred.subtotal,
+          taxTotal: inferred.taxTotal,
           total: inferred.total,
+          ...{ grossAmount: inferred.grossAmount, withholdingAmount: inferred.withholdingAmount },
           status: "REVIEWING",
           fileUrl,
           folderMonth: targetMonth,
@@ -374,7 +375,7 @@ export async function POST(request: Request) {
           mimeType: file.type,
           ocrText: extracted.text,
           mailProcessed: false,
-          memo: [buildMailSummaryMemo({ classification, invoice: inferred, senderName: mailDocument.senderName || senderName }), ...fallbackWarnings].filter(Boolean).join("\n"),
+          memo: [inferred.memo, buildMailSummaryMemo({ classification, invoice: inferred, senderName: mailDocument.senderName || senderName }), ...fallbackWarnings].filter(Boolean).join("\n"),
           uploadedById: user.id,
           createdAt: timestamp,
           updatedAt: timestamp,

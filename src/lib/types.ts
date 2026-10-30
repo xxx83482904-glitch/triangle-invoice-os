@@ -73,10 +73,14 @@ export type User = {
   deletedAt?: string | null;
 };
 
+export type BankPartyAlias = { id: string; company: "JAPAN" | "CHINA"; accountId: string; content: string; confirmedById: string; createdAt: string };
+export type InvoiceInstallment = { id: string; dueDate: string; amount: number; note?: string };
+
 export type Client = {
   id: string;
   company?: "CHINA" | "JAPAN";
   companyName: string;
+  bankAliases?: BankPartyAlias[];
   contactName?: string;
   email?: string;
   phone?: string;
@@ -93,6 +97,7 @@ export type Vendor = {
   id: string;
   company?: "CHINA" | "JAPAN";
   companyName: string;
+  bankAliases?: BankPartyAlias[];
   contactName?: string;
   email?: string;
   phone?: string;
@@ -165,6 +170,7 @@ export type IssuedInvoiceItem = {
 export type IssuedInvoice = {
   id: string;
   estimateId?: string;
+  installmentSchedule?: InvoiceInstallment[];
   invoiceNumber: string;
   projectId: string;
   clientId: string;
@@ -231,6 +237,8 @@ export type ReceivedInvoice = {
   subtotal: number;
   taxTotal: number;
   total: number;
+  grossAmount?: number;
+  withholdingAmount?: number;
   status: ReceivedInvoiceStatus;
   fileUrl?: string;
   originalFileName?: string;

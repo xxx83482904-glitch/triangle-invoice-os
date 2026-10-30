@@ -19,7 +19,7 @@ export default async function BankReconciliationPage({ searchParams }: { searchP
   if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
   const params = await searchParams, company = companyFromParam(params.company), data = await readDataForRequest();
   const overview = bankReconciliationOverview(data, company);
-  const filters = { account: params.account || "", month: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month || "") ? params.month! : "", status: ["all", "matched", "conflict", "excluded"].includes(params.status || "") ? params.status! : "unmatched", query: (params.q || "").slice(0, 200), invoice: params.invoice || "" };
+  const filters = { account: params.account || "", month: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month || "") ? params.month! : "", status: ["all", "matched", "conflict", "excluded", "not_required"].includes(params.status || "") ? params.status! : "unmatched", query: (params.q || "").slice(0, 200), invoice: params.invoice || "" };
   const accountFilter = bankAccountFilter(data.bankAccounts, data.bankTransactions, company, filters.account);
   filters.account = accountFilter.selectedId;
   const focus = overview.invoices.find((row) => row.key === filters.invoice);

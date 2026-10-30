@@ -5,8 +5,12 @@ import { isSelectionControl } from "@/lib/list-selection";
 
 import Link from "next/link";
 import { ChevronDown, ChevronRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { updateReceivedInvoiceInline, updateReceivedInvoiceStatus } from "@/app/actions";
+import { saveReceivedInvoice } from "./actions";
+import { OriginalDocumentPreview } from "./original-document-preview";
+import { ReceivedAmountFields } from "./received-amount-fields";
+import { receivedInvoiceEvidence, receivedInvoiceWarnings, type ReceivedInvoiceAmounts } from "@/lib/received-invoice-review";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,8 +26,11 @@ type Option = {
   value: string;
 };
 
-export type ReceivedInvoiceWorkspaceItem = {
+export type ReceivedInvoiceWorkspaceItem = ReceivedInvoiceAmounts & {
   createdAt: string;
+  updatedAt: string;
+  mailProcessed: boolean;
+  bankReconciledAmount: number;
   dueDate: string;
   fileUrl?: string;
   folderMonth?: string;
@@ -71,7 +78,7 @@ function monthLabel(key: string) {
 }
 
 function isOverdue(row: ReceivedInvoiceWorkspaceItem, today: string) {
-  return row.unpaidAmount > 0 && row.dueDate < today;
+  return row.unpaidAmount > 0 && Boolean(row.dueDate) && row.dueDate < today;
 }
 
 function isDueSoon(row: ReceivedInvoiceWorkspaceItem, today: string) {
@@ -97,42 +104,6 @@ function invoiceMatchesFilter(row: ReceivedInvoiceWorkspaceItem, filter: WorkFil
   if (filter === "scheduled") return row.status === "SCHEDULED";
   if (filter === "paid") return row.unpaidAmount <= 0 || row.status === "PAID";
   return true;
-}
-
-function InvoicePreview({ row }: { row: ReceivedInvoiceWorkspaceItem }) {
-  if (!row.fileUrl) {
-    return <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-muted text-sm text-muted-foreground">ファイルがありません。</div>;
-  }
-
-  if (row.mimeType?.startsWith("image/")) {
-    return (
-      <div className="flex min-h-[360px] items-center justify-center overflow-hidden rounded-lg bg-muted">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={row.fileUrl} alt={row.originalFileName ?? row.vendorName} className="max-h-[58vh] w-full object-contain" />
-      </div>
-    );
-  }
-
-  if (row.mimeType === "application/pdf") {
-    return (
-      <div className="space-y-2">
-        <iframe title={row.originalFileName ?? row.vendorName} src={row.fileUrl} className="hidden h-[58vh] min-h-[420px] w-full rounded-lg border bg-muted md:block" />
-        <div className="flex items-center justify-center rounded-lg bg-muted py-12 md:hidden">
-          <Button asChild variant="outline">
-            <a href={row.fileUrl} target="_blank">PDFを別画面で開く</a>
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-muted">
-      <Button asChild variant="outline">
-        <a href={row.fileUrl} target="_blank">ファイルを開く</a>
-      </Button>
-    </div>
-  );
 }
 
 function SelectField({
@@ -186,6 +157,8 @@ export function ReceivedInvoicesWorkspace({
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
   const [filter, setFilter] = useState<WorkFilter>(initialId ? "all" : "unpaid");
   const [query, setQuery] = useState("");
+  const [saving, startSaving] = useTransition();
+  const [saveResult, setSaveResult] = useState<{ id: string; message: string; error?: boolean }>();
 
   const filteredInvoices = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -248,9 +221,6 @@ export function ReceivedInvoicesWorkspace({
       <CardHeader className="gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <CardTitle>受領請求書一覧</CardTitle>
-          <div className="mt-1 text-xs text-muted-foreground">
-            月別に確認し、行を選ぶと右側でPDFと詳細を見ながら処理できます。
-          </div>
         </div>
         {showTotals ? <div className="grid grid-cols-3 gap-1 text-xs text-muted-foreground lg:min-w-[420px]">
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
@@ -291,8 +261,8 @@ export function ReceivedInvoicesWorkspace({
 
         <SelectionToolbar selection={selection} />
         {filteredInvoices.length ? (
-          <div className="grid min-h-[720px] overflow-hidden rounded-lg border xl:grid-cols-[minmax(0,1fr)_440px]">
-            <div className="min-w-0 overflow-x-auto">
+          <div className="grid min-h-[720px] overflow-hidden border">
+            <div className="max-h-[420px] min-w-0 overflow-auto">
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-muted/50 text-xs text-muted-foreground">
                   <tr>
@@ -301,7 +271,7 @@ export function ReceivedInvoicesWorkspace({
                     <th className="px-3 py-2 text-left">案件</th>
                     <th className="px-3 py-2 text-left">請求日</th>
                     <th className="px-3 py-2 text-left">支払期限</th>
-                    <th className="px-3 py-2 text-right">税込</th>
+                    <th className="px-3 py-2 text-right">差引支払額</th>
                     <th className="px-3 py-2 text-right">未払い</th>
                     <th className="px-3 py-2 text-left">状態</th>
                     <th className="px-3 py-2 text-left">ファイル</th>
@@ -362,7 +332,10 @@ export function ReceivedInvoicesWorkspace({
                                       name="status"
                                       defaultValue={invoice.status}
                                       className="h-7 max-w-[140px] rounded-full border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                                      onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                                      onChange={(event) => {
+                                        if (event.currentTarget.value === "PAID" && invoice.unpaidAmount > 0 && !window.confirm(`差額 ${yen.format(invoice.unpaidAmount)} の支払記録を追加します。銀行照合済みにはなりません。続行しますか？`)) { event.currentTarget.value = invoice.status; return; }
+                                        event.currentTarget.form?.requestSubmit();
+                                      }}
                                     >
                                       {statusOptions.map((option) => (
                                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -391,7 +364,7 @@ export function ReceivedInvoicesWorkspace({
               </table>
             </div>
 
-            <aside className="border-t bg-background p-4 xl:border-t-0 xl:border-l">
+            <aside className="min-w-0 border-t bg-background p-4">
               {activeInvoice ? (
                 <div className="space-y-4">
                   <div className="border-b pb-3">
@@ -403,6 +376,11 @@ export function ReceivedInvoicesWorkspace({
                       <StatusBadge status={activeInvoice.status} />
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge variant="outline">{activeInvoice.mailProcessed ? "処理済み" : "未処理"}</Badge>
+                      <Badge variant="outline">支払登録 {yen.format(activeInvoice.paidAmount)}</Badge>
+                      <Badge variant={activeInvoice.total > 0 && activeInvoice.bankReconciledAmount >= activeInvoice.total ? "secondary" : "outline"}>
+                        {activeInvoice.total > 0 && activeInvoice.bankReconciledAmount >= activeInvoice.total ? "銀行照合済み" : activeInvoice.bankReconciledAmount > 0 ? "銀行一部照合" : "銀行未照合"} {yen.format(activeInvoice.bankReconciledAmount)}
+                      </Badge>
                       <Badge variant={activeInvoice.unpaidAmount > 0 ? "secondary" : "outline"}>
                         未払い {yen.format(Math.max(0, activeInvoice.unpaidAmount))}
                       </Badge>
@@ -418,39 +396,64 @@ export function ReceivedInvoicesWorkspace({
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-lg border p-3">
                       <div className="text-xs text-muted-foreground">請求日 / 支払期限</div>
                       <div className="mt-1 text-sm font-medium">{formatDate(activeInvoice.issueDate)} / {formatDate(activeInvoice.dueDate)}</div>
                     </div>
                     <div className="rounded-lg border p-3">
-                      <div className="text-xs text-muted-foreground">税込 / 支払済</div>
+                      <div className="text-xs text-muted-foreground">差引支払額 / 支払登録済み</div>
                       <div className="mt-1 text-sm font-medium">{yen.format(activeInvoice.total)} / {yen.format(activeInvoice.paidAmount)}</div>
                     </div>
                   </div>
 
-                  <div className="min-w-0 space-y-3 rounded-lg border p-3">
+                  <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                  <div className="min-w-0 space-y-3 lg:sticky lg:top-4">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       {activeInvoice.mimeType?.startsWith("image/") ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                       プレビュー
                     </div>
-                    <InvoicePreview row={activeInvoice} />
+                    <OriginalDocumentPreview key={`${activeInvoice.id}:${activeInvoice.fileUrl}`} fileUrl={activeInvoice.fileUrl} mimeType={activeInvoice.mimeType} fileName={activeInvoice.originalFileName ?? activeInvoice.vendorName} />
                   </div>
 
+                  <div className="min-w-0 space-y-4">
+                  {receivedInvoiceWarnings(activeInvoice).length ? <ul className="space-y-1 border-l-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950" aria-label="原本確認の注意点">
+                    {receivedInvoiceWarnings(activeInvoice).map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul> : null}
+                  {Object.keys(receivedInvoiceEvidence(activeInvoice.ocrText ?? "").snippets).length ? <details open className="border-b pb-3 text-xs">
+                    <summary className="cursor-pointer font-medium">OCR抽出根拠（原文）</summary>
+                    <dl className="mt-2 space-y-2">{Object.entries(receivedInvoiceEvidence(activeInvoice.ocrText ?? "").snippets).map(([field, text]) => <div key={field}>
+                      <dt className="font-medium">{({ issuer: "請求元", bank: "振込先・銀行", issueDate: "請求日", dueDate: "支払期限", subtotal: "税抜", taxTotal: "消費税", grossAmount: "税込総額", withholdingAmount: "源泉徴収税", total: "差引支払額" } as Record<string, string>)[field]}</dt>
+                      <dd className="break-words whitespace-pre-wrap text-muted-foreground">{text}</dd>
+                    </div>)}</dl>
+                  </details> : null}
                   {canEdit ? (
-                    <form key={activeInvoice.id} action={updateReceivedInvoiceInline} className="space-y-3 rounded-lg border p-3">
+                    <form key={`${activeInvoice.id}:${activeInvoice.updatedAt}`} action={updateReceivedInvoiceInline} onSubmit={(event) => {
+                      event.preventDefault();
+                      const form = new FormData(event.currentTarget);
+                      if (form.get("status") === "PAID" && Number(form.get("total")) > activeInvoice.paidAmount && !window.confirm(`差額 ${yen.format(Number(form.get("total")) - activeInvoice.paidAmount)} の支払記録を追加します。銀行照合済みにはなりません。続行しますか？`)) return;
+                      startSaving(async () => {
+                        try {
+                          const result = await saveReceivedInvoice(form);
+                          setSaveResult({ id: activeInvoice.id, message: result.ok ? "保存しました。" : result.error, error: !result.ok });
+                        } catch {
+                          setSaveResult({ id: activeInvoice.id, message: "通信に失敗しました。入力内容を保持しています。再試行してください。", error: true });
+                        }
+                      });
+                    }} className="space-y-3">
                       <input type="hidden" name="company" value={company} />
                       <input type="hidden" name="receivedInvoiceId" value={activeInvoice.id} />
+                      <input type="hidden" name="expectedUpdatedAt" value={activeInvoice.updatedAt} />
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium">詳細編集</div>
-                        <Button type="submit" size="sm" className="gap-1">
+                        <Button type="submit" size="sm" className="gap-1" disabled={saving}>
                           <Save className="h-4 w-4" />
-                          保存
+                          {saving ? "保存中…" : "保存"}
                         </Button>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className="space-y-1">
-                          <span className="text-xs font-medium text-muted-foreground">支払先</span>
+                          <span className="text-xs font-medium text-muted-foreground">請求元（発行者）</span>
                           <SelectField name="vendorId" defaultValue={activeInvoice.vendorId} options={vendors} />
                         </label>
                         <label className="space-y-1">
@@ -469,23 +472,13 @@ export function ReceivedInvoicesWorkspace({
                           <span className="text-xs font-medium text-muted-foreground">支払期限</span>
                           <Input name="dueDate" type="date" defaultValue={activeInvoice.dueDate} />
                         </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-medium text-muted-foreground">税込</span>
-                          <Input name="total" type="number" defaultValue={activeInvoice.total} className="font-mono" />
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-medium text-muted-foreground">税抜</span>
-                          <Input name="subtotal" type="number" defaultValue={activeInvoice.subtotal} />
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-medium text-muted-foreground">消費税</span>
-                          <Input name="taxTotal" type="number" defaultValue={activeInvoice.taxTotal} />
-                        </label>
                       </div>
+                      <ReceivedAmountFields amounts={activeInvoice} />
                       <label className="block space-y-1">
                         <span className="text-xs font-medium text-muted-foreground">メモ</span>
                         <Textarea name="memo" defaultValue={activeInvoice.memo ?? ""} className="min-h-24" />
                       </label>
+                      {saveResult?.id === activeInvoice.id ? <p role={saveResult.error ? "alert" : "status"} className={`text-sm ${saveResult.error ? "text-destructive" : "text-emerald-700"}`}>{saveResult.message}</p> : null}
                     </form>
                   ) : null}
 
@@ -494,6 +487,8 @@ export function ReceivedInvoicesWorkspace({
                     <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-xs leading-5">
                       {activeInvoice.ocrText || "OCR本文はありません。"}
                     </pre>
+                  </div>
+                  </div>
                   </div>
                 </div>
               ) : (

@@ -5,6 +5,8 @@ import type { AppData, User } from "@/lib/types";
 import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankTransaction, CategoryInput } from "@/lib/banking-types";
 import { bankClassificationLabel, createBankSuggester } from "@/lib/bank-classification";
 import { bankAccountFilter } from "@/lib/bank-account-options";
+import { matchesBankSearch } from "@/lib/bank-search";
+import { bankCategoryAllocations, bankSplitValidation } from "@/lib/bank-bookkeeping";
 import { APLUS_SETTLEMENT_LABEL, bankCardSettlementConflict, bankSettlementClassificationProtected, hasConfirmedBankLink, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 
 export const treatmentLabels = { NORMAL: "通常", TRANSFER: "振替・カード精算", EXCLUDED: "対象外" } as const;
@@ -60,6 +62,10 @@ export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope,
     const row = byId.get(edit.id);
     if (!row) throw new Error("明細が見つかりません");
     if (row.updatedAt !== edit.updatedAt) throw new Error("明細が更新されています。画面を更新して再度保存してください");
+    if (row.bookkeeping?.splits?.length && (edit.categoryId || edit.subCategoryId || edit.treatment !== row.treatment)) throw new Error("科目分割済みです。明細詳細から内訳を変更してください");
+    if (edit.reviewed && row.bookkeeping?.hold) throw new Error("保留を解消してから確認済みにしてください");
+    const splitIssue = bankSplitValidation(row, row.bookkeeping?.splits || [], data.accountingCategories).issue;
+    if (edit.reviewed && splitIssue) throw new Error(splitIssue);
     if ((data.bankTransfers || []).some((link) => !link.deletedAt && [link.outgoingId, link.incomingId].includes(row.id)) && (edit.treatment !== row.treatment || edit.reviewed !== row.reviewed || edit.categoryId !== row.categoryId || edit.subCategoryId !== row.subCategoryId)) throw new Error("資金移動と照合済みです。分類を変える前に資金移動の照合を解除してください");
     if (edit.treatment !== "NORMAL" && data.bankReconciliations.some((link) => !link.deletedAt && link.transactionId === row.id)) throw new Error("請求書と照合済みです。扱いを変える前に請求書照合を解除してください");
     categorySelection(data, company, edit.categoryId, edit.subCategoryId);
@@ -67,7 +73,7 @@ export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope,
       const category = data.accountingCategories.find((item) => item.id === id);
       if (category?.officeCode && category.officeCode !== row.officeCode) throw new Error("明細と同じ事業者の勘定科目を選択してください");
     }
-    if (edit.reviewed && (row.sourceMissing || (edit.treatment === "NORMAL" && !edit.categoryId))) throw new Error("確認済みにする前に勘定科目と元明細を確認してください");
+    if (edit.reviewed && (row.sourceMissing || (edit.treatment === "NORMAL" && !edit.categoryId && !row.bookkeeping?.splits?.length))) throw new Error("確認済みにする前に勘定科目と元明細を確認してください");
     return { row, edit };
   });
   // Validate the entire batch before touching any row.
@@ -123,7 +129,7 @@ export function deleteBankDefinition(data: AppData, user: Actor, company: Compan
   if (!row || row.updatedAt !== updatedAt) throw new Error("対象が更新されています。画面を更新してください");
   if (kind === "category") {
     if ((row as AccountingCategory).sourceId) throw new Error("連携科目は削除できません");
-    if (data.bankTransactions.some((t) => t.company === company && (t.categoryId === id || t.subCategoryId === id)) || data.bankRules.some((r) => r.company === company && !r.deletedAt && (r.categoryId === id || r.subCategoryId === id)) || data.accountingCategories.some((c) => c.parentId === id && !c.deletedAt)) throw new Error("使用中の科目は削除できません");
+    if (data.bankTransactions.some((t) => t.company === company && (t.categoryId === id || t.subCategoryId === id || t.bookkeeping?.splits?.some((part) => part.categoryId === id || part.subCategoryId === id))) || data.bankRules.some((r) => r.company === company && !r.deletedAt && (r.categoryId === id || r.subCategoryId === id)) || data.accountingCategories.some((c) => c.parentId === id && !c.deletedAt)) throw new Error("使用中の科目は削除できません");
   }
   row.deletedAt = stamp(row.updatedAt); row.updatedAt = row.deletedAt;
   return { id };
@@ -149,7 +155,7 @@ function ruleFor(data: AppData, transaction: BankTransaction) {
 }
 
 export function classifyBankTransaction(data: AppData, transaction: BankTransaction, suggest = createBankSuggester(data)) {
-  if (transaction.classificationSource === "MANUAL" || transaction.reviewed || transaction.sourceMissing || transaction.sourceStatus === "excluded" || hasConfirmedBankLink(data, transaction)) return false;
+  if (transaction.bookkeeping?.splits?.length || transaction.bookkeeping?.hold || transaction.classificationSource === "MANUAL" || transaction.reviewed || transaction.sourceMissing || transaction.sourceStatus === "excluded" || hasConfirmedBankLink(data, transaction)) return false;
   if (knownBankCardSettlement(data, transaction) && bankSettlementClassificationProtected(data, transaction)) return false;
   const rule = ruleFor(data, transaction);
   const suggestion = rule ? undefined : suggest(transaction);
@@ -292,28 +298,31 @@ export function bankFilters(params: Record<string, string | undefined>): BankFil
     month: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month || "") ? params.month! : "",
     account: params.account || "", category: params.category || "",
     side: ["INCOME", "EXPENSE"].includes(params.side || "") ? params.side! : "",
-    status: ["unclassified", "unreviewed", "reviewed", "transfer", "excluded", "missing"].includes(params.status || "") ? params.status! : "",
+    status: ["unclassified", "unreviewed", "reviewed", "transfer", "excluded", "missing", "held", "no-invoice"].includes(params.status || "") ? params.status! : "",
     query: (params.q || "").slice(0, 200), sort: ["date-asc", "amount-desc", "amount-asc"].includes(params.sort || "") ? params.sort! : "date-desc",
+    queryMode: params.queryMode === "exact" ? "exact" : "contains", excludeQuery: (params.excludeQuery || "").slice(0, 500),
     page: Math.max(1, Math.min(100000, Math.floor(Number(params.page) || 1))), transaction: (params.transaction || "").slice(0, 500), analysisThrough,
   };
 }
 
-export function selectBankTransactions(data: AppData, company: CompanyScope, filters: BankFilters) {
+export function selectBankTransactions(data: AppData, company: CompanyScope, filters: BankFilters, options: { all?: boolean } = {}) {
   const accountFilter = bankAccountFilter(data.bankAccounts, data.bankTransactions, company, filters.account);
   const analysisAccount = filters.analysisThrough ? data.bankAccounts.find((row) => row.company === company && row.id === filters.account) : undefined;
   const all = data.bankTransactions.filter((row) => row.company === company && (!filters.transaction || row.id === filters.transaction)
     && (!filters.analysisThrough || (analysisAccount && row.officeCode === analysisAccount.officeCode && row.transactionDate <= filters.analysisThrough && row.side === "EXPENSE" && row.amount > 0 && row.treatment === "NORMAL" && !row.sourceMissing && row.bankAccountId === filters.account)));
-  const query = normalized(filters.query);
-  const rows = all.filter((row) => (!filters.month || row.transactionDate.startsWith(filters.month)) && (!filters.account || accountFilter.memberIds.has(row.bankAccountId)) && (!filters.category || row.categoryId === filters.category || row.subCategoryId === filters.category) && (!filters.side || row.side === filters.side) && (!query || normalized(`${row.content} ${row.memo} ${row.sourceMemo}`).includes(query)) && (!filters.status || (filters.status === "unclassified" && !row.categoryId && row.treatment === "NORMAL") || (filters.status === "unreviewed" && !row.reviewed) || (filters.status === "reviewed" && row.reviewed) || (filters.status === "transfer" && row.treatment === "TRANSFER") || (filters.status === "excluded" && row.treatment === "EXCLUDED") || (filters.status === "missing" && row.sourceMissing)));
+  const rows = all.filter((row) => (!filters.month || row.transactionDate.startsWith(filters.month)) && (!filters.account || accountFilter.memberIds.has(row.bankAccountId)) && (!filters.category || row.categoryId === filters.category || row.subCategoryId === filters.category || row.bookkeeping?.splits?.some((part) => part.categoryId === filters.category || part.subCategoryId === filters.category)) && (!filters.side || row.side === filters.side) && matchesBankSearch(row, filters.query, filters.queryMode, filters.excludeQuery) && (!filters.status || (filters.status === "unclassified" && bankCategoryAllocations(row).some((part) => !part.categoryId) && row.treatment === "NORMAL") || (filters.status === "unreviewed" && !row.reviewed) || (filters.status === "reviewed" && row.reviewed) || (filters.status === "transfer" && row.treatment === "TRANSFER") || (filters.status === "excluded" && row.treatment === "EXCLUDED") || (filters.status === "missing" && row.sourceMissing) || (filters.status === "held" && Boolean(row.bookkeeping?.hold)) || (filters.status === "no-invoice" && row.bookkeeping?.invoiceRequirement === "NOT_REQUIRED")));
   const months = Array.from(new Set(all.map((row) => row.transactionDate.slice(0, 7)))).sort().reverse();
   const direction = filters.sort.endsWith("asc") ? 1 : -1;
   rows.sort((a, b) => direction * (filters.sort.startsWith("amount") ? a.amount - b.amount : a.transactionDate.localeCompare(b.transactionDate)) || a.id.localeCompare(b.id));
   const page = Math.min(filters.page, Math.max(1, Math.ceil(rows.length / BANK_PAGE_SIZE)));
   const summary = rows.reduce((sum, row) => {
     if (row.sourceMissing || row.treatment !== "NORMAL") { sum.excluded++; return sum; }
-    if (row.side === "INCOME") sum.income += row.amount; else sum.expense += row.amount;
-    if (!row.categoryId) sum.unclassified++;
+    const amount = filters.category && row.bookkeeping?.splits?.length
+      ? bankCategoryAllocations(row).filter((part) => part.categoryId === filters.category || part.subCategoryId === filters.category).reduce((total, part) => total + part.amount, 0)
+      : row.amount;
+    if (row.side === "INCOME") sum.income += amount; else sum.expense += amount;
+    if (bankCategoryAllocations(row).some((part) => !part.categoryId)) sum.unclassified++;
     return sum;
   }, { income: 0, expense: 0, excluded: 0, unclassified: 0 });
-  return { rows: rows.slice((page - 1) * BANK_PAGE_SIZE, page * BANK_PAGE_SIZE), total: rows.length, page, months, summary };
+  return { rows: options.all ? rows : rows.slice((page - 1) * BANK_PAGE_SIZE, page * BANK_PAGE_SIZE), total: rows.length, page, months, summary };
 }

@@ -52,7 +52,7 @@ export function createBankSuggester(data: AppData, { allowGuesses = false }: { a
   for (const row of data.bankTransactions) {
     // Preview can learn from explicitly reviewed candidates with preserved provenance.
     // Import/sync retain their existing manual-history-only policy.
-    if ((!allowGuesses && row.classificationSource !== "MANUAL") || !row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || !normalize(row.content) || knownBankCardSettlement(data, row)) continue;
+    if (row.bookkeeping?.splits?.length || row.bookkeeping?.hold || (!allowGuesses && row.classificationSource !== "MANUAL") || !row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || !normalize(row.content) || knownBankCardSettlement(data, row)) continue;
     const key = historyKey(row);
     const previous = history.get(key);
     if (!valid(row) || previous === null || (previous && selectionKey(previous) !== selectionKey(row))) {
@@ -63,6 +63,7 @@ export function createBankSuggester(data: AppData, { allowGuesses = false }: { a
   }
 
   return (row: BankTransaction): BankSuggestion | undefined => {
+    if (row.bookkeeping?.splits?.length || row.bookkeeping?.hold) return;
     const settlement = knownBankCardSettlement(data, row);
     if (settlement) {
       if (row.sourceMissing || row.sourceStatus === "excluded" || bankSettlementClassificationProtected(data, row)) return;
@@ -110,7 +111,7 @@ export function createBankSuggester(data: AppData, { allowGuesses = false }: { a
   };
 }
 
-type ClassificationLabelRow = Pick<BankTransaction, "categoryId" | "reviewed" | "treatment" | "classificationSource" | "classificationConfidence" | "classificationReason" | "sourceMissing">;
+type ClassificationLabelRow = Pick<BankTransaction, "categoryId" | "reviewed" | "treatment" | "classificationSource" | "classificationConfidence" | "classificationReason" | "sourceMissing" | "bookkeeping">;
 const classificationLabels = {
   GUESS: "推測・要確認",
   HISTORY: "過去実績",
@@ -122,9 +123,11 @@ const classificationLabels = {
 
 // Pure presentation state: only explicit review can confirm a classification.
 export function bankClassificationLabel(row: ClassificationLabelRow): { kind: keyof typeof classificationLabels; label: string } {
+  if (!row.sourceMissing && row.bookkeeping?.hold) return { kind: "GUESS", label: "保留・要確認" };
+  if (!row.sourceMissing && row.bookkeeping?.splits?.length && !row.reviewed) return { kind: "INFERRED", label: "科目分割・未確認" };
   let kind: keyof typeof classificationLabels;
   if (row.sourceMissing) kind = "NOT_APPLICABLE";
-  else if (row.reviewed && (row.categoryId || row.treatment !== "NORMAL")) kind = "CONFIRMED";
+  else if (row.reviewed && (row.categoryId || row.bookkeeping?.splits?.length || row.treatment !== "NORMAL")) kind = "CONFIRMED";
   else if (row.treatment !== "NORMAL") kind = "NOT_APPLICABLE";
   else if (!row.categoryId) kind = "UNAVAILABLE";
   else if (row.classificationConfidence) kind = row.classificationConfidence;

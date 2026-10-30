@@ -18,6 +18,9 @@ import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { paidForReceived, readDataForRequest as readData } from "@/lib/store";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
+import { ReceivedAmountFields } from "./received-amount-fields";
+import { reconciliationIssue } from "@/lib/bank-reconciliation";
+import type { ReceivedInvoiceAmounts } from "@/lib/received-invoice-review";
 import { ReceivedInvoicesWorkspace, type ReceivedInvoiceWorkspaceItem } from "./received-invoices-workspace";
 
 export default async function ReceivedInvoicesPage({
@@ -58,9 +61,15 @@ export default async function ReceivedInvoicesPage({
       const vendor = vendors.find((item) => item.id === invoice.vendorId);
       const project = projects.find((item) => item.id === invoice.projectId);
       const paidAmount = paidForReceived(data, invoice.id);
+      const amounts: ReceivedInvoiceAmounts = invoice;
       const linkedMail = data.mailDocuments.find((m) => !m.deletedAt && m.relatedReceivedInvoiceId === invoice.id);
       return {
         createdAt: invoice.createdAt,
+        updatedAt: invoice.updatedAt,
+        grossAmount: amounts.grossAmount,
+        withholdingAmount: amounts.withholdingAmount,
+        mailProcessed: invoice.mailProcessed === true || linkedMail?.mailProcessed === true,
+        bankReconciledAmount: (data.bankReconciliations ?? []).filter((link) => !link.deletedAt && link.company === company && link.invoiceKind === "received" && link.invoiceId === invoice.id && !reconciliationIssue(data, link)).reduce((sum, link) => sum + link.amount, 0),
         dueDate: invoice.dueDate,
         fileUrl: invoice.fileUrl || linkedMail?.fileUrl,
         folderMonth: invoice.folderMonth,
@@ -133,7 +142,7 @@ export default async function ReceivedInvoicesPage({
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>支払先 <span className="text-destructive">*</span></Label>
+                    <Label>請求元（発行者） <span className="text-destructive">*</span></Label>
                     <CreatableSelect
                       name="vendorId"
                       options={vendors.map((vendor) => ({ label: vendor.companyName, value: vendor.id }))}
@@ -145,28 +154,15 @@ export default async function ReceivedInvoicesPage({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>請求日 <span className="text-destructive">*</span></Label>
-                    <Input name="issueDate" type="date" defaultValue={todayIso()} required />
+                    <Label>請求日</Label>
+                    <Input name="issueDate" type="date" defaultValue={todayIso()} />
                   </div>
                   <div className="space-y-2">
-                    <Label>支払期限 <span className="text-destructive">*</span></Label>
-                    <Input name="dueDate" type="date" required />
+                    <Label>支払期限</Label>
+                    <Input name="dueDate" type="date" />
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>税抜</Label>
-                    <Input name="subtotal" type="number" min="0" defaultValue={0} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>消費税</Label>
-                    <Input name="taxTotal" type="number" min="0" defaultValue={0} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>税込 <span className="text-destructive">*</span></Label>
-                    <Input name="total" type="number" min="0" required />
-                  </div>
-                </div>
+                <ReceivedAmountFields />
                 <div className="space-y-2">
                   <Label>メモ</Label>
                   <Textarea name="memo" />
