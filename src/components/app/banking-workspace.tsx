@@ -1,4 +1,5 @@
 "use client";
+import { SectionExportDialog } from "@/components/app/section-export-dialog";
 
 import type { BankAccountOption } from "@/lib/bank-account-options";
 
@@ -304,6 +305,7 @@ export function BankingWorkspace(props: Props) {
     <header className="bank-ledger-header flex flex-wrap items-center justify-between gap-3 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-3"><h1 className="break-words text-xl font-semibold">口座・カード明細</h1><select className={`${bankSelectClass} bank-account-filter`} aria-label="口座で絞り込み" value={props.selectedAccountOption} disabled={pending} onChange={(e) => navigate({ account: e.target.value })}><option value="">すべての口座・カード</option>{props.accountOptions.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select></div>
       <div className="flex flex-wrap gap-2">
+        <SectionExportDialog scope="banking" role={props.role} disabled={pending || Boolean(dirty)} />
         {props.aiSettings ? <BankAiSettings {...props.aiSettings} disabled={pending || Boolean(dirty)} /> : null}
         <Button className="min-h-11" variant="outline" disabled={pending || Boolean(dirty)} onClick={() => setSettings(true)}><Settings2 className="size-4" />科目・ルール</Button>
         <Button className="min-h-11" variant="outline" disabled={!configured || syncing || pending || Boolean(dirty)} onClick={() => setSyncOpen(true)}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}同期</Button>

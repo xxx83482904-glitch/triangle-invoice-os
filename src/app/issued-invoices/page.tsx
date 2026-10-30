@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { redirect } from "next/navigation";
 import { createIssuedInvoice } from "@/app/actions";
@@ -53,6 +54,7 @@ export default async function IssuedInvoicesPage({
   return (
     <AppShell>
       <PageHeader title="発行請求書">
+        <SectionExportDialog scope="issued" role={user.role} />
         {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
         <BillingProjectCleanup company={company} groups={billingProjectGroups(data, user, company)} />
         {can(user, "view:documents") ? <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button> : null}

@@ -1,4 +1,5 @@
 import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
+import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import { redirect } from "next/navigation";
 import { MailSorterDropzone } from "@/app/mail-sorter/mail-sorter-dropzone";
 import { OcrDocumentsTable, type OcrDocumentListItem } from "@/app/mail-sorter/ocr-documents-table";
@@ -142,6 +143,7 @@ export default async function MailSorterPage({
         title="郵便物フォルダー"
       >
         {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
+        <SectionExportDialog scope="mail" role={user.role} />
       </PageHeader>
 
       <div className="space-y-6">

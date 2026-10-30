@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import { redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { DocumentsWorkspace } from "@/components/app/documents-workspace";
@@ -18,6 +19,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   const data = await readDataForRequest();
   return <AppShell>
     <PageHeader title="全書類">
+      <SectionExportDialog scope="all" role={user.role} />
       {can(user, "view:mailSorter") ? <Button variant="outline" asChild><Link prefetch={false} href="/mail-sorter?company=JAPAN">郵便物</Link></Button> : null}
       {can(user, "view:receivedInvoices") ? <Button variant="outline" asChild><Link prefetch={false} href={`/received-invoices?company=${company}`}>受領請求書</Link></Button> : null}
       {can(user, "view:issuedInvoices") ? <Button variant="outline" asChild><Link prefetch={false} href={`/issued-invoices?company=${company}`}>発行請求書</Link></Button> : null}

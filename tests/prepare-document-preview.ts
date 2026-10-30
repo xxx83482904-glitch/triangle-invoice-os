@@ -23,6 +23,11 @@ async function main() {
   const upload = path.join(root, "uploads");
   await mkdir(upload);
   const data = fixture();
+  if (process.argv.includes("--japan-only")) {
+    data.appEdition = "JAPAN";
+    data.projects = data.projects.filter((p) => p.company === "JAPAN");
+    data.issuedInvoices = data.issuedInvoices.filter((i) => data.projects.some((p) => p.id === i.projectId));
+  }
   data.users = ["ADMIN", "PROJECT_MANAGER", "MAIL_EDITOR"].map((role, n) => ({ id: ["admin", "manager", "mail"][n], name: `Test ${role}`, email: `${role.toLowerCase()}@example.invalid`, role: role as "ADMIN" | "PROJECT_MANAGER" | "MAIL_EDITOR", passwordHash: hashSync("local-documents-test-only", 10), createdAt: timestamp, updatedAt: timestamp }));
   if (process.argv.includes("--installments")) {
     data.users.push({ id: "billing", name: "Test Billing", email: "billing@example.invalid", role: "BILLING_EDITOR", passwordHash: hashSync("local-documents-test-only", 10), createdAt: timestamp, updatedAt: timestamp });

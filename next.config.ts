@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["pdfkit", "pdf-parse", "@napi-rs/canvas", "tesseract.js"],
   outputFileTracingIncludes: {
+    "/api/section-export": ["./public/fonts/BIZUDMincho-Regular.ttf"],
     "/api/estimates/*/pdf": ["./public/fonts/BIZUDMincho-Regular.ttf"],
     "/api/issued-invoices/*/pdf": ["./public/fonts/BIZUDMincho-Regular.ttf"],
     "/api/uploads/**": [

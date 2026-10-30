@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { EstimatesWorkspace } from "@/components/app/estimates-workspace";
 import { getCurrentUser } from "@/lib/auth";
@@ -17,7 +18,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
   const projects = visibleProjects(data, user).filter((p) => matchesCompany(p, company));
   const ids = new Set(projects.map((p) => p.id));
   const estimates = data.estimates.filter((e) => !e.deletedAt && ids.has(e.projectId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  return <AppShell><PageHeader title="発行見積書" /><EstimatesWorkspace key={company} company={company} estimates={estimates}
+  return <AppShell><PageHeader title="発行見積書"><SectionExportDialog scope="estimate" role={user.role} /></PageHeader><EstimatesWorkspace key={company} company={company} estimates={estimates}
     rows={documentRows(data, user, company).filter((row) => row.kind === "estimate")}
     initialId={params.document} canEdit={can(user, "manage:estimates")}
     projects={projects.map((p) => ({ id: p.id, name: p.name, clientId: p.clientId, updatedAt: p.updatedAt }))}

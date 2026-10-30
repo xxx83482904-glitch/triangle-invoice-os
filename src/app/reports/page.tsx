@@ -1,4 +1,5 @@
 import { AppShell, PageHeader } from "@/components/app/shell";
+import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isBillableIssuedInvoice } from "@/lib/documents";
@@ -42,6 +43,7 @@ export default async function ReportsPage({
   return (
     <AppShell>
       <PageHeader title="レポート" description="月別、案件別、クライアント別、支払先別の数字をCSVに落とせる形で確認します。">
+        <SectionExportDialog scope="all" role={user.role} />
         <Button asChild variant="outline"><Link href={`/api/export/projects?company=${company}`} prefetch={false}>案件別CSV</Link></Button>
       </PageHeader>
 
