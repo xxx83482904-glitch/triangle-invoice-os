@@ -212,7 +212,7 @@ export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDis
   const suggestSales = createBankSalesSuggester(data);
   const transfers = new Set((data.bankTransfers || []).filter((link) => !link.deletedAt).flatMap((link) => [link.outgoingId, link.incomingId]));
   const allocated = new Map<string, number>();
-  for (const link of data.bankReconciliations) if (!link.deletedAt) allocated.set(link.transactionId, (allocated.get(link.transactionId) || 0) + link.amount);
+  for (const link of data.bankReconciliations) if (!link.deletedAt) allocated.set(link.transactionId, (allocated.get(link.transactionId) || 0) + link.amount + (link.fee?.borneBy === "bank" ? link.fee.amount : 0));
   return rows.map((row) => {
     const settlement = knownBankCardSettlement(data, row);
     if (row.classificationSource === "MANUAL" || row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || hasConfirmedBankLink(data, row)

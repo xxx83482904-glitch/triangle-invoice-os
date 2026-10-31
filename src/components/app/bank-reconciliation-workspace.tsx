@@ -30,6 +30,7 @@ type Props = {
   page: number; total: number; initialView: "bank" | "invoices" | "checks"; unlinkedMailCount: number; counts: { unmatched: number; recorded: number; overdue: number; conflicts: number };
   aiPreview?: BankAiPreview; aiConfigured: boolean; aiModel: string; review?: BankDocumentReview;
   aiSettings?: { keyFromEnv: boolean; modelFromEnv: boolean };
+  feeCategories?: Array<{ id: string; name: string }>;
 };
 
 function SyncStatusButton({ company, invoice }: { company: CompanyScope; invoice: ReconciliationInvoice }) {
@@ -57,7 +58,7 @@ function SyncStatusButton({ company, invoice }: { company: CompanyScope; invoice
   </>;
 }
 
-export function BankReconciliationWorkspace({ company, filters, rows, selected, invoices, links, accounts, page, total, initialView, counts, unlinkedMailCount, aiPreview, aiConfigured, aiModel, review, aiSettings }: Props) {
+export function BankReconciliationWorkspace({ company, filters, rows, selected, invoices, links, accounts, page, total, initialView, counts, unlinkedMailCount, aiPreview, aiConfigured, aiModel, review, aiSettings, feeCategories }: Props) {
   const router = useRouter(), [pending, startTransition] = useTransition();
   const view = initialView;
   const [query, setQuery] = useState(filters.query);
@@ -95,7 +96,7 @@ export function BankReconciliationWorkspace({ company, filters, rows, selected, 
       </div>
       <p className="text-xs text-muted-foreground md:hidden">{filters.month || "全期間"} / {stateLabels[filters.status] || "すべての状態"}{filters.account ? ` / ${accounts.find((row) => row.id === filters.account)?.name || ""}` : ""}{filters.query ? ` / 検索: ${filters.query}` : ""}</p>
       {filters.invoice ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span className="break-words">請求書候補: {invoiceMap.get(filters.invoice)?.title || "対象外の請求書"}</span><Button className={touch} variant="ghost" onClick={() => navigate({ invoice: "" })}><X className="size-4" />解除</Button></div> : null}
-      <BankReconciliationDesk key={`${filters.account}:${filters.month}:${filters.status}:${filters.invoice}:${page}:${selected?.id || ""}`} company={company} rows={rows} selected={selected} invoices={invoices} links={links} accounts={accounts} page={page} total={total} focusInvoice={filters.invoice} href={href} pending={pending} onRemove={(link) => { setRemoving(link); setError(""); }} aiPreview={aiPreview} aiConfigured={aiConfigured} aiModel={aiModel} />
+      <BankReconciliationDesk key={`${filters.account}:${filters.month}:${filters.status}:${filters.invoice}:${page}:${selected?.id || ""}`} company={company} rows={rows} selected={selected} invoices={invoices} links={links} accounts={accounts} page={page} total={total} focusInvoice={filters.invoice} href={href} pending={pending} onRemove={(link) => { setRemoving(link); setError(""); }} aiPreview={aiPreview} aiConfigured={aiConfigured} aiModel={aiModel} feeCategories={feeCategories} />
     </> : view === "checks" && aiPreview && review ? <BankReviewPanel company={company} review={review} preview={aiPreview} configured={aiConfigured} model={aiModel} /> : <section className="space-y-3" aria-label="請求書の照合状況"><div className="grid gap-2 sm:grid-cols-2"><Input className={touch} aria-label="請求書を検索" placeholder="請求書・取引先・案件・金額" value={invoiceQuery} onChange={(e) => setInvoiceQuery(e.target.value)} /><select className={bankSelectClass} aria-label="請求書の照合状態" value={invoiceFilter} onChange={(e) => setInvoiceFilter(e.target.value)}><option value="unmatched">銀行未照合</option><option value="recorded">支払い登録済み・銀行未照合</option><option value="overdue">期限超過</option><option value="issues">要再確認・状態の不整合・照合対象外</option><option value="all">すべて</option></select></div><p className="text-xs text-muted-foreground">{invoiceRows.length}件{invoiceRows.length > 100 ? " / 先頭100件を表示。検索で絞り込めます。" : ""}。支払い登録済みと銀行照合済みは別の状態です。</p>
       <ul className="divide-y">{invoiceRows.slice(0, 100).map((row) => <li className="space-y-2 py-4 text-sm" key={row.key}>
         <div className="flex flex-wrap items-center justify-between gap-2">

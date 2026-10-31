@@ -312,6 +312,9 @@ export type Payment = {
   paymentDate: string;
   method?: string;
   memo?: string;
+  // Breakdown when a transfer fee was deducted by the payer: amount = bank receipt + feeAmount.
+  feeAmount?: number;
+  feeCategoryId?: string;
   history?: PaymentHistoryEntry[];
   createdById: string;
   createdAt: string;

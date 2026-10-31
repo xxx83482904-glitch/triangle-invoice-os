@@ -25,7 +25,9 @@ export function reconciliationCandidates(bank: ReconciliationBank, invoices: Rec
   const candidates = invoices.filter((row) => row.eligible && !row.conflict && (row.outstanding > 0 || row.payments.some((payment) => payment.available > 0)) && (bank.side === "INCOME" ? row.kind === "issued" : row.kind === "received")).map((row) => {
     const reasons: string[] = [], warnings: string[] = [];
     const available = reconciliationPaymentOptions(bank, row);
-    const amounts = [row.outstanding, ...available.map((payment) => payment.available)].filter((amount) => amount > 0);
+    // When the stored total disagrees with gross − withholding, the net payable is also a legitimate target.
+    const netOutstanding = row.withholdingMismatch ? Math.max(0, row.netPayable - row.paid) : 0;
+    const amounts = [row.outstanding, ...(netOutstanding > 0 ? [netOutstanding] : []), ...available.map((payment) => payment.available)].filter((amount) => amount > 0);
     const target = amounts.toSorted((a, b) => Math.abs(cents(a) - cents(bank.remaining)) - Math.abs(cents(b) - cents(bank.remaining)))[0];
     const exact = cents(target) === cents(bank.remaining);
     const party = normalizeReconciliationName(row.party), holder = normalizeReconciliationName(row.accountHolder);
@@ -42,7 +44,9 @@ export function reconciliationCandidates(bank: ReconciliationBank, invoices: Rec
     const distances = dates.map((date) => dayDistance(date, bank.date)).filter((value): value is number => value !== undefined);
     const distance = distances.length ? Math.min(...distances) : undefined;
     let score = exact ? 40 : 0;
-    if (exact) reasons.push(matchingPayments.length ? "登録済みの支払い額と一致" : "未入金・未払い額と一致");
+    const netMatch = exact && netOutstanding > 0 && cents(target) === cents(netOutstanding) && cents(target) !== cents(row.outstanding);
+    if (exact) reasons.push(matchingPayments.length ? "登録済みの支払い額と一致" : netMatch ? "源泉徴収後の差引支払額と一致" : "未入金・未払い額と一致");
+    if (netMatch) warnings.push("請求書の差引支払額が税込総額−源泉徴収税額と一致していません。請求書の金額を確認してください");
     if (numberMatch) { reasons.push("請求書番号が摘要に一致"); score += 65; }
     // Alternative evidence of the same counterparty is counted once, not three times.
     if (nameMatch || holderMatch || historyMatch || aliasMatch) score += 40;

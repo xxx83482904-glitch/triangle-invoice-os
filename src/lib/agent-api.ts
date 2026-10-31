@@ -159,7 +159,8 @@ const treatment = z.enum(["NORMAL", "TRANSFER", "EXCLUDED"]);
 const classifySchema = z.object({ categoryId: nullableReference, subCategoryId: nullableReference, treatment: treatment.optional(), reviewed: z.boolean().optional(), memo: z.string().max(2000).optional(),
   classificationConfidence: z.enum(["GUESS", "HISTORY", "INFERRED"]).optional(), classificationReason: z.string().max(1000).optional(), acknowledgeGuess: z.boolean().optional() });
 const bookkeepingSchema = z.object({ categoryId: nullableReference, subCategoryId: nullableReference, splits: z.array(z.unknown()).optional(), hold: z.unknown().optional(), invoiceRequirement: z.enum(["UNDECIDED", "REQUIRED", "NOT_REQUIRED"]).optional(), memo: z.string().max(2000).optional(), reviewed: z.boolean().optional() });
-const allocationSchema = z.object({ invoiceKind: z.enum(["issued", "received"]), invoiceId: reference, amount: z.number(), mode: z.enum(["existing", "new"]).default("new"), paymentId: reference.optional(), note: z.string().trim().max(1000).optional(), duplicateAcknowledged: z.boolean().optional() });
+const allocationSchema = z.object({ invoiceKind: z.enum(["issued", "received"]), invoiceId: reference, amount: z.number(), mode: z.enum(["existing", "new"]).default("new"), paymentId: reference.optional(), note: z.string().trim().max(1000).optional(), duplicateAcknowledged: z.boolean().optional(),
+  fee: z.object({ amount: z.number(), categoryId: reference.optional() }).optional() });
 const batchAllocationsSchema = z.object({ allocations: z.array(allocationSchema).min(1).max(50) });
 const mailLinkSchema = z.object({ receivedInvoiceId: reference });
 const paymentRecordSchema = z.object({ kind: z.enum(["issued", "received"]), invoiceId: reference, amount: z.number(), paymentDate: z.string(), method: z.string().trim().max(100).optional(), memo: z.string().trim().max(1000).optional() });
@@ -201,7 +202,7 @@ function allocation(data: AppData, company: CompanyScope, bank: BankTransaction,
   const payment = input.mode === "existing" ? data.payments.find((row) => row.id === input.paymentId && !row.deletedAt) : undefined;
   if (input.mode === "existing" && !payment) throw new AgentError(404, "支払・入金記録が見つかりません");
   return { transactionId: bank.id, transactionUpdatedAt: bank.updatedAt, invoiceKind: input.invoiceKind, invoiceId: invoice.id, invoiceUpdatedAt: invoice.updatedAt, amount: input.amount, mode: input.mode,
-    paymentId: payment?.id, paymentUpdatedAt: payment?.updatedAt, acknowledged: true, note: input.note || "", duplicateAcknowledged: input.duplicateAcknowledged };
+    paymentId: payment?.id, paymentUpdatedAt: payment?.updatedAt, acknowledged: true, note: input.note || "", duplicateAcknowledged: input.duplicateAcknowledged, fee: input.fee };
 }
 const nextSortOrder = (rows: Array<{ company?: string | null; deletedAt?: string | null; sortOrder?: number }>, company: CompanyScope) => Math.max(0, ...rows.filter((row) => !row.deletedAt && companyFromParam(row.company) === company).map((row) => row.sortOrder || 0)) + 1;
 

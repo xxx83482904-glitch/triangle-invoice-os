@@ -141,6 +141,9 @@ export type BankReconciliation = BankEntity & {
   invoiceEvidence: string;
   paymentEvidence: string;
   note: string;
+  // Transfer fee handled with this link: "payer" = deducted from an incoming transfer (counts toward the invoice),
+  // "bank" = charged on top of an outgoing transfer (counts toward the bank row).
+  fee?: { amount: number; categoryId?: string; borneBy: "payer" | "bank" };
   confirmedById: string;
   reaffirmedAt?: string;
   reaffirmedById?: string;

@@ -11,6 +11,7 @@ import { readDataForRequest } from "@/lib/store";
 import { prepareBankAi } from "@/lib/bank-ai";
 import { bankDocumentReview } from "@/lib/bank-review";
 import { bankToday } from "@/lib/banking";
+import { feeCategoryOptions } from "@/lib/bank-reconciliation-allocation";
 import { effectiveOcrConfig } from "@/lib/ocr-settings";
 
 export default async function BankReconciliationPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -35,7 +36,7 @@ export default async function BankReconciliationPage({ searchParams }: { searchP
   const aiPreview = view === "checks" ? prepareBankAi(data, company, { mode: "month", month }, today, overview).preview : view === "bank" && selected ? prepareBankAi(data, company, { mode: "transaction", transactionId: selected.id }, today, overview).preview : undefined;
   const review = view === "checks" ? bankDocumentReview(data, company, overview, params.checkKind, Number(params.checkPage) || 1) : undefined;
   const aiConfig = await effectiveOcrConfig();
-  return <AppShell><BankReconciliationWorkspace key={`${company}:${filters.query}:${params.view || "bank"}`} company={company} filters={filters} rows={rows} selected={selected}
+  return <AppShell><BankReconciliationWorkspace key={`${company}:${filters.query}:${params.view || "bank"}`} company={company} filters={filters} rows={rows} selected={selected} feeCategories={feeCategoryOptions(data.accountingCategories, company)}
     invoices={overview.invoices} links={overview.links} accounts={accountFilter.options.map((option) => ({ id: option.id, name: option.name, invoiceEligible: data.bankAccounts.some((account) => account.company === company && option.memberIds.includes(account.id) && !invoiceAccountScopeIssue(account)) }))}
     page={page} total={bankRows.length} initialView={view} unlinkedMailCount={overview.unlinkedMailCount}
     aiPreview={aiPreview} aiConfigured={Boolean(aiConfig.openAiApiKey)} aiModel={aiConfig.ocrAiModel} review={review}

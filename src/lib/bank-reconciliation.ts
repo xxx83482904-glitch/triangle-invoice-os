@@ -7,6 +7,7 @@ import { APLUS_SETTLEMENT_LINK_ISSUE, bankCardSettlementConflict, bankCardSettle
 import type { BankReconciliation, BankTransaction } from "@/lib/banking-types";
 import type { AppData, IssuedInvoice, Payment, ReceivedInvoice, User } from "@/lib/types";
 import { normalizeReconciliationName } from "@/lib/bank-reconciliation-matching";
+import { bankSplitValidation } from "@/lib/bank-bookkeeping";
 export { reconciliationCandidates } from "@/lib/bank-reconciliation-matching";
 
 type Kind = "issued" | "received";
@@ -24,6 +25,29 @@ const invoiceEvidenceMatches = (stored: string, kind: Kind, row: IssuedInvoice |
 const paymentEvidence = (row: Payment) => JSON.stringify([row.type, row.issuedInvoiceId, row.receivedInvoiceId, row.amount, row.paymentDate]);
 const activeLinks = (data: AppData, company: CompanyScope) => (data.bankReconciliations || []).filter((row) => row.company === company && !row.deletedAt);
 const paymentMatches = (payment: Payment, kind: Kind, id: string) => !payment.deletedAt && payment.type === (kind === "issued" ? "INCOME" : "EXPENSE") && (kind === "issued" ? payment.issuedInvoiceId === id && !payment.receivedInvoiceId : payment.receivedInvoiceId === id && !payment.issuedInvoiceId);
+// A fee rides along a link. Payer-borne fees are part of what the invoice received; bank-borne fees are part of what left the bank row.
+export const linkBankCents = (link: Pick<BankReconciliation, "amount" | "fee">) => cents(link.amount) + (link.fee?.borneBy === "bank" ? cents(link.fee.amount) : 0);
+export const linkPaymentCents = (link: Pick<BankReconciliation, "amount" | "fee">) => cents(link.amount) + (link.fee?.borneBy === "payer" ? cents(link.fee.amount) : 0);
+
+function withholdingInfo(kind: Kind, invoice: IssuedInvoice | ReceivedInvoice) {
+  const withholdingAmount = kind === "received" ? (invoice as ReceivedInvoice).withholdingAmount || 0 : 0;
+  const netPayable = withholdingAmount > 0 ? Math.max(0, ((invoice as ReceivedInvoice).grossAmount ?? invoice.subtotal + invoice.taxTotal) - withholdingAmount) : invoice.total;
+  return { withholdingAmount, netPayable, withholdingMismatch: withholdingAmount > 0 && cents(netPayable) !== cents(invoice.total) };
+}
+
+// Bank-borne fee: split the bank row into the invoice part and the fee category when the row allows it. Returns a note, never throws.
+function applyFeeSplit(data: AppData, bank: BankTransaction, feeYen: number, categoryId?: string) {
+  if (!categoryId) return "手数料の科目が未指定のため、明細の科目分割はしていません";
+  if (bank.bookkeeping?.splits?.length) return "明細に科目分割があるため変更していません";
+  if (!bank.categoryId) return "明細に科目が未設定のため分割していません。科目を設定してから記帳詳細で分けてください";
+  if (!Number.isSafeInteger(bank.amount) || !Number.isSafeInteger(feeYen) || feeYen >= bank.amount) return "整数の円金額でないため分割していません";
+  const splits = [{ id: crypto.randomUUID(), categoryId: bank.categoryId, subCategoryId: bank.subCategoryId, amount: bank.amount - feeYen, memo: "請求書照合分" }, { id: crypto.randomUUID(), categoryId, amount: feeYen, memo: "振込手数料" }];
+  const issue = bankSplitValidation(bank, splits, data.accountingCategories).issue;
+  if (issue) return `分割していません: ${issue}`;
+  bank.bookkeeping = { ...bank.bookkeeping, splits };
+  bank.updatedAt = stamp(bank.updatedAt);
+  return `明細を ${bank.amount - feeYen} 円（${bank.categoryId ? "元の科目" : ""}）と手数料 ${feeYen} 円に分割しました`;
+}
 
 function reconciliationIndex(data: AppData) {
   const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map((row) => [row.id, row]));
@@ -100,6 +124,8 @@ export const reconcileSchema = z.object({
   amount: z.number().refine(monetary, "金額は正の数で小数点以下2桁までにしてください"),
   acknowledged: z.literal(true), note: z.string().trim().max(1000).default(""),
   duplicateAcknowledged: z.boolean().optional(),
+  // 差額を支払手数料で処理: payer-deducted fee on income, bank-charged fee on expense. New payment records only.
+  fee: z.object({ amount: z.number().refine(monetary, "手数料は正の数で小数点以下2桁までにしてください"), categoryId: z.string().min(1).max(1000).optional() }).optional(),
 });
 export type ReconcileInput = z.input<typeof reconcileSchema>;
 
@@ -115,7 +141,11 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
   if (bank.side !== (value.invoiceKind === "issued" ? "INCOME" : "EXPENSE")) throw new Error("請求書と入出金の方向が異なります");
   const links = activeLinks(data, company), bankLinks = links.filter((row) => row.transactionId === bank.id);
   if (bankLinks.some((row) => reconciliationIssue(data, row, today))) throw new Error("この明細には要再確認の照合があります。先に解除して見直してください");
-  if (amount > cents(bank.amount) - bankLinks.reduce((total, row) => total + cents(row.amount), 0)) throw new Error("銀行明細の未照合額を超えています");
+  const fee = value.fee ? cents(value.fee.amount) : 0, borneBy = value.invoiceKind === "issued" ? "payer" as const : "bank" as const;
+  if (fee && value.mode !== "new") throw new Error("手数料差額の処理は新しい支払記録でのみ使えます");
+  const feeCategory = value.fee?.categoryId ? data.accountingCategories.find((row) => row.id === value.fee!.categoryId && row.company === company && !row.parentId && row.available && !row.deletedAt && (!row.officeCode || row.officeCode === bank.officeCode)) : undefined;
+  if (value.fee?.categoryId && !feeCategory) throw new Error("手数料の科目が見つかりません");
+  if (amount + (borneBy === "bank" ? fee : 0) > cents(bank.amount) - bankLinks.reduce((total, row) => total + linkBankCents(row), 0)) throw new Error(fee && borneBy === "bank" ? "手数料を含めると銀行明細の未照合額を超えています" : "銀行明細の未照合額を超えています");
   const { invoice } = targetInvoice(data, company, value.invoiceKind, value.invoiceId);
   if (links.some((row) => row.invoiceKind === value.invoiceKind && row.invoiceId === value.invoiceId && reconciliationIssue(data, row, today))) throw new Error("この請求書には要再確認の照合があります。先に解除して見直してください");
   if (!eligibleInvoice(value.invoiceKind, invoice)) throw new Error("下書き・保留などの請求書は先に金額と状態を確定してください");
@@ -125,21 +155,22 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
     const found = data.payments.find((row) => row.id === value.paymentId);
     if (!found || !paymentMatches(found, value.invoiceKind, invoice.id) || found.updatedAt !== value.paymentUpdatedAt || !monetary(found.amount)) throw new Error("入金・支払い記録が更新されています");
     if (!isBankDate(found.paymentDate) || found.paymentDate > today) throw new Error("将来日・不正な日付の支払い記録は実際の銀行照合に使用できません");
-    const reserved = links.filter((row) => row.paymentId === found.id).reduce((total, row) => total + cents(row.amount), 0);
+    const reserved = links.filter((row) => row.paymentId === found.id).reduce((total, row) => total + linkPaymentCents(row), 0);
     if (amount > cents(found.amount) - reserved) throw new Error("既存の支払い記録はすでに照合済みです");
     payment = found;
   } else {
     const recorded = data.payments.filter((row) => paymentMatches(row, value.invoiceKind, invoice.id));
     const paid = recorded.reduce((total, row) => total + cents(row.amount), 0);
-    if (amount > cents(invoice.total) - paid) throw new Error("未入金・未払い額を超えています。登録済みの支払いがある場合は既存記録に紐づけてください");
+    if (amount + (borneBy === "payer" ? fee : 0) > cents(invoice.total) - paid) throw new Error(fee && borneBy === "payer" ? "手数料を含めた記録額が未入金額を超えています。差額と請求額を確認してください" : "未入金・未払い額を超えています。登録済みの支払いがある場合は既存記録に紐づけてください");
     const possibleDuplicate = invoice.status === "PAID" || recorded.some((payment) =>
-      cents(payment.amount) > links.filter((link) => link.paymentId === payment.id).reduce((sum, link) => sum + cents(link.amount), 0) ||
+      cents(payment.amount) > links.filter((link) => link.paymentId === payment.id).reduce((sum, link) => sum + linkPaymentCents(link), 0) ||
       (payment.paymentDate === bank.transactionDate && cents(payment.amount) === amount));
     if (possibleDuplicate && !value.duplicateAcknowledged) throw new Error("支払い済み・未照合の記録があります。既存記録との照合、または別の実際の支払いであることを確認してください");
     const timestamp = new Date().toISOString();
     payment = { id: crypto.randomUUID(), source: "BANK_RECONCILIATION", type: bank.side,
       ...(value.invoiceKind === "issued" ? { issuedInvoiceId: invoice.id } : { receivedInvoiceId: invoice.id }),
-      amount: value.amount, paymentDate: bank.transactionDate, method: "銀行明細照合", memo: value.note,
+      amount: borneBy === "payer" && fee ? (amount + fee) / 100 : value.amount, ...(borneBy === "payer" && fee ? { feeAmount: value.fee!.amount, feeCategoryId: feeCategory?.id } : {}),
+      paymentDate: bank.transactionDate, method: fee ? "銀行明細照合（手数料差額処理）" : "銀行明細照合", memo: value.note,
       createdById: actor.id, createdAt: timestamp, updatedAt: timestamp };
   }
   // Validate everything before altering payment totals or linked mail status.
@@ -148,10 +179,11 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
   const timestamp = new Date().toISOString();
   const link: BankReconciliation = { id: crypto.randomUUID(), company, transactionId: bank.id, invoiceKind: value.invoiceKind, invoiceId: invoice.id, paymentId: payment.id, amount: value.amount,
     createdPayment: value.mode === "new", bankEvidence: bankEvidence(bank), invoiceEvidence: invoiceEvidence(value.invoiceKind, invoice), paymentEvidence: paymentEvidence(payment),
-    note: value.note, confirmedById: actor.id, createdAt: timestamp, updatedAt: timestamp };
+    note: value.note, ...(value.fee ? { fee: { amount: value.fee.amount, categoryId: feeCategory?.id, borneBy } } : {}), confirmedById: actor.id, createdAt: timestamp, updatedAt: timestamp };
   data.bankReconciliations ||= [];
   data.bankReconciliations.unshift(link);
-  return { id: link.id, paymentId: payment.id, createdPayment: link.createdPayment };
+  const feeNote = fee && borneBy === "bank" ? applyFeeSplit(data, bank, value.fee!.amount, feeCategory?.id) : "";
+  return { id: link.id, paymentId: payment.id, createdPayment: link.createdPayment, ...(fee ? { fee: { amount: value.fee!.amount, borneBy, note: feeNote } } : {}) };
 }
 
 export const reconciliationBatchSchema = z.object({
@@ -174,10 +206,15 @@ export function confirmBankReconciliationBatch(data: AppData, actor: Pick<User, 
   }
   // Publish nothing until every allocation passes, including mail/status side effects.
   const draft = structuredClone(data);
+  const bankRow = draft.bankTransactions.find((row) => row.id === value.transactionId && row.company === company);
+  if (!bankRow || bankRow.updatedAt !== value.transactionUpdatedAt) throw new Error("銀行明細が更新されています。画面を更新してください");
+  if (value.allocations.filter((row) => row.fee).length > 1) throw new Error("手数料差額の処理は1件の配賦にだけ付けられます");
+  // A bank-borne fee may split the bank row (bumping its version), so later allocations read the current version.
   const results = value.allocations.map((row) => confirmBankReconciliation(draft, actor, company, {
-    ...row, transactionId: value.transactionId, transactionUpdatedAt: value.transactionUpdatedAt, acknowledged: true,
+    ...row, transactionId: value.transactionId, transactionUpdatedAt: bankRow.updatedAt, acknowledged: true,
     invoiceUpdatedAt: targetInvoice(draft, company, row.invoiceKind, row.invoiceId).invoice.updatedAt,
   }, today));
+  data.bankTransactions = draft.bankTransactions;
   data.payments = draft.payments;
   data.bankReconciliations = draft.bankReconciliations;
   data.issuedInvoices = draft.issuedInvoices;
@@ -281,9 +318,9 @@ export function reconciliationReaffirmBlocker(data: AppData, link: BankReconcili
   if (bank.side !== payment.type) return "入出金の方向が一致しません";
   if (!isBankDate(payment.paymentDate) || payment.paymentDate > today) return "将来日・不正な日付の支払い記録は実際の銀行照合に使用できません";
   if (!monetary(link.amount)) return "照合額が不正です";
-  const amount = cents(link.amount), others = activeLinks(data, link.company).filter((row) => row.id !== link.id);
-  if (amount > cents(bank.amount) - others.filter((row) => row.transactionId === bank.id).reduce((total, row) => total + cents(row.amount), 0)) return "銀行明細の金額が照合額を下回ります";
-  if (amount > cents(payment.amount) - others.filter((row) => row.paymentId === payment.id).reduce((total, row) => total + cents(row.amount), 0)) return "入金・支払い記録の金額が照合額を下回ります";
+  const others = activeLinks(data, link.company).filter((row) => row.id !== link.id);
+  if (linkBankCents(link) > cents(bank.amount) - others.filter((row) => row.transactionId === bank.id).reduce((total, row) => total + linkBankCents(row), 0)) return "銀行明細の金額が照合額を下回ります";
+  if (linkPaymentCents(link) > cents(payment.amount) - others.filter((row) => row.paymentId === payment.id).reduce((total, row) => total + linkPaymentCents(row), 0)) return "入金・支払い記録の金額が照合額を下回ります";
   return "";
 }
 
@@ -352,12 +389,12 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
   const conflictBank = new Set<string>(), conflictInvoice = new Set<string>();
   for (const link of links) {
     const key = `${link.invoiceKind}:${link.invoiceId}`;
-    linkedBank.set(link.transactionId, (linkedBank.get(link.transactionId) || 0) + cents(link.amount));
-    linkedPayment.set(link.paymentId, (linkedPayment.get(link.paymentId) || 0) + cents(link.amount));
+    linkedBank.set(link.transactionId, (linkedBank.get(link.transactionId) || 0) + linkBankCents(link));
+    linkedPayment.set(link.paymentId, (linkedPayment.get(link.paymentId) || 0) + linkPaymentCents(link));
     if (issues.get(link.id)) {
       conflictBank.add(link.transactionId); conflictInvoice.add(key);
       if (!blockers.get(link.id)) reaffirmableInvoice.set(key, (reaffirmableInvoice.get(key) || 0) + 1);
-    } else validInvoice.set(key, (validInvoice.get(key) || 0) + cents(link.amount));
+    } else validInvoice.set(key, (validInvoice.get(key) || 0) + linkPaymentCents(link));
   }
   const invoices = ( ["issued", "received"] as const).flatMap((kind) => (kind === "issued" ? data.issuedInvoices : data.receivedInvoices).flatMap((invoice) => {
     if (invoice.deletedAt) return [];
@@ -383,6 +420,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       paid: paid / 100, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, matched: matched / 100, unmatched: Math.max(0, cents(invoice.total) - matched) / 100,
       recordedUnmatched: Math.max(0, paid - matched) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,
       eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), reaffirmable: reaffirmableInvoice.get(key) || 0, stateMismatch,
+      ...withholdingInfo(kind, invoice),
       mailCount: mail.length, status: invoice.status, overdue: eligible && Boolean(invoice.dueDate) && invoice.dueDate < today && paid < cents(invoice.total),
       href: kind === "issued" ? `/issued-invoices?company=${company}&document=${encodeURIComponent(key)}` : `/received-invoices?company=${company}&document=${encodeURIComponent(invoice.id)}`,
       payments: payments.map((row) => ({ id: row.id, updatedAt: row.updatedAt, amount: row.amount, date: row.paymentDate, available: Math.max(0, cents(row.amount) - (linkedPayment.get(row.id) || 0)) / 100, method: row.method || "手入力" })),
@@ -425,7 +463,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       state: conflictBank.has(row.id) ? "conflict" : matched ? "matched" : row.treatment === "NORMAL" && !row.sourceMissing && row.bookkeeping?.invoiceRequirement === "NOT_REQUIRED" ? "not_required" : issue ? "excluded" : "unmatched" };
   });
   return { banks, invoices, unlinkedMailCount, links: links.map((row) => ({ id: row.id, updatedAt: row.updatedAt, transactionId: row.transactionId, invoiceKey: `${row.invoiceKind}:${row.invoiceId}`, amount: row.amount, createdPayment: row.createdPayment,
-    issue: issues.get(row.id) || "", reaffirmable: Boolean(issues.get(row.id)) && !blockers.get(row.id), reaffirmBlocker: blockers.get(row.id) || "", reaffirmedAt: row.reaffirmedAt, note: row.note, createdAt: row.createdAt })) };
+    fee: row.fee, issue: issues.get(row.id) || "", reaffirmable: Boolean(issues.get(row.id)) && !blockers.get(row.id), reaffirmBlocker: blockers.get(row.id) || "", reaffirmedAt: row.reaffirmedAt, note: row.note, createdAt: row.createdAt })) };
 }
 export type ReconciliationOverview = ReturnType<typeof bankReconciliationOverview>;
 export type ReconciliationInvoice = ReconciliationOverview["invoices"][number];

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bankToday, isBankDate } from "@/lib/banking";
-import { reconciliationIssue, syncInvoicePaymentState } from "@/lib/bank-reconciliation";
+import { reconciliationIssue, syncInvoicePaymentState, linkPaymentCents } from "@/lib/bank-reconciliation";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
@@ -129,7 +129,7 @@ export function adjustPayment(data: AppData, actor: Actor, company: CompanyScope
 }
 
 export type PaymentRecordView = {
-  id: string; updatedAt: string; amount: number; paymentDate: string; method: string; memo: string; origin: PaymentOrigin; originLabel: string;
+  id: string; updatedAt: string; amount: number; feeAmount: number; paymentDate: string; method: string; memo: string; origin: PaymentOrigin; originLabel: string;
   linked: boolean; linkedAmount: number; linkIssue: string; canceled: boolean; canceledAt?: string; createdBy: string; createdAt: string;
   history: Array<{ at: string; by: string; kind: PaymentHistoryEntry["kind"]; kindLabel: string; reason: string; before?: { amount: number; paymentDate: string }; after?: { amount: number; paymentDate: string } }>;
 };
@@ -142,8 +142,8 @@ export function paymentRecordsFor(data: AppData, company: CompanyScope, kind: Pa
   return data.payments.filter((payment) => matches(payment, kind, invoiceId)).map((payment): PaymentRecordView => {
     const own = links.filter((link) => link.paymentId === payment.id);
     const origin = paymentOrigin(payment);
-    return { id: payment.id, updatedAt: payment.updatedAt, amount: payment.amount, paymentDate: payment.paymentDate, method: payment.method || "", memo: payment.memo || "", origin, originLabel: paymentOriginLabels[origin],
-      linked: own.length > 0, linkedAmount: own.reduce((total, link) => total + cents(link.amount), 0) / 100, linkIssue: own.map((link) => reconciliationIssue(data, link, today)).find(Boolean) || "",
+    return { id: payment.id, updatedAt: payment.updatedAt, amount: payment.amount, feeAmount: payment.feeAmount || 0, paymentDate: payment.paymentDate, method: payment.method || "", memo: payment.memo || "", origin, originLabel: paymentOriginLabels[origin],
+      linked: own.length > 0, linkedAmount: own.reduce((total, link) => total + linkPaymentCents(link), 0) / 100, linkIssue: own.map((link) => reconciliationIssue(data, link, today)).find(Boolean) || "",
       canceled: Boolean(payment.deletedAt), canceledAt: payment.deletedAt || undefined, createdBy: name(payment.createdById), createdAt: payment.createdAt,
       history: (payment.history || []).map((entry) => ({ at: entry.at, by: name(entry.byId), kind: entry.kind, kindLabel: historyKindLabels[entry.kind], reason: entry.reason || "", before: entry.before, after: entry.after })) };
   }).sort((a, b) => Number(a.canceled) - Number(b.canceled) || b.paymentDate.localeCompare(a.paymentDate) || b.createdAt.localeCompare(a.createdAt));
