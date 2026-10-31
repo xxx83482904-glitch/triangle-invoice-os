@@ -344,7 +344,29 @@ export type AuditLog = {
   undoneAt?: string;
   undoneById?: string;
   undoOfAuditLogId?: string;
+  // Who or what made the change. Absent on rows written before this field existed (a signed-in person or a system job).
+  origin?: AuditOrigin;
 };
+
+export type AuditOrigin = { kind: "user" | "agent" | "sync" | "ai"; tokenId?: string; reason?: string };
+
+export type ApiTokenScope = "bank:read" | "integrity:read" | "bank:write" | "reconcile:write" | "payments:write" | "received:write" | "mail:write" | "partners:write";
+export type ApiToken = {
+  id: string;
+  userId: string;
+  name: string;
+  tokenHash: string;
+  prefix: string;
+  scopes: ApiTokenScope[];
+  company: "JAPAN";
+  expiresAt: string;
+  lastUsedAt?: string;
+  revokedAt?: string | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type AgentRequest = { id: string; tokenId: string; idempotencyKey: string; requestHash: string; result: unknown; createdAt: string; expiresAt: string };
 
 export type InvoiceNumberSetting = {
   id: string;
@@ -382,6 +404,8 @@ export type AppData = {
   attachments: Attachment[];
   auditLogs: AuditLog[];
   invoiceNumberSettings: InvoiceNumberSetting[];
+  apiTokens?: ApiToken[];
+  agentRequests?: AgentRequest[];
 };
 
 export type ProjectMoney = {
