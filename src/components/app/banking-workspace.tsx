@@ -35,6 +35,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "@/hooks/use-toast";
 import { BANK_PAGE_SIZE, bankToday, treatmentLabels, type BankDisplayRow } from "@/lib/banking";
 import { BankClassificationBadge } from "@/components/app/bank-classification-badge";
+import { BankGuessReviewDialog } from "@/components/app/bank-guess-review-dialog";
+import { isGuessClassification } from "@/lib/bank-classification";
 import type { AccountingCategory, BankAccount, BankEdit, BankFilters, BankRule, BankSyncState, BankTransaction } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
 import type { UserRole } from "@/lib/types";
@@ -62,6 +64,7 @@ export function BankingWorkspace(props: Props) {
   const [search, setSearch] = useState(filters.query);
   const [filterEdits, setFilterEdits] = useState<Record<string, string>>({ queryMode: filters.queryMode || "contains", excludeQuery: filters.excludeQuery || "" });
   const [savePreview, setSavePreview] = useState<BankSavePreview | null>(null);
+  const [guessReview, setGuessReview] = useState<{ guesses: BankTransaction[]; others: number } | null>(null);
   const [saveResult, setSaveResult] = useState<{ saved: number; remaining: number; uncertain: boolean } | null>(null);
   const [savedRows, setSavedRows] = useState<Record<string, BankDisplayRow>>({});
   const [matchingSnapshot, setMatchingSnapshot] = useState<string[] | null>(null);
@@ -216,22 +219,28 @@ export function BankingWorkspace(props: Props) {
       return next;
     });
   }
-  function reviewSelection(reviewed: boolean) {
+  function reviewSelection(reviewed: boolean, decision?: { acknowledgeGuesses: boolean }) {
     if (pending || filterDirty || !selected.size) return;
     try {
-      const targets = rows.filter((row) => selected.has(row.id));
+      let targets = rows.filter((row) => selected.has(row.id));
+      // Guessed categories need a person to look at them before they count as reviewed.
+      const guesses = new Set(reviewed ? targets.filter((row) => { const value = drafts[row.id] || editFrom(row); return !value.reviewed && isGuessClassification({ ...row, ...value }); }).map((row) => row.id) : []);
+      if (guesses.size && !decision) { setGuessReview({ guesses: targets.filter((row) => guesses.has(row.id)).map((row) => ({ ...row, ...drafts[row.id] })), others: targets.length - guesses.size }); return; }
+      if (decision && !decision.acknowledgeGuesses) targets = targets.filter((row) => !guesses.has(row.id));
+      setGuessReview(null);
+      if (!targets.length) { setError("推測のままの明細だけが選択されています。科目を選び直すか、内容を確認して確定してください"); return; }
       const reviewedDrafts = reviewBankDrafts(targets, drafts, reviewed);
       setDrafts((current) => {
         const next = { ...current };
         for (const row of targets) {
           if (!reviewedDrafts[row.id]) continue;
           const value = reviewedDrafts[row.id];
-          next[row.id] = patchBankDraft(current, row, reviewed ? { ...editFrom(value), reviewed } : { reviewed });
+          next[row.id] = patchBankDraft(current, row, reviewed ? { ...editFrom(value), reviewed, acknowledgeGuess: guesses.has(row.id) ? true : undefined } : { reviewed, acknowledgeGuess: undefined });
         }
         return next;
       });
       setError("");
-      toast({ title: `${selected.size}件を${reviewed ? "確認済み" : "未確認"}に変更（未保存）` });
+      toast({ title: `${targets.length}件を${reviewed ? "確認済み" : "未確認"}に変更（未保存）${reviewed && guesses.size && decision?.acknowledgeGuesses ? `。推測のまま確定 ${guesses.size}件` : ""}` });
     } catch (error) { setError(error instanceof Error ? error.message : "確認状態を変更できませんでした"); }
   }
   function openCategories(row?: BankTransaction) {
@@ -413,7 +422,8 @@ export function BankingWorkspace(props: Props) {
     return <RowSelectionCheckbox selection={selection} id={row.id} label={`${row.transactionDate} ${row.content}を選択`} />;
   }
   function status(row: BankDisplayRow, value: BankEdit) {
-    return <div className="bank-classification-state flex flex-wrap items-center gap-1"><BankClassificationBadge row={{ ...row, ...value }} />{drafts[row.id] ? <><span className="text-[11px] text-amber-700 dark:text-amber-300">編集・未保存{drafts[row.id].updatedAt !== row.updatedAt ? "（競合）" : ""}</span><Button variant="ghost" size="icon" className="size-6" title="この明細の編集を破棄" aria-label={`${row.content}の編集を破棄`} disabled={pending} onClick={() => { if (window.confirm("この明細の未保存の編集を破棄しますか？")) setDrafts((current) => { const next = { ...current }; delete next[row.id]; return next; }); }}><X className="size-3" /></Button></> : row.predictionPending ? <span className="text-[11px] text-muted-foreground">自動候補・未採用</span> : null}</div>;
+    const sales = row.salesSuggestion && value.treatment === "NORMAL" && (!value.categoryId || !row.salesSuggestion.acceptedIds.includes(value.categoryId)) ? row.salesSuggestion : undefined;
+    return <div className="bank-classification-state flex flex-wrap items-center gap-1"><BankClassificationBadge row={{ ...row, ...value }} />{drafts[row.id] ? <><span className="text-[11px] text-amber-700 dark:text-amber-300">編集・未保存{drafts[row.id].updatedAt !== row.updatedAt ? "（競合）" : ""}</span><Button variant="ghost" size="icon" className="size-6" title="この明細の編集を破棄" aria-label={`${row.content}の編集を破棄`} disabled={pending} onClick={() => { if (window.confirm("この明細の未保存の編集を破棄しますか？")) setDrafts((current) => { const next = { ...current }; delete next[row.id]; return next; }); }}><X className="size-3" /></Button></> : row.predictionPending ? <span className="text-[11px] text-muted-foreground">自動候補・未採用</span> : null}{sales ? <div className="bank-sales-hint flex basis-full flex-wrap items-center gap-1 text-[11px] text-emerald-800 dark:text-emerald-300" title={sales.reason}><span>請求書と照合済みの入金。{sales.categoryName ? `売上系の科目「${sales.categoryName}」を提案` : "売上系の科目を提案"}</span><Button variant="outline" size="xs" disabled={pending || filterDirty || Boolean(row.bookkeeping?.splits?.length)} aria-label={`${row.content}に${sales.categoryName ? `売上科目「${sales.categoryName}」を適用` : "売上系の科目を選ぶ"}`} onClick={() => sales.categoryId ? edit(row, { categoryId: sales.categoryId, subCategoryId: undefined, classificationReason: "発行請求書と照合済みの入金（売上科目の提案を採用・未確定）" }) : openCategories(row)}>{sales.categoryId ? "提案を採用" : "科目を選ぶ"}</Button></div> : null}</div>;
   }
   function classificationReason(row: BankTransaction, value: BankEdit) {
     return value.classificationReason;
@@ -553,6 +563,7 @@ export function BankingWorkspace(props: Props) {
       </div>
     </footer>
     {savePreview ? <BankSavePreviewDialog preview={savePreview} categories={categories} busy={pending} onClose={() => setSavePreview(null)} onSave={save} /> : null}
+    {guessReview ? <BankGuessReviewDialog guesses={guessReview.guesses} others={guessReview.others} categories={categories} busy={pending} onClose={() => setGuessReview(null)} onConfirm={(acknowledgeGuesses) => reviewSelection(true, { acknowledgeGuesses })} /> : null}
     <Dialog open={categoryPickerOpen} onOpenChange={setCategoryPickerOpen}>
       <DialogContent aria-describedby={undefined} showCloseButton={false} className="top-0 left-auto right-0 h-dvh max-h-dvh w-full max-w-sm translate-x-0 translate-y-0 grid-rows-[auto_minmax(0,1fr)] gap-0 rounded-none p-0 sm:max-w-sm" onInteractOutside={(event) => event.preventDefault()}>
         <DialogHeader className="border-b py-4 pl-3 pr-14"><DialogTitle>科目・確認</DialogTitle></DialogHeader>

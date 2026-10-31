@@ -109,6 +109,8 @@ export type BankEdit = {
   classificationSource?: BankClassificationSource;
   classificationReason?: string;
   classificationConfidence?: BankClassificationConfidence;
+  // Required when a GUESS classification is marked reviewed: the person confirms they looked at it.
+  acknowledgeGuess?: boolean;
 };
 
 export type BankRuleInput = Omit<BankRule, "company" | "createdAt" | "id" | "updatedAt" | "deletedAt"> & { id?: string; updatedAt?: string };

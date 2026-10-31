@@ -6,6 +6,7 @@
 
 - Eligible normal transactions without a saved category receive a read-only display candidate immediately. No provider request or financial write occurs merely by opening or scrolling the list.
 - Labels: red `推測・要確認` for weak/no evidence, yellow `過去実績` for matching confirmed history, pale yellow `推定` for rules/keywords or medium/high AI confidence, blue `分類確定` only after explicit review. Text labels accompany color in both themes.
+- Marking a red guess as reviewed requires an explicit acknowledgement (`acknowledgeGuess`); the workspace asks first and the saved reason keeps `推測候補を内容確認のうえ確定`. Income reconciled with an issued invoice gets a sales-category hint. See `docs/review-confidence-guard-2026-10-31.md`.
 - Candidates always choose an available root category within the same company/office. If no valid category exists, show `有効な科目なし`; never invent a category or silently create a master record. Missing sources, transfers and excluded rows keep their existing treatment.
 - Save is explicit. The save count includes loaded display candidates and edits, not unseen transactions. Saving a candidate preserves its confidence and reason without marking it confirmed. Confirmed history alone can teach subsequent predictions. Undo restores confidence together with classification.
 - The list fetches 50 records at a time and automatically appends while scrolling, without a 50-row display ceiling or pagination. Selection and drafts span loaded rows. Desktop column headings stay visible in the scroll area; mobile retains the stacked view.

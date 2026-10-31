@@ -282,7 +282,8 @@ test("explicitly saved candidates keep evidence but do not teach history until r
     assert.equal(row.reviewed, false);
     assert.equal(bankClassificationLabel(row).kind, confidence);
     assert.equal(createBankSuggester(data, { allowGuesses: true })(transaction({ id: "next" }))!.classificationConfidence, "GUESS");
-    saveBankEdits(data, admin, "JAPAN", [{ ...row, reviewed: true }]);
+    if (confidence === "GUESS") assert.throws(() => saveBankEdits(data, admin, "JAPAN", [{ ...row, reviewed: true }]), /推測/);
+    saveBankEdits(data, admin, "JAPAN", [{ ...row, reviewed: true, acknowledgeGuess: confidence === "GUESS" }]);
     assert.equal(bankClassificationLabel(row).kind, "CONFIRMED");
     assert.equal(createBankSuggester(data, { allowGuesses: true })(transaction({ id: "next" }))!.classificationConfidence, "HISTORY");
   }

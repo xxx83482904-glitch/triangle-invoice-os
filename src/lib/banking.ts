@@ -3,8 +3,9 @@ import type { CompanyScope } from "@/lib/company";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 import { BANK_SYNC_IDENTITY_FIELDS, BANK_SYNC_META_FIELDS } from "@/lib/banking-types";
-import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankSyncChange, BankSyncChangeKind, BankSyncReviewSnapshot, BankTransaction, CategoryInput } from "@/lib/banking-types";
-import { bankClassificationLabel, createBankSuggester } from "@/lib/bank-classification";
+import type { AccountingCategory, BankClassificationConfidence, BankEdit, BankFilters, BankRule, BankRuleInput, BankSyncChange, BankSyncChangeKind, BankSyncReviewSnapshot, BankTransaction, CategoryInput } from "@/lib/banking-types";
+import { GUESS_REVIEW_BLOCKER, acknowledgedGuessReason, bankClassificationLabel, createBankSuggester, isGuessClassification, stripGuessAcknowledgement } from "@/lib/bank-classification";
+import { createBankSalesSuggester, type BankSalesSuggestion } from "@/lib/bank-sales-suggestion";
 import { bankAccountFilter } from "@/lib/bank-account-options";
 import { matchesBankSearch } from "@/lib/bank-search";
 import { bankCategoryAllocations, bankSplitValidation } from "@/lib/bank-bookkeeping";
@@ -19,6 +20,7 @@ const reference = z.string().max(1000).optional();
 const treatment = z.enum(["NORMAL", "TRANSFER", "EXCLUDED"]);
 const normalized = (text: string) => text.normalize("NFKC").trim().toLocaleLowerCase("ja");
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
+const isConfidence = (value: string): value is BankClassificationConfidence => ["GUESS", "HISTORY", "INFERRED"].includes(value);
 export const sourceKey = (company: CompanyScope, office: string, kind: string, id: string, subId = "") => ["mf", company, office, kind, id, subId].map(encodeURIComponent).join(":");
 
 export function isBankDate(value: string) {
@@ -56,7 +58,7 @@ function categorySelection(data: AppData, company: CompanyScope, categoryId?: st
 
 export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope, input: BankEdit[]) {
   assertBankAccess(user, company);
-  const edits = z.array(z.object({ id: z.string(), updatedAt: z.string(), categoryId: reference, subCategoryId: reference, treatment, reviewed: z.boolean(), memo: z.string().max(2000), classificationConfidence: z.enum(["GUESS", "HISTORY", "INFERRED"]).optional(), classificationReason: z.string().max(1000).optional() })).min(1).max(500).parse(input);
+  const edits = z.array(z.object({ id: z.string(), updatedAt: z.string(), categoryId: reference, subCategoryId: reference, treatment, reviewed: z.boolean(), memo: z.string().max(2000), classificationConfidence: z.enum(["GUESS", "HISTORY", "INFERRED"]).optional(), classificationReason: z.string().max(1000).optional(), acknowledgeGuess: z.boolean().optional() })).min(1).max(500).parse(input);
   if (new Set(edits.map((row) => row.id)).size !== edits.length) throw new Error("明細が重複しています");
   const byId = new Map(data.bankTransactions.filter((row) => row.company === company).map((row) => [row.id, row]));
   const changes = edits.map((edit) => {
@@ -75,17 +77,21 @@ export function saveBankEdits(data: AppData, user: Actor, company: CompanyScope,
       if (category?.officeCode && category.officeCode !== row.officeCode) throw new Error("明細と同じ事業者の勘定科目を選択してください");
     }
     if (edit.reviewed && (row.sourceMissing || (edit.treatment === "NORMAL" && !edit.categoryId && !row.bookkeeping?.splits?.length))) throw new Error("確認済みにする前に勘定科目と元明細を確認してください");
-    return { row, edit };
-  });
-  // Validate the entire batch before touching any row.
-  for (const { row, edit } of changes) {
     const sameSelection = row.categoryId === edit.categoryId && row.subCategoryId === edit.subCategoryId && row.treatment === edit.treatment;
     const legacyConfidence = bankClassificationLabel({ ...row, reviewed: false }).kind;
-    const confidence = edit.classificationConfidence ?? (sameSelection ? row.classificationConfidence ?? (["GUESS", "HISTORY", "INFERRED"].includes(legacyConfidence) ? legacyConfidence : undefined) : undefined);
+    const confidence = edit.classificationConfidence ?? (sameSelection ? row.classificationConfidence ?? (isConfidence(legacyConfidence) ? legacyConfidence : undefined) : undefined);
     const reason = edit.classificationReason ?? (sameSelection ? row.classificationReason : undefined);
-    Object.assign(row, edit, { categoryId: edit.categoryId || undefined, subCategoryId: edit.subCategoryId || undefined, classificationSource: "MANUAL", classificationConfidence: confidence, classificationReason: reason, ruleId: undefined, updatedAt: stamp(row.updatedAt) });
+    // A guessed category only becomes "reviewed" after a person explicitly says they looked at it.
+    const guess = isGuessClassification({ ...row, categoryId: edit.categoryId || undefined, treatment: edit.treatment, classificationSource: "MANUAL", classificationConfidence: confidence, classificationReason: reason });
+    const acknowledged = edit.reviewed && !row.reviewed && guess;
+    if (acknowledged && !edit.acknowledgeGuess) throw new Error(GUESS_REVIEW_BLOCKER);
+    return { row, edit, confidence, acknowledged, reason: edit.reviewed ? (acknowledged ? acknowledgedGuessReason(reason) : reason) : stripGuessAcknowledgement(reason) };
+  });
+  // Validate the entire batch before touching any row.
+  for (const { row, edit, confidence, reason } of changes) {
+    Object.assign(row, { categoryId: edit.categoryId || undefined, subCategoryId: edit.subCategoryId || undefined, treatment: edit.treatment, reviewed: edit.reviewed, memo: edit.memo, classificationSource: "MANUAL", classificationConfidence: confidence, classificationReason: reason, ruleId: undefined, updatedAt: stamp(row.updatedAt) });
   }
-  return { count: changes.length };
+  return { count: changes.length, acknowledgedGuesses: changes.filter((change) => change.acknowledged).length };
 }
 
 const ruleSchema = z.object({
@@ -198,11 +204,12 @@ export function previewBankRules(data: AppData, user: Actor, company: CompanySco
   return { ...result, rows };
 }
 
-export type BankDisplayRow = BankTransaction & { predictionPending?: boolean; linkLabel?: string; settlementConflict?: string };
+export type BankDisplayRow = BankTransaction & { predictionPending?: boolean; linkLabel?: string; settlementConflict?: string; salesSuggestion?: BankSalesSuggestion };
 
 // Display candidates never mutate the source records or count as confirmed history.
 export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDisplayRow[] {
   const suggest = createBankSuggester(data, { allowGuesses: true });
+  const suggestSales = createBankSalesSuggester(data);
   const transfers = new Set((data.bankTransfers || []).filter((link) => !link.deletedAt).flatMap((link) => [link.outgoingId, link.incomingId]));
   const allocated = new Map<string, number>();
   for (const link of data.bankReconciliations) if (!link.deletedAt) allocated.set(link.transactionId, (allocated.get(link.transactionId) || 0) + link.amount);
@@ -219,7 +226,8 @@ export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDis
     return changed && (candidate.categoryId || candidate.treatment !== "NORMAL") ? { ...candidate, updatedAt: row.updatedAt, predictionPending: true } : { ...row };
   }).map((row) => ({ ...row, ...(knownBankCardSettlement(data, row)
     ? { linkLabel: APLUS_SETTLEMENT_LABEL, settlementConflict: bankCardSettlementConflict(data, row) }
-    : transfers.has(row.id) ? { linkLabel: "資金移動" } : allocated.has(row.id) ? { linkLabel: Math.round(allocated.get(row.id)! * 100) >= Math.round(row.amount * 100) ? "請求書" : "一部照合" } : {}) }));
+    : transfers.has(row.id) ? { linkLabel: "資金移動" } : allocated.has(row.id) ? { linkLabel: Math.round(allocated.get(row.id)! * 100) >= Math.round(row.amount * 100) ? "請求書" : "一部照合" } : {}) }))
+    .map((row) => { const salesSuggestion = suggestSales(row); return salesSuggestion ? { ...row, salesSuggestion } : row; });
 }
 
 export type ImportedAccount = { id: string; subId?: string; name: string; serviceName: string; isManual: boolean };
