@@ -1,4 +1,5 @@
 import { AppShell, PageHeader } from "@/components/app/shell";
+import { isPayableReceivedInvoice } from "@/lib/debt-groups";
 import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -27,7 +28,7 @@ export default async function ReportsPage({
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));
   const issuedInvoices = data.issuedInvoices.filter((invoice) => isBillableIssuedInvoice(invoice) && projectIds.has(invoice.projectId));
-  const receivedInvoices = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId));
+  const receivedInvoices = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId) && isPayableReceivedInvoice(data, invoice));
   const issuedIds = new Set(issuedInvoices.map((invoice) => invoice.id));
   const receivedIds = new Set(receivedInvoices.map((invoice) => invoice.id));
   const payments = data.payments.filter(

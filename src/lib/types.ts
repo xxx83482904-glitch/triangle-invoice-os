@@ -249,11 +249,18 @@ export type ReceivedInvoice = {
   paidAt?: string;
   paymentMethod?: string;
   memo?: string;
+  // Debt group: 請求書 → 再請求 → 督促 → 領収書 of one debt share a debtGroupId; only the latest payable role is paid.
+  debtGroupId?: string;
+  debtRole?: DebtRole;
+  // 合計請求書: amount billed this time versus the balance carried over from earlier statements.
+  statementCurrentAmount?: number;
+  statementCarriedOver?: number;
   uploadedById: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
 };
+export type DebtRole = "INVOICE" | "REISSUE" | "REMINDER" | "STATEMENT" | "RECEIPT";
 
 export type MailDocument = {
   id: string;

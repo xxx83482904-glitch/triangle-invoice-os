@@ -8,6 +8,7 @@ import type { BankReconciliation, BankTransaction } from "@/lib/banking-types";
 import type { AppData, IssuedInvoice, Payment, ReceivedInvoice, User } from "@/lib/types";
 import { normalizeReconciliationName } from "@/lib/bank-reconciliation-matching";
 import { bankSplitValidation } from "@/lib/bank-bookkeeping";
+import { DEBT_NOT_PAYABLE, isPayableReceivedInvoice } from "@/lib/debt-groups";
 export { reconciliationCandidates } from "@/lib/bank-reconciliation-matching";
 
 type Kind = "issued" | "received";
@@ -149,6 +150,7 @@ export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" 
   const { invoice } = targetInvoice(data, company, value.invoiceKind, value.invoiceId);
   if (links.some((row) => row.invoiceKind === value.invoiceKind && row.invoiceId === value.invoiceId && reconciliationIssue(data, row, today))) throw new Error("この請求書には要再確認の照合があります。先に解除して見直してください");
   if (!eligibleInvoice(value.invoiceKind, invoice)) throw new Error("下書き・保留などの請求書は先に金額と状態を確定してください");
+  if (value.invoiceKind === "received" && !isPayableReceivedInvoice(data, invoice as ReceivedInvoice)) throw new Error(DEBT_NOT_PAYABLE);
   if (invoice.updatedAt !== value.invoiceUpdatedAt) throw new Error("請求書が更新されています。画面を更新してください");
   let payment: Payment;
   if (value.mode === "existing") {
@@ -404,7 +406,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const payments = paymentsByInvoice.get(key) || [];
     const paid = payments.reduce((total, row) => total + cents(row.amount), 0), matched = validInvoice.get(key) || 0;
     const mail = kind === "received" ? mailByInvoice.get(invoice.id) || [] : [];
-    const eligible = eligibleInvoice(kind, invoice);
+    const eligible = eligibleInvoice(kind, invoice) && (kind !== "received" || isPayableReceivedInvoice(data, invoice as ReceivedInvoice));
     const complete = paid >= cents(invoice.total) && invoice.total > 0;
     const stateMismatch = eligible && (kind === "received"
       ? (invoice.status === "PAID") !== complete || Boolean((invoice as ReceivedInvoice).mailProcessed) !== complete || mail.some((row) => Boolean(row.mailProcessed) !== complete)

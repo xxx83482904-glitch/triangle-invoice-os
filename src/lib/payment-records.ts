@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bankToday, isBankDate } from "@/lib/banking";
 import { reconciliationIssue, syncInvoicePaymentState, linkPaymentCents } from "@/lib/bank-reconciliation";
+import { DEBT_NOT_PAYABLE, isPayableReceivedInvoice } from "@/lib/debt-groups";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
@@ -84,6 +85,7 @@ export type RecordPaymentInput = z.input<typeof recordSchema>;
 export function recordPayment(data: AppData, actor: Actor, company: CompanyScope, input: RecordPaymentInput, today = bankToday()) {
   const value = recordSchema.parse(input);
   const { invoice } = targetInvoice(data, actor, company, value.kind, value.invoiceId);
+  if (value.kind === "received" && !isPayableReceivedInvoice(data, invoice as ReceivedInvoice)) throw new Error(DEBT_NOT_PAYABLE);
   if (value.invoiceUpdatedAt && invoice.updatedAt !== value.invoiceUpdatedAt) throw new Error("請求書が更新されています。画面を更新してください");
   if (!isBankDate(value.paymentDate) || value.paymentDate > today) throw new Error("支払日は今日以前の実在する日付にしてください");
   const paid = activePaymentsFor(data, value.kind, invoice.id).reduce((total, payment) => total + cents(payment.amount), 0);

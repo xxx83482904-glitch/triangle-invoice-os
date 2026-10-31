@@ -10,6 +10,7 @@ import { confirmBankReconciliation, confirmBankReconciliationBatch, reaffirmBank
 import { linkMailDocumentToReceivedInvoice, unlinkMailDocument } from "@/lib/mail-links";
 import { adjustPayment, cancelPayment, recordPayment } from "@/lib/payment-records";
 import { applyReceivedInvoiceFields } from "@/lib/received-invoice-edits";
+import { assignDebtGroup, removeFromDebtGroup } from "@/lib/debt-groups";
 import { bankSyncRunViews } from "@/lib/bank-sync-runs";
 import { integrityReport } from "@/lib/integrity";
 import { can, canAccessCompany } from "@/lib/rbac";
@@ -110,7 +111,7 @@ export const agentOperations = {
   "reconcile.confirm": "reconcile:write", "reconcile.batch": "reconcile:write", "reconcile.remove": "reconcile:write", "reconcile.reaffirm": "reconcile:write",
   "mail.link": "mail:write", "mail.unlink": "mail:write",
   "payment.record": "payments:write", "payment.cancel": "payments:write", "payment.adjust": "payments:write",
-  "received.update": "received:write", "vendor.create": "partners:write", "project.create": "partners:write",
+  "received.update": "received:write", "debt.group": "received:write", "debt.unlink": "received:write", "vendor.create": "partners:write", "project.create": "partners:write",
 } as const satisfies Record<string, ApiTokenScope>;
 export type AgentOperation = keyof typeof agentOperations;
 const operationNames = Object.keys(agentOperations) as [AgentOperation, ...AgentOperation[]];
@@ -271,6 +272,14 @@ function applyOperation(data: AppData, auth: AgentAuth, company: CompanyScope, o
       const updated: ReceivedInvoice = applyReceivedInvoiceFields(data, actor, company, invoice.id, form);
       updated.updatedAt = stamp(updated.updatedAt);
       return { targetId: invoice.id, result: { id: invoice.id, total: updated.total, status: updated.status } };
+    }
+    case "debt.group": {
+      const payload = z.object({ invoiceIds: z.array(reference).min(2).max(50), roles: z.record(z.string(), z.enum(["INVOICE", "REISSUE", "REMINDER", "STATEMENT", "RECEIPT"])).default({}), groupId: reference.optional() }).parse(operation.payload);
+      return { targetId: payload.invoiceIds[0], result: assignDebtGroup(data, actor, company, payload) };
+    }
+    case "debt.unlink": {
+      const invoice = find(data.receivedInvoices, operation.target.id, "受領請求書", operation);
+      return { targetId: invoice.id, result: removeFromDebtGroup(data, actor, company, { invoiceId: invoice.id, expectedUpdatedAt: invoice.updatedAt }) };
     }
     case "vendor.create": {
       if (!can(actor, "manage:vendors")) throw new AgentError(403, "支払先を作成する権限がありません");
