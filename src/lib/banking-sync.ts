@@ -7,6 +7,7 @@ import type { CompanyScope } from "@/lib/company";
 import type { AppData, User } from "@/lib/types";
 import type { BankSyncState } from "@/lib/banking-types";
 import { recordBankCoverage } from "@/lib/bank-forecast";
+import { BANK_SYNC_SYSTEM_ACTOR, bankSyncRunFor, beginBankSyncRun, finishBankSyncRun, recordBankSyncChanges, recordBankSyncRange } from "@/lib/bank-sync-runs";
 
 type Actor = Pick<User, "id" | "role">;
 export type BankSyncRequest = { mode: "recent" | "all" | "range"; start?: string; end?: string };
@@ -65,9 +66,11 @@ export async function queueBankSync(company: CompanyScope, input: BankSyncReques
       resume = { start: state.rangeStart, completedThrough: state.completedThrough };
     }
     Object.assign(state, { runId, requestMode: request.mode, status: "RUNNING", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), imported: 0, updated: 0, error: undefined, rangeStart: resume?.start, rangeEnd: undefined, completedThrough: resume?.completedThrough });
+    // Every run keeps its own change record so review clearances can be reviewed and restored later.
+    beginBankSyncRun(data, { runId, company, officeCode: config.officeCode, actorId: user?.id || BANK_SYNC_SYSTEM_ACTOR, mode: request.mode });
     return { runId };
   }, undefined, noUndo);
-  return { company, runId, request, resume, userId: user?.id || "system-moneyforward" };
+  return { company, runId, request, resume, userId: user?.id || BANK_SYNC_SYSTEM_ACTOR };
 }
 
 export async function runBankSync(job: Awaited<ReturnType<typeof queueBankSync>>) {
@@ -97,6 +100,8 @@ export async function runBankSync(job: Awaited<ReturnType<typeof queueBankSync>>
       if (current.officeCode !== office.code) throw new MoneyForwardError("連携事業者が一致しません");
       mergeBankMasters(data, company, office.code, accounts, categories);
       Object.assign(current, { officeName: office.name, rangeStart: start, rangeEnd: end });
+      const run = bankSyncRunFor(data, company, runId);
+      if (run) recordBankSyncRange(run, start, end);
       return { accounts: accounts.length, categories: categories.length, start, end };
     });
     for (const range of ranges) {
@@ -105,17 +110,27 @@ export async function runBankSync(job: Awaited<ReturnType<typeof queueBankSync>>
         const result = mergeBankTransactions(data, company, office.code, items, range);
         recordBankCoverage(current, range.start, range.end, data.bankAccounts.filter((row) => row.company === company && row.officeCode === office.code && row.available).map((row) => row.id));
         current.imported += result.imported; current.updated += result.updated; current.completedThrough = range.end;
-        return { ...result, through: range.end };
+        const run = bankSyncRunFor(data, company, runId);
+        if (run) recordBankSyncChanges(run, result);
+        // Audit rows keep counts only; the per-row diff lives in the run record.
+        return { imported: result.imported, updated: result.updated, changes: result.changes.length, reviewCleared: result.changes.filter((change) => change.reviewCleared).length, through: range.end };
       });
     }
-    await update("BANK_SYNC_FINISH", (_data, current) => {
+    await update("BANK_SYNC_FINISH", (data, current) => {
       current.status = "SUCCESS";
       // A historical-only refresh must not advance the incremental watermark.
       if (request.mode !== "range") current.lastSuccessAt = new Date().toISOString();
+      const run = bankSyncRunFor(data, company, runId);
+      if (run) finishBankSyncRun(run, "SUCCESS");
       return { imported: current.imported, updated: current.updated };
     });
   } catch (error) {
-    await update("BANK_SYNC_ERROR", (_data, state) => { state.status = "ERROR"; state.error = bankingError(error); return { error: state.error }; });
+    await update("BANK_SYNC_ERROR", (data, state) => {
+      state.status = "ERROR"; state.error = bankingError(error);
+      const run = bankSyncRunFor(data, company, runId);
+      if (run) finishBankSyncRun(run, "ERROR", state.error);
+      return { error: state.error };
+    });
   }
 }
 

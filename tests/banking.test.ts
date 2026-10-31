@@ -23,8 +23,8 @@ const rule = (extra: Partial<BankRuleInput> = {}): BankRuleInput => ({ name: "Au
 test("bank and card transactions import once without changing invoice payments", () => {
   const data = setup(), invoices = JSON.stringify(data.issuedInvoices);
   const items = [source(), source("card-charge", { connected_account_id: "card", connected_sub_account_id: null, side: "EXPENSE", value: 5000 }), source("card-refund", { connected_account_id: "card", connected_sub_account_id: null, value: 500 })];
-  assert.deepEqual(mergeBankTransactions(data, "JAPAN", office, items, range), { imported: 3, updated: 0 });
-  assert.deepEqual(mergeBankTransactions(data, "JAPAN", office, items, range), { imported: 0, updated: 0 });
+  assert.deepEqual(mergeBankTransactions(data, "JAPAN", office, items, range), { imported: 3, updated: 0, changes: [] });
+  assert.deepEqual(mergeBankTransactions(data, "JAPAN", office, items, range), { imported: 0, updated: 0, changes: [] });
   assert.equal(data.bankTransactions.length, 3); assert.equal(data.payments.length, 0); assert.equal(JSON.stringify(data.issuedInvoices), invoices);
 });
 test("month ranges handle leap years, boundaries and invalid dates", () => {
@@ -178,4 +178,48 @@ test("undo of a classification keeps newer source data and requires review", () 
   assert.equal(data.bankTransactions[0].memo, "Previous memo");
   assert.equal(data.bankTransactions[0].reviewed, false);
   assert.notEqual(data.bankTransactions[0].updatedAt, version);
+});
+
+test("journalizing status and memo changes keep review, categories, memos and bookkeeping", () => {
+  const data = setup(); mergeBankTransactions(data, "JAPAN", office, [source()], range);
+  const row = data.bankTransactions[0];
+  saveBankEdits(data, admin, "JAPAN", [edit(row, { categoryId: catId, subCategoryId: sourceKey("JAPAN", office, "category", "design", "sales"), reviewed: true, memo: "Reviewed locally" })]);
+  row.bookkeeping = { invoiceRequirement: "NOT_REQUIRED" };
+  const before = row.updatedAt;
+  const result = mergeBankTransactions(data, "JAPAN", office, [source("t1", { journalizing_status: "registered", memo: "MF memo" })], range);
+  assert.equal(result.updated, 1); assert.equal(result.changes.length, 1);
+  assert.equal(result.changes[0].kind, "META"); assert.equal(result.changes[0].reviewCleared, false); assert.equal(result.changes[0].before, undefined);
+  assert.deepEqual(result.changes[0].fields.map((field) => field.key).sort(), ["sourceMemo", "sourceStatus"]);
+  assert.equal(row.reviewed, true); assert.equal(row.categoryId, catId); assert.ok(row.subCategoryId); assert.equal(row.memo, "Reviewed locally"); assert.equal(row.classificationSource, "MANUAL");
+  assert.deepEqual(row.bookkeeping, { invoiceRequirement: "NOT_REQUIRED" });
+  assert.equal(row.sourceStatus, "registered"); assert.equal(row.sourceMemo, "MF memo"); assert.notEqual(row.updatedAt, before); assert.equal(result.changes[0].afterUpdatedAt, row.updatedAt);
+  assert.deepEqual(mergeBankTransactions(data, "JAPAN", office, [source("t1", { journalizing_status: "registered", memo: "MF memo" })], range), { imported: 0, updated: 0, changes: [] });
+});
+test("amount, date, description or account changes clear review and record the previous state", () => {
+  const data = setup(); mergeBankTransactions(data, "JAPAN", office, [source(), source("t2")], range);
+  saveBankEdits(data, admin, "JAPAN", data.bankTransactions.map((row) => edit(row, { categoryId: catId, reviewed: true })));
+  const result = mergeBankTransactions(data, "JAPAN", office, [source("t1", { value: 13500 }), source("t2", { date: "2026-09-16", journalizing_status: "registered" })], range);
+  assert.equal(result.changes.length, 2);
+  for (const change of result.changes) { assert.equal(change.kind, "CHANGED"); assert.equal(change.reviewCleared, true); assert.equal(change.before?.reviewed, true); assert.equal(change.before?.categoryId, catId); }
+  assert.deepEqual(result.changes[0].fields, [{ key: "amount", before: 12000, after: 13500 }]);
+  assert.deepEqual(result.changes[1].fields.map((field) => field.key), ["transactionDate", "sourceStatus"]);
+  assert.ok(data.bankTransactions.every((row) => !row.reviewed && row.categoryId === catId && row.classificationSource === "MANUAL"));
+  assert.ok(result.changes.every((change) => change.afterUpdatedAt === data.bankTransactions.find((row) => row.id === change.transactionId)!.updatedAt));
+});
+test("vanished and reappearing rows are recorded with their review state", () => {
+  const data = setup(); mergeBankTransactions(data, "JAPAN", office, [source()], range);
+  saveBankEdits(data, admin, "JAPAN", [edit(data.bankTransactions[0], { categoryId: catId, reviewed: true })]);
+  const missing = mergeBankTransactions(data, "JAPAN", office, [], range);
+  assert.equal(missing.changes.length, 1); assert.equal(missing.changes[0].kind, "MISSING"); assert.equal(missing.changes[0].reviewCleared, true);
+  assert.deepEqual(missing.changes[0].fields, [{ key: "sourceMissing", before: false, after: true }]);
+  const restored = mergeBankTransactions(data, "JAPAN", office, [source()], range);
+  assert.equal(restored.changes[0].kind, "RESTORED"); assert.equal(restored.changes[0].reviewCleared, false); assert.equal(data.bankTransactions[0].reviewed, false);
+  assert.deepEqual(mergeBankTransactions(data, "JAPAN", office, [source()], range).changes, []);
+});
+test("source exclusion still toggles treatment for automatic rows as an informational change", () => {
+  const data = setup(); mergeBankTransactions(data, "JAPAN", office, [source()], range);
+  const excluded = mergeBankTransactions(data, "JAPAN", office, [source("t1", { journalizing_status: "excluded" })], range);
+  assert.equal(excluded.changes[0].kind, "META"); assert.equal(data.bankTransactions[0].treatment, "EXCLUDED");
+  mergeBankTransactions(data, "JAPAN", office, [source("t1", { journalizing_status: "none" })], range);
+  assert.equal(data.bankTransactions[0].treatment, "NORMAL");
 });

@@ -152,3 +152,39 @@ export type BankTransfer = BankEntity & {
   confirmedById: string;
   deletedAt?: string | null;
 };
+
+// Fields a sync may rewrite. Identity fields invalidate review; meta fields are informational only.
+export const BANK_SYNC_IDENTITY_FIELDS = ["bankAccountId", "transactionDate", "amount", "side", "content"] as const;
+export const BANK_SYNC_META_FIELDS = ["sourceMemo", "sourceStatus"] as const;
+export type BankSyncSourceField = (typeof BANK_SYNC_IDENTITY_FIELDS)[number] | (typeof BANK_SYNC_META_FIELDS)[number] | "sourceMissing";
+export type BankSyncChangeKind = "CHANGED" | "META" | "MISSING" | "RESTORED";
+export type BankSyncReviewSnapshot = Pick<BankTransaction, "reviewed" | "categoryId" | "subCategoryId" | "treatment" | "classificationSource" | "classificationConfidence" | "classificationReason" | "ruleId">;
+export type BankSyncChange = {
+  transactionId: string;
+  kind: BankSyncChangeKind;
+  fields: Array<{ key: BankSyncSourceField; before: string | number | boolean; after: string | number | boolean }>;
+  reviewCleared: boolean;
+  before?: BankSyncReviewSnapshot;
+  afterUpdatedAt: string;
+  restoredAt?: string;
+};
+export type BankSyncRun = BankEntity & {
+  runId: string;
+  officeCode: string;
+  actorId: string;
+  mode: "recent" | "all" | "range";
+  status: "RUNNING" | "SUCCESS" | "ERROR";
+  error?: string;
+  rangeStart?: string;
+  rangeEnd?: string;
+  startedAt: string;
+  finishedAt?: string;
+  added: number;
+  changed: number;
+  metaOnly: number;
+  missing: number;
+  restored: number;
+  reviewCleared: number;
+  changes: BankSyncChange[];
+  truncated: boolean;
+};

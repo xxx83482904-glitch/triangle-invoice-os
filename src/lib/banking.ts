@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { CompanyScope } from "@/lib/company";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
-import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankTransaction, CategoryInput } from "@/lib/banking-types";
+import { BANK_SYNC_IDENTITY_FIELDS, BANK_SYNC_META_FIELDS } from "@/lib/banking-types";
+import type { AccountingCategory, BankEdit, BankFilters, BankRule, BankRuleInput, BankSyncChange, BankSyncChangeKind, BankSyncReviewSnapshot, BankTransaction, CategoryInput } from "@/lib/banking-types";
 import { bankClassificationLabel, createBankSuggester } from "@/lib/bank-classification";
 import { bankAccountFilter } from "@/lib/bank-account-options";
 import { matchesBankSearch } from "@/lib/bank-search";
@@ -249,7 +250,10 @@ export function mergeBankMasters(data: AppData, company: CompanyScope, office: s
   for (const row of data.accountingCategories) if (row.company === company && row.officeCode === office && row.sourceId && !categoryIds.has(row.id)) row.available = false;
 }
 
-export function mergeBankTransactions(data: AppData, company: CompanyScope, office: string, items: ImportedTransaction[], range: { start: string; end: string }) {
+export type BankSyncMergeResult = { imported: number; updated: number; changes: BankSyncChange[] };
+const reviewSnapshot = (row: BankTransaction): BankSyncReviewSnapshot => ({ reviewed: row.reviewed, categoryId: row.categoryId, subCategoryId: row.subCategoryId, treatment: row.treatment, classificationSource: row.classificationSource, classificationConfidence: row.classificationConfidence, classificationReason: row.classificationReason, ruleId: row.ruleId });
+
+export function mergeBankTransactions(data: AppData, company: CompanyScope, office: string, items: ImportedTransaction[], range: { start: string; end: string }): BankSyncMergeResult {
   monthRanges(range.start, range.end);
   const seen = new Set<string>();
   const byId = new Map(data.bankTransactions.filter((row) => row.company === company && row.officeCode === office).map((row) => [row.sourceId, row]));
@@ -261,17 +265,28 @@ export function mergeBankTransactions(data: AppData, company: CompanyScope, offi
   }
   let imported = 0, updated = 0;
   const importedRows: BankTransaction[] = [];
+  const tracked: Array<{ row: BankTransaction; change: BankSyncChange }> = [];
+  const track = (row: BankTransaction, kind: BankSyncChangeKind, fields: BankSyncChange["fields"], before: BankSyncReviewSnapshot, reviewCleared: boolean) =>
+    tracked.push({ row, change: { transactionId: row.id, kind, fields, reviewCleared, ...(reviewCleared ? { before } : {}), afterUpdatedAt: row.updatedAt } });
   for (const item of items) {
     const existing = byId.get(item.id);
     const values = { bankAccountId: sourceKey(company, office, "account", item.connected_account_id, item.connected_sub_account_id || undefined), transactionDate: item.date, amount: item.value, side: item.side, content: item.content, sourceMemo: item.memo || "", sourceStatus: item.journalizing_status, sourceMissing: false };
     if (existing) {
-      if (Object.entries(values).some(([key, value]) => existing[key as keyof BankTransaction] !== value)) {
+      const fields: BankSyncChange["fields"] = [...BANK_SYNC_IDENTITY_FIELDS, ...BANK_SYNC_META_FIELDS].filter((key) => existing[key] !== values[key]).map((key) => ({ key, before: existing[key], after: values[key] }));
+      const restored = existing.sourceMissing;
+      if (restored) fields.push({ key: "sourceMissing", before: true, after: false });
+      if (fields.length) {
+        // Only the amount, date, direction, description, account or a reappearing row invalidate review.
+        // Money Forward's journalizing status and memo are informational and keep the local review state.
+        const identityChanged = restored || fields.some((field) => (BANK_SYNC_IDENTITY_FIELDS as readonly string[]).includes(field.key));
+        const before = reviewSnapshot(existing);
         if (existing.classificationSource !== "MANUAL") {
           if (values.sourceStatus === "excluded") existing.treatment = "EXCLUDED";
           else if (existing.sourceStatus === "excluded" && existing.treatment === "EXCLUDED") existing.treatment = "NORMAL";
         }
-        Object.assign(existing, values, { reviewed: false, updatedAt: stamp(existing.updatedAt) });
+        Object.assign(existing, values, identityChanged ? { reviewed: false } : {}, { updatedAt: stamp(existing.updatedAt) });
         updated++;
+        track(existing, restored ? "RESTORED" : identityChanged ? "CHANGED" : "META", fields, before, identityChanged && before.reviewed);
       }
       importedRows.push(existing);
     } else {
@@ -283,13 +298,17 @@ export function mergeBankTransactions(data: AppData, company: CompanyScope, offi
   }
   // Only a completely fetched period may mark vanished source rows. Never delete local history.
   for (const row of byId.values()) if (row.transactionDate >= range.start && row.transactionDate <= range.end && !seen.has(row.sourceId) && !row.sourceMissing) {
+    const before = reviewSnapshot(row);
     row.sourceMissing = true; row.reviewed = false; row.updatedAt = stamp(row.updatedAt); updated++;
+    track(row, "MISSING", [{ key: "sourceMissing", before: false, after: true }], before, before.reviewed);
   }
   // Build history only after source corrections and missing rows invalidate review.
   const suggest = createBankSuggester(data);
   // Known settlements remain display/preview candidates until the user explicitly saves.
   for (const row of importedRows) if (!knownBankCardSettlement(data, row)) classifyBankTransaction(data, row, suggest);
-  return { imported, updated };
+  // Classification may stamp a row again; the recorded version must match the saved row so later edits are detectable.
+  for (const entry of tracked) entry.change.afterUpdatedAt = entry.row.updatedAt;
+  return { imported, updated, changes: tracked.map((entry) => entry.change) };
 }
 
 export function bankFilters(params: Record<string, string | undefined>): BankFilters {

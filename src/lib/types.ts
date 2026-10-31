@@ -1,4 +1,4 @@
-import type { AccountingCategory, BankAccount, BankReconciliation, BankRule, BankSyncState, BankTransaction, BankTransfer } from "@/lib/banking-types";
+import type { AccountingCategory, BankAccount, BankReconciliation, BankRule, BankSyncRun, BankSyncState, BankTransaction, BankTransfer } from "@/lib/banking-types";
 
 export type UserRole =
   | "ADMIN"
@@ -365,6 +365,7 @@ export type AppData = {
   bankSyncStates: BankSyncState[];
   bankReconciliations: BankReconciliation[];
   bankTransfers?: BankTransfer[];
+  bankSyncRuns?: BankSyncRun[];
   bankAiUsage?: Partial<Record<"JAPAN" | "CHINA", { day: string; count: number; lastRequestedAt: string }>>;
   attachments: Attachment[];
   auditLogs: AuditLog[];
