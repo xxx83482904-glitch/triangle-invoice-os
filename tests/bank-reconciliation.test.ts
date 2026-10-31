@@ -362,14 +362,14 @@ test("unlinking an existing payment preserves it and edited new payments are pro
   assert.equal(JSON.stringify(fresh), unchanged);
 });
 
-test("paid status alone is not bank evidence and inconsistent mail status is visible and repairable", () => {
+test("paid status alone is not bank evidence and mail processing differences are separate", () => {
   const data = setup(); data.receivedInvoices[0].status = "PAID"; data.mailDocuments[0].mailProcessed = true;
   let row = bankReconciliationOverview(data, "JAPAN", today).invoices.find((item) => item.kind === "received")!;
   assert.equal(row.stateMismatch, true); assert.equal(row.matched, 0); assert.equal(row.outstanding, 8000);
   assert.throws(() => confirm(data, { invoiceKind: "received" }), /別の実際の支払い/);
   confirm(data, { invoiceKind: "received", duplicateAcknowledged: true }); data.mailDocuments[0].mailProcessed = false;
   row = bankReconciliationOverview(data, "JAPAN", today).invoices.find((item) => item.kind === "received")!;
-  assert.equal(row.stateMismatch, true);
+  assert.equal(row.stateMismatch, false); assert.equal(row.mailProcessingMismatch, true);
   const before = JSON.stringify(data.payments);
   syncReconciledInvoiceStatus(data, admin, "JAPAN", "received", row.id, row.updatedAt, today);
   assert.equal(data.mailDocuments[0].mailProcessed, true); assert.equal(JSON.stringify(data.payments), before);
@@ -494,7 +494,8 @@ test("invoice and mail status mismatches stay visible without inventing payments
   data.receivedInvoices[0].mailProcessed = false;
   const view = bankReconciliationOverview(data, "JAPAN", today);
   assert.ok(view.invoices.find((row) => row.id === "issued-1")!.stateMismatch);
-  assert.ok(view.invoices.find((row) => row.id === "received-1")!.stateMismatch);
+  assert.equal(view.invoices.find((row) => row.id === "received-1")!.stateMismatch, false);
+  assert.equal(view.invoices.find((row) => row.id === "received-1")!.mailProcessingMismatch, true);
   assert.equal(reconciliationCandidates(view.banks[0], view.invoices).length, 0);
   const paymentBefore = JSON.stringify(data.payments);
   syncReconciledInvoiceStatus(data, admin, "JAPAN", "issued", "issued-1", data.issuedInvoices[0].updatedAt, today);

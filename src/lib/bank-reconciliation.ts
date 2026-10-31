@@ -409,8 +409,10 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const eligible = eligibleInvoice(kind, invoice) && (kind !== "received" || isPayableReceivedInvoice(data, invoice as ReceivedInvoice));
     const complete = paid >= cents(invoice.total) && invoice.total > 0;
     const stateMismatch = eligible && (kind === "received"
-      ? (invoice.status === "PAID") !== complete || Boolean((invoice as ReceivedInvoice).mailProcessed) !== complete || mail.some((row) => Boolean(row.mailProcessed) !== complete)
+      ? (invoice.status === "PAID") !== complete
       : invoicePaymentSummary({ payments }, invoice as IssuedInvoice).status !== invoice.status);
+    // Mail processing is independent of payment completion: expose the difference for information only.
+    const mailProcessingMismatch = eligible && kind === "received" && (Boolean((invoice as ReceivedInvoice).mailProcessed) !== complete || mail.some((row) => Boolean(row.mailProcessed) !== complete));
     return [{ key, kind, id: invoice.id, updatedAt: invoice.updatedAt, title: kind === "issued" ? (invoice as IssuedInvoice).invoiceNumber : (invoice as ReceivedInvoice).originalFileName || mail[0]?.title || "受領請求書",
       party: party?.companyName || "取引先未設定", partyId: party?.id || "", accountHolder: party && "accountHolder" in party && typeof party.accountHolder === "string" ? party.accountHolder : "",
       confirmedNames: [] as Array<{ accountId: string; content: string }>,
@@ -421,7 +423,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       project: project.name, total: invoice.total, date: invoice.issueDate, dueDate: invoice.dueDate,
       paid: paid / 100, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, matched: matched / 100, unmatched: Math.max(0, cents(invoice.total) - matched) / 100,
       recordedUnmatched: Math.max(0, paid - matched) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,
-      eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), reaffirmable: reaffirmableInvoice.get(key) || 0, stateMismatch,
+      eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), reaffirmable: reaffirmableInvoice.get(key) || 0, stateMismatch, mailProcessingMismatch,
       ...withholdingInfo(kind, invoice),
       mailCount: mail.length, status: invoice.status, overdue: eligible && Boolean(invoice.dueDate) && invoice.dueDate < today && paid < cents(invoice.total),
       href: kind === "issued" ? `/issued-invoices?company=${company}&document=${encodeURIComponent(key)}` : `/received-invoices?company=${company}&document=${encodeURIComponent(invoice.id)}`,

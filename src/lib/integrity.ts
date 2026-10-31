@@ -15,6 +15,7 @@ import { activePaymentsFor, isLegacyStatusPayment } from "@/lib/payment-records"
 export const integrityKinds = {
   reconciliation_conflict: { label: "要再確認の照合", description: "照合後に請求書・支払記録・銀行明細のいずれかが変わった照合です。", action: "照合画面で内容を確認し、問題なければ「内容を確認して照合を維持」、違っていれば解除して再照合してください" },
   payment_mismatch: { label: "支払記録と請求額・状態の不整合", description: "支払記録の合計が請求額を超えている、または書類の状態と支払記録の完了状態が一致していません。", action: "書類の支払記録一覧で金額修正・取消を行い、状態を支払記録に合わせてください" },
+  mail_processing_mismatch: { label: "郵便処理と支払状況の差", description: "受領請求書または連携郵便物の処理状態が、支払記録の完了状態と異なります。書類整理と支払いは独立した状態です。", action: "書類整理の状況に応じて郵便物の処理状態を確認してください。支払状況と一致させる必要はありません" },
   mail_link: { label: "郵便物の参照切れ・原本欠落", description: "郵便物が削除済みの受領請求書を参照している、または原本ファイルが見つかりません。", action: "郵便物フォルダーで「受領請求書を作り直す」か既存書類へ再連携し、原本は再アップロードしてください" },
   reviewed_guess: { label: "推測のまま確認済み", description: "根拠の弱い推測の科目が、内容確認の記録なしに確認済みになっています（確認ガード導入前のデータ）。", action: "未確認に戻して摘要と科目を見直すか、科目を選び直してから確認済みにしてください" },
   reviewed_undecided: { label: "確認済みだが記帳メモ未確定", description: "確認済みの明細で、請求書要否が「未確定」のまま、または保留が残っています。", action: "記帳詳細で請求書要否を決めるか、保留を解消してください" },
@@ -78,6 +79,9 @@ export function integrityReport(data: AppData, company: CompanyScope, options: {
     if (invoice.overpaid > 0 || invoice.stateMismatch) push({ id: `payment_mismatch:${invoice.key}`, kind: "payment_mismatch", severity: invoice.overpaid > 0 ? "ERROR" : "WARNING", title: `${invoice.title} / ${invoice.party}`,
       detail: [invoice.overpaid > 0 ? `支払記録の合計が請求額を ${money(invoice.overpaid)} 超えています` : "", invoice.stateMismatch ? `書類の状態「${invoice.status}」と支払記録の完了状態（記録 ${money(invoice.paid)} / 請求額 ${money(invoice.total)}）が一致しません` : ""].filter(Boolean).join("。"),
       date: invoice.date, links, target });
+    if (invoice.mailProcessingMismatch) push({ id: `mail_processing_mismatch:${invoice.key}`, kind: "mail_processing_mismatch", severity: "INFO", title: `${invoice.title} / ${invoice.party}`,
+      detail: `受領請求書または連携郵便物の処理状態と、支払記録の完了状態（記録 ${money(invoice.paid)} / 請求額 ${money(invoice.total)}）が異なります。書類整理と支払いは独立した状態のため、この差だけでは支払記録・請求書の状態の不整合ではありません`,
+      date: invoice.date, links: [{ label: "郵便物", href: `/mail-sorter?company=${company}` }, { label: "受領請求書", href: invoice.href }], target });
     if (invoice.recordedUnmatched > 0) {
       const legacy = activePaymentsFor(data, invoice.kind, invoice.id).filter(isLegacyStatusPayment).length;
       push({ id: `paid_without_bank:${invoice.key}`, kind: "paid_without_bank", severity: legacy ? "WARNING" : "INFO", title: `${invoice.title} / ${invoice.party}`,
