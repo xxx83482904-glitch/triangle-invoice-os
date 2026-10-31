@@ -6,6 +6,7 @@ import { bankDisplayRows, bankFilters, bankToday, selectBankTransactions } from 
 import { bankAccountOverview } from "@/lib/bank-account-overview";
 import { bankAccountFilter } from "@/lib/bank-account-options";
 import { bankSyncBusy } from "@/lib/banking-sync";
+import { pendingBankSyncReviewCount } from "@/lib/bank-sync-runs";
 import { companyFromParam } from "@/lib/company";
 import { moneyForwardConfig } from "@/lib/moneyforward-client";
 import { can, defaultPathForRole } from "@/lib/rbac";
@@ -35,7 +36,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
     selectedBalance={balanceRow ? { id: balanceRow.id, name: balanceRow.name, kind: balanceRow.kind, unspecified: balanceRow.unspecified, balance: balanceRow.balance, balanceCalculation: balanceRow.balanceCalculation } : undefined}
     categories={data.accountingCategories.filter((row) => row.company === company).sort((a, b) => a.name.localeCompare(b.name, "ja"))}
     rules={data.bankRules.filter((row) => row.company === company && !row.deletedAt)}
-    configured={Boolean(moneyForwardConfig(company))} sync={sync} busy={bankSyncBusy(sync)} admin={user.role === "ADMIN"}
+    configured={Boolean(moneyForwardConfig(company))} sync={sync} busy={bankSyncBusy(sync)} admin={user.role === "ADMIN"} syncImpact={{ pending: pendingBankSyncReviewCount(data, company) }}
     aiSettings={can(user, "manage:settings") ? { configured: Boolean(ai.openAiApiKey), model: ai.ocrAiModel, keyFromEnv: ai.openAiSource === "env", modelFromEnv: ai.ocrAiModelSource === "env" } : undefined}
   /></AppShell>;
 }

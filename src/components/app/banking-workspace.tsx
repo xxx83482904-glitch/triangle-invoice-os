@@ -17,6 +17,7 @@ import { loadBankLinksAction } from "@/app/banking/link-actions";
 import { BankLinksDialog, type BankLinkData } from "@/components/app/bank-links-dialog";
 import { loadBankDraftRowsAction, loadBankTransactionsAction, previewBankRulesAction, saveBankEditsAction, setBankAutoSyncAction } from "@/app/banking/actions";
 import { BankAuditDialog } from "@/components/app/bank-audit-dialog";
+import { BankSyncRunsDialog } from "@/components/app/bank-sync-runs-dialog";
 import { BankBookkeepingDialog } from "@/components/app/bank-bookkeeping-dialog";
 import { BankSavePreviewDialog, type BankSavePreview } from "@/components/app/bank-save-preview";
 import { bankEditFrom, bankMatchingSelection, bankSaveChanges, bankSaveIds, patchBankDraft, removeSavedBankDrafts, type BankDrafts, type BankSaveScope } from "@/lib/bank-workspace-drafts";
@@ -51,6 +52,7 @@ type Props = {
   configured: boolean; sync?: BankSyncState; busy: boolean; admin: boolean;
   selectedBalance?: BankBalanceSummaryProps["row"] & { id: string; name: string };
   aiSettings?: { configured: boolean; model: string; keyFromEnv: boolean; modelFromEnv: boolean };
+  syncImpact?: { pending: number };
 };
 
 export function BankingWorkspace(props: Props) {
@@ -443,6 +445,7 @@ export function BankingWorkspace(props: Props) {
     <div className="bank-workflow-line"><WorkflowNav role={props.role} compact />{!classificationPreview ? <div className="bank-ledger-totals flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" aria-label="表示条件の集計"><span>{monthName(filters.month)} / {total.toLocaleString()}件</span><span>入金 <strong className="font-medium tabular-nums text-emerald-700 dark:text-emerald-400">{money.format(summary.income)}</strong></span><span>出金 <strong className="font-medium tabular-nums text-foreground">{money.format(summary.expense)}</strong></span><span>候補の保存待ち {summary.unclassified}件</span>{summary.excluded ? <span>集計対象外 {summary.excluded}件</span> : null}</div> : null}</div>
     <div className="bank-sync-status flex flex-wrap items-center justify-between gap-x-3 text-xs text-muted-foreground">
       <div role="status" className="min-w-0 break-words">{!configured ? "Money Forward 未接続（連携キー・事業者番号が未設定）" : syncing ? `同期中${sync?.completedThrough ? ` / ${sync.completedThrough}まで取得済み` : ""}` : sync?.lastSuccessAt ? `最終同期 ${new Date(sync.lastSuccessAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}` : "Money Forward 接続設定済み・初回同期前"}</div>
+      <BankSyncRunsDialog company={company} disabled={pending || Boolean(dirty)} pending={props.syncImpact?.pending ?? 0} />
       <label className="flex min-h-8 items-center gap-2"><input type="checkbox" className="size-4 accent-primary" checked={Boolean(sync?.autoSync)} disabled={!configured || !admin || pending} onChange={(e) => {
         const enabled = e.target.checked;
         startTransition(async () => {

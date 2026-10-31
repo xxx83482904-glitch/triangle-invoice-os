@@ -48,6 +48,7 @@ test("sync commits complete months, resumes safely and serializes concurrent edi
     assert.deepEqual(saved.bankSyncStates[0].coverage, [{ start: "2020-08-01", end: "2020-08-31", accountIds: [saved.bankAccounts[0].id] }]);
     assert.ok(!JSON.stringify(saved).includes("never-log-test-secret"));
     assert.ok(saved.auditLogs.filter((log) => log.action.startsWith("BANK_SYNC")).every((log) => !log.beforeStateJson));
+    assert.equal(saved.bankSyncRuns?.length, 1); assert.deepEqual([saved.bankSyncRuns![0].status, saved.bankSyncRuns![0].added, saved.bankSyncRuns![0].rangeStart, saved.bankSyncRuns![0].error], ["ERROR", 1, "2020-08-01", saved.bankSyncStates[0].error]);
     failSeptember = false; months.length = 0;
     const resumed = await queueBankSync("JAPAN", request, admin); assert.ok(resumed.resume);
     await runBankSync(resumed);
@@ -55,8 +56,10 @@ test("sync commits complete months, resumes safely and serializes concurrent edi
     assert.deepEqual(months, ["2020-09-01"]); assert.equal(saved.bankTransactions.length, 2);
     assert.equal(saved.bankSyncStates[0].status, "SUCCESS"); assert.equal(saved.bankSyncStates[0].lastSuccessAt, undefined);
     assert.deepEqual(saved.bankSyncStates[0].coverage, [{ start: "2020-08-01", end: "2020-09-30", accountIds: [saved.bankAccounts[0].id] }]);
+    assert.equal(saved.bankSyncRuns?.length, 2); assert.deepEqual([saved.bankSyncRuns![0].status, saved.bankSyncRuns![0].added, saved.bankSyncRuns![0].changes.length, saved.bankSyncRuns![0].actorId], ["SUCCESS", 1, 0, admin.id]);
     await runBankSync(await queueBankSync("JAPAN", request, admin));
     assert.equal((await readData()).bankTransactions.length, 2);
+    assert.deepEqual((await readData()).bankSyncRuns!.map((run) => run.added), [0, 1, 1]);
     await assert.rejects(queueBankSync("CHINA", request, admin), /日本版/);
     await assert.rejects(setBankAutoSync({ id: "accountant", role: "ACCOUNTING" }, "JAPAN", true), /管理者/);
     await setBankAutoSync(admin, "JAPAN", true); assert.equal((await readData()).bankSyncStates[0].autoSync, true);
