@@ -28,7 +28,7 @@ const data = () => ({
 } as Loose);
 
 test("the status report maps review states to one, keeps paid and scheduled, and lists payment mismatches", () => {
-  const report = statusReport(data(), "JAPAN") as { documents: number; counts: Record<string, number>; mapped: Record<string, number>; changes: number; mismatches: Array<{ id: string }> };
+  const report = statusReport(data(), "JAPAN") as unknown as { documents: number; counts: Record<string, number>; mapped: Record<string, number>; changes: number; mismatches: Array<{ id: string }> };
   assert.equal(report.documents, 4);
   assert.deepEqual(report.mapped, { REVIEWING: 2, PAID: 1, SCHEDULED: 1 });
   assert.equal(report.changes, 2);
@@ -37,7 +37,7 @@ test("the status report maps review states to one, keeps paid and scheduled, and
 });
 
 test("the category report finds colliding names and descriptions spread over categories, reviewed rows only", () => {
-  const report = categoryReport(data(), "JAPAN") as { duplicates: Array<{ name: string; ids: string[]; proposal: string }>; mixed: Array<{ content: string; count: number; breakdown: Array<{ name: string; count: number }> }> };
+  const report = categoryReport(data(), "JAPAN") as unknown as { duplicates: Array<{ name: string; ids: string[]; proposal: string }>; mixed: Array<{ content: string; count: number; breakdown: Array<{ name: string; count: number }> }> };
   assert.deepEqual(report.duplicates.map((row) => row.ids), [["c1", "c2"]]);
   assert.match(report.duplicates[0].proposal, /連携科目へ寄せ/);
   assert.deepEqual(report.mixed.map((row) => [row.content, row.count, row.breakdown.map((item) => item.name)]), [["テスト文具", 2, ["雑費", "消耗品費"]]]);
