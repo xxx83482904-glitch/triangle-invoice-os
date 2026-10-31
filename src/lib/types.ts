@@ -291,9 +291,20 @@ export type MailFolder = {
   deletedAt?: string | null;
 };
 
+export type PaymentHistoryEntry = {
+  at: string;
+  byId: string;
+  kind: "RECORDED" | "ADJUSTED" | "CANCELED";
+  reason?: string;
+  before?: { amount: number; paymentDate: string };
+  after?: { amount: number; paymentDate: string };
+};
+
 export type Payment = {
   id: string;
-  source?: "INVOICE_STATUS" | "BANK_RECONCILIATION";
+  // MANUAL = explicit entry by a person; BANK_RECONCILIATION = created while matching a bank row;
+  // INVOICE_STATUS = legacy issued-invoice status flow. Older rows without a source are read as legacy.
+  source?: "INVOICE_STATUS" | "BANK_RECONCILIATION" | "MANUAL";
   type: PaymentType;
   issuedInvoiceId?: string;
   receivedInvoiceId?: string;
@@ -301,6 +312,7 @@ export type Payment = {
   paymentDate: string;
   method?: string;
   memo?: string;
+  history?: PaymentHistoryEntry[];
   createdById: string;
   createdAt: string;
   updatedAt: string;

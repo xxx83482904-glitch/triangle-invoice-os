@@ -88,6 +88,11 @@ function updatePaymentStatus(data: AppData, kind: Kind, invoice: IssuedInvoice |
   }
 }
 
+// Shared with manual payment records: re-derive paid/complete state from payment rows without creating any payment.
+export function syncInvoicePaymentState(data: AppData, kind: Kind, invoice: IssuedInvoice | ReceivedInvoice) {
+  updatePaymentStatus(data, kind, invoice);
+}
+
 export const reconcileSchema = z.object({
   transactionId: z.string().min(1).max(1000), transactionUpdatedAt: z.string(),
   invoiceKind: z.enum(["issued", "received"]), invoiceId: z.string().min(1).max(1000), invoiceUpdatedAt: z.string(),

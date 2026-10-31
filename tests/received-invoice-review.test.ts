@@ -66,10 +66,9 @@ test("review warns about supplier/date conflicts and withholding not yet represe
   for (const term of ["銀行", "請求元候補", "請求日", "支払期限", "源泉徴収"]) assert.ok(warnings.some((warning) => warning.includes(term)), term);
 });
 
-test("amount validation rejects invalid, negative, fractional, unbalanced and overpaid changes", () => {
+test("amount validation rejects invalid, negative, fractional and unbalanced changes; paid amounts never block a correction", () => {
   for (const patch of [{ withholdingAmount: -1 }, { total: NaN }, { grossAmount: Infinity }, { taxTotal: 0.1 }, { total: 110000 }, { grossAmount: 120000 }]) assert.throws(() => validateReceivedAmounts({ ...amounts, ...patch }));
-  assert.throws(() => validateReceivedAmounts(amounts, 100000), /登録済み/);
-  assert.deepEqual(validateReceivedAmounts(amounts, 99790), amounts);
+  assert.deepEqual(validateReceivedAmounts(amounts), amounts);
   assert.throws(() => receivedAmountsFromForm(form({ total: "" })), /金額/);
   assert.throws(() => validateReceivedDates("2026-02-30", "2026-10-15"));
 });
