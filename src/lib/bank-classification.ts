@@ -27,7 +27,7 @@ const inScope = (category: AccountingCategory, row: BankTransaction) => category
   && (!category.officeCode || category.officeCode === row.officeCode) && category.available && !category.deletedAt;
 
 // Direction ranks candidates, but is not evidence of business use or tax treatment.
-const categorySide = (category: AccountingCategory) => {
+export const bankCategorySide = (category: AccountingCategory) => {
   const group = normalize(category.group);
   if (["expense", "費用", "経費"].includes(group)) return "EXPENSE";
   if (["income", "revenue", "収益", "収入"].includes(group)) return "INCOME";
@@ -81,7 +81,7 @@ export function createBankSuggester(data: AppData, { allowGuesses = false }: { a
       let closest: AccountingCategory | undefined, bestScore = -1;
       for (const category of categories.values()) {
         if (!category.id || category.parentId || !inScope(category, row)) continue;
-        const side = categorySide(category), name = normalize(category.name);
+        const side = bankCategorySide(category), name = normalize(category.name);
         const related = matches.some(({ pattern }) => normalize(pattern.category) === name) || (name.length > 1 && content.includes(name));
         const generic = (row.side === "EXPENSE" ? ["雑費", "その他費用", "諸経費"] : ["雑収入", "その他収益"]).includes(name);
         const score = (side === row.side ? 100 : side === undefined ? 50 : 0) + (related ? 20 : 0) + (generic ? 10 : 0) + (category.officeCode === row.officeCode ? 1 : 0);
@@ -111,7 +111,7 @@ export function createBankSuggester(data: AppData, { allowGuesses = false }: { a
   };
 }
 
-type ClassificationLabelRow = Pick<BankTransaction, "categoryId" | "reviewed" | "treatment" | "classificationSource" | "classificationConfidence" | "classificationReason" | "sourceMissing" | "bookkeeping">;
+export type ClassificationLabelRow = Pick<BankTransaction, "categoryId" | "reviewed" | "treatment" | "classificationSource" | "classificationConfidence" | "classificationReason" | "sourceMissing" | "bookkeeping">;
 const classificationLabels = {
   GUESS: "推測・要確認",
   HISTORY: "過去実績",
@@ -139,4 +139,23 @@ export function bankClassificationLabel(row: ClassificationLabelRow): { kind: ke
     else kind = row.classificationSource === "UNASSIGNED" ? "GUESS" : "INFERRED";
   }
   return { kind, label: classificationLabels[kind] };
+}
+
+export const GUESS_REVIEW_BLOCKER = "推測のままの分類です。摘要と科目を確認して「内容を確認して確定」を選ぶか、科目を選び直してください";
+export const GUESS_ACKNOWLEDGED_PREFIX = "推測候補を内容確認のうえ確定";
+
+// A guess stays a guess until a person says they looked at it; this decides which rows need that step.
+export function isGuessClassification(row: ClassificationLabelRow) {
+  return Boolean(row.categoryId) && !row.bookkeeping?.hold && !row.bookkeeping?.splits?.length && row.treatment === "NORMAL"
+    && bankClassificationLabel({ ...row, reviewed: false }).kind === "GUESS";
+}
+
+export function stripGuessAcknowledgement(reason?: string) {
+  if (!reason || !reason.startsWith(GUESS_ACKNOWLEDGED_PREFIX)) return reason;
+  return reason.slice(GUESS_ACKNOWLEDGED_PREFIX.length).replace(/^:\s*/, "") || undefined;
+}
+
+export function acknowledgedGuessReason(reason?: string) {
+  const base = stripGuessAcknowledgement(reason);
+  return `${GUESS_ACKNOWLEDGED_PREFIX}${base ? `: ${base}` : ""}`.slice(0, 1000);
 }

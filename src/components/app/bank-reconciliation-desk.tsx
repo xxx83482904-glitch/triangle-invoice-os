@@ -10,6 +10,7 @@ import { BankReconciliationReaffirm } from "@/components/app/bank-reconciliation
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { reconciliationCandidates } from "@/lib/bank-reconciliation-matching";
+import { reconciliationCombinations } from "@/lib/bank-reconciliation-combinations";
 import type { ReconciliationBank, ReconciliationInvoice, ReconciliationOverview } from "@/lib/bank-reconciliation";
 import type { BankAiPreview } from "@/lib/bank-ai-types";
 import type { CompanyScope } from "@/lib/company";
@@ -23,6 +24,7 @@ type Props = {
   href: (values: Record<string, string>) => string; pending: boolean;
   onRemove: (link: ReconciliationOverview["links"][number]) => void;
   aiPreview?: BankAiPreview; aiConfigured: boolean; aiModel: string;
+  feeCategories?: Array<{ id: string; name: string }>;
 };
 
 export { BankReconciliationAllocation as BankReconciliationConfirmation } from "@/components/app/bank-reconciliation-allocation";
@@ -38,6 +40,8 @@ export function BankReconciliationDesk(props: Props) {
   const busy = saving || pending;
   const actionable = selected && !selected.issue && !selected.conflict && selected.remaining > 0;
   const candidates = useMemo(() => selected ? reconciliationCandidates(selected, invoices, invoices.length) : [], [selected, invoices]);
+  const combinations = useMemo(() => selected ? reconciliationCombinations(selected, invoices) : [], [selected, invoices]);
+  const [comboKeys, setComboKeys] = useState<string[]>([]);
   const candidateMap = new Map(candidates.map((row) => [row.key, row]));
   const normalized = query.normalize("NFKC").toLocaleLowerCase("ja").trim();
   const choices = selected ? invoices.filter((row) => row.eligible && !row.conflict && (selected.side === "INCOME" ? row.kind === "issued" : row.kind === "received") && (row.outstanding > 0 || row.payments.some((payment) => payment.available > 0))) : [];
@@ -46,7 +50,7 @@ export function BankReconciliationDesk(props: Props) {
   const chosen = actionable ? choices.find((row) => row.key === selectedKey) : undefined;
   const selectedLinks = links.filter((row) => row.transactionId === selected?.id);
   function selectBank(id: string) {
-    setActiveId(id); setSelectedKey(props.focusInvoice); setQuery(""); setShowAll(false); setShowList(false);
+    setActiveId(id); setSelectedKey(props.focusInvoice); setComboKeys([]); setQuery(""); setShowAll(false); setShowList(false);
     window.history.replaceState(null, "", href({ transaction: id, page: String(props.page) }));
   }
   function complete(amount: number) {
@@ -76,6 +80,7 @@ export function BankReconciliationDesk(props: Props) {
         {actionable ? <>
           <div className="flex flex-wrap items-center justify-between gap-2 py-2"><h3 className="text-sm font-semibold">対応する請求書</h3>{chosen ? <Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => setSelectedKey("")}>選択を変更</Button> : <label className="relative min-w-0 flex-1 sm:max-w-64"><Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" /><Input aria-label="請求書を検索" className="min-h-11 pl-9" placeholder="取引先・案件・金額" value={query} disabled={busy} onChange={(e) => setQuery(e.target.value)} /></label>}</div>
           {!chosen ? <div role="group" aria-label="候補の絞り込み" className="mb-2 flex gap-1"><Button variant={!showAll ? "secondary" : "ghost"} className="min-h-11" aria-pressed={!showAll} disabled={busy} onClick={() => setShowAll(false)}>候補 {candidates.length}</Button><Button variant={showAll ? "secondary" : "ghost"} className="min-h-11" aria-pressed={showAll} disabled={busy} onClick={() => setShowAll(true)}>すべて {choices.length}</Button></div> : null}
+          {!chosen && combinations.length ? <div className="mb-2 space-y-1 border-l-2 border-sky-500 pl-3 text-xs" aria-label="合算候補"><p className="font-medium">合算候補（未払い額の合計が入金額と一致）</p>{combinations.map((combo) => <button key={combo.keys.join("+")} type="button" disabled={busy} className="block min-h-11 w-full break-words rounded-md border px-2 py-1 text-left hover:bg-muted" onClick={() => { setComboKeys(combo.keys); setSelectedKey(combo.keys[0]); }}>{combo.titles.join(" ＋ ")} = {money(combo.total)}{combo.sameParty ? "" : "（取引先が異なります。原本で確認してください）"}</button>)}</div> : null}
           <ul className="max-h-80 divide-y overflow-y-auto border-y" aria-label="請求書の候補">{(chosen ? [chosen] : visible.slice(0, 100)).map((invoice) => {
             const candidate = candidateMap.get(invoice.key);
             return <li key={invoice.key}><button disabled={busy} aria-pressed={chosen?.key === invoice.key} onClick={() => setSelectedKey(invoice.key)} className={`flex min-h-11 w-full min-w-0 items-start gap-3 p-3 text-left text-sm ${chosen?.key === invoice.key ? "bg-primary/10" : "hover:bg-muted"}`}>
@@ -86,7 +91,7 @@ export function BankReconciliationDesk(props: Props) {
           })}</ul>
           {!chosen && !visible.length ? <p className="py-5 text-sm text-muted-foreground">{query ? "検索に一致する請求書はありません。" : "確かな候補がありません。すべての請求書から選択できます。"}</p> : null}
           {!chosen && visible.length > 100 ? <p className="py-2 text-xs text-muted-foreground">先頭100件を表示。検索で絞り込めます。</p> : null}
-          {chosen ? <BankReconciliationConfirmation key={`${selected.id}:${selected.updatedAt}:${selected.remaining}:${chosen.key}:${chosen.updatedAt}:${chosen.payments.map((row) => `${row.id}:${row.available}:${row.updatedAt}`).join()}`} company={company} bank={selected} invoice={chosen} invoices={choices} onBusy={setSaving} onComplete={complete} /> : <p className="border-b py-5 text-sm text-muted-foreground">請求書を選択すると照合額を確認できます。</p>}
+          {chosen ? <BankReconciliationConfirmation key={`${comboKeys.join("+")}:${selected.id}:${selected.updatedAt}:${selected.remaining}:${chosen.key}:${chosen.updatedAt}:${chosen.payments.map((row) => `${row.id}:${row.available}:${row.updatedAt}`).join()}`} company={company} bank={selected} invoice={chosen} invoices={choices} feeCategories={props.feeCategories} initialKeys={comboKeys.includes(chosen.key) ? comboKeys : undefined} onBusy={setSaving} onComplete={complete} /> : <p className="border-b py-5 text-sm text-muted-foreground">請求書を選択すると照合額を確認できます。</p>}
         </> : !selected.issue && !selected.conflict && !selected.remaining ? <p className="flex items-center gap-2 py-5 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="size-4" />この明細は照合済みです</p> : null}
         {selectedLinks.length ? <section className="border-t py-3"><h3 className="text-xs font-semibold">照合済みの記録</h3><ul className="divide-y">{selectedLinks.map((link) => { const title = invoices.find((row) => row.key === link.invoiceKey)?.title || "削除・移動された請求書"; return <li key={link.id} className="py-2 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span className="min-w-0 break-words">{title} / {money(link.amount)}</span><Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => onRemove(link)}><Unlink className="size-4" />照合解除</Button></div>{link.issue ? <p className="text-xs text-destructive">{link.issue}</p> : null}{link.issue ? link.reaffirmable ? <div className="mt-1"><BankReconciliationReaffirm company={company} target={{ kind: "link", link, title }} disabled={busy} /></div> : <p className="text-xs text-muted-foreground">維持できません: {link.reaffirmBlocker}</p> : null}{link.reaffirmedAt && !link.issue ? <p className="text-xs text-muted-foreground">内容確認のうえ維持 {new Date(link.reaffirmedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</p> : null}{link.note ? <p className="break-words text-xs text-muted-foreground">{link.note}</p> : null}</li>; })}</ul></section> : null}
         {actionable && aiPreview && props.selected?.id === selected.id ? <details className="border-t py-2"><summary className="min-h-11 cursor-pointer content-center text-sm text-muted-foreground">AIで追加確認</summary><BankAiPanel key={aiPreview.revision} company={company} preview={aiPreview} configured={aiConfigured} model={aiModel} onChooseInvoice={(key) => { if (!busy && choices.some((row) => row.key === key)) setSelectedKey(key); }} /></details> : actionable ? <Button variant="ghost" disabled={busy} className="min-h-11 text-sm text-muted-foreground" onClick={() => router.refresh()}>この明細のAI確認を読み込む</Button> : null}

@@ -109,6 +109,8 @@ export type BankEdit = {
   classificationSource?: BankClassificationSource;
   classificationReason?: string;
   classificationConfidence?: BankClassificationConfidence;
+  // Required when a GUESS classification is marked reviewed: the person confirms they looked at it.
+  acknowledgeGuess?: boolean;
 };
 
 export type BankRuleInput = Omit<BankRule, "company" | "createdAt" | "id" | "updatedAt" | "deletedAt"> & { id?: string; updatedAt?: string };
@@ -139,6 +141,9 @@ export type BankReconciliation = BankEntity & {
   invoiceEvidence: string;
   paymentEvidence: string;
   note: string;
+  // Transfer fee handled with this link: "payer" = deducted from an incoming transfer (counts toward the invoice),
+  // "bank" = charged on top of an outgoing transfer (counts toward the bank row).
+  fee?: { amount: number; categoryId?: string; borneBy: "payer" | "bank" };
   confirmedById: string;
   reaffirmedAt?: string;
   reaffirmedById?: string;
@@ -152,6 +157,8 @@ export type BankTransfer = BankEntity & {
   outgoingEvidence: string;
   incomingEvidence: string;
   previous: Array<BankEdit & { ruleId?: string }>;
+  // 送金手数料 when the outgoing side is larger than the incoming side by exactly this amount.
+  fee?: { amount: number; categoryId?: string };
   confirmedById: string;
   deletedAt?: string | null;
 };

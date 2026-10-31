@@ -14,6 +14,7 @@ import { assertJapanData } from "@/lib/japan-storage";
 import type {
   AppData,
   AuditLog,
+  AuditOrigin,
   Client,
   Project,
   ProjectMoney,
@@ -313,7 +314,7 @@ function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
 function isLegacySnapshot(value: unknown): value is AppDataSnapshot {
   if (!value || typeof value !== "object") return false;
   const source = value as Record<string, unknown>;
-  const optionalLegacyKeys = new Set<string>(["estimates", "bankAccounts", "bankTransactions", "accountingCategories", "bankRules", "bankSyncStates", "bankReconciliations", "bankTransfers", "bankSyncRuns"]);
+  const optionalLegacyKeys = new Set<string>(["estimates", "bankAccounts", "bankTransactions", "accountingCategories", "bankRules", "bankSyncStates", "bankReconciliations", "bankTransfers", "bankSyncRuns", "apiTokens", "agentRequests"]);
   return undoCollectionKeys.every((key) => (optionalLegacyKeys.has(key) && source[key] === undefined) || Array.isArray(source[key]));
 }
 
@@ -615,6 +616,8 @@ async function normalizeData(data: AppData) {
   if (!Array.isArray(data.bankReconciliations)) { data.bankReconciliations = []; changed = true; }
   if (!Array.isArray(data.bankTransfers)) { data.bankTransfers = []; changed = true; }
   if (!Array.isArray(data.bankSyncRuns)) { data.bankSyncRuns = []; changed = true; }
+  if (!Array.isArray(data.apiTokens)) { data.apiTokens = []; changed = true; }
+  if (!Array.isArray(data.agentRequests)) { data.agentRequests = []; changed = true; }
   if (!Array.isArray(data.attachments)) { data.attachments = []; changed = true; }
   if (!Array.isArray(data.auditLogs)) { data.auditLogs = []; changed = true; }
   if (!Array.isArray(data.invoiceNumberSettings)) { data.invoiceNumberSettings = seedData().invoiceNumberSettings; changed = true; }
@@ -694,7 +697,7 @@ export function mutateData<T>(
   targetId: string,
   mutator: (data: AppData) => T,
   beforeJson?: unknown,
-  options?: { undoable?: boolean },
+  options?: { undoable?: boolean; origin?: AuditOrigin },
 ) {
   return withDataMutationLock(async () => {
     const data = await readData();
@@ -711,6 +714,8 @@ export function mutateData<T>(
       beforeStateJson: beforeStateJson.changes.length ? beforeStateJson : undefined,
       afterJson: result,
       createdAt: now(),
+      // Money Forward sync runs under the system actor; everything else without an explicit origin is a signed-in person.
+      origin: options?.origin ?? (userId === "system-moneyforward" ? { kind: "sync" } : undefined),
     };
     data.auditLogs.unshift(audit);
     normalizeAuditHistory(data);

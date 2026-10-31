@@ -10,6 +10,8 @@ import { updateReceivedInvoiceInline, updateReceivedInvoiceStatus } from "@/app/
 import { saveReceivedInvoice } from "./actions";
 import { OriginalDocumentPreview } from "./original-document-preview";
 import { PaymentRecordsPanel } from "./payment-records-panel";
+import { DebtGroupPanel } from "./debt-group-panel";
+import { debtRoles, type DebtGroupView } from "@/lib/debt-groups";
 import { ReceivedAmountFields } from "./received-amount-fields";
 import type { PaymentRecordView } from "@/lib/payment-records";
 import { receivedInvoiceEvidence, receivedInvoiceWarnings, type ReceivedInvoiceAmounts } from "@/lib/received-invoice-review";
@@ -31,6 +33,7 @@ type Option = {
 export type ReceivedInvoiceWorkspaceItem = ReceivedInvoiceAmounts & {
   createdAt: string;
   updatedAt: string;
+  debt: DebtGroupView;
   mailProcessed: boolean;
   bankReconciledAmount: number;
   dueDate: string;
@@ -333,7 +336,7 @@ export function ReceivedInvoicesWorkspace({
                                 </span>
                               </td>
                               <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(invoice.total)}</td>
-                              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(Math.max(0, invoice.unpaidAmount))}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.debt.payable ? yen.format(Math.max(0, invoice.unpaidAmount)) : <span className="font-sans text-xs text-muted-foreground" title="債務グループの支払対象外">対象外</span>}</td>
                               <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                                 {canApprove ? (
                                   <form action={updateReceivedInvoiceStatus}>
@@ -396,6 +399,7 @@ export function ReceivedInvoicesWorkspace({
                         未払い {yen.format(Math.max(0, activeInvoice.unpaidAmount))}
                       </Badge>
                       <Badge variant="outline">請求月 {monthLabel(monthKey(activeInvoice))}</Badge>
+                      {activeInvoice.debt.groupId ? <Badge variant={activeInvoice.debt.payable ? "outline" : "secondary"}>債務グループ / {debtRoles[activeInvoice.debt.role]} / {activeInvoice.debt.payable ? "支払対象" : "支払対象外"}</Badge> : null}
                       {activeInvoice.fileUrl ? (
                         <Button asChild size="sm" variant="outline">
                           <a href={activeInvoice.fileUrl} target="_blank">
@@ -419,6 +423,7 @@ export function ReceivedInvoicesWorkspace({
                   </div>
 
                   <PaymentRecordsPanel key={`${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.payments.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={activeInvoice} records={activeInvoice.payments} canRecord={canRecordPayments} />
+                  <DebtGroupPanel key={`debt:${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.debt.members.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={activeInvoice} canManage={canApprove} />
 
                   <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                   <div className="min-w-0 space-y-3 lg:sticky lg:top-4">

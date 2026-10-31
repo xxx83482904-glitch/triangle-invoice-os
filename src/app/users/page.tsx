@@ -5,6 +5,8 @@ import { can, defaultPathForRole, roleLabel } from "@/lib/rbac";
 import { readDataForRequest } from "@/lib/store";
 import { approvalRoles } from "@/lib/user-access";
 import { ApprovalForm } from "./approval-form";
+import { AgentTokens } from "./agent-tokens";
+import { agentScopes, agentTokenViews } from "@/lib/agent-tokens";
 
 export default async function UsersPage() {
   const actor = await getCurrentUser();
@@ -14,6 +16,9 @@ export default async function UsersPage() {
   const users = data.users.filter((user) => !user.deletedAt);
   const pending = users.filter((user) => user.accessStatus === "PENDING");
   const roles = approvalRoles.map((value) => ({ value, label: roleLabel(value) }));
+  const tokens = agentTokenViews(data);
+  const tokenUsers = users.filter((user) => user.accessStatus !== "PENDING" && user.accessStatus !== "REJECTED").map((user) => ({ id: user.id, name: user.name, role: roleLabel(user.role) }));
+  const scopes = Object.entries(agentScopes).map(([value, meta]) => ({ value, label: meta.label }));
 
   return <AppShell>
     <PageHeader title="利用者管理" />
@@ -39,5 +44,6 @@ export default async function UsersPage() {
         </div>)}
       </div>
     </section>
+    <AgentTokens tokens={tokens} users={tokenUsers} scopes={scopes} />
   </AppShell>;
 }

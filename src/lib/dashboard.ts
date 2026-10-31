@@ -1,4 +1,5 @@
 import { outstandingAmount } from "@/lib/accounting-summary";
+import { isPayableReceivedInvoice } from "@/lib/debt-groups";
 import { bankAccountOverview, bankFiscalYear } from "@/lib/bank-account-overview";
 import { isBankDate } from "@/lib/banking";
 import { matchesCompany, type CompanyScope } from "@/lib/company";
@@ -26,7 +27,8 @@ export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role">,
   const clients = new Map(data.clients.map((row) => [row.id, row.companyName]));
   const vendors = new Map(data.vendors.map((row) => [row.id, row.companyName]));
   const issued = data.issuedInvoices.filter((row) => !row.deletedAt && projectById.has(row.projectId) && row.status !== "CANCELED");
-  const received = data.receivedInvoices.filter((row) => !row.deletedAt && projectById.has(row.projectId) && !["REJECTED", "ARCHIVED"].includes(row.status));
+  // Superseded documents of a debt group (older 請求書 behind a 再請求, 領収書) are evidence, not open debts.
+  const received = data.receivedInvoices.filter((row) => !row.deletedAt && projectById.has(row.projectId) && !["REJECTED", "ARCHIVED"].includes(row.status) && isPayableReceivedInvoice(data, row));
   const issuedIds = new Set(issued.map((row) => row.id)), receivedIds = new Set(received.map((row) => row.id));
   const paid = new Map<string, number>();
   // Reconciliation-generated payments count once. Bank rows are never added to invoice payments.

@@ -64,7 +64,7 @@ test("batch edits are atomic, version checked and tenant scoped", () => {
   assert.equal(JSON.stringify(data), before);
   assert.throws(() => saveBankEdits(data, admin, "CHINA", [edit(data.bankTransactions[0])]), /日本版/);
   assert.throws(() => saveBankEdits(data, admin, "JAPAN", [edit(data.bankTransactions[0], { subCategoryId: sourceKey("JAPAN", office, "category", "design", "sales") })]), /補助科目/);
-  assert.deepEqual(saveBankEdits(data, admin, "JAPAN", data.bankTransactions.map((row) => edit(row, { categoryId: catId, reviewed: true }))), { count: 2 });
+  assert.deepEqual(saveBankEdits(data, admin, "JAPAN", data.bankTransactions.map((row) => edit(row, { categoryId: catId, reviewed: true }))), { count: 2, acknowledgedGuesses: 0 });
 });
 test("unclassified ordinary transactions cannot be marked reviewed", () => {
   const data = setup(); mergeBankTransactions(data, "JAPAN", office, [source()], range);

@@ -33,7 +33,9 @@ test("saving an unconfirmed guess keeps red provenance; explicit confirmation al
   assert.equal(bankClassificationLabel(saved).kind, "GUESS");
   assert.equal(saved.classificationSource, "MANUAL");
   assert.equal(saved.reviewed, false);
-  saveBankEdits(data, admin, "JAPAN", [{ ...saved, reviewed: true }]);
+  assert.throws(() => saveBankEdits(data, admin, "JAPAN", [{ ...saved, reviewed: true }]), /推測/);
+  assert.equal(saved.reviewed, false);
+  saveBankEdits(data, admin, "JAPAN", [{ ...saved, reviewed: true, acknowledgeGuess: true }]);
   assert.equal(bankClassificationLabel(saved).kind, "CONFIRMED");
   restoreUndoState(data, { format: "triangle-undo-patch-v1", changes: [{ collection: "bankTransactions", id: saved.id, index: 0, before }] });
   assert.equal(bankClassificationLabel(data.bankTransactions[0]).kind, "GUESS");

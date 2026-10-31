@@ -18,6 +18,7 @@ import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
 import { paymentRecordsFor, receivedPaymentSummary } from "@/lib/payment-records";
+import { debtGroupView } from "@/lib/debt-groups";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
 import { ReceivedAmountFields } from "./received-amount-fields";
 import { reconciliationIssue } from "@/lib/bank-reconciliation";
@@ -62,11 +63,13 @@ export default async function ReceivedInvoicesPage({
       const vendor = vendors.find((item) => item.id === invoice.vendorId);
       const project = projects.find((item) => item.id === invoice.projectId);
       const summary = receivedPaymentSummary(data, invoice);
+      const debt = debtGroupView(data, company, invoice);
       const amounts: ReceivedInvoiceAmounts = invoice;
       const linkedMail = data.mailDocuments.find((m) => !m.deletedAt && m.relatedReceivedInvoiceId === invoice.id);
       return {
         createdAt: invoice.createdAt,
         updatedAt: invoice.updatedAt,
+        debt,
         grossAmount: amounts.grossAmount,
         withholdingAmount: amounts.withholdingAmount,
         mailProcessed: invoice.mailProcessed === true || linkedMail?.mailProcessed === true,
@@ -89,7 +92,7 @@ export default async function ReceivedInvoicesPage({
         subtotal: invoice.subtotal,
         taxTotal: invoice.taxTotal,
         total: invoice.total,
-        unpaidAmount: summary.outstanding,
+        unpaidAmount: debt.payable ? summary.outstanding : 0,
         vendorId: invoice.vendorId,
         vendorName: vendor?.companyName ?? "支払先未設定",
       };
