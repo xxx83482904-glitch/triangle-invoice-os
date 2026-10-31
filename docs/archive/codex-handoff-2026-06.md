@@ -1,3 +1,5 @@
+> アーカイブ（2026-10-31）。この文書は 2026-06 時点の Codex 向け引き継ぎで、現役ではありません。手順は `docs/*.md` と Vault の「TRIANGLE Invoice OS 開発引き継ぎ」「Synologyデプロイ手順」を参照してください。機密情報の行は削除済みです。
+
 # Codex Handoff
 
 This document is for continuing TRIANGLE Invoice OS work from another PC or
@@ -28,19 +30,19 @@ npm.cmd run build
 npm.cmd run dev
 ```
 
-Open `http://localhost:3000`.
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
 
 Demo accounts:
 
-- `admin@triangle.local` / `password123`
-- `accounting@triangle.local` / `password123`
-- `pm@triangle.local` / `password123`
-- `designer@triangle.local` / `password123`
-- `guest@triangle.local` / `password123`
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
 
 ## Required Environment Values
 
-Use `.env.example` as the base. Do not commit real secrets.
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
 
 For OCR + AI classification:
 
@@ -62,9 +64,9 @@ Keep `ALLOW_SELF_DEPLOY=false` unless this is a trusted self-hosted deployment.
 
 ## Current Synology Production
 
-- DSM LAN URL: `https://192.168.1.218:5001/`
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
 - Public app URL: `https://trianglejp14f.synology.me/login`
-- Public port URL: `http://trianglejp14f.synology.me:3000/login`
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
 - Container Manager project: `triangle-invoice-os`
 - Container name: `triangle-invoice-os`
 - Synology project folder: `/volume1/docker/triangle-invoice-os`
@@ -92,7 +94,7 @@ Open Container Manager, select project `triangle-invoice-os`, then use
 
 ### SSH Deploy
 
-SSH is currently not enabled on `192.168.1.218:22`.
+（機密情報のため削除: 旧公開URL・LAN IP・デモ用パスワード・ポート。現役の接続情報は NAS と Vault の非公開メモで管理する）
 
 If enabled later, deploy from Windows:
 

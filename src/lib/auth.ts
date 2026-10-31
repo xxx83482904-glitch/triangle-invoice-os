@@ -17,9 +17,15 @@ function secureSessionCookie() {
   return process.env.NODE_ENV === "production";
 }
 
+let warnedAboutDefaultSecret = false;
 function secretKey() {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret && process.env.NODE_ENV === "production" && !warnedAboutDefaultSecret) {
+    warnedAboutDefaultSecret = true;
+    console.warn("[auth] SESSION_SECRET is not set; the built-in default is in use. Set SESSION_SECRET on the host and restart.");
+  }
   return new TextEncoder().encode(
-    process.env.SESSION_SECRET ?? "triangle-invoice-os-local-development-secret",
+    secret ?? "triangle-invoice-os-local-development-secret",
   );
 }
 
