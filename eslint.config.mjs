@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "design-fee-calculator/**",
     "public/design-fee-calculator/**",
+    // Local scratch copies (production build checks, synthetic data) are never linted.
+    "tmp/**",
   ]),
 ]);
 

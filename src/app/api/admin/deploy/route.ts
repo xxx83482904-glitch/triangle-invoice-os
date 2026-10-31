@@ -1,40 +1,14 @@
 import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { DeployFailureLimiter, deployEnabled, deployTokenMatches } from "@/lib/deploy-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 let activeDeploy = false;
-
-const TRUSTED_DEPLOY_TOKEN_SHA256 = "6634f3e9aa0ecad5c44d810112aca37d8165020c70d70ae1ed8d89c762be998b";
-
-function deployEnabled() {
-  return (
-    (process.env.ALLOW_SELF_DEPLOY === "true" && (process.env.DEPLOY_TOKEN?.trim().length ?? 0) >= 32) ||
-    TRUSTED_DEPLOY_TOKEN_SHA256.length === 64
-  );
-}
-
-function tokenMatches(value: string | null) {
-  const expected = process.env.DEPLOY_TOKEN?.trim();
-  if (!value) return false;
-
-  if (expected) {
-    const actualBuffer = Buffer.from(value);
-    const expectedBuffer = Buffer.from(expected);
-    if (actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)) {
-      return true;
-    }
-  }
-
-  const actualHash = createHash("sha256").update(value).digest("hex");
-  const actualHashBuffer = Buffer.from(actualHash);
-  const trustedHashBuffer = Buffer.from(TRUSTED_DEPLOY_TOKEN_SHA256);
-  return actualHashBuffer.length === trustedHashBuffer.length && timingSafeEqual(actualHashBuffer, trustedHashBuffer);
-}
+const failures = new DeployFailureLimiter();
 
 function appRootPath() {
   const cwd = process.cwd();
@@ -72,11 +46,14 @@ function requireDeployToken(request: Request) {
   if (!deployEnabled()) {
     return NextResponse.json({ error: "Self deploy is disabled" }, { status: 404 });
   }
-
-  if (!tokenMatches(request.headers.get("x-deploy-token"))) {
+  if (failures.locked()) {
+    return NextResponse.json({ error: "Too many failed deploy attempts. Try again later." }, { status: 429 });
+  }
+  if (!deployTokenMatches(request.headers.get("x-deploy-token"))) {
+    failures.record();
     return NextResponse.json({ error: "Invalid deploy token" }, { status: 403 });
   }
-
+  failures.reset();
   return null;
 }
 

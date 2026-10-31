@@ -5,12 +5,13 @@ import { outstandingAmount } from "@/lib/accounting-summary";
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { compareSync, hashSync } from "bcryptjs";
+import { hashSync } from "bcryptjs";
 import { Pool } from "pg";
 import { cache } from "react";
 import { runtimeDataDir } from "@/lib/runtime-paths";
 import { defaultSelectOptions } from "@/lib/select-options";
 import { assertJapanData } from "@/lib/japan-storage";
+import { applyReleaseUsers, releaseUserSeeds } from "@/lib/release-users";
 import type {
   AppData,
   AuditLog,
@@ -30,10 +31,6 @@ const LEGACY_DATA_FILE = path.join(process.cwd(), "data", "app-data.json");
 
 const now = () => new Date().toISOString();
 
-const releaseAdminEmail = "kure@the-triangle.jp";
-const releaseAdminPassword = "triangle0843";
-const releaseMailEditorEmail = "miyasaka@the-triangle.jp";
-const releaseMailEditorPassword = "triangle0843";
 export const newId = () => crypto.randomUUID();
 
 function active<T extends { deletedAt?: string | null }>(rows: T[]) {
@@ -70,30 +67,19 @@ function project(
   };
 }
 
+function initialLocalAdmin(createdAt: string): User {
+  const password = crypto.randomUUID();
+  console.warn(`[store] 初期管理者 admin@triangle.local を作成しました。初回ログインのパスワード: ${password}（ログイン後に必ず変更してください。RELEASE_ADMIN_* を設定すればこの処理は走りません）`);
+  return { id: "usr-admin", name: "Triangle Admin", email: "admin@triangle.local", passwordHash: hashSync(password, 10), role: "ADMIN", createdAt, updatedAt: createdAt };
+}
 function seedData(): AppData {
   const createdAt = now();
-  const passwordHash = hashSync(releaseAdminPassword, 10);
-
-  const users: User[] = [
-    {
-      id: "usr-admin",
-      name: "Triangle Admin",
-      email: releaseAdminEmail,
-      passwordHash,
-      role: "ADMIN",
-      createdAt,
-      updatedAt: createdAt,
-    },
-    {
-      id: "usr-mail-miyasaka",
-      name: "Miyasaka",
-      email: releaseMailEditorEmail,
-      passwordHash: hashSync(releaseMailEditorPassword, 10),
-      role: "MAIL_EDITOR",
-      createdAt,
-      updatedAt: createdAt,
-    },
-  ];
+  // Fresh installs get the RELEASE_* accounts when configured; otherwise one local admin with a random password,
+  // printed once to the server log, so the first person can sign in and approve registrations.
+  const seeds = releaseUserSeeds();
+  const users: User[] = seeds.length
+    ? seeds.map((seed) => ({ id: seed.id, name: seed.name, email: seed.email, passwordHash: hashSync(seed.password, 10), role: seed.role, createdAt, updatedAt: createdAt }))
+    : [initialLocalAdmin(createdAt)];
 
   const clients: Client[] = [
     {
@@ -493,104 +479,9 @@ async function writeRawData(data: AppData) {
   writeFileSync(DATA_FILE, JSON.stringify(nextData, null, 2));
 }
 
+// Release accounts are seeded from RELEASE_* environment variables only when missing; nothing is reset on read.
 function normalizeReleaseUsers(data: AppData) {
-  let changed = false;
-  const timestamp = now();
-  const demoEmails = new Set([
-    "accounting@triangle.local",
-    "pm@triangle.local",
-    "designer@triangle.local",
-    "guest@triangle.local",
-  ]);
-  let admin =
-    data.users.find((user) => user.email.toLowerCase() === releaseAdminEmail) ??
-    data.users.find((user) => user.id === "usr-admin") ??
-    data.users.find((user) => user.email.toLowerCase() === "admin@triangle.local");
-
-  if (!admin) {
-    admin = {
-      id: "usr-admin",
-      name: "Triangle Admin",
-      email: releaseAdminEmail,
-      passwordHash: hashSync(releaseAdminPassword, 10),
-      role: "ADMIN",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-    data.users.unshift(admin);
-    changed = true;
-  }
-
-  if (admin.email !== releaseAdminEmail) {
-    admin.email = releaseAdminEmail;
-    changed = true;
-  }
-  if (admin.role !== "ADMIN") {
-    admin.role = "ADMIN";
-    changed = true;
-  }
-  if (!compareSync(releaseAdminPassword, admin.passwordHash)) {
-    admin.passwordHash = hashSync(releaseAdminPassword, 10);
-    changed = true;
-  }
-  if (admin.deletedAt) {
-    admin.deletedAt = null;
-    changed = true;
-  }
-  if (changed) admin.updatedAt = timestamp;
-
-  let mailEditor =
-    data.users.find((user) => user.email.toLowerCase() === releaseMailEditorEmail) ??
-    data.users.find((user) => user.id === "usr-mail-miyasaka");
-
-  if (!mailEditor) {
-    mailEditor = {
-      id: "usr-mail-miyasaka",
-      name: "Miyasaka",
-      email: releaseMailEditorEmail,
-      passwordHash: hashSync(releaseMailEditorPassword, 10),
-      role: "MAIL_EDITOR",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-    data.users.unshift(mailEditor);
-    changed = true;
-  }
-
-  if (mailEditor.name !== "Miyasaka") {
-    mailEditor.name = "Miyasaka";
-    changed = true;
-  }
-  if (mailEditor.email !== releaseMailEditorEmail) {
-    mailEditor.email = releaseMailEditorEmail;
-    changed = true;
-  }
-  if (mailEditor.role !== "MAIL_EDITOR") {
-    mailEditor.role = "MAIL_EDITOR";
-    changed = true;
-  }
-  if (!compareSync(releaseMailEditorPassword, mailEditor.passwordHash)) {
-    mailEditor.passwordHash = hashSync(releaseMailEditorPassword, 10);
-    changed = true;
-  }
-  if (mailEditor.deletedAt) {
-    mailEditor.deletedAt = null;
-    changed = true;
-  }
-  if (changed) mailEditor.updatedAt = timestamp;
-
-  for (const user of data.users) {
-    const email = user.email.toLowerCase();
-    if (demoEmails.has(email) || (email === "admin@triangle.local" && user.id !== admin.id)) {
-      if (!user.deletedAt) {
-        user.deletedAt = timestamp;
-        user.updatedAt = timestamp;
-        changed = true;
-      }
-    }
-  }
-
-  return changed;
+  return applyReleaseUsers(data, releaseUserSeeds(), now());
 }
 
 async function normalizeData(data: AppData) {
