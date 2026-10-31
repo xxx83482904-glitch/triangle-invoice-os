@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
-import { confirmBankReconciliation, confirmBankReconciliationBatch, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput, type ReconciliationBatchInput } from "@/lib/bank-reconciliation";
+import { confirmBankReconciliation, confirmBankReconciliationBatch, reaffirmBankReconciliation, reaffirmInvoiceReconciliations, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput, type ReconciliationBatchInput } from "@/lib/bank-reconciliation";
 import { mutateData } from "@/lib/store";
 import { isActiveUser } from "@/lib/user-access";
 import type { CompanyScope } from "@/lib/company";
@@ -65,4 +65,20 @@ export async function syncReconciledInvoiceStatusAction(company: CompanyScope, k
     const result = await mutateData(user.id, "BANK_RECONCILE_STATUS", "Invoice", id, (data) => syncReconciledInvoiceStatus(data, liveActor(data, user.id), company, kind, id, updatedAt));
     refresh(); return { success: true as const, ...result };
   } catch (error) { return { success: false as const, error: message(error, "状態の同期に失敗しました") }; }
+}
+
+export async function reaffirmBankReconciliationAction(company: CompanyScope, id: string, updatedAt: string) {
+  const user = await requireUser();
+  try {
+    const result = await mutateData(user.id, "BANK_RECONCILE_REAFFIRM", "BankReconciliation", id, (data) => reaffirmBankReconciliation(data, liveActor(data, user.id), company, id, updatedAt));
+    refresh(); return { success: true as const, ...result };
+  } catch (error) { return { success: false as const, error: message(error, "照合を維持できませんでした") }; }
+}
+
+export async function reaffirmInvoiceReconciliationsAction(company: CompanyScope, kind: "issued" | "received", id: string, updatedAt: string) {
+  const user = await requireUser();
+  try {
+    const result = await mutateData(user.id, "BANK_RECONCILE_REAFFIRM_INVOICE", "Invoice", id, (data) => reaffirmInvoiceReconciliations(data, liveActor(data, user.id), company, kind, id, updatedAt));
+    refresh(); return { success: true as const, ...result };
+  } catch (error) { return { success: false as const, error: message(error, "照合を維持できませんでした") }; }
 }

@@ -15,6 +15,12 @@ const monetary = (value: number) => Number.isFinite(value) && value > 0 && value
 const stamp = (old: string) => new Date(Math.max(Date.now(), Date.parse(old) + 1)).toISOString();
 const bankEvidence = (row: BankTransaction) => JSON.stringify([row.officeCode, row.bankAccountId, row.sourceId, row.side, row.transactionDate, row.amount, row.content]);
 const invoiceEvidence = (kind: Kind, row: IssuedInvoice | ReceivedInvoice) => JSON.stringify([kind, row.projectId, "clientId" in row ? row.clientId : row.vendorId, row.total]);
+// Only the document kind and the payable total are evidence. The stored shape still carries the project and
+// counterparty for older readers, but editing a project, counterparty, memo or an eligible status never
+// invalidates a confirmed link.
+const invoiceEvidenceMatches = (stored: string, kind: Kind, row: IssuedInvoice | ReceivedInvoice) => {
+  try { const parsed: unknown = JSON.parse(stored); return Array.isArray(parsed) && parsed[0] === kind && cents(Number(parsed[3])) === cents(row.total); } catch { return false; }
+};
 const paymentEvidence = (row: Payment) => JSON.stringify([row.type, row.issuedInvoiceId, row.receivedInvoiceId, row.amount, row.paymentDate]);
 const activeLinks = (data: AppData, company: CompanyScope) => (data.bankReconciliations || []).filter((row) => row.company === company && !row.deletedAt);
 const paymentMatches = (payment: Payment, kind: Kind, id: string) => !payment.deletedAt && payment.type === (kind === "issued" ? "INCOME" : "EXPENSE") && (kind === "issued" ? payment.issuedInvoiceId === id && !payment.receivedInvoiceId : payment.receivedInvoiceId === id && !payment.issuedInvoiceId);
@@ -56,7 +62,8 @@ export function reconciliationIssue(data: AppData, link: BankReconciliation, tod
   if (bankEvidence(bank) !== link.bankEvidence) return "照合後に銀行の金額・日付・摘要が変わりました";
   try {
     const { invoice } = targetInvoice(data, link.company, link.invoiceKind, link.invoiceId, index);
-    if (!eligibleInvoice(link.invoiceKind, invoice) || invoiceEvidence(link.invoiceKind, invoice) !== link.invoiceEvidence) return "照合後に請求書の金額・案件・状態が変わりました";
+    if (!eligibleInvoice(link.invoiceKind, invoice)) return "照合後に請求書が照合できない状態（下書き・保留・却下など）になりました";
+    if (!invoiceEvidenceMatches(link.invoiceEvidence, link.invoiceKind, invoice)) return "照合後に請求書の金額が変わりました";
   } catch { return "請求書が削除・移動されています"; }
   const payment = index ? index.payments.get(link.paymentId) : data.payments.find((row) => row.id === link.paymentId);
   if (!payment || !paymentMatches(payment, link.invoiceKind, link.invoiceId) || paymentEvidence(payment) !== link.paymentEvidence) return "照合後に入金・支払い記録が変わりました";
@@ -255,10 +262,66 @@ export function syncReconciledInvoiceStatus(data: AppData, actor: Pick<User, "id
   return { id, status: invoice.status };
 }
 
+// Empty string means the current bank row, invoice and payment still support the link, so its evidence can be re-recorded.
+export function reconciliationReaffirmBlocker(data: AppData, link: BankReconciliation, today = bankToday(), index?: ReconciliationIndex) {
+  const bank = index ? index.banks.get(link.transactionId) : data.bankTransactions.find((row) => row.id === link.transactionId);
+  if (!bank || bank.company !== link.company) return "銀行明細が見つかりません";
+  const bankProblem = bankIssue(data, link.company, bank, today, index);
+  if (bankProblem) return bankProblem;
+  let invoice: IssuedInvoice | ReceivedInvoice;
+  try { invoice = targetInvoice(data, link.company, link.invoiceKind, link.invoiceId, index).invoice; } catch { return "請求書が削除・移動されています"; }
+  if (!eligibleInvoice(link.invoiceKind, invoice)) return "下書き・保留などの請求書は先に金額と状態を確定してください";
+  const payment = index ? index.payments.get(link.paymentId) : data.payments.find((row) => row.id === link.paymentId);
+  if (!payment || !paymentMatches(payment, link.invoiceKind, link.invoiceId) || !monetary(payment.amount)) return "入金・支払い記録が見つかりません";
+  if (bank.side !== payment.type) return "入出金の方向が一致しません";
+  if (!isBankDate(payment.paymentDate) || payment.paymentDate > today) return "将来日・不正な日付の支払い記録は実際の銀行照合に使用できません";
+  if (!monetary(link.amount)) return "照合額が不正です";
+  const amount = cents(link.amount), others = activeLinks(data, link.company).filter((row) => row.id !== link.id);
+  if (amount > cents(bank.amount) - others.filter((row) => row.transactionId === bank.id).reduce((total, row) => total + cents(row.amount), 0)) return "銀行明細の金額が照合額を下回ります";
+  if (amount > cents(payment.amount) - others.filter((row) => row.paymentId === payment.id).reduce((total, row) => total + cents(row.amount), 0)) return "入金・支払い記録の金額が照合額を下回ります";
+  return "";
+}
+
+function reaffirmLink(data: AppData, actor: Pick<User, "id" | "role">, link: BankReconciliation, today: string) {
+  const issue = reconciliationIssue(data, link, today);
+  if (!issue) throw new Error("この照合は要再確認ではありません");
+  const blocker = reconciliationReaffirmBlocker(data, link, today);
+  if (blocker) throw new Error(blocker);
+  const bank = data.bankTransactions.find((row) => row.id === link.transactionId)!;
+  const { invoice } = targetInvoice(data, link.company, link.invoiceKind, link.invoiceId);
+  const payment = data.payments.find((row) => row.id === link.paymentId)!;
+  // Re-record the evidence only. Payments and document statuses stay as they are; "状態を揃える" remains the explicit status repair.
+  Object.assign(link, { bankEvidence: bankEvidence(bank), invoiceEvidence: invoiceEvidence(link.invoiceKind, invoice), paymentEvidence: paymentEvidence(payment),
+    reaffirmedAt: new Date().toISOString(), reaffirmedById: actor.id, reaffirmedIssue: issue, updatedAt: stamp(link.updatedAt) });
+  return { id: link.id, issue };
+}
+
+export function reaffirmBankReconciliation(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, id: string, updatedAt: string, today = bankToday()) {
+  assertBankAccess(actor, company);
+  const link = activeLinks(data, company).find((row) => row.id === id);
+  if (!link || link.updatedAt !== updatedAt) throw new Error("照合記録が更新されています");
+  return reaffirmLink(data, actor, link, today);
+}
+
+export function reaffirmInvoiceReconciliations(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, kind: Kind, id: string, updatedAt: string, today = bankToday()) {
+  assertBankAccess(actor, company);
+  if (!["issued", "received"].includes(kind)) throw new Error("書類の種類が不正です");
+  const { invoice } = targetInvoice(data, company, kind, id);
+  if (invoice.updatedAt !== updatedAt) throw new Error("請求書が更新されています。画面を更新してください");
+  const links = activeLinks(data, company).filter((row) => row.invoiceKind === kind && row.invoiceId === id && reconciliationIssue(data, row, today));
+  if (!links.length) throw new Error("この請求書に要再確認の照合はありません");
+  // All or nothing: one unsupported link means the document still needs a decision, so nothing is re-recorded.
+  const blocked = links.map((row) => reconciliationReaffirmBlocker(data, row, today)).filter(Boolean);
+  if (blocked.length) throw new Error(`維持できない照合があります: ${[...new Set(blocked)].join(" / ")}`);
+  const results = links.map((row) => reaffirmLink(data, actor, row, today));
+  return { count: results.length, issues: results.map((row) => row.issue) };
+}
+
 export function bankReconciliationOverview(data: AppData, company: CompanyScope, today = bankToday()) {
   const index = reconciliationIndex(data);
   const links = activeLinks(data, company);
   const issues = new Map(links.map((row) => [row.id, reconciliationIssue(data, row, today, index)]));
+  const blockers = new Map(links.filter((row) => issues.get(row.id)).map((row) => [row.id, reconciliationReaffirmBlocker(data, row, today, index)]));
   const paymentsByInvoice = new Map<string, Payment[]>(), mailByInvoice = new Map<string, AppData["mailDocuments"]>();
   for (const payment of data.payments) {
     const kind = payment.type === "INCOME" ? "issued" : "received", id = kind === "issued" ? payment.issuedInvoiceId : payment.receivedInvoiceId;
@@ -280,14 +343,16 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
   const clients = new Map(data.clients.filter((row) => !row.deletedAt && partnerMatchesCompany(row, company)).map((row) => [row.id, row]));
   const vendors = new Map(data.vendors.filter((row) => !row.deletedAt && partnerMatchesCompany(row, company)).map((row) => [row.id, row]));
   const linkedBank = new Map<string, number>(), linkedPayment = new Map<string, number>();
-  const validInvoice = new Map<string, number>();
+  const validInvoice = new Map<string, number>(), reaffirmableInvoice = new Map<string, number>();
   const conflictBank = new Set<string>(), conflictInvoice = new Set<string>();
   for (const link of links) {
     const key = `${link.invoiceKind}:${link.invoiceId}`;
     linkedBank.set(link.transactionId, (linkedBank.get(link.transactionId) || 0) + cents(link.amount));
     linkedPayment.set(link.paymentId, (linkedPayment.get(link.paymentId) || 0) + cents(link.amount));
-    if (issues.get(link.id)) { conflictBank.add(link.transactionId); conflictInvoice.add(key); }
-    else validInvoice.set(key, (validInvoice.get(key) || 0) + cents(link.amount));
+    if (issues.get(link.id)) {
+      conflictBank.add(link.transactionId); conflictInvoice.add(key);
+      if (!blockers.get(link.id)) reaffirmableInvoice.set(key, (reaffirmableInvoice.get(key) || 0) + 1);
+    } else validInvoice.set(key, (validInvoice.get(key) || 0) + cents(link.amount));
   }
   const invoices = ( ["issued", "received"] as const).flatMap((kind) => (kind === "issued" ? data.issuedInvoices : data.receivedInvoices).flatMap((invoice) => {
     if (invoice.deletedAt) return [];
@@ -312,7 +377,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       project: project.name, total: invoice.total, date: invoice.issueDate, dueDate: invoice.dueDate,
       paid: paid / 100, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, matched: matched / 100, unmatched: Math.max(0, cents(invoice.total) - matched) / 100,
       recordedUnmatched: Math.max(0, paid - matched) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,
-      eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), stateMismatch,
+      eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), reaffirmable: reaffirmableInvoice.get(key) || 0, stateMismatch,
       mailCount: mail.length, status: invoice.status, overdue: eligible && Boolean(invoice.dueDate) && invoice.dueDate < today && paid < cents(invoice.total),
       href: kind === "issued" ? `/issued-invoices?company=${company}&document=${encodeURIComponent(key)}` : `/received-invoices?company=${company}&document=${encodeURIComponent(invoice.id)}`,
       payments: payments.map((row) => ({ id: row.id, updatedAt: row.updatedAt, amount: row.amount, date: row.paymentDate, available: Math.max(0, cents(row.amount) - (linkedPayment.get(row.id) || 0)) / 100, method: row.method || "手入力" })),
@@ -354,7 +419,8 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       remaining: Math.max(0, cents(row.amount) - cents(allocated)) / 100, allocated, issue, conflict: conflictBank.has(row.id),
       state: conflictBank.has(row.id) ? "conflict" : matched ? "matched" : row.treatment === "NORMAL" && !row.sourceMissing && row.bookkeeping?.invoiceRequirement === "NOT_REQUIRED" ? "not_required" : issue ? "excluded" : "unmatched" };
   });
-  return { banks, invoices, unlinkedMailCount, links: links.map((row) => ({ id: row.id, updatedAt: row.updatedAt, transactionId: row.transactionId, invoiceKey: `${row.invoiceKind}:${row.invoiceId}`, amount: row.amount, createdPayment: row.createdPayment, issue: issues.get(row.id) || "", note: row.note, createdAt: row.createdAt })) };
+  return { banks, invoices, unlinkedMailCount, links: links.map((row) => ({ id: row.id, updatedAt: row.updatedAt, transactionId: row.transactionId, invoiceKey: `${row.invoiceKind}:${row.invoiceId}`, amount: row.amount, createdPayment: row.createdPayment,
+    issue: issues.get(row.id) || "", reaffirmable: Boolean(issues.get(row.id)) && !blockers.get(row.id), reaffirmBlocker: blockers.get(row.id) || "", reaffirmedAt: row.reaffirmedAt, note: row.note, createdAt: row.createdAt })) };
 }
 export type ReconciliationOverview = ReturnType<typeof bankReconciliationOverview>;
 export type ReconciliationInvoice = ReconciliationOverview["invoices"][number];

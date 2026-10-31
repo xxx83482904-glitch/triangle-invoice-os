@@ -140,6 +140,9 @@ export type BankReconciliation = BankEntity & {
   paymentEvidence: string;
   note: string;
   confirmedById: string;
+  reaffirmedAt?: string;
+  reaffirmedById?: string;
+  reaffirmedIssue?: string;
   deletedAt?: string | null;
 };
 

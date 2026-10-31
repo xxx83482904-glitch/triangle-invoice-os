@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { admin, fixture, timestamp } from "./document-fixture";
-import { bankReconciliationOverview, confirmBankReconciliation, confirmBankReconciliationBatch, saveReconciliationAlias, saveReconciliationInstallments, reconciliationCandidates, reconciliationIssue, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput, type ReconciliationBatchInput } from "../src/lib/bank-reconciliation";
+import { bankReconciliationOverview, confirmBankReconciliation, confirmBankReconciliationBatch, reaffirmBankReconciliation, reaffirmInvoiceReconciliations, reconciliationReaffirmBlocker, saveReconciliationAlias, saveReconciliationInstallments, reconciliationCandidates, reconciliationIssue, removeBankReconciliation, syncReconciledInvoiceStatus, type ReconcileInput, type ReconciliationBatchInput } from "../src/lib/bank-reconciliation";
 import { allocationPreview, type AllocationDraft } from "../src/lib/bank-reconciliation-allocation";
 import { confirmBankTransfer } from "../src/lib/bank-transfers";
 import { bankCategoryAllocations } from "../src/lib/bank-bookkeeping";
@@ -588,4 +588,76 @@ test("partial historical matches on expense accounts remain valid but cannot be 
   assert.throws(() => confirm(data, { amount: 6000 }), /照合.*対象/); assert.equal(JSON.stringify(data), before);
   data.bankTransactions[0].amount++;
   assert.equal(bankReconciliationOverview(data, "JAPAN", today).banks[0].state, "conflict");
+});
+
+test("project, counterparty, memo and eligible status edits keep confirmed links; amount and ineligible status changes flag them", () => {
+  const data = setup(); confirm(data); confirm(data, { invoiceKind: "received" });
+  const issued = data.issuedInvoices[0], received = data.receivedInvoices[0];
+  data.projects.push({ ...data.projects.find((row) => row.id === issued.projectId)!, id: "other-project", name: "Other project" });
+  data.clients.push({ ...data.clients[0], id: "another-client", companyName: "Another client", bankAliases: [] });
+  data.vendors.push({ ...data.vendors[0], id: "another-vendor", companyName: "Another vendor", bankAliases: [] });
+  Object.assign(issued, { projectId: "other-project", clientId: "another-client", notes: "edited", internalMemo: "memo", status: "SENT" });
+  Object.assign(received, { projectId: "other-project", vendorId: "another-vendor", memo: "edited", status: "APPROVAL_PENDING", dueDate: "2026-12-31" });
+  assert.ok(data.bankReconciliations.every((link) => !reconciliationIssue(data, link, today)));
+  const view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.ok(view.invoices.filter((row) => ["issued-1", "received-1"].includes(row.id)).every((row) => !row.conflict && row.matched > 0 && row.reaffirmable === 0));
+  assert.ok(view.banks.every((row) => row.state === "matched"));
+  issued.total += 500;
+  assert.match(reconciliationIssue(data, data.bankReconciliations.find((link) => link.invoiceKind === "issued")!, today), /金額/);
+  received.status = "ON_HOLD";
+  assert.match(reconciliationIssue(data, data.bankReconciliations.find((link) => link.invoiceKind === "received")!, today), /状態/);
+});
+
+test("reaffirm re-records evidence after a reviewed source change and refuses unsupported links", () => {
+  const data = setup(); confirm(data);
+  const link = data.bankReconciliations[0];
+  assert.throws(() => reaffirmBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt, today), /要再確認ではありません/);
+  data.bankTransactions[0].content = "Test customer INV-001 (corrected)";
+  assert.match(reconciliationIssue(data, link, today), /摘要/);
+  assert.equal(reconciliationReaffirmBlocker(data, link, today), "");
+  assert.throws(() => reaffirmBankReconciliation(data, { id: "mail", role: "MAIL_EDITOR" }, "JAPAN", link.id, link.updatedAt, today), /権限/);
+  assert.throws(() => reaffirmBankReconciliation(data, admin, "JAPAN", link.id, "stale", today), /更新されています/);
+  const before = JSON.stringify([data.payments, data.issuedInvoices]);
+  const result = reaffirmBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt, today);
+  assert.match(result.issue, /摘要/);
+  assert.equal(reconciliationIssue(data, link, today), ""); assert.ok(link.reaffirmedAt); assert.equal(link.reaffirmedById, admin.id); assert.match(link.reaffirmedIssue!, /摘要/);
+  assert.equal(JSON.stringify([data.payments, data.issuedInvoices]), before);
+  assert.equal(bankReconciliationOverview(data, "JAPAN", today).banks[0].state, "matched");
+  data.issuedInvoices[0].total += 500;
+  assert.equal(reconciliationReaffirmBlocker(data, link, today), "");
+  reaffirmBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt, today);
+  assert.equal(reconciliationIssue(data, link, today), "");
+  data.payments[0].amount = 5000;
+  assert.match(reconciliationReaffirmBlocker(data, link, today), /支払い記録の金額/);
+  assert.throws(() => reaffirmBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt, today), /支払い記録の金額/);
+  data.payments[0].amount = link.amount; data.bankTransactions[0].sourceMissing = true;
+  assert.match(reconciliationReaffirmBlocker(data, link, today), /元明細/);
+  data.bankTransactions[0].sourceMissing = false; data.issuedInvoices[0].status = "CANCELED";
+  assert.match(reconciliationReaffirmBlocker(data, link, today), /状態を確定/);
+  data.issuedInvoices[0].status = "ISSUED"; data.payments[0].deletedAt = today;
+  assert.match(reconciliationReaffirmBlocker(data, link, today), /見つかりません/);
+  const view = bankReconciliationOverview(data, "JAPAN", today);
+  assert.equal(view.links[0].reaffirmable, false); assert.ok(view.links[0].reaffirmBlocker); assert.ok(view.links[0].issue);
+});
+
+test("invoice-level reaffirm keeps every supported link or nothing", () => {
+  const data = setup(); data.issuedInvoices[0].total = 12000; data.bankTransactions[0].amount = 7000;
+  data.bankTransactions.push({ ...data.bankTransactions[0], id: "bank-income-2", sourceId: "source-income-2", amount: 5000 });
+  confirm(data, { amount: 7000 }); confirm(data, { transactionId: "bank-income-2", amount: 5000 });
+  const invoice = data.issuedInvoices[0];
+  assert.throws(() => reaffirmInvoiceReconciliations(data, admin, "JAPAN", "issued", invoice.id, invoice.updatedAt, today), /要再確認の照合はありません/);
+  invoice.total = 12300;
+  assert.equal(bankReconciliationOverview(data, "JAPAN", today).invoices.find((row) => row.id === invoice.id)!.reaffirmable, 2);
+  assert.throws(() => reaffirmInvoiceReconciliations(data, admin, "JAPAN", "issued", invoice.id, "stale", today), /更新されています/);
+  const second = data.bankTransactions.find((row) => row.id === "bank-income-2")!;
+  second.sourceMissing = true;
+  const snapshot = JSON.stringify(data.bankReconciliations);
+  assert.throws(() => reaffirmInvoiceReconciliations(data, admin, "JAPAN", "issued", invoice.id, invoice.updatedAt, today), /維持できない照合/);
+  assert.equal(JSON.stringify(data.bankReconciliations), snapshot);
+  second.sourceMissing = false;
+  const result = reaffirmInvoiceReconciliations(data, admin, "JAPAN", "issued", invoice.id, invoice.updatedAt, today);
+  assert.equal(result.count, 2);
+  assert.ok(data.bankReconciliations.every((link) => !reconciliationIssue(data, link, today) && link.reaffirmedAt));
+  const row = bankReconciliationOverview(data, "JAPAN", today).invoices.find((item) => item.id === invoice.id)!;
+  assert.equal(row.conflict, false); assert.equal(row.matched, 12000); assert.equal(row.reaffirmable, 0); assert.equal(row.outstanding, 300);
 });
