@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { bankSelectClass } from "@/components/app/banking-settings";
 import { BankReconciliationDesk } from "@/components/app/bank-reconciliation-desk";
+import { BankReconciliationReaffirm } from "@/components/app/bank-reconciliation-reaffirm";
 import { BankReconciliationInstallments } from "@/components/app/bank-reconciliation-installments";
 import { BankAiSettings } from "@/components/app/bank-ai-settings";
 import { BankReviewPanel } from "@/components/app/bank-review-panel";
@@ -102,13 +103,14 @@ export function BankReconciliationWorkspace({ company, filters, rows, selected, 
           <div className="flex flex-wrap gap-2">
             <Link className="inline-flex min-h-11 items-center gap-1 text-primary underline" href={row.href}>書類<ArrowUpRight className="size-4" /></Link>
             {row.eligible ? <Link prefetch={false} className="inline-flex min-h-11 items-center gap-1 rounded-md border px-3 hover:bg-muted" href={`/banking/reconcile?company=${company}&invoice=${encodeURIComponent(row.key)}&status=all`}><Search className="size-4" />銀行候補・照合記録</Link> : null}
+            {row.conflict && row.reaffirmable > 0 ? <BankReconciliationReaffirm company={company} target={{ kind: "invoice", invoice: row }} disabled={pending} /> : null}
             {row.stateMismatch && !row.conflict && row.matched > 0 ? <SyncStatusButton company={company} invoice={row} /> : null}
           </div>
         </div>
         <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">{[["請求額", row.total], ["入金・支払い登録済み", row.paid], ["銀行照合済み", row.matched], ["未入金・未払い", row.outstanding]].map(([label, amount]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="break-all font-medium tabular-nums">{money(Number(amount))}</dd></div>)}</dl>
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs"><span>書類処理: {row.kind === "received" ? row.processed ? "処理済み" : "未処理" : row.status}</span><span>実際の入金・支払い: {row.paid >= row.total && row.total > 0 ? "全額登録済み" : row.paid > 0 ? "一部登録済み" : "未登録"}</span><span>銀行照合: {row.conflict ? "要再確認" : row.matched >= row.total && row.total > 0 ? "全額照合済み" : row.matched > 0 ? "一部照合" : "未照合"}</span></p>
         {row.kind === "issued" && row.eligible ? <BankReconciliationInstallments key={`${row.key}:${row.updatedAt}`} company={company} invoice={row} /> : null}
-        <p className="text-xs text-amber-800 dark:text-amber-300">{[row.conflict ? "照合後にデータ変更あり" : "", row.stateMismatch ? "支払記録と請求書・郵便物の状態が不一致" : "", row.overpaid ? `請求額より多い支払い ${money(row.overpaid)}` : "", row.overdue ? "期限超過" : "", !row.eligible ? "下書き・保留・金額などを確認後に照合" : "", row.recordedUnmatched > 0 ? `登録済みのうち銀行未照合 ${money(row.recordedUnmatched)}` : ""].filter(Boolean).join(" / ")}</p>
+        <p className="text-xs text-amber-800 dark:text-amber-300">{[row.conflict ? (row.reaffirmable > 0 ? "照合後に金額などが変わりました。内容を確認して維持するか、解除して見直してください" : "照合後にデータ変更あり。照合を解除して見直してください") : "", row.stateMismatch ? "支払記録と請求書・郵便物の状態が不一致" : "", row.overpaid ? `請求額より多い支払い ${money(row.overpaid)}` : "", row.overdue ? "期限超過" : "", !row.eligible ? "下書き・保留・金額などを確認後に照合" : "", row.recordedUnmatched > 0 ? `登録済みのうち銀行未照合 ${money(row.recordedUnmatched)}` : ""].filter(Boolean).join(" / ")}</p>
       </li>)}</ul>{!invoiceRows.length ? <p className="py-4 text-sm text-muted-foreground">該当する請求書はありません。</p> : null}
     </section>}
     <Dialog open={Boolean(removing)} onOpenChange={(open) => { if (!open && !pending) setRemoving(null); }}><DialogContent showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}><DialogHeader><DialogTitle>照合を解除しますか？</DialogTitle><DialogDescription>{removing?.createdPayment ? "この照合で追加した入金・支払い記録も取り消し、請求書・郵便物の完了状態を再計算します。" : "銀行との紐づけだけを解除します。もともと登録されていた入金・支払い記録は残します。"} 銀行の原明細は変更しません。</DialogDescription></DialogHeader>{error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}<div className="flex flex-wrap gap-2"><Button className={touch} variant="outline" disabled={pending} onClick={() => setRemoving(null)}>キャンセル</Button><Button className={touch} disabled={pending} onClick={remove}><Unlink className="size-4" />照合解除</Button></div></DialogContent></Dialog>
