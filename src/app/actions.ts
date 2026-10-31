@@ -7,12 +7,12 @@ import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, assertCompanyAccess, can, canEditOptionGroup, defaultPathForRole } from "@/lib/rbac";
-import { mutateData, newId, paidForIssued, paidForReceived, readData, restoreUndoState, withDataMutationLock, writeData } from "@/lib/store";
-import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
+import { mutateData, newId, readData, restoreUndoState, withDataMutationLock, writeData } from "@/lib/store";
+import { visibleProjects } from "@/lib/documents";
 import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
 import { applyReceivedInvoiceFields } from "@/lib/received-invoice-edits";
-import { receivedAmountsFromForm, validateReceivedAmounts } from "@/lib/received-invoice-review";
-import { invoicePaymentSummary } from "@/lib/invoice-status";
+import { receivedAmountsFromForm } from "@/lib/received-invoice-review";
+import { assertReceivedPaidAllowed, recordPayment } from "@/lib/payment-records";
 import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
 import { saveClient } from "@/lib/partner-project-edits";
 import { registrationSchema, requestRegistration } from "@/lib/user-access";
@@ -22,7 +22,6 @@ import type {
   IssuedInvoiceItem,
   MailDocumentCategory,
   MailFolder,
-  Payment,
   Project,
   ReceivedInvoice,
   SelectOptionGroup,
@@ -187,40 +186,21 @@ function ocrFileUrlsForTargets(data: AppData, mailDocumentIds: string[], receive
   return urls;
 }
 
-function markReceivedInvoicePaid(data: AppData, invoice: ReceivedInvoice, userId: string, timestamp: string) {
-  const paid = paidForReceived(data, invoice.id);
-  const remaining = Math.max(invoice.total - paid, 0);
-  const paymentDate = timestamp.slice(0, 10);
-
-  if (remaining > 0) {
-    data.payments.unshift({
-      id: newId(),
-      type: "EXPENSE",
-      receivedInvoiceId: invoice.id,
-      amount: remaining,
-      paymentDate,
-      method: invoice.paymentMethod ?? "ステータス変更",
-      memo: "ステータス変更で支払済みにしました",
-      createdById: userId,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-  }
-
+// "支払済み" is derived from payment records. Choosing the status never creates a payment; it is accepted only when
+// manual payment records or bank reconciliation already cover the payable amount.
+function markReceivedInvoicePaid(data: AppData, invoice: ReceivedInvoice, _userId: string, timestamp: string) {
+  const summary = assertReceivedPaidAllowed(data, invoice);
   invoice.status = "PAID";
-  invoice.paidAt = invoice.paidAt ?? paymentDate;
-  invoice.paymentMethod = invoice.paymentMethod ?? "ステータス変更";
+  invoice.paidAt = summary.paidAt ?? invoice.paidAt ?? timestamp.slice(0, 10);
   invoice.updatedAt = timestamp;
 }
 
-function setReceivedInvoiceMailProcessed(data: AppData, invoice: ReceivedInvoice | undefined, mailProcessed: boolean, userId: string, timestamp: string) {
+// Document processing is separate from payment: marking mail as processed never touches payment state.
+function setReceivedInvoiceMailProcessed(data: AppData, invoice: ReceivedInvoice | undefined, mailProcessed: boolean, _userId: string, timestamp: string) {
+  void data;
   if (!invoice || invoice.deletedAt) return;
   invoice.mailProcessed = mailProcessed;
-  if (mailProcessed) {
-    markReceivedInvoicePaid(data, invoice, userId, timestamp);
-  } else {
-    invoice.updatedAt = timestamp;
-  }
+  invoice.updatedAt = timestamp;
 }
 
 async function deleteUnreferencedUploadFiles(fileUrls: Iterable<string>) {
@@ -757,34 +737,8 @@ export async function recordIncomePayment(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "manage:incomePayments");
   const invoiceId = value(formData, "issuedInvoiceId");
-  const timestamp = now();
-  const payment: Payment = {
-    id: newId(),
-    type: "INCOME",
-    issuedInvoiceId: invoiceId,
-    amount: money(formData, "amount"),
-    paymentDate: value(formData, "paymentDate"),
-    method: optional(formData, "method"),
-    memo: optional(formData, "memo"),
-    createdById: user.id,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  await mutateData(user.id, "RECORD_INCOME_PAYMENT", "Payment", payment.id, (data) => {
-    const invoice = data.issuedInvoices.find((item) => item.id === invoiceId);
-    if (!invoice || !isBillableIssuedInvoice(invoice)) throw new Error("金額のある発行済みの請求書を選択してください");
-    if (!visibleProjects(data, user).some((p) => p.id === invoice.projectId)) throw new Error("この請求書に入金を登録する権限がありません");
-    if (payment.amount <= 0 || payment.amount > invoice.total - paidForIssued(data, invoiceId)) throw new Error("未入金額の範囲で入力してください");
-    data.payments.unshift(payment);
-    if (invoice) {
-      const paymentState = invoicePaymentSummary(data, invoice);
-      invoice.status = paymentState.status;
-      invoice.paidAt = paymentState.paidAt;
-      invoice.updatedAt = timestamp;
-    }
-    return payment;
-  });
+  const input = { kind: "issued" as const, invoiceId, amount: money(formData, "amount"), paymentDate: value(formData, "paymentDate"), method: optional(formData, "method") || "", memo: optional(formData, "memo") || "" };
+  await mutateData(user.id, "RECORD_INCOME_PAYMENT", "IssuedInvoice", invoiceId, (data) => recordPayment(data, user, companyFromParam(optional(formData, "company")), input));
   revalidatePath("/payments");
   revalidatePath("/issued-invoices");
   revalidatePath("/dashboard");
@@ -887,7 +841,7 @@ export async function updateOcrDocumentInline(formData: FormData) {
     }
 
     if (receivedInvoice) {
-      const amounts = validateReceivedAmounts(receivedAmountsFromForm(formData, receivedInvoice), paidForReceived(draft, receivedInvoice.id));
+      const amounts = receivedAmountsFromForm(formData, receivedInvoice);
       const vendorId = value(formData, "vendorId");
       const projectId = value(formData, "projectId");
       if (draft.vendors.some((vendor) => vendor.id === vendorId && !vendor.deletedAt)) receivedInvoice.vendorId = vendorId;
@@ -1468,35 +1422,14 @@ export async function recordExpensePayment(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "manage:expensePayments");
   const invoiceId = value(formData, "receivedInvoiceId");
-  const timestamp = now();
-  const payment: Payment = {
-    id: newId(),
-    type: "EXPENSE",
-    receivedInvoiceId: invoiceId,
-    amount: money(formData, "amount"),
-    paymentDate: value(formData, "paymentDate"),
-    method: optional(formData, "method"),
-    memo: optional(formData, "memo"),
-    createdById: user.id,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  await mutateData(user.id, "RECORD_EXPENSE_PAYMENT", "Payment", payment.id, (data) => {
-    data.payments.unshift(payment);
-    const invoice = data.receivedInvoices.find((item) => item.id === invoiceId);
-    if (invoice) {
-      const paid = paidForReceived(data, invoiceId);
-      invoice.status = paid >= invoice.total ? "PAID" : "SCHEDULED";
-      invoice.paidAt = paid >= invoice.total ? payment.paymentDate : undefined;
-      invoice.paymentMethod = payment.method;
-      invoice.updatedAt = timestamp;
-    }
-    return payment;
-  });
+  const input = { kind: "received" as const, invoiceId, amount: money(formData, "amount"), paymentDate: value(formData, "paymentDate"), method: optional(formData, "method") || "", memo: optional(formData, "memo") || "" };
+  await mutateData(user.id, "RECORD_EXPENSE_PAYMENT", "ReceivedInvoice", invoiceId, (data) => recordPayment(data, user, companyFromParam(optional(formData, "company")), input));
   revalidatePath("/payments");
   revalidatePath("/received-invoices");
   revalidatePath("/dashboard");
+  revalidatePath("/documents");
+  revalidatePath("/mail-sorter");
+  revalidatePath("/projects");
 }
 
 export async function softDelete(formData: FormData) {

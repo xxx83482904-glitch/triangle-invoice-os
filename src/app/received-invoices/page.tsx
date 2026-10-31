@@ -16,7 +16,8 @@ import { todayIso } from "@/lib/format";
 import { receivedStatusLabels, visibleProjects } from "@/lib/documents";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
-import { paidForReceived, readDataForRequest as readData } from "@/lib/store";
+import { readDataForRequest as readData } from "@/lib/store";
+import { paymentRecordsFor, receivedPaymentSummary } from "@/lib/payment-records";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
 import { ReceivedAmountFields } from "./received-amount-fields";
 import { reconciliationIssue } from "@/lib/bank-reconciliation";
@@ -60,7 +61,7 @@ export default async function ReceivedInvoicesPage({
     .map<ReceivedInvoiceWorkspaceItem>((invoice) => {
       const vendor = vendors.find((item) => item.id === invoice.vendorId);
       const project = projects.find((item) => item.id === invoice.projectId);
-      const paidAmount = paidForReceived(data, invoice.id);
+      const summary = receivedPaymentSummary(data, invoice);
       const amounts: ReceivedInvoiceAmounts = invoice;
       const linkedMail = data.mailDocuments.find((m) => !m.deletedAt && m.relatedReceivedInvoiceId === invoice.id);
       return {
@@ -79,14 +80,16 @@ export default async function ReceivedInvoicesPage({
         mimeType: invoice.mimeType || linkedMail?.mimeType,
         ocrText: invoice.ocrText || linkedMail?.ocrText,
         originalFileName: invoice.originalFileName || linkedMail?.originalFileName,
-        paidAmount,
+        paidAmount: summary.paid,
+        payments: paymentRecordsFor(data, company, "received", invoice.id),
         projectId: invoice.projectId,
         projectName: project?.name ?? "案件未設定",
         status: invoice.status,
+        statusMismatch: summary.statusMismatch,
         subtotal: invoice.subtotal,
         taxTotal: invoice.taxTotal,
         total: invoice.total,
-        unpaidAmount: Math.max(0, invoice.total - paidAmount),
+        unpaidAmount: summary.outstanding,
         vendorId: invoice.vendorId,
         vendorName: vendor?.companyName ?? "支払先未設定",
       };
@@ -108,6 +111,7 @@ export default async function ReceivedInvoicesPage({
           showTotals={can(user, "view:dashboard")}
           canApprove={mayApprove}
           canEdit={mayEdit}
+          canRecordPayments={can(user, "manage:expensePayments")}
           company={company}
           invoices={invoices}
           projects={projects.map((project) => ({ label: project.name, value: project.id }))}

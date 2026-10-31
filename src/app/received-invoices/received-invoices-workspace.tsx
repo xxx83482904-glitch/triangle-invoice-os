@@ -9,7 +9,9 @@ import { useMemo, useState, useTransition } from "react";
 import { updateReceivedInvoiceInline, updateReceivedInvoiceStatus } from "@/app/actions";
 import { saveReceivedInvoice } from "./actions";
 import { OriginalDocumentPreview } from "./original-document-preview";
+import { PaymentRecordsPanel } from "./payment-records-panel";
 import { ReceivedAmountFields } from "./received-amount-fields";
+import type { PaymentRecordView } from "@/lib/payment-records";
 import { receivedInvoiceEvidence, receivedInvoiceWarnings, type ReceivedInvoiceAmounts } from "@/lib/received-invoice-review";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -41,9 +43,11 @@ export type ReceivedInvoiceWorkspaceItem = ReceivedInvoiceAmounts & {
   ocrText?: string;
   originalFileName?: string;
   paidAmount: number;
+  payments: PaymentRecordView[];
   projectId: string;
   projectName: string;
   status: ReceivedInvoiceStatus;
+  statusMismatch: boolean;
   subtotal: number;
   taxTotal: number;
   total: number;
@@ -109,11 +113,13 @@ function invoiceMatchesFilter(row: ReceivedInvoiceWorkspaceItem, filter: WorkFil
 function SelectField({
   defaultValue,
   disabled,
+  disabledValues = [],
   name,
   options,
 }: {
   defaultValue: string;
   disabled?: boolean;
+  disabledValues?: string[];
   name: string;
   options: Option[];
 }) {
@@ -125,17 +131,20 @@ function SelectField({
       className="h-9 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value}>{option.label}</option>
+        <option key={option.value} value={option.value} disabled={disabledValues.includes(option.value) && option.value !== defaultValue}>{option.label}</option>
       ))}
     </select>
   );
 }
+
+const paidGuardMessage = "支払済みにするには支払記録の登録か銀行照合が必要です。状態の変更だけでは支払記録は作られません。「支払記録」から登録してください。";
 
 export function ReceivedInvoicesWorkspace({
   initialId,
   showTotals = true,
   canApprove,
   canEdit,
+  canRecordPayments,
   company,
   invoices,
   projects,
@@ -146,6 +155,7 @@ export function ReceivedInvoicesWorkspace({
   showTotals?: boolean;
   canApprove: boolean;
   canEdit: boolean;
+  canRecordPayments: boolean;
   company: CompanyScope;
   invoices: ReceivedInvoiceWorkspaceItem[];
   projects: Option[];
@@ -333,12 +343,13 @@ export function ReceivedInvoicesWorkspace({
                                       defaultValue={invoice.status}
                                       className="h-7 max-w-[140px] rounded-full border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                       onChange={(event) => {
-                                        if (event.currentTarget.value === "PAID" && invoice.unpaidAmount > 0 && !window.confirm(`差額 ${yen.format(invoice.unpaidAmount)} の支払記録を追加します。銀行照合済みにはなりません。続行しますか？`)) { event.currentTarget.value = invoice.status; return; }
+                                        // A status change never creates a payment; paid is reached through payment records or bank reconciliation.
+                                        if (event.currentTarget.value === "PAID" && invoice.unpaidAmount > 0) { event.currentTarget.value = invoice.status; setActiveId(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); return; }
                                         event.currentTarget.form?.requestSubmit();
                                       }}
                                     >
                                       {statusOptions.map((option) => (
-                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                        <option key={option.value} value={option.value} disabled={option.value === "PAID" && invoice.unpaidAmount > 0 && invoice.status !== "PAID"}>{option.label}</option>
                                       ))}
                                     </select>
                                   </form>
@@ -407,6 +418,8 @@ export function ReceivedInvoicesWorkspace({
                     </div>
                   </div>
 
+                  <PaymentRecordsPanel key={`${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.payments.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={activeInvoice} records={activeInvoice.payments} canRecord={canRecordPayments} />
+
                   <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                   <div className="min-w-0 space-y-3 lg:sticky lg:top-4">
                     <div className="flex items-center gap-2 text-sm font-medium">
@@ -431,7 +444,7 @@ export function ReceivedInvoicesWorkspace({
                     <form key={`${activeInvoice.id}:${activeInvoice.updatedAt}`} action={updateReceivedInvoiceInline} onSubmit={(event) => {
                       event.preventDefault();
                       const form = new FormData(event.currentTarget);
-                      if (form.get("status") === "PAID" && Number(form.get("total")) > activeInvoice.paidAmount && !window.confirm(`差額 ${yen.format(Number(form.get("total")) - activeInvoice.paidAmount)} の支払記録を追加します。銀行照合済みにはなりません。続行しますか？`)) return;
+                      if (form.get("status") === "PAID" && Number(form.get("total")) > activeInvoice.paidAmount) { setSaveResult({ id: activeInvoice.id, message: paidGuardMessage, error: true }); return; }
                       startSaving(async () => {
                         try {
                           const result = await saveReceivedInvoice(form);
@@ -462,7 +475,8 @@ export function ReceivedInvoicesWorkspace({
                         </label>
                         <label className="space-y-1">
                           <span className="text-xs font-medium text-muted-foreground">状態</span>
-                          <SelectField name="status" defaultValue={activeInvoice.status} options={statusOptions} />
+                          <SelectField name="status" defaultValue={activeInvoice.status} options={statusOptions} disabledValues={activeInvoice.unpaidAmount > 0 ? ["PAID"] : []} />
+                          <span className="block text-[11px] text-muted-foreground">支払済みは支払記録・銀行照合で決まります。金額の訂正は支払記録とは別に保存できます。</span>
                         </label>
                         <label className="space-y-1">
                           <span className="text-xs font-medium text-muted-foreground">請求日</span>

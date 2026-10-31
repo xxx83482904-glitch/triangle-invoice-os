@@ -1,7 +1,7 @@
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
 import { can, canAccessCompany } from "@/lib/rbac";
-import { receivedAmountsFromForm, validateReceivedAmounts, validateReceivedDates } from "@/lib/received-invoice-review";
+import { receivedAmountsFromForm, validateReceivedDates } from "@/lib/received-invoice-review";
 import type { AppData, User } from "@/lib/types";
 
 export function applyReceivedInvoiceFields(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, id: string, form: FormData) {
@@ -15,8 +15,8 @@ export function applyReceivedInvoiceFields(data: AppData, user: Pick<User, "id" 
   const vendor = data.vendors.find((item) => item.id === field("vendorId") && !item.deletedAt && partnerMatchesCompany(item, company));
   if (!project || !vendor) throw new Error("案件と請求元を確認してください。");
   validateReceivedDates(field("issueDate"), field("dueDate"));
-  const paid = data.payments.filter((payment) => !payment.deletedAt && payment.type === "EXPENSE" && payment.receivedInvoiceId === id).reduce((sum, payment) => sum + payment.amount, 0);
-  const amounts = validateReceivedAmounts(receivedAmountsFromForm(form, invoice), paid);
+  // Amount corrections are independent of payment records; an overpaid balance is reported, never blocked here.
+  const amounts = receivedAmountsFromForm(form, invoice);
   // Validate every field before touching the invoice or related payment records.
   Object.assign(invoice, amounts, { projectId: project.id, vendorId: vendor.id,
     issueDate: field("issueDate"), dueDate: field("dueDate"), memo: field("memo") || undefined });

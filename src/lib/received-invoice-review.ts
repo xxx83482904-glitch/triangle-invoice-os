@@ -91,7 +91,7 @@ export function receivedInvoiceWarnings(row: ReceivedInvoiceAmounts & { vendorNa
   return warnings;
 }
 
-export function validateReceivedAmounts(amounts: ReceivedInvoiceAmounts, paidAmount = 0) {
+export function validateReceivedAmounts(amounts: ReceivedInvoiceAmounts) {
   for (const value of [amounts.subtotal, amounts.taxTotal, amounts.total, amounts.grossAmount, amounts.withholdingAmount]) {
     if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) throw new Error("金額は0以上の整数で入力してください。");
   }
@@ -100,7 +100,6 @@ export function validateReceivedAmounts(amounts: ReceivedInvoiceAmounts, paidAmo
     if (gross !== amounts.subtotal + amounts.taxTotal) throw new Error("税込総額は税抜額と消費税額の合計にしてください。");
     if (gross - (amounts.withholdingAmount ?? 0) !== amounts.total) throw new Error("差引支払額は税込総額から源泉徴収税額を引いた金額にしてください。");
   }
-  if (amounts.total < paidAmount) throw new Error("差引支払額が登録済み支払額を下回ります。先に支払・照合を確認してください。");
   return amounts;
 }
 
