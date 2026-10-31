@@ -36,6 +36,7 @@ import { toast } from "@/hooks/use-toast";
 import { BANK_PAGE_SIZE, bankToday, treatmentLabels, type BankDisplayRow } from "@/lib/banking";
 import { BankClassificationBadge } from "@/components/app/bank-classification-badge";
 import { BankGuessReviewDialog } from "@/components/app/bank-guess-review-dialog";
+import { BankBulkReclassifyDialog } from "@/components/app/bank-bulk-reclassify-dialog";
 import { isGuessClassification } from "@/lib/bank-classification";
 import type { AccountingCategory, BankAccount, BankEdit, BankFilters, BankRule, BankSyncState, BankTransaction } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
@@ -374,6 +375,7 @@ export function BankingWorkspace(props: Props) {
     return <div className="inline-flex max-w-full flex-wrap items-center justify-end gap-0.5">
       <Button className="bank-row-link max-w-full whitespace-normal px-1 text-xs text-muted-foreground" variant="ghost" title={`${row.content} / ${row.side === "INCOME" ? "入金を照合" : "出金を照合"}`} disabled={pending || Boolean(dirty)} onClick={() => openLinks(row)}><FileCheck2 className="size-3.5 shrink-0" />{row.linkLabel || "照合"}</Button>
       <span className="inline-flex md:[&>button]:size-7 md:[&>button]:min-h-7"><BankBookkeepingDialog company={company} transaction={row} categories={categories} disabled={pending || Boolean(dirty)} onSaved={(saved) => setSavedRows((current) => ({ ...current, [saved.id]: { ...row, ...saved, predictionPending: false } }))} /></span>
+      <span className="inline-flex md:[&>button]:size-7 md:[&>button]:min-h-7"><BankBulkReclassifyDialog company={company} row={row} accountName={accountMap.get(row.bankAccountId)} categories={categories} disabled={pending || Boolean(dirty) || row.sourceMissing} onApplied={() => router.refresh()} /></span>
       {row.settlementConflict ? <p className="mt-1 max-w-full basis-full break-words text-xs text-amber-700 dark:text-amber-400" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}
     </div>;
   }

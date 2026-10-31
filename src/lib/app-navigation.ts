@@ -59,13 +59,16 @@ export function workflowNavigation(pathname: string, params: URLSearchParams, ro
     { href: "/banking/reconcile?view=checks", label: "AI・確認事項", permission: "manage:banking" },
     { href: "/banking/insights", label: "出金の傾向", permission: "view:banking" },
     { href: "/banking/forecast", label: "資金予測", permission: "view:banking" },
+    { href: "/banking/payroll", label: "給与一覧", permission: "view:banking" },
+    { href: "/banking/obligations", label: "税金・保険", permission: "view:banking" },
+    { href: "/banking/integrity", label: "整合性", permission: "view:banking" },
   ] : appNavigation.flatMap((group) => group.items).filter((item) => paths.includes(item.href)).sort((a, b) => paths.indexOf(a.href) - paths.indexOf(b.href));
   return items.filter((item) => canRole(role, item.permission)).map((item) => {
     const [path, search] = item.href.split("?"), target = new URLSearchParams(search);
     target.set("company", path === "/mail-sorter" ? "JAPAN" : company);
     const checks = target.get("view") === "checks";
     if (bank) {
-      if (["/banking", "/banking/insights", "/banking/forecast"].includes(path) && params.get("account")) target.set("account", params.get("account")!);
+      if (["/banking", "/banking/insights", "/banking/forecast", "/banking/payroll", "/banking/obligations", "/banking/integrity"].includes(path) && params.get("account")) target.set("account", params.get("account")!);
       const month = params.get("month") || params.get("checkMonth");
       if (path !== "/banking/accounts" && month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && (checks || path !== "/banking/forecast" && path !== "/banking/reconcile")) target.set(checks ? "checkMonth" : "month", month);
     }

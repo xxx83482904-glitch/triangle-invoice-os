@@ -27,12 +27,13 @@ function rowIssue(data: AppData, company: CompanyScope, row: BankTransaction, to
   return "";
 }
 
-function pairIssue(data: AppData, company: CompanyScope, from: BankTransaction, to: BankTransaction, today: string) {
+function pairIssue(data: AppData, company: CompanyScope, from: BankTransaction, to: BankTransaction, today: string, feeCents = 0) {
   const issue = rowIssue(data, company, from, today) || rowIssue(data, company, to, today);
   if (issue) return issue;
   if (from.side === to.side || from.id === to.id) return "出金と入金を一つずつ選択してください";
   if (from.officeCode !== to.officeCode) return "異なる事業者の資金移動は照合できません";
-  if (cents(from.amount) !== cents(to.amount)) return "金額が一致しません。手数料・為替差額を自動消込しません";
+  const outgoing = from.side === "EXPENSE" ? from : to, incoming = outgoing === from ? to : from;
+  if (cents(outgoing.amount) !== cents(incoming.amount) + feeCents) return feeCents ? "出金額が入金額＋送金手数料と一致しません" : "金額が一致しません。手数料・為替差額を自動消込しません";
   const accountGroup = bankAccountFilter(data.bankAccounts, data.bankTransactions, company, from.bankAccountId);
   if (accountGroup.memberIds.has(to.bankAccountId)) return "同じ口座の明細とは照合できません";
   return "";
@@ -41,7 +42,7 @@ function pairIssue(data: AppData, company: CompanyScope, from: BankTransaction, 
 export function bankTransferIssue(data: AppData, link: BankTransfer, today = bankToday()) {
   const from = data.bankTransactions.find((row) => row.id === link.outgoingId), to = data.bankTransactions.find((row) => row.id === link.incomingId);
   if (!from || !to) return "資金移動の明細が見つかりません";
-  const issue = pairIssue(data, link.company, from, to, today);
+  const issue = pairIssue(data, link.company, from, to, today, link.fee ? cents(link.fee.amount) : 0);
   if (issue) return issue;
   if (evidence(from) !== link.outgoingEvidence || evidence(to) !== link.incomingEvidence || from.treatment !== "TRANSFER" || to.treatment !== "TRANSFER") return "照合後に資金移動の明細が変更されました。解除して再確認してください";
   return "";
@@ -51,8 +52,17 @@ export const transferSchema = z.object({
   transactionId: z.string().min(1).max(1000), transactionUpdatedAt: z.string(),
   counterpartId: z.string().min(1).max(1000), counterpartUpdatedAt: z.string(),
   acknowledged: z.literal(true),
+  fee: z.object({ amount: z.number().positive().max(1e12), categoryId: z.string().min(1).max(1000).optional() }).strict().optional(),
 }).strict();
 export type TransferInput = z.infer<typeof transferSchema>;
+export const TRANSFER_FEE_LIMIT = 1100;
+// Outgoing minus incoming when the gap is small enough to be a transfer fee; otherwise 0 (an exact pair) or -1 (no pairing).
+export function transferFeeDifference(a: BankTransaction, b: BankTransaction) {
+  const outgoing = a.side === "EXPENSE" ? a : b, incoming = outgoing === a ? b : a;
+  if (a.side === b.side) return -1;
+  const difference = cents(outgoing.amount) - cents(incoming.amount);
+  return difference === 0 ? 0 : difference > 0 && difference <= cents(TRANSFER_FEE_LIMIT) ? difference / 100 : -1;
+}
 
 export function confirmBankTransfer(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: TransferInput, today = bankToday()) {
   assertBankAccess(actor, company);
@@ -60,15 +70,15 @@ export function confirmBankTransfer(data: AppData, actor: Pick<User, "id" | "rol
   const first = data.bankTransactions.find((row) => row.id === value.transactionId), second = data.bankTransactions.find((row) => row.id === value.counterpartId);
   if (!first || !second || first.updatedAt !== value.transactionUpdatedAt || second.updatedAt !== value.counterpartUpdatedAt) throw new Error("明細が更新されています。画面を更新してください");
   if (linked(data, first.id) || linked(data, second.id)) throw new Error("この明細は資金移動と照合済みです");
-  const issue = pairIssue(data, company, first, second, today);
+  const issue = pairIssue(data, company, first, second, today, value.fee ? cents(value.fee.amount) : 0);
   if (issue) throw new Error(issue);
   const from = first.side === "EXPENSE" ? first : second, to = first.side === "INCOME" ? first : second;
   const timestamp = new Date().toISOString();
-  const link: BankTransfer = { id: crypto.randomUUID(), company, outgoingId: from.id, incomingId: to.id,
+  const link: BankTransfer = { id: crypto.randomUUID(), company, outgoingId: from.id, incomingId: to.id, ...(value.fee ? { fee: value.fee } : {}),
     outgoingEvidence: evidence(from), incomingEvidence: evidence(to), confirmedById: actor.id, createdAt: timestamp, updatedAt: timestamp,
     previous: [from, to].map((row) => ({ id: row.id, updatedAt: row.updatedAt, categoryId: row.categoryId, subCategoryId: row.subCategoryId, treatment: row.treatment, reviewed: row.reviewed, memo: row.memo, classificationSource: row.classificationSource, classificationReason: row.classificationReason, classificationConfidence: row.classificationConfidence, ruleId: row.ruleId })),
   };
-  for (const row of [from, to]) Object.assign(row, { treatment: "TRANSFER", reviewed: true, classificationSource: "MANUAL", classificationConfidence: undefined, classificationReason: "自社口座間の資金移動を照合済み", ruleId: undefined, updatedAt: stamp(row.updatedAt) });
+  for (const row of [from, to]) Object.assign(row, { treatment: "TRANSFER", reviewed: true, classificationSource: "MANUAL", classificationConfidence: undefined, classificationReason: value.fee && row === from ? `自社口座間の資金移動を照合済み（送金手数料 ${value.fee.amount} 円を含む。手数料は資金移動リンクに記録）` : "自社口座間の資金移動を照合済み", ruleId: undefined, updatedAt: stamp(row.updatedAt) });
   (data.bankTransfers ||= []).unshift(link);
   return { id: link.id };
 }
@@ -99,7 +109,9 @@ export function bankTransferDetail(data: AppData, company: CompanyScope, id: str
   const counterpart = link && data.bankTransactions.find((item) => item.id === (link.outgoingId === id ? link.incomingId : link.outgoingId));
   return { row: display(row), issue: link ? bankTransferIssue(data, link, today) : rowIssue(data, company, row, today), settlement: bankCardSettlementDetail(data, row),
     link: link ? { id: link.id, updatedAt: link.updatedAt, counterpart: counterpart ? display(counterpart) : undefined } : undefined,
-    candidates: link ? [] : data.bankTransactions.filter((other) => other.company === company && other.officeCode === row.officeCode && other.side !== row.side && cents(other.amount) === cents(row.amount) && !linked(data, other.id) && !pairIssue(data, company, row, other, today))
-      .sort((a, b) => Math.abs(Date.parse(a.transactionDate) - Date.parse(row.transactionDate)) - Math.abs(Date.parse(b.transactionDate) - Date.parse(row.transactionDate)) || b.transactionDate.localeCompare(a.transactionDate)).map(display),
+    // Exact pairs first; then pairs whose outgoing side is larger by a plausible transfer fee (recorded on the link when confirmed).
+    candidates: link ? [] : data.bankTransactions.filter((other) => other.company === company && other.officeCode === row.officeCode && other.side !== row.side && transferFeeDifference(row, other) >= 0 && !linked(data, other.id) && !pairIssue(data, company, row, other, today, cents(transferFeeDifference(row, other))))
+      .sort((a, b) => transferFeeDifference(row, a) - transferFeeDifference(row, b) || Math.abs(Date.parse(a.transactionDate) - Date.parse(row.transactionDate)) - Math.abs(Date.parse(b.transactionDate) - Date.parse(row.transactionDate)) || b.transactionDate.localeCompare(a.transactionDate))
+      .map((other) => ({ ...display(other), feeDifference: transferFeeDifference(row, other) })),
   };
 }

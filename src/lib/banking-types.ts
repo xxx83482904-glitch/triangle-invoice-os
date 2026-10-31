@@ -157,6 +157,8 @@ export type BankTransfer = BankEntity & {
   outgoingEvidence: string;
   incomingEvidence: string;
   previous: Array<BankEdit & { ruleId?: string }>;
+  // 送金手数料 when the outgoing side is larger than the incoming side by exactly this amount.
+  fee?: { amount: number; categoryId?: string };
   confirmedById: string;
   deletedAt?: string | null;
 };

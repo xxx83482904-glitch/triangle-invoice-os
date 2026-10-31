@@ -39,15 +39,20 @@ function PayerAlias({ company, bank, invoice, disabled, onBusy }: { company: Com
   </details>;
 }
 
-export function BankReconciliationAllocation({ company, bank, invoice, invoices = [invoice], feeCategories = [], onBusy, onComplete }: {
-  company: CompanyScope; bank: ReconciliationBank; invoice: ReconciliationInvoice; invoices?: ReconciliationInvoice[]; feeCategories?: Array<{ id: string; name: string }>;
+export function BankReconciliationAllocation({ company, bank, invoice, invoices = [invoice], feeCategories = [], initialKeys, onBusy, onComplete }: {
+  company: CompanyScope; bank: ReconciliationBank; invoice: ReconciliationInvoice; invoices?: ReconciliationInvoice[]; feeCategories?: Array<{ id: string; name: string }>; initialKeys?: string[];
   onBusy: (busy: boolean) => void; onComplete: (amount: number) => void;
 }) {
   const makeRow = (item: ReconciliationInvoice, availableAmount: number, id: string): AllocationDraft => {
     const payment = reconciliationPaymentOptions(bank, item)[0];
     return { id, invoiceKey: item.key, mode: payment ? "existing" : "new", paymentId: payment?.id || "", amount: String(Math.max(0, Math.min(availableAmount, payment?.available ?? item.outstanding))), duplicateAcknowledged: false };
   };
-  const [rows, setRows] = useState<AllocationDraft[]>(() => [makeRow(invoice, bank.remaining, "initial")]);
+  // A 合算候補 opens with one allocation row per invoice, each taking what is left of the bank amount in turn.
+  const [rows, setRows] = useState<AllocationDraft[]>(() => {
+    const keys = initialKeys?.length ? initialKeys : [invoice.key];
+    let remaining = bank.remaining;
+    return keys.flatMap((key, index) => { const item = invoices.find((entry) => entry.key === key); if (!item) return []; const row = makeRow(item, remaining, index ? `initial-${index}` : "initial"); remaining = Math.max(0, remaining - Number(row.amount)); return [row]; });
+  });
   const [pending, startTransition] = useTransition(), [aliasBusy, setAliasBusy] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false), [note, setNote] = useState(""), [error, setError] = useState("");
   const [addKey, setAddKey] = useState(""), [submitted, setSubmitted] = useState(false), [uncertain, setUncertain] = useState(false);
