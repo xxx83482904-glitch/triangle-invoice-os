@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectAllCheckbox } from "@/components/app/list-selection";
 import { useRouter } from "next/navigation";
-import { Bot, CheckCheck, CircleAlert, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, Pencil, RefreshCw, Save, Search, Settings2, WandSparkles, X } from "lucide-react";
+import { Bot, CheckCheck, CircleAlert, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, Pencil, RefreshCw, Save, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
 import { BankFiscalMonthTabs, BankReviewTag, BankSelectionReview } from "@/components/app/bank-ledger-controls";
 import { bankSelectionAmount, reviewBankDrafts } from "@/lib/bank-ledger";
@@ -446,6 +446,7 @@ export function BankingWorkspace(props: Props) {
     <header className="bank-ledger-header flex flex-wrap items-center justify-between gap-3 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-3"><h1 className="break-words text-xl font-semibold">口座・カード明細</h1><select className={`${bankSelectClass} bank-account-filter`} aria-label="口座で絞り込み" value={filterEdits.account ?? props.selectedAccountOption} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, account: e.target.value, analysisThrough: "" }))}><option value="">すべての口座・カード</option>{props.accountOptions.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select></div>
       <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" href={`/banking/integrity?company=${company}`}><ShieldCheck className="size-4" />整合性チェック</Link>
         <SectionExportDialog scope="banking" role={props.role} disabled={pending || Boolean(dirty)} />
         {props.aiSettings ? <BankAiSettings {...props.aiSettings} disabled={pending || Boolean(dirty)} /> : null}
         <Button className="min-h-11" variant="outline" disabled={pending || Boolean(dirty)} onClick={() => setSettings(true)}><Settings2 className="size-4" />科目・ルール</Button>
