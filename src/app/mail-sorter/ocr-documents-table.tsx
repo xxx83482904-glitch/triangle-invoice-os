@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { MailDocumentCategory, ReceivedInvoiceStatus } from "@/lib/types";
+import { isMailProcessed, type MailSorterEdit } from "@/lib/mail-processing";
 import { matchesMailSearch } from "@/lib/mail-search";
 import { MailRelinkForm, MailUnlinkButton } from "./mail-link-controls";
 
@@ -65,6 +66,7 @@ export type OcrDocumentListItem = {
   fileMissing?: boolean;
   linkCandidates?: Array<{ label: string; value: string }>;
   mailUpdatedAt?: string;
+  invoiceUpdatedAt?: string;
 };
 
 type FolderOption = {
@@ -282,11 +284,7 @@ function duplicateDescription(row: OcrDocumentListItem) {
   return `${row.duplicateReason ?? "重複候補"}${title}${score}`;
 }
 
-function isProcessed(row: OcrDocumentListItem) {
-  if (typeof row.mailProcessed === "boolean") return row.mailProcessed;
-  const s = row.extracted?.status;
-  return s === "PAID" || s === "SCHEDULED" || s === "ARCHIVED";
-}
+const isProcessed = isMailProcessed;
 
 function DocumentPreview({ compact = false, row }: { compact?: boolean; row: OcrDocumentListItem }) {
   const frameClass = compact ? "h-[56vh] min-h-[360px]" : "h-[68vh] min-h-96";
@@ -582,21 +580,23 @@ export function OcrDocumentsTable({
   const [folderSenderWidth, setFolderSenderWidth] = useState(220);
   const [listPreviewWidth, setListPreviewWidth] = useState(420);
   const [pendingCategories, setPendingCategories] = useState<Partial<Record<string, MailDocumentCategory>>>({});
-  const [pendingProcessing, setPendingProcessing] = useState<Partial<Record<string, ProcessingStatusValue>>>({});
+  const [isSaving, startSaveTransition] = useTransition();
+  const saveInFlight = useRef(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const processing = pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
+      const processing = (isProcessed(row) ? "processed" : "unprocessed");
       const category = pendingCategories[row.id] ?? row.category;
       if (processingFilter !== "all" && processing !== processingFilter) return false;
       if (categoryFilter !== "all" && category !== categoryFilter) return false;
       if (duplicateFilter === "duplicates" && !isDuplicate(row)) return false;
       return matchesMailSearch(row, deferredQuery);
     });
-  }, [categoryFilter, duplicateFilter, pendingCategories, pendingProcessing, processingFilter, rows, deferredQuery]);
+  }, [categoryFilter, duplicateFilter, pendingCategories, processingFilter, rows, deferredQuery]);
   const processingCounts = useMemo(() => rows.reduce((counts, row) => {
-    counts[pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed")]++;
+    counts[(isProcessed(row) ? "processed" : "unprocessed")]++;
     return counts;
-  }, { all: rows.length, processed: 0, unprocessed: 0 }), [rows, pendingProcessing]);
+  }, { all: rows.length, processed: 0, unprocessed: 0 }), [rows]);
   const hasFilters = Boolean(query || processingFilter !== "all" || categoryFilter !== "all" || duplicateFilter !== "all");
   function resetFilters() {
     setQuery(""); setProcessingFilter("all"); setCategoryFilter("all"); setDuplicateFilter("all"); setVisibleListCount(LIST_BATCH_SIZE);
@@ -675,12 +675,12 @@ export function OcrDocumentsTable({
       .map((row) => ({
         category: pendingCategories[row.id],
         mailDocumentId: row.mailDocumentId,
-        processingStatus: pendingProcessing[row.id],
+        mailUpdatedAt: row.mailUpdatedAt,
+        invoiceUpdatedAt: row.invoiceUpdatedAt,
         receivedInvoiceId: row.receivedInvoiceId,
       }))
-      .filter((edit) => edit.category || edit.processingStatus);
-  }, [pendingCategories, pendingProcessing, rows]);
-  const pendingEditsJson = JSON.stringify(pendingEdits);
+      .filter((edit) => edit.category);
+  }, [pendingCategories, rows]);
   const exportHref = canExport ? `/api/export/ocr-documents?company=${company}${
     selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
   }` : "#";
@@ -691,22 +691,49 @@ export function OcrDocumentsTable({
   };
 
   const processingValueForRow = (row: OcrDocumentListItem): ProcessingStatusValue =>
-    pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
+    (isProcessed(row) ? "processed" : "unprocessed");
 
   const categoryValueForRow = (row: OcrDocumentListItem) => pendingCategories[row.id] ?? row.category;
 
-  const applyProcessingDraft = (targetRows: OcrDocumentListItem[], processingStatus: ProcessingStatusValue) => {
-    const editableRows = targetRows.filter((row) => row.mailDocumentId || row.receivedInvoiceId);
-    if (!editableRows.length) return;
-    setPendingProcessing((current) => {
-      const next = { ...current };
-      for (const row of editableRows) {
-        const original = isProcessed(row) ? "processed" : "unprocessed";
-        if (processingStatus === original) delete next[row.id];
-        else next[row.id] = processingStatus;
+  const saveEdits = (edits: MailSorterEdit[], processing = false) => {
+    if (!edits.length || saveInFlight.current || !canEdit) return;
+    saveInFlight.current = true;
+    setSaveFeedback(null);
+    startSaveTransition(async () => {
+      try {
+        const form = new FormData();
+        form.set("changes", JSON.stringify(edits));
+        const result = await saveMailSorterBulkEdits(form);
+        if (!result.ok) throw new Error(result.error);
+        // Remove only the submitted category drafts after a successful save; keep newer edits.
+        if (!processing) setPendingCategories((current) => {
+          const next = { ...current };
+          for (const row of rows) {
+            const saved = edits.find((edit) => edit.mailDocumentId && edit.mailDocumentId === row.mailDocumentId);
+            if (saved?.category && next[row.id] === saved.category) delete next[row.id];
+          }
+          return next;
+        });
+        const message = processing ? "処理状態を保存しました" : "分類の変更を保存しました";
+        setSaveFeedback({ message, error: false });
+        toast({ title: message, variant: "success" });
+        // revalidatePath in the action returns fresh rows in the same response.
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "通信状況を確認して再試行してください";
+        setSaveFeedback({ message: "保存できませんでした: " + reason + (processing ? "（処理状態は保存前の表示のままです）" : "（変更内容は保持しています）"), error: true });
+        toast({ title: "保存に失敗しました", description: reason, variant: "destructive" });
+      } finally {
+        saveInFlight.current = false;
       }
-      return next;
     });
+  };
+
+  const saveProcessing = (targetRows: OcrDocumentListItem[], processingStatus: ProcessingStatusValue) => {
+    const edits = targetRows.filter((row) => row.mailDocumentId || row.receivedInvoiceId).map((row) => ({
+      mailDocumentId: row.mailDocumentId, receivedInvoiceId: row.receivedInvoiceId,
+      mailUpdatedAt: row.mailUpdatedAt, invoiceUpdatedAt: row.invoiceUpdatedAt, processingStatus,
+    }));
+    saveEdits(edits, true);
   };
 
   const applyCategoryDraft = (targetRows: OcrDocumentListItem[], category: MailDocumentCategory) => {
@@ -879,8 +906,10 @@ export function OcrDocumentsTable({
         value={value}
         className={processingStatusSelectClass(value === "processed")}
         aria-label="処理状態"
+        disabled={isSaving}
+        title="書類整理の状態です。変更すると保存します。支払状況とは独立しています"
         onClick={(event) => event.stopPropagation()}
-        onChange={(event) => applyProcessingDraft(selectedOrSingleRow(row), event.currentTarget.value as ProcessingStatusValue)}
+        onChange={(event) => saveProcessing(selectedOrSingleRow(row), event.currentTarget.value as ProcessingStatusValue)}
       >
         {processingStatusOptions.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -899,6 +928,7 @@ export function OcrDocumentsTable({
         value={value}
         className={categorySelectClass(value)}
         aria-label="分類"
+        disabled={isSaving}
         onClick={(event) => event.stopPropagation()}
         onChange={(event) => applyCategoryDraft(selectedOrSingleRow(row), event.currentTarget.value as MailDocumentCategory)}
       >
@@ -999,6 +1029,8 @@ export function OcrDocumentsTable({
           {hasFilters ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
           <LoaderCircle aria-label="絞り込み中" className={`size-4 animate-spin ${isFiltering || query !== deferredQuery ? "opacity-100" : "invisible"}`} />
         </div>
+        <p className="text-xs text-muted-foreground">処理状態は書類整理のための手動設定です。変更すると保存します。支払状況とは連動しません。</p>
+        {isSaving ? <p role="status" className="text-sm">保存中…</p> : saveFeedback ? <p role={saveFeedback.error ? "alert" : "status"} className={saveFeedback.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>{saveFeedback.message}</p> : null}
         <SelectionToolbar selection={selection} />
         <div>
           {selectedRows.length || pendingEdits.length ? (
@@ -1008,15 +1040,15 @@ export function OcrDocumentsTable({
               </Badge>
               {pendingEdits.length ? <Badge variant="outline">{pendingEdits.length}件の変更</Badge> : null}
               {hiddenSelectedCount ? <span className="text-xs text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}
-              <Button type="button" variant="ghost" size="icon" className="size-11 text-destructive" title="選択した郵便物を削除" aria-label="選択した郵便物を削除" disabled={!canEdit || !selectedRows.length} onClick={() => setBulkDeleteOpen(true)}><Trash2 className="size-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="size-11 text-destructive" title="選択した郵便物を削除" aria-label="選択した郵便物を削除" disabled={!canEdit || !selectedRows.length || isSaving} onClick={() => setBulkDeleteOpen(true)}><Trash2 className="size-4" /></Button>
               <select
                 aria-label="選択した書類の処理状態"
                 className="h-9 min-w-32 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                disabled={!canEdit || !selectedRows.length}
+                disabled={!canEdit || !selectedRows.length || isSaving}
                 value=""
                 onChange={(event) => {
                   const value = event.currentTarget.value as ProcessingStatusValue;
-                  if (value) applyProcessingDraft(selectedRows, value);
+                  if (value) saveProcessing(selectedRows, value);
                 }}
               >
                 <option value="">処理状態</option>
@@ -1027,7 +1059,7 @@ export function OcrDocumentsTable({
               <select
                 aria-label="選択した書類の分類"
                 className="h-9 min-w-32 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                disabled={!canEdit || !selectedRows.some((row) => row.mailDocumentId)}
+                disabled={!canEdit || isSaving || !selectedRows.some((row) => row.mailDocumentId)}
                 value=""
                 onChange={(event) => {
                   const value = event.currentTarget.value as MailDocumentCategory;
@@ -1054,20 +1086,10 @@ export function OcrDocumentsTable({
                   <option key={month} value={month}>{monthLabel(month)}</option>
                 ))}
               </select>
-              <form
-                action={saveMailSorterBulkEdits}
-                className="ml-auto flex items-center gap-2"
-                onSubmit={() => {
-                  setPendingCategories({});
-                  setPendingProcessing({});
-                }}
-              >
-                <input type="hidden" name="changes" value={pendingEditsJson} readOnly />
-                <Button type="submit" size="sm" className="h-9 gap-1" disabled={!pendingEdits.length}>
-                  <Save className="h-3.5 w-3.5" />
-                  すべて保存
-                </Button>
-              </form>
+              <Button type="button" size="sm" className="ml-auto h-9 gap-1" disabled={isSaving || !pendingEdits.length} onClick={() => saveEdits(pendingEdits)}>
+                <Save className="h-3.5 w-3.5" />
+                分類を保存
+              </Button>
               <Button
                 type="button"
                 size="sm"

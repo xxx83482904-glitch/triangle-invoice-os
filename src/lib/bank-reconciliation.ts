@@ -106,10 +106,8 @@ function updatePaymentStatus(data: AppData, kind: Kind, invoice: IssuedInvoice |
     const complete = payments.reduce((total, row) => total + cents(row.amount), 0) >= cents(item.total);
     item.status = complete ? "PAID" : item.status === "PAID" ? "SCHEDULED" : item.status;
     item.paidAt = complete ? payments.map((row) => row.paymentDate).sort().at(-1) : undefined;
-    item.mailProcessed = complete; item.updatedAt = stamp(item.updatedAt);
-    for (const mail of data.mailDocuments) if (!mail.deletedAt && mail.relatedReceivedInvoiceId === item.id && companyFromParam(mail.company) === companyFromParam(data.projects.find((row) => row.id === item.projectId)?.company)) {
-      mail.mailProcessed = complete; mail.updatedAt = stamp(mail.updatedAt);
-    }
+    // Payment changes must not overwrite manual document processing.
+    item.updatedAt = stamp(item.updatedAt);
   }
 }
 

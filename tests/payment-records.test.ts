@@ -26,7 +26,7 @@ test("a status change alone never marks a received invoice paid; the stored stat
   assert.equal(data.payments.length, 0);
 });
 
-test("manual records are explicit, scoped, bounded by the outstanding amount, and complete the document", () => {
+test("manual records are explicit, scoped, bounded by the outstanding amount, and complete payment without processing the document", () => {
   const { data, invoice } = setup();
   assert.throws(() => recordPayment(data, { id: "mail", role: "MAIL_EDITOR" }, "JAPAN", { kind: "received", invoiceId: invoice.id, amount: 1000, paymentDate: today }, today), /権限/);
   assert.throws(() => recordPayment(data, admin, "CHINA", { kind: "received", invoiceId: invoice.id, amount: 1000, paymentDate: today }, today), /日本版/);
@@ -42,7 +42,7 @@ test("manual records are explicit, scoped, bounded by the outstanding amount, an
   assert.deepEqual([payment.source, payment.method, payment.memo, payment.history?.[0].kind, payment.history?.[0].reason, paymentOrigin(payment)], ["MANUAL", "現金", "一部", "RECORDED", "通帳で確認", "MANUAL"]);
   const second = record(data, 5000);
   assert.equal(second.status, "PAID"); assert.equal(invoice.status, "PAID"); assert.equal(invoice.paidAt, today);
-  assert.equal(invoice.mailProcessed, true); assert.equal(data.mailDocuments[0].mailProcessed, true);
+  assert.equal(invoice.mailProcessed, false); assert.equal(data.mailDocuments[0].mailProcessed, false);
   assert.equal(assertReceivedPaidAllowed(data, invoice).complete, true);
   assert.throws(() => record(data, 1), /未払い額/);
   assert.equal(data.payments.find((row) => row.amount === 5000)?.method, "手入力");

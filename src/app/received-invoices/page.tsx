@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isMailProcessed } from "@/lib/mail-processing";
 import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { redirect } from "next/navigation";
@@ -72,7 +73,7 @@ export default async function ReceivedInvoicesPage({
         debt,
         grossAmount: amounts.grossAmount,
         withholdingAmount: amounts.withholdingAmount,
-        mailProcessed: invoice.mailProcessed === true || linkedMail?.mailProcessed === true,
+        mailProcessed: isMailProcessed(invoice),
         bankReconciledAmount: (data.bankReconciliations ?? []).filter((link) => !link.deletedAt && link.company === company && link.invoiceKind === "received" && link.invoiceId === invoice.id && !reconciliationIssue(data, link)).reduce((sum, link) => sum + link.amount, 0),
         dueDate: invoice.dueDate,
         fileUrl: invoice.fileUrl || linkedMail?.fileUrl,

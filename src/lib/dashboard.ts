@@ -1,4 +1,5 @@
 import { outstandingAmount } from "@/lib/accounting-summary";
+import { isMailProcessed } from "@/lib/mail-processing";
 import { isPayableReceivedInvoice } from "@/lib/debt-groups";
 import { bankAccountOverview, bankFiscalYear } from "@/lib/bank-account-overview";
 import { isBankDate } from "@/lib/banking";
@@ -84,18 +85,18 @@ export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role">,
   });
   const visibleReceived = new Map(received.map((row) => [row.id, row]));
   const mailInvoiceIds = new Set<string>();
+  const pendingMailInvoiceIds = new Set<string>();
   let pendingMail = 0;
   if (company === "JAPAN") {
     for (const mail of data.mailDocuments) {
       if (mail.deletedAt || mail.company === "CHINA") continue;
       const invoice = mail.relatedReceivedInvoiceId ? visibleReceived.get(mail.relatedReceivedInvoiceId) : undefined;
       if (invoice) {
-        if (mailInvoiceIds.has(invoice.id)) continue;
         mailInvoiceIds.add(invoice.id);
-        if (!(invoice.mailProcessed ?? invoice.status === "PAID")) pendingMail++;
-      } else if (!(mail.mailProcessed ?? Boolean(mail.relatedReceivedInvoiceId))) pendingMail++;
+        if (!isMailProcessed(invoice) || !isMailProcessed(mail)) pendingMailInvoiceIds.add(invoice.id);
+      } else if (!isMailProcessed(mail)) pendingMail++;
     }
-    pendingMail += received.filter((row) => !mailInvoiceIds.has(row.id) && !(row.mailProcessed ?? row.status === "PAID")).length;
+    pendingMail += pendingMailInvoiceIds.size + received.filter((row) => !mailInvoiceIds.has(row.id) && !isMailProcessed(row)).length;
   }
   const transactions = data.bankTransactions.filter((row) => row.company === company);
   const sync = data.bankSyncStates.filter((row) => row.company === company);

@@ -6,7 +6,6 @@ import type { AppData, MailDocument, ReceivedInvoice, User } from "@/lib/types";
 
 type Actor = Pick<User, "id" | "role">;
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
-const cents = (value: number) => Math.round(value * 100);
 const normalize = (value?: string) => (value || "").normalize("NFKC").toLocaleLowerCase("ja").replace(/\s+/g, "");
 export const canManageMailLinks = (actor: Actor) => can(actor, "manage:mailSorter") || can(actor, "manage:receivedInvoices") || can(actor, "upload:receivedInvoices");
 
@@ -28,7 +27,7 @@ export function unlinkMailDocumentsForInvoice(data: AppData, invoiceId: string) 
   let count = 0;
   for (const mail of data.mailDocuments) {
     if (mail.deletedAt || mail.relatedReceivedInvoiceId !== invoiceId) continue;
-    mail.relatedReceivedInvoiceId = undefined; mail.mailProcessed = false; mail.updatedAt = stamp(mail.updatedAt); count++;
+    mail.relatedReceivedInvoiceId = undefined; mail.updatedAt = stamp(mail.updatedAt); count++;
   }
   return count;
 }
@@ -69,11 +68,9 @@ export function linkMailDocumentToReceivedInvoice(data: AppData, actor: Actor, c
   if (!invoice || !visibleProjects(data, actor).some((row) => row.id === invoice.projectId)) throw new Error("受領請求書が見つかりません");
   const current = resolveMailLink(data, company, mail);
   if (current.invoice && current.invoice.id !== invoice.id) throw new Error("別の受領請求書と連携済みです。先に連携を解除してください");
-  const paid = data.payments.filter((row) => !row.deletedAt && row.type === "EXPENSE" && row.receivedInvoiceId === invoice.id).reduce((total, row) => total + cents(row.amount), 0);
   mail.relatedReceivedInvoiceId = invoice.id;
   if (mail.category !== "INVOICE" && mail.category !== "RECEIPT") mail.category = "INVOICE";
-  // Mail "processed" follows the document's payment completion, the same rule bank reconciliation applies.
-  mail.mailProcessed = invoice.total > 0 && paid >= cents(invoice.total);
+  // Linking changes references, never the manual processing flag.
   mail.updatedAt = stamp(mail.updatedAt);
   return { mailDocumentId: mail.id, receivedInvoiceId: invoice.id, mailProcessed: mail.mailProcessed };
 }
@@ -85,7 +82,7 @@ export function unlinkMailDocument(data: AppData, actor: Actor, company: Company
   const mail = targetMail(data, actor, company, value.mailDocumentId, value.mailUpdatedAt);
   if (!mail.relatedReceivedInvoiceId) throw new Error("この郵便物は未連携です");
   const previous = mail.relatedReceivedInvoiceId;
-  mail.relatedReceivedInvoiceId = undefined; mail.mailProcessed = false; mail.updatedAt = stamp(mail.updatedAt);
+  mail.relatedReceivedInvoiceId = undefined; mail.updatedAt = stamp(mail.updatedAt);
   return { mailDocumentId: mail.id, previousReceivedInvoiceId: previous };
 }
 

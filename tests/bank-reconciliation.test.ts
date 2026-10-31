@@ -238,16 +238,23 @@ test("already-recorded status/manual payments are linked without duplication or 
   assert.notEqual(data.bankReconciliations[0].id, old.id);
 });
 
-test("received payment completion updates every linked mail document without counting mail twice", () => {
-  const data = setup(); data.mailDocuments.push({ ...data.mailDocuments[0], id: "mail-copy" });
+test("received payment completion preserves mixed manual processing without counting mail twice", () => {
+  const data = setup(); data.mailDocuments.push({ ...data.mailDocuments[0], id: "mail-copy", mailProcessed: true });
   confirm(data, { invoiceKind: "received", amount: 3000 });
   assert.equal(data.receivedInvoices[0].status, "SCHEDULED");
-  assert.ok(data.mailDocuments.every((row) => !row.mailProcessed));
+  assert.deepEqual(data.mailDocuments.map((row) => row.mailProcessed), [false, true]);
   confirm(data, { invoiceKind: "received", amount: 5000 });
   assert.equal(data.receivedInvoices[0].status, "PAID"); assert.equal(data.receivedInvoices[0].paidAt, today);
-  assert.ok(data.mailDocuments.every((row) => row.mailProcessed));
+  assert.deepEqual(data.mailDocuments.map((row) => row.mailProcessed), [false, true]);
+  assert.ok(data.mailDocuments.every((row) => row.updatedAt === timestamp));
+  assert.equal(data.receivedInvoices[0].mailProcessed, false);
   const rows = bankReconciliationOverview(data, "JAPAN", today).invoices.filter((row) => row.kind === "received");
   assert.equal(rows.length, 1); assert.equal(rows[0].matched, 8000); assert.equal(rows[0].mailCount, 2);
+  const link = data.bankReconciliations.at(-1)!;
+  removeBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt);
+  assert.equal(data.receivedInvoices[0].status, "SCHEDULED");
+  assert.deepEqual(data.mailDocuments.map((row) => row.mailProcessed), [false, true]);
+  assert.ok(data.mailDocuments.every((row) => row.updatedAt === timestamp));
 });
 
 test("one bank movement can cover multiple invoices and multiple movements can cover one invoice", () => {
@@ -372,7 +379,7 @@ test("paid status alone is not bank evidence and mail processing differences are
   assert.equal(row.stateMismatch, false); assert.equal(row.mailProcessingMismatch, true);
   const before = JSON.stringify(data.payments);
   syncReconciledInvoiceStatus(data, admin, "JAPAN", "received", row.id, row.updatedAt, today);
-  assert.equal(data.mailDocuments[0].mailProcessed, true); assert.equal(JSON.stringify(data.payments), before);
+  assert.equal(data.mailDocuments[0].mailProcessed, false); assert.equal(JSON.stringify(data.payments), before);
 });
 
 test("matching reasons are evidence, not automatic confirmation; equal amounts remain ambiguous", () => {
@@ -573,7 +580,7 @@ test("the restricted account scope preserves historical matches, payment totals 
   assert.equal(JSON.stringify(data), before);
   data.mailDocuments[0].mailProcessed = false;
   syncReconciledInvoiceStatus(data, admin, "JAPAN", "received", "received-1", data.receivedInvoices[0].updatedAt, today);
-  assert.equal(data.mailDocuments[0].mailProcessed, true);
+  assert.equal(data.mailDocuments[0].mailProcessed, false);
   const link = data.bankReconciliations.find((row) => row.invoiceKind === "received")!;
   removeBankReconciliation(data, admin, "JAPAN", link.id, link.updatedAt);
   assert.equal(data.receivedInvoices[0].status, "SCHEDULED");

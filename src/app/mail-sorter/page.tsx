@@ -1,4 +1,5 @@
 import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
+import { isMailProcessed } from "@/lib/mail-processing";
 import { SectionExportDialog } from "@/components/app/section-export-dialog";
 import { redirect } from "next/navigation";
 import { MailSorterDropzone } from "@/app/mail-sorter/mail-sorter-dropzone";
@@ -100,7 +101,8 @@ export default async function MailSorterPage({
         linkBroken: link.broken,
         brokenTargetId: link.targetId,
         linkCandidates: invoice ? [] : mailLinkCandidates(data, company, document).map((candidate) => ({ value: candidate.id, label: `${targetLabels.get(candidate.id) ?? candidate.id} — ${candidate.reasons.join("・")}` })),
-        mailProcessed: document.mailProcessed ?? Boolean(invoice),
+        mailProcessed: isMailProcessed(document),
+        invoiceUpdatedAt: invoice?.updatedAt,
         mailDocumentId: document.id,
         mailUpdatedAt: document.updatedAt,
         memo: document.memo,
@@ -139,7 +141,8 @@ export default async function MailSorterPage({
         fileUrl: invoice.fileUrl,
         folderMonth: invoice.folderMonth,
         id: `invoice-${invoice.id}`,
-        mailProcessed: invoice.mailProcessed ?? invoice.status === "PAID",
+        mailProcessed: isMailProcessed(invoice),
+        invoiceUpdatedAt: invoice.updatedAt,
         memo: invoice.memo,
         mimeType: invoice.mimeType,
         ocrPreview: previewText(invoice.ocrText),
