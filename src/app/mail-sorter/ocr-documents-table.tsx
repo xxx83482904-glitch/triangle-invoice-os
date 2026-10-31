@@ -18,6 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { MailDocumentCategory, ReceivedInvoiceStatus } from "@/lib/types";
 import { matchesMailSearch } from "@/lib/mail-search";
+import { MailRelinkForm, MailUnlinkButton } from "./mail-link-controls";
 
 type Option = {
   label: string;
@@ -58,6 +59,12 @@ export type OcrDocumentListItem = {
   receivedInvoiceId?: string;
   savedAs: string;
   senderName?: string;
+  // Link integrity: a mail document whose received invoice was deleted, or whose original file is gone.
+  linkBroken?: boolean;
+  brokenTargetId?: string;
+  fileMissing?: boolean;
+  linkCandidates?: Array<{ label: string; value: string }>;
+  mailUpdatedAt?: string;
 };
 
 type FolderOption = {
@@ -257,6 +264,8 @@ function summaryLines(row: OcrDocumentListItem) {
     lines.push(`合計: ${moneyFormatter.format(row.extracted.total)}`);
   }
   if (row.confidence) lines.push(`信頼度: ${row.confidence}%`);
+  if (row.linkBroken) lines.push("参照切れ: 反映先の受領請求書が削除されています");
+  if (row.fileMissing) lines.push("原本: ファイルが見つかりません");
   if (isDuplicate(row)) lines.push(`重複: ${duplicateDescription(row)}`);
   const remainder = memoRemainder(row);
   if (remainder) lines.push(`メモ: ${remainder}`);
@@ -329,6 +338,7 @@ function DocumentEditor({
   canEdit,
   company,
   compact = false,
+  linkTargets = [],
   projects,
   row,
   statusOptions,
@@ -338,6 +348,7 @@ function DocumentEditor({
   canEdit: boolean;
   company: CompanyScope;
   compact?: boolean;
+  linkTargets?: Option[];
   projects: Option[];
   row: OcrDocumentListItem;
   statusOptions: Option[];
@@ -426,6 +437,7 @@ function DocumentEditor({
                   ))}
                 </select>
               </div>
+              {row.mailDocumentId && row.receivedInvoiceId ? <MailUnlinkButton company={company} mailDocumentId={row.mailDocumentId} mailUpdatedAt={row.mailUpdatedAt} disabled={!canEdit} /> : null}
             </>
           ) : null}
         </div>
@@ -447,11 +459,12 @@ function DocumentEditor({
               </div>
             </div>
           ) : (
+            <>
             <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium">受領請求書へ反映</div>
-                  <div className="mt-1 text-xs text-muted-foreground">この郵便物を受領請求書として登録します。</div>
+                  <div className="text-sm font-medium">{row.linkBroken ? "受領請求書を作り直す" : "受領請求書へ反映"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{row.linkBroken ? "以前に反映した受領請求書は削除されています。この郵便物から作り直します。" : "この郵便物を受領請求書として登録します。"}</div>
                 </div>
                 <Button
                   type="submit"
@@ -503,6 +516,8 @@ function DocumentEditor({
                 </div>
               </div>
             </div>
+            {row.mailDocumentId ? <MailRelinkForm company={company} mailDocumentId={row.mailDocumentId} mailUpdatedAt={row.mailUpdatedAt} candidates={row.linkCandidates ?? []} targets={linkTargets} broken={row.linkBroken} brokenTargetId={row.brokenTargetId} disabled={!canEdit} /> : null}
+            </>
           )}
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">メモ</label>
@@ -526,6 +541,7 @@ export function OcrDocumentsTable({
   canEdit,
   canExport = false,
   company,
+  linkTargets = [],
   projects,
   rows,
   statusOptions,
@@ -536,6 +552,7 @@ export function OcrDocumentsTable({
   canExport?: boolean;
   company: CompanyScope;
   folders: FolderOption[];
+  linkTargets?: Option[];
   projects: Option[];
   rows: OcrDocumentListItem[];
   statusOptions: Option[];
@@ -1201,7 +1218,7 @@ export function OcrDocumentsTable({
                                     <td className="px-3 py-2">{renderDuplicateBadge(row) ?? <span className="text-xs text-muted-foreground">-</span>}</td>
                                     <td className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
                                     <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
-                                    <td className="max-w-[160px] truncate px-3 py-2">{row.savedAs}</td>
+                                    <td className="max-w-[200px] px-3 py-2"><span className="flex flex-wrap items-center gap-1"><span className="truncate">{row.savedAs}</span>{row.linkBroken ? <Badge variant="destructive">参照切れ</Badge> : null}{row.fileMissing ? <Badge variant="destructive">原本なし</Badge> : null}</span></td>
                                     <td className="px-3 py-2">
                                       {row.fileUrl ? (
                                         <a className="text-sm underline" href={row.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
@@ -1305,6 +1322,7 @@ export function OcrDocumentsTable({
                                 canEdit={canEdit}
                                 company={company}
                                 compact
+                                linkTargets={linkTargets}
                                 projects={projects}
                                 row={listPreviewRow}
                                 statusOptions={statusOptions}
@@ -1729,6 +1747,7 @@ export function OcrDocumentsTable({
                                   ))}
                                 </select>
                               </div>
+                              {activeRow.mailDocumentId && activeRow.receivedInvoiceId ? <MailUnlinkButton company={company} mailDocumentId={activeRow.mailDocumentId} mailUpdatedAt={activeRow.mailUpdatedAt} disabled={!canEdit} /> : null}
                             </>
                           ) : null}
                         </div>
@@ -1751,12 +1770,13 @@ export function OcrDocumentsTable({
                             </div>
                           ) : (
                             /* #26: Default values from OCR extraction when available */
+                            <>
                             <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div>
-                                  <div className="text-sm font-medium">受領請求書へ反映</div>
+                                  <div className="text-sm font-medium">{activeRow.linkBroken ? "受領請求書を作り直す" : "受領請求書へ反映"}</div>
                                   <div className="mt-1 text-xs text-muted-foreground">
-                                    この郵便物を受領請求書として登録します。
+                                    {activeRow.linkBroken ? "以前に反映した受領請求書は削除されています。この郵便物から作り直します。" : "この郵便物を受領請求書として登録します。"}
                                   </div>
                                 </div>
                                 <Button
@@ -1841,6 +1861,8 @@ export function OcrDocumentsTable({
                                 </div>
                               </div>
                             </div>
+                            {activeRow.mailDocumentId ? <MailRelinkForm company={company} mailDocumentId={activeRow.mailDocumentId} mailUpdatedAt={activeRow.mailUpdatedAt} candidates={activeRow.linkCandidates ?? []} targets={linkTargets} broken={activeRow.linkBroken} brokenTargetId={activeRow.brokenTargetId} disabled={!canEdit} /> : null}
+                            </>
                           )}
                           <div className="space-y-2">
                             <label className="text-xs font-medium text-muted-foreground">メモ</label>

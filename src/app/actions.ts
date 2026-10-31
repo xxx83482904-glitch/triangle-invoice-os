@@ -13,6 +13,7 @@ import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
 import { applyReceivedInvoiceFields } from "@/lib/received-invoice-edits";
 import { receivedAmountsFromForm } from "@/lib/received-invoice-review";
 import { assertReceivedPaidAllowed, recordPayment } from "@/lib/payment-records";
+import { unlinkMailDocumentsForInvoice } from "@/lib/mail-links";
 import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
 import { saveClient } from "@/lib/partner-project-edits";
 import { registrationSchema, requestRegistration } from "@/lib/user-access";
@@ -1207,6 +1208,8 @@ export async function deleteOcrDocument(formData: FormData) {
     if (receivedInvoice) {
       receivedInvoice.deletedAt = timestamp;
       receivedInvoice.updatedAt = timestamp;
+      // Other mail documents that pointed at this invoice go back to "未連携" instead of keeping a dangling reference.
+      unlinkMailDocumentsForInvoice(draft, receivedInvoice.id);
     }
 
     for (const attachment of draft.attachments) {
@@ -1260,6 +1263,7 @@ export async function deleteOcrDocumentsBulk(formData: FormData) {
       if (receivedInvoiceIds.includes(receivedInvoice.id)) {
         receivedInvoice.deletedAt = timestamp;
         receivedInvoice.updatedAt = timestamp;
+        unlinkMailDocumentsForInvoice(draft, receivedInvoice.id);
       }
     }
 
@@ -1458,6 +1462,7 @@ export async function softDelete(formData: FormData) {
       for (const attachment of draft.attachments) {
         if (attachment.relatedType === "ReceivedInvoice" && attachment.relatedId === id) attachment.deletedAt = now();
       }
+      unlinkMailDocumentsForInvoice(draft, id);
     }
     return row;
   }, before);

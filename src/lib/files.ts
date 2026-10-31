@@ -144,6 +144,13 @@ export function readableUploadFileName({
   return `${normalizedDate}_${sender}_${id.slice(0, 8)}${extension}`;
 }
 
+// Synchronous existence check against the local upload roots. Undefined when files live in the database store or the URL has no file name.
+export function uploadedFileExists(fileUrlOrName?: string | null): boolean | undefined {
+  const safeName = path.basename(uploadedFileNameFromUrl(fileUrlOrName));
+  if (!safeName || shouldUseDatabaseFileStore()) return undefined;
+  return [uploadRoot, legacyUploadRoot].some((root) => existsSync(path.join(root, safeName)));
+}
+
 export async function deleteReceivedInvoiceFile(fileUrlOrName?: string | null) {
   const safeName = path.basename(uploadedFileNameFromUrl(fileUrlOrName));
   if (!safeName) return;

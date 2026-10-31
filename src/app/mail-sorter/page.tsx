@@ -9,6 +9,8 @@ import { companyFromParam, mailSorterCompany, matchesCompany } from "@/lib/compa
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
+import { uploadedFileExists } from "@/lib/files";
+import { mailIntegrityReport, mailLinkCandidates, resolveMailLink } from "@/lib/mail-links";
 
 function cleanText(value?: string) {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -42,12 +44,20 @@ export default async function MailSorterPage({
     value: option.value,
   }));
 
+  const vendorName = (id: string) => vendors.find((vendor) => vendor.id === id)?.companyName ?? "支払先未設定";
+  const linkTargets = data.receivedInvoices
+    .filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId))
+    .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.createdAt.localeCompare(a.createdAt))
+    .map((invoice) => ({ value: invoice.id, label: `${vendorName(invoice.vendorId)} / ${invoice.issueDate || "日付なし"} / ¥${invoice.total.toLocaleString("ja-JP")}${invoice.originalFileName ? ` / ${invoice.originalFileName}` : ""}` }));
+  const targetLabels = new Map(linkTargets.map((target) => [target.value, target.label]));
+  const integrity = mailIntegrityReport(data, company, uploadedFileExists);
+
   const mailDocuments = data.mailDocuments
     .filter((document) => !document.deletedAt && companyFromParam(document.company) === company)
     .map<OcrDocumentListItem>((document) => {
-      const invoice = document.relatedReceivedInvoiceId
-        ? data.receivedInvoices.find((item) => item.id === document.relatedReceivedInvoiceId)
-        : undefined;
+      // Only a live received invoice counts as a link; a deleted target is shown as "参照切れ" with repair actions.
+      const link = resolveMailLink(data, company, document);
+      const invoice = link.invoice;
       const vendor = invoice ? data.vendors.find((item) => item.id === invoice.vendorId) : undefined;
       const project = invoice ? data.projects.find((item) => item.id === invoice.projectId) : undefined;
       const duplicateMailDocument = document.duplicateOfMailDocumentId
@@ -83,23 +93,26 @@ export default async function MailSorterPage({
             }
           : undefined,
         fileName: document.originalFileName,
+        fileMissing: uploadedFileExists(document.fileUrl) === false,
         fileUrl: document.fileUrl,
         folderMonth: document.folderMonth ?? invoice?.folderMonth,
         id: `mail-${document.id}`,
+        linkBroken: link.broken,
+        brokenTargetId: link.targetId,
+        linkCandidates: invoice ? [] : mailLinkCandidates(data, company, document).map((candidate) => ({ value: candidate.id, label: `${targetLabels.get(candidate.id) ?? candidate.id} — ${candidate.reasons.join("・")}` })),
         mailProcessed: document.mailProcessed ?? Boolean(invoice),
         mailDocumentId: document.id,
+        mailUpdatedAt: document.updatedAt,
         memo: document.memo,
         mimeType: document.mimeType,
         ocrPreview: previewText(document.ocrText),
         receivedInvoiceId: invoice?.id,
-        savedAs: invoice ? "受領請求書" : "その他書類",
+        savedAs: invoice ? "受領請求書" : link.broken ? "受領請求書（参照切れ）" : "その他書類",
         senderName: document.senderName || vendor?.companyName,
       };
     });
 
-  const linkedReceivedInvoiceIds = new Set(
-    data.mailDocuments.map((document) => document.relatedReceivedInvoiceId).filter((id): id is string => Boolean(id)),
-  );
+  const linkedReceivedInvoiceIds = new Set(mailDocuments.map((row) => row.receivedInvoiceId).filter((id): id is string => Boolean(id)));
   const directReceivedInvoices = data.receivedInvoices
     .filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId) && invoice.ocrText && !linkedReceivedInvoiceIds.has(invoice.id))
     .map<OcrDocumentListItem>((invoice) => {
@@ -122,6 +135,7 @@ export default async function MailSorterPage({
           vendorName: vendor?.companyName ?? "支払先未設定",
         },
         fileName: invoice.originalFileName ?? "受領請求書",
+        fileMissing: uploadedFileExists(invoice.fileUrl) === false,
         fileUrl: invoice.fileUrl,
         folderMonth: invoice.folderMonth,
         id: `invoice-${invoice.id}`,
@@ -147,10 +161,16 @@ export default async function MailSorterPage({
       </PageHeader>
 
       <div className="space-y-6">
+        {integrity.brokenLinks || integrity.missingMailFiles ? (
+          <p role="alert" className="border-l-2 border-amber-500 pl-3 text-sm">
+            {[integrity.brokenLinks ? `参照先の受領請求書が削除された郵便物 ${integrity.brokenLinks}件` : "", integrity.missingMailFiles ? `原本ファイルが見つからない郵便物 ${integrity.missingMailFiles}件` : ""].filter(Boolean).join(" / ")}。該当行は「参照切れ」「原本なし」の表示で確認でき、参照切れは編集欄から作り直すか既存の受領請求書へ再連携できます。
+          </p>
+        ) : null}
         <OcrDocumentsTable
           canEdit={mayEdit}
           canExport={can(user, "export:csv")}
           company={company}
+          linkTargets={linkTargets}
           folders={data.mailFolders
             .filter((folder) => !folder.deletedAt && companyFromParam(folder.company) === company)
             .map((folder) => ({ label: folder.label, month: folder.month }))}
