@@ -17,7 +17,7 @@ const { embedIllustrations } = await bundle(
 );
 const localImage = async (url) =>
   "data:image/png;base64," +
-  (await readFile(project + "public" + url)).toString("base64");
+  (await sharp(await readFile(project + "public" + url)).png().toBuffer()).toString("base64");
 
 test("saved illustrations are embedded once per atlas with no external image dependency", async () => {
   const recipe = sampleRecipe("bento", newRecipe("bento"));
@@ -30,8 +30,8 @@ test("saved illustrations are embedded once per atlas with no external image dep
     reads++;
     return localImage(url);
   });
-  assert.equal(reads, 4);
-  assert.equal((svg.match(/data:image\/png;base64,/g) ?? []).length, 4);
+  assert.equal(reads, 8);
+  assert.equal((svg.match(/data:image\/png;base64,/g) ?? []).length, 8);
   assert.equal((svg.match(/<use /g) ?? []).length, 41);
   assert.equal(svg.includes('href="/akira-kitchen/'), false);
 });

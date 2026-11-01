@@ -6,9 +6,16 @@ import { bundle, project } from "./bundle.mjs";
 const runtimeErrors = [];
 // Only the app's local PNG assets are available to this offline test harness.
 globalThis.fetch = async (url) => {
-  assert.match(String(url), /^\/akira-kitchen\/illustration-[a-z0-9-]+\.png$/);
+  assert.match(
+    String(url),
+    /^\/akira-kitchen\/(?:media\/[a-z0-9-]+\.webp|audio\/[a-z0-9-]+\.mp3)$/,
+  );
   return new Response(await readFile(project + "public" + url), {
-    headers: { "content-type": "image/png" },
+    headers: {
+      "content-type": String(url).endsWith(".mp3")
+        ? "audio/mpeg"
+        : "image/webp",
+    },
   });
 };
 const virtualConsole = new VirtualConsole();
@@ -64,9 +71,9 @@ w.HTMLElement.prototype.getBoundingClientRect = function () {
   return {
     x: 0,
     y: 0,
-    left: 0,
+    left: this.hasAttribute("data-shelf") ? 1000 : 0,
     top: 0,
-    right: isBoard ? 800 : 520,
+    right: this.hasAttribute("data-shelf") ? 1300 : isBoard ? 800 : 520,
     bottom: isBoard ? 500 : 400,
     width: isBoard ? 800 : 520,
     height: isBoard ? 500 : 400,
@@ -117,6 +124,16 @@ class AudioStub {
   }
 }
 w.AudioContext = AudioStub;
+globalThis.Image = class {
+  set src(value) {
+    queueMicrotask(() => this.onload?.());
+  }
+  decode() {
+    return Promise.resolve();
+  }
+};
+globalThis.requestAnimationFrame = w.requestAnimationFrame.bind(w);
+globalThis.cancelAnimationFrame = w.cancelAnimationFrame.bind(w);
 const { act } = await import("react"),
   React = await import("react"),
   { createRoot } = await import("react-dom/client");
@@ -169,7 +186,7 @@ const saveFromUI = async () => {
   // completed state inside act instead of assuming a fixed 150 ms is enough.
   for (let attempt = 0; attempt < 50; attempt++) {
     await settle(100);
-    if (buttons().some((b) => norm(b.textContent) === "ほぞんしたよ" && b.disabled)) return;
+    if (buttons().some((b) => norm(b.textContent) === "アルバムへ")) return;
   }
   assert.fail("save did not finish");
 };
@@ -206,324 +223,191 @@ const cook = async (process) => {
 };
 await act(async () => root.render(React.createElement(AkiraKitchen)));
 await settle();
-check("home is composed from DOM controls and supplied character", () => {
+
+check("home has independent controls and canonical chef", () => {
   assert.equal(screen(), 1);
-  assert.ok(
-    document.querySelector(
-      'img[src="/akira-kitchen/illustration-chef-home-v2.png"]',
-    ),
-  );
-  assert.equal(document.querySelectorAll("img.full-img").length, 0);
+  assert.ok(document.querySelector('img[src$="/chef-home.webp"]'));
+  assert.ok(button("もういちど きく"));
 });
-await tap(button("おとを けす"));
-await act(async () => button("おとを つける").dispatchEvent(new w.MouseEvent("click", { bubbles: true, detail: 1 })));
-check("a touch button commits on release and ignores its duplicate compatibility click", () => {
-  assert.equal(button("おとを つける").getAttribute("aria-pressed"), "false");
-});
-await click(button("おとを つける"));
 await click(button("おべんとう"));
-assert.equal(screen(), 2);
+await settle(300);
+await click(button("つめよう"));
+await settle();
+check("empty pantry cannot reach arrangement", () => assert.equal(screen(), 2));
 await click(button("おにぎり"));
-assert.equal(screen(), 3);
+await settle();
 await click(button("うめ"));
 await cook("rice");
-await settle();
-check(
-  "rice is taken, squeezed through three stages and flavor retained",
-  () => {
-    assert.equal(recipe().progress.rice, 3);
-    assert.equal(recipe().rice, "ume");
-    assert.ok(recipe().ready.includes("onigiri"));
-  },
-);
 await next();
-await click(button("チーズ"));
-await tap(document.querySelector('[data-process="egg"]'));
-await tap(document.querySelector('[data-process="egg"]'));
-const eggGesture = document.querySelector('[data-process="egg"]');
-await pointer(eggGesture, "pointerdown", 260, 100);
-await pointer(eggGesture, "pointermove", 340, 150);
-assert.ok(eggGesture.querySelector('g[transform^="rotate("]'));
-for (const [x, y] of [
-  [300, 250],
-  [200, 250],
-  [160, 150],
-  [260, 100],
-])
-  await pointer(eggGesture, "pointermove", x, y);
-await pointer(eggGesture, "pointerup", 260, 100);
-check("freehand circular motion advances mixing and updates the spoon", () => {
-  assert.ok(Number(eggGesture.dataset.progress) > 1);
-});
+await settle();
 await cook("egg");
-await settle();
-check("egg cracks, mixes, pours, rolls twice and completes", () => {
-  assert.equal(recipe().progress.egg, 5);
-  assert.equal(recipe().egg, "cheese");
-});
 await next();
+await settle();
 await click(button("カレー"));
 await cook("chicken");
-await settle();
-check("chicken seasoning, rolling, pot and browning complete", () => {
-  assert.equal(recipe().progress.chicken, 4);
-  assert.equal(recipe().chicken, "curry");
-});
 await next();
+await settle();
 await cook("broccoli");
-await click(button("にんじん"));
-await click(button("ほしの にんじん"));
-await cook("carrot");
-await click(button("トマト"));
-await cook("tomato");
-await settle();
-check("vegetables cook independently with selected carrot shape", () => {
-  assert.equal(recipe().vegetables.length, 3);
-  assert.equal(recipe().carrotShape, "star");
-});
 await next();
-assert.equal(screen(), 7);
-const tile = button("おにぎりを のせる");
-await pointer(tile, "pointerdown", 100, 600);
-await pointer(tile, "pointermove", 220, 160);
-await pointer(tile, "pointerup", 220, 160);
 await settle();
-check("pantry food follows pointer and places at chosen coordinates", () => {
-  assert.equal(recipe().items.length, 1);
-  assert.ok(Math.abs(recipe().items[0].x - 27.5) < 0.001);
-  assert.equal(recipe().items[0].y, 32);
-  assert.equal(recipe().items[0].variant, "ume");
-});
-await tap(button("おにぎりを のせる"));
-await tap(button("たまごやきを のせる"));
-await tap(button("からあげを のせる"));
-await tap(button("にんじんを のせる"));
-await settle();
-check("duplicate foods and selected flavors are reflected in the dish", () => {
-  assert.equal(recipe().items.length, 5);
-  assert.equal(recipe().items[2].variant, "cheese");
-  assert.equal(recipe().items[3].variant, "curry");
-  assert.equal(recipe().items[4].variant, "star");
-});
-const first = document.querySelector("[data-piece]");
-await pointer(first, "pointerdown", 220, 160);
-await pointer(first, "pointermove", 600, 360);
-await pointer(first, "pointerup", 600, 360);
-await settle();
-const beforeCancel = structuredClone(recipe());
-check("existing food can be repositioned freely", () =>
-  assert.notEqual(recipe().items[0].x, 27.5),
-);
-await pointer(button("トマトを のせる"), "pointerdown");
-await pointer(button("トマトを のせる"), "pointermove", 500, 200);
-await pointer(button("トマトを のせる"), "pointercancel", 500, 200);
-await settle();
-check("cancelled pointer does not add or lose food", () =>
-  assert.deepEqual(recipe(), beforeCancel),
-);
-await click(button("はずす"));
-await settle();
-assert.equal(recipe().items.length, 4);
-await click(button("もどす"));
-await settle();
-check("remove and undo restore exact arrangement", () =>
-  assert.deepEqual(recipe().items, beforeCancel.items),
+check("all main cooking types reach completed state", () =>
+  assert.deepEqual(recipe().ready, [
+    "onigiri",
+    "tamago",
+    "karaage",
+    "broccoli",
+  ]),
 );
 await click(button("できた！"));
-assert.equal(screen(), 8);
 await settle();
-const finished = structuredClone(recipe());
-check("completion renders actual selected arrangement", () =>
-  assert.ok(
-    document.querySelector(
-      '[aria-label="じぶんの おべんとう"] ellipse[fill="#fff0a4"]',
-    ),
-  ),
+check("empty bento cannot complete", () => assert.equal(screen(), 7));
+await click(button("おにぎりを のせる"));
+await settle();
+await click(button("おにぎりを のせる"));
+await click(button("たまごやきを のせる"));
+await settle();
+check("duplicate food, selected flavors and placement persist", () => {
+  assert.equal(recipe().items.length, 3);
+  assert.equal(recipe().items[0].variant, "ume");
+  assert.notEqual(recipe().items[0].x, recipe().items[1].x);
+});
+const first = recipe().items[0],
+  piece = document.querySelector('[data-piece="' + first.id + '"]');
+await pointer(piece, "pointerdown", first.x * 8, first.y * 5);
+await pointer(piece, "pointermove", 600, 300);
+await pointer(piece, "pointerup", 600, 300);
+await settle();
+check("moving food updates only its coordinates", () => {
+  assert.notEqual(recipe().items[0].x, first.x);
+  assert.equal(recipe().items.length, 3);
+});
+await click(button("はずす"));
+await settle();
+assert.equal(recipe().items.length, 2);
+await click(button("もどす"));
+await settle();
+check("one-step undo restores exact food", () =>
+  assert.equal(recipe().items.length, 3),
 );
+const original = structuredClone(recipe());
+await click(button("できた！"));
+await settle();
+check("completion renders selected dish", () => {
+  assert.equal(screen(), 8);
+  assert.ok(document.querySelector('image[href*="rice-ume"]'));
+});
 await click(button("たべてみる"));
+await settle();
 await click(button("おにぎりを たべる"));
 await settle();
-check("tasting consumes display food without changing saved original", () => {
-  assert.equal(screen(), 9);
-  assert.deepEqual(recipe().items, finished.items);
-  assert.ok(document.body.textContent.includes("おいしい！"));
-});
+check("one bite retains food; second bite removes only display", () =>
+  assert.equal(document.querySelectorAll("[data-eat]").length, 3),
+);
+await click(button("おにぎりを たべる"));
+await settle();
+assert.equal(document.querySelectorAll("[data-eat]").length, 2);
+assert.deepEqual(recipe().items, original.items);
 await click(button("アルバムへ"));
-assert.equal(screen(), 10);
+await settle();
 await saveFromUI();
-let saved = await storage.listArtworks();
-check("IndexedDB stores image, date, choices and all coordinates", () => {
+const saved = await storage.listArtworks();
+check("IndexedDB stores real image, choices, coordinates and date", () => {
   assert.equal(saved.length, 1);
-  assert.deepEqual(saved[0].recipe, finished);
-  assert.equal(saved[0].image.type, "image/svg+xml");
+  assert.equal(saved[0].recipe.rice, "ume");
+  assert.deepEqual(saved[0].recipe.items, original.items);
+  assert.ok(saved[0].image.size > 10000);
   assert.ok(Date.parse(saved[0].createdAt));
 });
-assert.equal(
-  await saved[0].image.text(),
-  await illustrations.embedIllustrations(art.dishSVG(finished)),
-);
-await click(button("アルバム"));
-assert.equal(screen(), 16);
-await click(document.querySelector("time").closest("button"));
-check("album reopens actual stored artwork in accessible dialog", () =>
-  assert.ok(document.querySelector('dialog[open] img[src^="blob:"]')),
-);
-await click(button("けす"));
-await settle();
-assert.equal((await storage.listArtworks()).length, 0);
-await click(button("けした さくひんを もどす"));
-await settle();
-saved = await storage.listArtworks();
-check("deletion is persisted and undo restores the image and recipe", () =>
-  assert.equal(saved.length, 1),
-);
-await click(button("もどる"));
-await click(button("ケーキ"));
-assert.equal(screen(), 11);
-await click(button("チョコ"));
-await click(button("つくろう"));
-assert.equal(screen(), 12);
-await cook("batter");
-await next();
-await cook("bake");
-await next();
-assert.equal(screen(), 14);
-await click(button("ぬる"));
-const board = document.querySelector('[aria-label="ケーキの かざりだい"]');
-await pointer(board, "pointerdown", 280, 180);
-await pointer(board, "pointermove", 340, 200);
-await pointer(board, "pointermove", 460, 200);
-await pointer(board, "pointerup", 460, 200);
-await settle();
-check("cream strokes follow touch and persist as one stroke", () => {
-  assert.equal(recipe().strokes.length, 1);
-  assert.equal(recipe().strokes[0].length, 3);
-  assert.equal(recipe().progress.cream, 1);
+const svg = await saved[0].image.text();
+check("saved work has embedded WebP artwork and no external dependency", () => {
+  assert.ok(svg.includes("data:image/webp;base64,"));
+  assert.ok(!svg.includes('href="/akira-kitchen/'));
 });
-await tap(button("いちごを のせる"));
-await tap(button("バナナを のせる"));
-await tap(button("ブルーベリーを のせる"));
+await click(button("アルバムへ"));
 await settle();
-let topping = document.querySelector("[data-piece]");
-await pointer(topping, "pointerdown", 200, 200);
-await pointer(topping, "pointermove", 300, 150);
-await pointer(topping, "pointerup", 300, 150);
-await click(button("はずす"));
-await click(button("もどす"));
-await settle();
-check("cake toppings add, move, delete and undo independently of cream", () => {
-  assert.equal(recipe().items.length, 3);
-  assert.equal(recipe().strokes.length, 1);
-  assert.equal(recipe().cake, "chocolate");
-});
-await click(button("できた！"));
-assert.equal(screen(), 15);
-await saveFromUI();
-assert.equal((await storage.listArtworks()).length, 2);
-check("cake and bento coexist in persistent album");
-const originalCake = (await storage.listArtworks()).find(
-  (w) => w.recipe.mode === "cake",
+await click(
+  document.querySelector('img[alt="つくった おべんとう"]').closest("button"),
 );
-assert.ok(button("ほぞんしたよ").disabled);
-await click(button("もどる"));
-await tap(button("チョコを のせる"));
 await settle();
 check(
-  "editing a saved work forks its id and keeps the original artwork",
+  "album opens a full-screen artwork and hides delete behind parent gate",
   () => {
-    assert.notEqual(recipe().id, originalCake.id);
+    assert.ok(document.querySelector('[role="dialog"][aria-label="さくひん"]'));
+    assert.ok(
+      !buttons().some((b) => norm(b.textContent) === "このさくひんをけす"),
+    );
   },
 );
-assert.deepEqual(
-  (await storage.listArtworks()).find((w) => w.id === originalCake.id).recipe,
-  originalCake.recipe,
+await click(button("とじる"));
+await click(button("ホーム"));
+await settle();
+await click(button("ケーキ"));
+await settle(300);
+await click(button("チョコ"));
+await click(button("つくろう"));
+await settle();
+await cook("batter");
+await next();
+await settle();
+await cook("bake");
+await next();
+await settle();
+check("cake starts with cream before toppings", () => {
+  assert.equal(screen(), 14);
+  assert.ok(document.querySelector('[role="progressbar"]'));
+  assert.equal(document.querySelectorAll("[data-food-drag]").length, 0);
+});
+let board = document.querySelector("[data-board]");
+for (let n = 0; n < 5 && document.querySelector('[role="progressbar"]'); n++) {
+  await pointer(board, "pointerdown", 200, 130);
+  await pointer(board, "pointermove", 600, 130 + n * 20);
+  await pointer(board, "pointermove", 600, 200);
+  await pointer(board, "pointermove", 200, 200);
+  await pointer(board, "pointerup", 200, 200);
+  await settle();
+}
+check(
+  "cream follows strokes, reaches coverage, then unlocks topping shelf",
+  () => {
+    assert.ok(recipe().strokes.length);
+    assert.equal(recipe().progress.cream, 1);
+    assert.equal(document.querySelectorAll("[data-food-drag]").length, 3);
+  },
 );
 await click(button("できた！"));
+await settle();
+assert.equal(screen(), 14);
+await click(button("いちごを のせる"));
+await click(button("いちごを のせる"));
+await click(button("いちごを のせる"));
+await settle();
+const cake = recipe();
+await click(button("できた！"));
+await settle();
+await click(button("たべてみる"));
+await settle();
+assert.equal(recipe().mode, "cake");
+await click(button("アルバムへ"));
+await settle();
 await saveFromUI();
-assert.equal((await storage.listArtworks()).length, 3);
-await click(button("アルバム"));
-await click(button("もどる"));
-await click(button("せってい"));
-assert.equal(screen(), 17);
-const soundToggle = buttons().find((b) =>
-  b.closest("div")?.textContent.startsWith("おと"),
-);
-await click(soundToggle);
-await settle();
-await pointer(button("ホームへ"), "pointerdown");
-const beforeMute = oscillatorStarts;
-await click(button("ホームへ"));
-await click(button("おべんとう"));
-assert.equal(oscillatorStarts, beforeMute);
-check("sound-off prevents new audio oscillators", () =>
-  assert.equal(
-    JSON.parse(localStorage.getItem("akira-kitchen:session:v2")).settings.sound,
-    false,
-  ),
-);
-await settle();
-const reloadDraft = structuredClone(recipe());
+const savedCakeAlbum = await storage.listArtworks();
+check("cake survives tasting and is saved beside bento", () => {
+  assert.equal(savedCakeAlbum.length, 2);
+  assert.equal(recipe().cake, "chocolate");
+  assert.deepEqual(recipe().strokes, cake.strokes);
+});
 await act(async () => root.unmount());
 root = createRoot(document.getElementById("root"));
 await act(async () => root.render(React.createElement(AkiraKitchen)));
 await settle();
-check("reload restores settings, draft and IndexedDB album", () => {
-  assert.deepEqual(recipe(), reloadDraft);
-  assert.equal(
-    JSON.parse(localStorage.getItem("akira-kitchen:session:v2")).settings.sound,
-    false,
-  );
-});
-assert.equal((await storage.listArtworks()).length, 3);
-// All 17 actual React trees, exported as reviewable DOM snapshots (not browser screenshots).
-await mkdir(project + "docs/akira-kitchen/qa/v2-dom", { recursive: true });
-for (let i = 1; i <= 17; i++) {
-  await act(async () => {
-    w.history.replaceState({}, "", `#screen=${i}`);
-    w.dispatchEvent(new w.HashChangeEvent("hashchange"));
-  });
-  assert.equal(screen(), i);
-  assert.ok(document.querySelector("h1").textContent);
-  await writeFile(
-    project + `docs/akira-kitchen/qa/v2-dom/${String(i).padStart(2, "0")}.html`,
-    document.querySelector("main").outerHTML,
-  );
-}
-check("all 17 screens render without runtime exceptions", () =>
-  assert.deepEqual(runtimeErrors, []),
+check("resume dialog is shown once on restoration", () =>
+  assert.ok(button("つづきから")),
 );
-// Low-storage errors are recoverable, never masquerade as a successful save.
-await act(async () => {
-  w.history.replaceState({}, "", "#screen=10");
-  w.dispatchEvent(new w.HashChangeEvent("hashchange"));
-});
-const realIDB = globalThis.indexedDB;
-globalThis.indexedDB = {
-  open() {
-    throw new Error("QuotaExceededError");
-  },
-};
-await click(button("ほぞんする"));
+await click(button("つづきから"));
 await settle();
-globalThis.indexedDB = realIDB;
-check("failed album write gives retry feedback and leaves save enabled", () => {
-  assert.ok(document.body.textContent.includes("ほぞんできませんでした"));
-  assert.equal(button("ほぞんする").disabled, false);
-});
-await act(async () => root.unmount());
-w.close();
-await writeFile(
-  project + "docs/akira-kitchen/qa/v2-ui-results.json",
-  JSON.stringify(
-    {
-      environment:
-        "JSDOM + fake-indexeddb + synthetic Pointer Events; not iPad Safari",
-      passed: checks.length,
-      checks,
-      runtimeErrors,
-    },
-    null,
-    2,
-  ),
+check("resume restores saved draft without touching album", () =>
+  assert.equal(recipe().mode, "cake"),
 );
-console.log(`${checks.length} UI/storage checks passed.`);
+await act(async () => root.unmount());
+assert.deepEqual(runtimeErrors, []);
+console.log("UI contract checks: " + checks.length + " passed");

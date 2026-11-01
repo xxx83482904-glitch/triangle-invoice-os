@@ -1,0 +1,119 @@
+{
+  "conditions": "Local static export with gzip, Chrome CDP throughput/latency; no CPU throttle; all home meal/chef images decoded",
+  "runs": [
+    {
+      "mbps": 4,
+      "latencyMs": 150,
+      "deviceScaleFactor": 2,
+      "cache": "cold",
+      "homeImagesMs": 632,
+      "measuredAtMs": 1492,
+      "paint": [
+        {
+          "name": "first-paint",
+          "ms": 524
+        },
+        {
+          "name": "first-contentful-paint",
+          "ms": 524
+        }
+      ],
+      "transferBytes": 347917
+    },
+    {
+      "mbps": 4,
+      "latencyMs": 150,
+      "deviceScaleFactor": 2,
+      "cache": "cold",
+      "homeImagesMs": 636,
+      "measuredAtMs": 1481,
+      "paint": [
+        {
+          "name": "first-paint",
+          "ms": 516
+        },
+        {
+          "name": "first-contentful-paint",
+          "ms": 516
+        }
+      ],
+      "transferBytes": 347917
+    },
+    {
+      "mbps": 4,
+      "latencyMs": 150,
+      "deviceScaleFactor": 2,
+      "cache": "cold",
+      "homeImagesMs": 630,
+      "measuredAtMs": 1499,
+      "paint": [
+        {
+          "name": "first-paint",
+          "ms": 504
+        },
+        {
+          "name": "first-contentful-paint",
+          "ms": 504
+        }
+      ],
+      "transferBytes": 347917
+    },
+    {
+      "mbps": 1.6,
+      "latencyMs": 150,
+      "deviceScaleFactor": 2,
+      "cache": "cold",
+      "homeImagesMs": 1155,
+      "measuredAtMs": 2529,
+      "paint": [
+        {
+          "name": "first-paint",
+          "ms": 620
+        },
+        {
+          "name": "first-contentful-paint",
+          "ms": 620
+        }
+      ],
+      "transferBytes": 347917
+    },
+    {
+      "mbps": 1.6,
+      "latencyMs": 150,
+      "deviceScaleFactor": 2,
+      "cache": "cold",
+      "homeImagesMs": 1137,
+      "measuredAtMs": 2560,
+      "paint": [
+        {
+          "name": "first-paint",
+          "ms": 612
+        },
+        {
+          "name": "first-contentful-paint",
+          "ms": 612
+        }
+      ],
+      "transferBytes": 332663
+    },
+    {
+      "mbps": 1.6,
+      "latencyMs": 150,
+      "deviceScaleFactor": 2,
+      "cache": "cold",
+      "homeImagesMs": 1147,
+      "measuredAtMs": 2744,
+      "paint": [
+        {
+          "name": "first-paint",
+          "ms": 904
+        },
+        {
+          "name": "first-contentful-paint",
+          "ms": 904
+        }
+      ],
+      "transferBytes": 347917
+    }
+  ]
+}

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node model.test.mjs && node ui.test.mjs && node audio.test.mjs && node pwa.test.mjs && node illustrations.test.mjs",
+    "test": "node model.test.mjs && node ui.test.mjs && node audio.test.mjs && node pwa.test.mjs && node illustrations.test.mjs && node preschool.test.mjs && node storage.test.mjs",
     "test:browser": "node browser.test.mjs"
   },
   "devDependencies": {

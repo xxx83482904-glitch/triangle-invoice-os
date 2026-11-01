@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type CSSProperties,
 } from "react";
 import {
   Album,
@@ -14,22 +15,38 @@ import {
   Home,
   Settings as SettingsIcon,
   Volume2,
-  VolumeX,
   RotateCcw,
   X,
   Trash2,
-  Plus,
+  Star,
+  Play,
+  LockKeyhole,
 } from "lucide-react";
 import {
   Arrangement,
   Chef,
   CookingGesture,
   ProgressDots,
-  processCue,
-  IngredientArt,
-  RiceProgress,
+  HandHint,
 } from "./cooking-controls";
-import { DishArt, FoodArt, sampleRecipe } from "./cooking-art";
+import { DishArt, FoodArt, DishBase } from "./cooking-art";
+import {
+  Action,
+  Confetti,
+  EntryHand,
+  ParentGate,
+  RotateOverlay,
+  StepPictures,
+} from "./kitchen-ui";
+import { ArtImage, preloadMedia, screenMedia } from "./media-assets";
+import {
+  SCREEN_VOICE,
+  instruction,
+  mission,
+  phrase,
+  countVoice,
+  type Voice,
+} from "./cooking-guidance";
 import {
   BACK,
   BENTO,
@@ -47,6 +64,7 @@ import {
   newRecipe,
   progress,
   screenFrom,
+  variant,
   type Artwork,
   type Food,
   type Mode,
@@ -67,32 +85,7 @@ import {
 import { KitchenAudio, type Sound } from "./cooking-audio";
 import s from "./kitchen.module.css";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const STANDALONE = process.env.NEXT_PUBLIC_AKIRA_STANDALONE === "1";
-const START_RECIPE: Recipe = {
-  id: "initial",
-  mode: "bento",
-  rice: "nori",
-  egg: "plain",
-  chicken: "soy",
-  vegetables: [],
-  carrotShape: "flower",
-  cake: "vanilla",
-  toppings: ["strawberry", "cream"],
-  items: [],
-  strokes: [],
-  ready: [],
-  progress: {
-    rice: 0,
-    egg: 0,
-    chicken: 0,
-    broccoli: 0,
-    carrot: 0,
-    tomato: 0,
-    batter: 0,
-    bake: 0,
-    cream: 0,
-  },
-};
+const START_RECIPE: Recipe = { ...newRecipe("bento"), id: "initial" };
 const PROCESS_SCREEN: Partial<Record<Screen, Process>> = {
   3: "rice",
   4: "egg",
@@ -100,11 +93,6 @@ const PROCESS_SCREEN: Partial<Record<Screen, Process>> = {
   12: "batter",
   13: "bake",
 };
-const CARROT_SHAPES = [
-  ["flower", "おはなの にんじん"],
-  ["star", "ほしの にんじん"],
-  ["heart", "ハートの にんじん"],
-];
 const COOK_SCREEN: Record<string, Screen> = {
   onigiri: 3,
   tamago: 4,
@@ -117,64 +105,20 @@ function recipeForScreen(screen: Screen, recipe: Recipe): Recipe {
   const mode =
     screen >= 11 && screen <= 15
       ? "cake"
-      : screen >= 2 && screen <= 10
+      : screen >= 2 && screen <= 8
         ? "bento"
         : recipe.mode;
   return recipe.mode === mode ? recipe : newRecipe(mode);
 }
-function Action({
-  children,
-  onClick,
-  color = "pink",
-  disabled = false,
-  className = "",
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  color?: string;
-  disabled?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      className={`${s.action} ${s[color]} ${className}`}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-function Confetti() {
-  return (
-    <div className={s.confetti} aria-hidden="true">
-      {Array.from({ length: 24 }, (_, i) => (
-        <i
-          key={i}
-          style={{
-            left: `${4 + i * 4}%`,
-            background: ["#ffca33", "#159de9", "#f65182", "#32b66c", "#ff823c"][
-              i % 5
-            ],
-            animationDelay: `${(i % 6) * 0.08}s`,
-            transform: `rotate(${i * 23}deg)`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
 function WorkImage({ work }: { work: Artwork }) {
   const img = useRef<HTMLImageElement>(null);
   useEffect(() => {
-    const next = URL.createObjectURL(work.image);
-    if (img.current) img.current.src = next;
-    return () => URL.revokeObjectURL(next);
+    const url = URL.createObjectURL(work.image);
+    if (img.current) img.current.src = url;
+    return () => URL.revokeObjectURL(url);
   }, [work.image]);
-  // Local IndexedDB Blob URLs must remain local and need no image optimization service.
+  // eslint-disable-next-line @next/next/no-img-element
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       ref={img}
       alt={
@@ -190,193 +134,454 @@ export function AkiraKitchen() {
     [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS),
     [ready, setReady] = useState(false);
   const [works, setWorks] = useState<Artwork[]>([]),
-    [albumError, setAlbumError] = useState(""),
+    [albumBusy, setAlbumBusy] = useState(true),
     [notice, setNotice] = useState(""),
+    [reaction, setReaction] = useState(""),
     [saving, setSaving] = useState(false),
     [savedId, setSavedId] = useState("");
   const [vegetable, setVegetable] = useState<Process>("broccoli"),
-    [paint, setPaint] = useState(false),
-    [eaten, setEaten] = useState<string[]>([]),
+    [bites, setBites] = useState<Record<string, number>>({}),
     [detail, setDetail] = useState<Artwork | null>(null),
-    [deleted, setDeleted] = useState<Artwork | null>(null),
+    [deleted, setDeleted] = useState<Artwork | null>(null);
+  const [resume, setResume] = useState(false),
+    [gate, setGate] = useState<"settings" | "delete" | null>(null),
+    [deleteAllowed, setDeleteAllowed] = useState(false),
+    [portrait, setPortrait] = useState(false),
+    [speaking, setSpeaking] = useState(false),
+    [idle, setIdle] = useState(false),
+    [stars, setStars] = useState(false),
+    [launching, setLaunching] = useState<Mode | null>(null);
+  const [scale, setScale] = useState<number | string>(
+      "var(--akira-stage-scale, 1)",
+    ),
+    [canUndo, setCanUndo] = useState(false),
     [offline, setOffline] = useState(
-      "オフライン起動は HTTPSの公開版で確認できます",
+      "はじめは インターネットに つないでください",
     );
   const viewport = useRef<HTMLDivElement>(null),
     audio = useRef<KitchenAudio | null>(null),
     saveLock = useRef(false),
-    history = useRef<Recipe[]>([]),
-    dialog = useRef<HTMLDialogElement>(null),
-    current = useRef({ recipe, screen, settings }),
-    [scale, setScale] = useState(1),
-    [canUndo, setCanUndo] = useState(false);
-  // Some touch browsers suppress the compatibility click following a captured
-  // cooking gesture. Commit ordinary button taps on pointer-up, and ignore only
-  // the duplicate compatibility click. Cooking/drag buttons own their pointers.
-  const touchButton = useRef<{ element: HTMLButtonElement; pointer: number; x: number; y: number } | null>(null);
-  const ignoreTouchClickUntil = useRef(0);
-  useEffect(() => {
-    current.current = { recipe, screen, settings };
-  }, [recipe, screen, settings]);
+    history = useRef<Recipe | null>(null);
+  const current = useRef({ recipe, screen, settings }),
+    navigation = useRef(0),
+    idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
+    reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchButton = useRef<{
+      element: HTMLButtonElement;
+      pointer: number;
+      x: number;
+      y: number;
+    } | null>(null),
+    ignoreTouchClickUntil = useRef(0),
+    lastVoice = useRef({ screen: 0, phase: "" }),
+    countTime = useRef(0),
+    missionCelebrated = useRef("");
+  current.current = { recipe, screen, settings };
+  const updateRecipe = (next: Recipe) => {
+    current.current.recipe = next;
+    setRecipe(next);
+  };
   const play = useCallback((sound: Sound) => audio.current?.play(sound), []);
-  const go = useCallback(
-    (next: Screen) => {
-      setScreen(next);
-      setNotice("");
-      setPaint(false);
-      play("tap");
-      window.history.replaceState({}, "", `#screen=${next}`);
+  const say = useCallback((...clips: Voice[]) => {
+    void audio.current?.say(...clips);
+  }, []);
+  const feedback = useCallback(
+    (voice: Voice) => {
+      setReaction(phrase(voice));
+      say(voice);
+      if (reactionTimer.current) clearTimeout(reactionTimer.current);
+      reactionTimer.current = setTimeout(() => setReaction(""), 1600);
     },
-    [play],
+    [say],
+  );
+  const awake = useCallback(() => {
+    setIdle(false);
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setIdle(true), 10000);
+  }, []);
+  const go = useCallback(
+    (target: Screen, bypass = false) => {
+      if (target === 17 && !bypass) {
+        setGate("settings");
+        say("parent", "hold");
+        return;
+      }
+      const r = current.current.recipe;
+      if ([8, 9, 10, 15].includes(target) && !r.items.length) {
+        target = r.mode === "bento" ? 7 : 14;
+        say("place-first");
+      }
+      if (target === 7 && !r.ready.length) {
+        target = 2;
+        say("cook-first");
+      }
+      const next = target,
+        token = ++navigation.current;
+      void Promise.race([
+        preloadMedia(screenMedia(next)),
+        new Promise((resolve) => setTimeout(resolve, 900)),
+      ]).then(() => {
+        if (token !== navigation.current) return;
+        setRecipe((value) => recipeForScreen(next, value));
+        setScreen(next);
+        setNotice("");
+        setReaction("");
+        setBites({});
+        play("tap");
+        window.history.replaceState({}, "", "#screen=" + next);
+        awake();
+      });
+    },
+    [awake, play, say],
   );
   const refreshAlbum = useCallback(async () => {
+    setAlbumBusy(true);
     try {
       await migrateLegacy();
       setWorks(await listArtworks());
-      setAlbumError("");
     } catch {
-      setAlbumError("アルバムを ひらけません。もういちど ためしてね。");
+      setNotice("アルバムを ひらけません。もういちど ためしてね。");
+    } finally {
+      setAlbumBusy(false);
     }
   }, []);
   useEffect(() => {
-    const hydration = window.setTimeout(() => {
-      const stored = readSession(),
-        hash = window.location.hash.match(/screen=(\d+)/);
-      if (stored) {
-        setRecipe(
-          recipeForScreen(
-            hash ? screenFrom(Number(hash[1])) : stored.screen,
-            stored.recipe,
-          ),
-        );
-        setSettings(stored.settings);
-        setScreen(hash ? screenFrom(Number(hash[1])) : stored.screen);
-      } else {
-        setRecipe(
-          recipeForScreen(
-            hash ? screenFrom(Number(hash[1])) : 1,
-            newRecipe("bento"),
-          ),
-        );
-        if (hash) setScreen(screenFrom(Number(hash[1])));
-      }
-      setReady(true);
-      void refreshAlbum();
-    }, 0);
     const engine = new KitchenAudio();
     audio.current = engine;
+    engine.onSpeaking = setSpeaking;
+    const timer = setTimeout(() => {
+      const stored = readSession(),
+        hash = window.location.hash.match(/screen=(\d+)/),
+        target = hash ? screenFrom(Number(hash[1])) : (stored?.screen ?? 1);
+      const initial = recipeForScreen(
+        target,
+        stored?.recipe ?? newRecipe("bento"),
+      );
+      setRecipe(initial);
+      setSettings(stored?.settings ?? DEFAULT_SETTINGS);
+      if (target === 6)
+        setVegetable(
+          (["broccoli", "tomato", "carrot"] as Process[]).find(
+            (p) =>
+              initial.progress[p] > 0 && initial.progress[p] < STAGES[p].length,
+          ) ?? "broccoli",
+        );
+      if (target === 17) {
+        setGate("settings");
+        setScreen(1);
+      } else if ([8, 9, 10, 15].includes(target) && !initial.items.length)
+        setScreen(initial.mode === "cake" ? 14 : 7);
+      else if (target === 7 && !initial.ready.length) setScreen(2);
+      else setScreen(target);
+      if (stored && target > 1 && target < 16) setResume(true);
+      setReady(true);
+      void refreshAlbum();
+      awake();
+    }, 0);
+    const save = () => saveSession({ version: 2, ...current.current });
     const visibility = () => {
       if (document.hidden) {
         engine.suspend();
-        saveSession({ version: 2, ...current.current });
+        save();
       }
     };
     document.addEventListener("visibilitychange", visibility);
-    const pageHide = () => saveSession({ version: 2, ...current.current });
-    window.addEventListener("pagehide", pageHide);
-    const hashChange = () => {
-      const next = screenFrom(
-        Number(window.location.hash.match(/screen=(\d+)/)?.[1] ?? 1),
+    window.addEventListener("pagehide", save);
+    const hashChange = () =>
+      go(
+        screenFrom(
+          Number(window.location.hash.match(/screen=(\d+)/)?.[1] ?? 1),
+        ),
       );
-      setScreen(next);
-      setRecipe((r) => recipeForScreen(next, r));
-    };
     window.addEventListener("hashchange", hashChange);
-    if (IS_PRODUCTION && STANDALONE && window.location.pathname === "/") {
-      window.location.replace("/akira-kitchen/" + window.location.hash);
-    }
-    if ("serviceWorker" in navigator && window.isSecureContext && IS_PRODUCTION)
-      void navigator.serviceWorker
-        .register("/akira-kitchen/sw.js", { scope: "/akira-kitchen/" })
-        .then(() => navigator.serviceWorker.ready)
-        .then(() => setOffline("オフラインで あそべます"))
-        .catch(() => setOffline("オフラインの じゅんびは まだです"));
-
+    const register = () => {
+      if (
+        "serviceWorker" in navigator &&
+        window.isSecureContext &&
+        IS_PRODUCTION
+      )
+        void navigator.serviceWorker
+          .register("/akira-kitchen/sw.js", { scope: "/akira-kitchen/" })
+          .then(() => navigator.serviceWorker.ready)
+          .then((registration) => {
+            setOffline("ひらいた がめんは オフラインでも あそべます");
+            registration.active?.postMessage({ type: "WARM_KITCHEN" });
+          })
+          .catch(() => setOffline("オフラインの じゅんびは まだです"));
+    };
+    if (document.readyState === "complete") register();
+    else window.addEventListener("load", register, { once: true });
+    const cacheReady = (event: MessageEvent) => {
+      if (event.data?.type === "KITCHEN_OFFLINE_READY")
+        setOffline("おりょうりは すべて オフラインで あそべます");
+    };
+    navigator.serviceWorker?.addEventListener("message", cacheReady);
     return () => {
-      window.clearTimeout(hydration);
+      clearTimeout(timer);
       engine.dispose();
       audio.current = null;
       document.removeEventListener("visibilitychange", visibility);
-      window.removeEventListener("pagehide", pageHide);
+      window.removeEventListener("pagehide", save);
       window.removeEventListener("hashchange", hashChange);
+      window.removeEventListener("load", register);
+      navigator.serviceWorker?.removeEventListener("message", cacheReady);
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (reactionTimer.current) clearTimeout(reactionTimer.current);
     };
-  }, [refreshAlbum]);
+  }, [awake, go, refreshAlbum]);
   useEffect(() => {
-    const element = viewport.current;
-    if (!element) return;
-    const resize = () => setScale(element.clientWidth / 1448);
+    const el = viewport.current;
+    if (!el) return;
+    const resize = () => {
+      setScale(el.clientWidth / 1448);
+      setPortrait(
+        window.innerWidth < 600 || window.innerHeight > window.innerWidth,
+      );
+    };
     resize();
     const observer = new ResizeObserver(resize);
-    observer.observe(element);
-    return () => observer.disconnect();
+    observer.observe(el);
+    window.addEventListener("resize", resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
   }, []);
   useEffect(() => {
     audio.current?.configure(settings);
   }, [settings]);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || resume) return;
     const timer = setTimeout(() => {
       if (!saveSession({ version: 2, screen, recipe, settings }))
         setNotice("とちゅうの きろくを ほぞんできません");
     }, 120);
     return () => clearTimeout(timer);
-  }, [ready, recipe, screen, settings]);
+  }, [ready, recipe, screen, settings, resume]);
+  const activeProcess = screen === 6 ? vegetable : PROCESS_SCREEN[screen];
+  const complete = activeProcess
+    ? recipe.progress[activeProcess] >= STAGES[activeProcess].length
+    : false;
+  const paint = screen === 14 && recipe.progress.cream < 1;
+  const challenge = mission(recipe);
+  const quest: Voice | undefined =
+    screen === 3
+      ? "triangle-mission"
+      : screen === 4
+        ? "egg-mission"
+        : screen === 5 || screen === 13
+          ? "brown-mission"
+          : screen === 6
+            ? vegetable === "carrot"
+              ? "flower-mission"
+              : vegetable === "tomato"
+                ? "red-mission"
+                : "green-mission"
+            : screen === 12
+              ? "ingredients-mission"
+              : screen === 7 || (screen === 14 && !paint)
+                ? challenge.voice
+                : paint
+                  ? "cream-mission"
+                  : undefined;
+  const cue: Voice = activeProcess
+    ? complete
+      ? activeProcess === "rice"
+        ? "triangle-done"
+        : "praise-1"
+      : instruction(activeProcess, recipe.progress[activeProcess])
+    : (quest ?? SCREEN_VOICE[screen]);
+  const phase = activeProcess
+    ? activeProcess + ":" + Math.floor(recipe.progress[activeProcess])
+    : paint
+      ? "paint"
+      : "place";
   useEffect(() => {
-    if (detail) dialog.current?.showModal?.();
-    else dialog.current?.close?.();
-  }, [detail]);
+    if (!ready) return;
+    if (portrait) {
+      say("rotate-device");
+      return;
+    }
+    if (resume) {
+      say("resume");
+      return;
+    }
+    if (gate) {
+      say("parent", "hold");
+      return;
+    }
+    const entered = lastVoice.current.screen !== screen;
+    const clips: Voice[] = entered ? [SCREEN_VOICE[screen]] : [];
+    if (entered && quest) clips.push(quest);
+    if (quest === "pack-rice" && entered) clips.push("put-two");
+    if (activeProcess && (!entered || cue !== quest)) clips.push(cue);
+    if (clips.length && (entered || Date.now() - countTime.current > 400))
+      say(...clips);
+    lastVoice.current = { screen, phase };
+    if (entered && (screen === 8 || screen === 15)) play("finish");
+    // Narration follows a new instruction, not every intermediate gesture frame.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, screen, phase, portrait, resume, gate, complete]);
+  useEffect(() => {
+    if (!ready) return;
+    void preloadMedia(screenMedia(screen));
+    const next = NEXT[screen] ?? (screen === 1 ? 2 : 1);
+    const timer = setTimeout(
+      () =>
+        void preloadMedia([
+          ...screenMedia(next),
+          ...(screen === 1 ? screenMedia(11) : []),
+        ]),
+      500,
+    );
+    return () => clearTimeout(timer);
+  }, [ready, screen]);
+  useEffect(() => {
+    if (
+      (screen === 7 || (screen === 14 && !paint)) &&
+      challenge.done &&
+      missionCelebrated.current !== recipe.id
+    ) {
+      missionCelebrated.current = recipe.id;
+      setStars(true);
+      play("finish");
+      feedback("clear");
+      const timer = setTimeout(() => setStars(false), 1800);
+      return () => clearTimeout(timer);
+    }
+  }, [screen, challenge.done, recipe.id, paint, play, feedback]);
   const isSaved =
     savedId === recipe.id || works.some((w) => w.id === recipe.id);
   const editable = (r: Recipe) =>
     works.some((w) => w.id === r.id) ? { ...r, id: id() } : r;
   const change = (next: Recipe, record = true) => {
     if (record) {
-      history.current = [...history.current.slice(-29), recipe];
+      history.current = recipe;
       setCanUndo(true);
     }
-    setRecipe(editable(next));
-    if (next !== recipe) setSavedId("");
+    updateRecipe(editable(next));
+    setSavedId("");
+    if (next.items.length > recipe.items.length) {
+      const food = next.items[next.items.length - 1].food,
+        count = next.items.filter((p) => p.food === food).length;
+      feedback(countVoice(count));
+      if (next.items.length === MAX_PIECES)
+        setNotice("いっぱい！ うごかして ならべよう");
+    } else if (next.items.length === recipe.items.length && !paint)
+      feedback("praise-2");
   };
   const undo = () => {
-    const previous = history.current.pop();
-    if (previous) {
-      setRecipe(previous);
-      setCanUndo(history.current.length > 0);
+    if (history.current) {
+      updateRecipe(history.current);
+      history.current = null;
+      setCanUndo(false);
       setSavedId("");
       play("pop");
-    }
+      feedback("undo");
+    } else feedback("tap-here");
   };
   const start = (mode: Mode, fresh = false) => {
     if (fresh || recipe.mode !== mode || recipe.id === "initial" || isSaved) {
-      setRecipe(newRecipe(mode));
-      history.current = [];
+      updateRecipe(newRecipe(mode));
+      history.current = null;
       setCanUndo(false);
       setSavedId("");
     }
-    setEaten([]);
-    go(mode === "bento" ? 2 : 11);
+    setBites({});
+    setLaunching(mode);
+    setTimeout(() => {
+      setLaunching(null);
+      go(mode === "bento" ? 2 : 11);
+    }, 200);
   };
-  const advance = (p: Process, n: number) =>
-    setRecipe((r) => progress(editable(r), p, n));
-  const next = () => {
-    const target = NEXT[screen];
-    if (target) go(target);
+  const advance = (p: Process, n: number) => {
+    const before = current.current.recipe,
+      next = progress(editable(before), p, n),
+      was = before.progress[p],
+      value = next.progress[p];
+    updateRecipe(next);
+    setSavedId("");
+    if (p === "egg" && was < 1 && value > was) {
+      countTime.current = Date.now();
+      say(value < 1 ? "count-1" : "count-2", value < 1 ? "crack" : "mix");
+      setReaction(value < 1 ? "1こ！" : "2こ！");
+    } else if (
+      p === "batter" &&
+      value <= 3 &&
+      Math.floor(value) > Math.floor(was)
+    ) {
+      countTime.current = Date.now();
+      say(("count-" + value) as Voice, instruction(p, value));
+      setReaction(value + "こ！");
+    } else if (value >= STAGES[p].length && was < value) {
+      play("finish");
+      feedback(
+        p === "rice"
+          ? "triangle-done"
+          : p === "chicken" || p === "bake"
+            ? "color-brown"
+            : "praise-1",
+      );
+    } else if (Math.floor(value) !== Math.floor(was)) setReaction("じょうず！");
+    else if (Date.now() - countTime.current > 1800) {
+      countTime.current = Date.now();
+      feedback("praise-2");
+    }
+  };
+  const choose = (
+    key: "rice" | "egg" | "chicken" | "cake" | "carrotShape",
+    value: string,
+  ) => {
+    updateRecipe({ ...editable(recipe), [key]: value });
+    setSavedId("");
+    play("pop");
+    feedback(
+      key === "carrotShape"
+        ? value === "flower"
+          ? "shape-flower"
+          : value === "star"
+            ? "shape-star"
+            : "shape-heart"
+        : key === "cake"
+          ? value === "strawberry"
+            ? "color-pink"
+            : value === "chocolate"
+              ? "color-brown"
+              : "color-white"
+          : "praise-3",
+    );
+  };
+  const cook = (food: Food) => {
+    if (["broccoli", "carrot", "tomato"].includes(food))
+      setVegetable(food as Process);
+    go(COOK_SCREEN[food] ?? 6);
+  };
+  const next = () => go(NEXT[screen] ?? 2);
+  const finishDish = () => {
+    if (!recipe.items.length) {
+      feedback("place-first");
+      return;
+    }
+    go(recipe.mode === "bento" ? 8 : 15);
   };
   const save = async () => {
-    if (saveLock.current || isSaved) return;
+    if (!recipe.items.length) {
+      feedback("place-first");
+      return;
+    }
+    if (saveLock.current || isSaved) {
+      feedback("saved");
+      return;
+    }
     saveLock.current = true;
     setSaving(true);
     try {
       const work = await saveArtwork(recipe);
       setWorks((w) => [work, ...w.filter((x) => x.id !== work.id)]);
       setSavedId(recipe.id);
-      setNotice("アルバムに ほぞんしたよ！");
       play("save");
-      try {
-        void navigator.storage?.persist?.().catch(() => {});
-      } catch {
-        /* Optional. */
-      }
+      feedback("saved");
+      void navigator.storage?.persist?.().catch(() => {});
     } catch {
       setNotice("ほぞんできませんでした。もういちど おしてね。");
     } finally {
@@ -384,18 +589,14 @@ export function AkiraKitchen() {
       setSaving(false);
     }
   };
-  const choose = (
-    key: "rice" | "egg" | "chicken" | "cake" | "carrotShape",
-    value: string,
-  ) => {
-    setRecipe((r) => ({ ...editable(r), [key]: value }));
-    setSavedId("");
-    play("pop");
-  };
-  const cook = (food: Food) => {
-    if (["broccoli", "carrot", "tomato"].includes(food))
-      setVegetable(food as Process);
-    go(COOK_SCREEN[food] ?? 6);
+  const eat = (piece: string) => {
+    const count = Math.min(2, (bites[piece] ?? 0) + 1),
+      nextBites = { ...bites, [piece]: count };
+    setBites(nextBites);
+    play("eat");
+    feedback(count === 1 ? "chew" : "yummy");
+    if (recipe.items.every((p) => (nextBites[p.id] ?? 0) >= 2))
+      setTimeout(() => go(10), 700);
   };
   const removeWork = async (work: Artwork) => {
     try {
@@ -403,33 +604,44 @@ export function AkiraKitchen() {
       setWorks((w) => w.filter((x) => x.id !== work.id));
       setDeleted(work);
       setDetail(null);
-      setNotice("けしたよ。もとに もどせます");
+      setDeleteAllowed(false);
+      play("pop");
     } catch {
-      setNotice("けせませんでした。もういちど ためしてね");
+      setNotice("けせませんでした。もういちど ためしてね。");
     }
   };
   const restore = async () => {
     if (!deleted) return;
     try {
       await putArtwork(deleted);
-      setWorks((w) => [deleted, ...w.filter((x) => x.id !== deleted.id)]);
+      await refreshAlbum();
       setDeleted(null);
-      setNotice("もとに もどしたよ");
+      play("save");
     } catch {
-      setNotice("もどせませんでした。もういちど ためしてね");
+      setNotice("もどせませんでした。もういちど ためしてね。");
     }
   };
-  const process =
-      PROCESS_SCREEN[screen] ?? (screen === 6 ? vegetable : undefined),
-    complete = process
-      ? recipe.progress[process] >= STAGES[process].length
-      : false;
-  let content: ReactNode;
+  const replay = () => {
+    awake();
+    if (portrait) {
+      say("rotate-device");
+      return;
+    }
+    say(
+      SCREEN_VOICE[screen],
+      cue,
+      ...(quest === "pack-rice" ? ["put-two" as Voice] : []),
+    );
+  };
+  const options =
+    screen === 3 ? RICE : screen === 4 ? EGGS : screen === 5 ? CHICKEN : [];
+  let content: ReactNode = null;
   if (screen === 1)
     content = (
       <>
         <Chef small />
         <div className={s.homeHeading}>
+          <ArtImage name="title-cloud" className={s.titleCloud} />
           <p>
             <span className={s.brandName}>あきら</span>くんと
             <span className={s.brandCooking}>
@@ -438,33 +650,38 @@ export function AkiraKitchen() {
               ))}
             </span>
           </p>
-          <h1>{TITLES[1]}</h1>
+          <h1>なにを つくる？</h1>
         </div>
         <div className={s.homeChoices}>
-          <button
-            className={`${s.homeCard} ${s.homeBento}`}
-            onClick={() => start("bento")}
-          >
-            <img src="/akira-kitchen/illustration-home-bento-v2.png" alt="" draggable={false} />
-            <span>
-              おべんとう <ArrowRight />
-            </span>
-          </button>
-          <button
-            className={`${s.homeCard} ${s.homeCake}`}
-            onClick={() => start("cake")}
-          >
-            <img src="/akira-kitchen/illustration-home-cake-v2.png" alt="" draggable={false} />
-            <span>
-              ケーキ <ArrowRight />
-            </span>
-          </button>
+          {(["bento", "cake"] as const).map((mode) => (
+            <button
+              key={mode}
+              className={[
+                s.homeCard,
+                mode === "bento" ? s.homeBento : s.homeCake,
+                launching === mode ? s.launch : "",
+              ].join(" ")}
+              onClick={() => start(mode)}
+            >
+              <ArtImage
+                name={"home-" + mode}
+                sizes="46vw"
+                fetchPriority="high"
+              />
+              <span>
+                {mode === "bento" ? "おべんとう" : "ケーキ"}
+                <ArrowRight />
+              </span>
+              {mode === "bento" && <EntryHand />}
+            </button>
+          ))}
         </div>
         <Action className={s.albumHome} color="purple" onClick={() => go(16)}>
-          <Album /> アルバム
+          <Album />
+          アルバム
         </Action>
         <button
-          className={`${s.round} ${s.settingsHome}`}
+          className={[s.round, s.settingsHome].join(" ")}
           aria-label="せってい"
           onClick={() => go(17)}
         >
@@ -476,125 +693,153 @@ export function AkiraKitchen() {
     content = (
       <>
         <div className={s.menuDish}>
-          <DishArt recipe={recipe} stretch />
-          <Action onClick={() => go(7)} color="green">
-            つめよう <ArrowRight />
-          </Action>
+          <DishArt recipe={recipe} />
+          {!recipe.items.length && (
+            <div className={s.silhouettes}>
+              <FoodArt food="onigiri" />
+              <FoodArt food="tamago" />
+              <FoodArt food="broccoli" />
+            </div>
+          )}
         </div>
-        <div className={s.foodRow}>
-          {BENTO.map((food) => (
+        <p className={s.menuPrompt}>ここに なにを いれる？</p>
+        <div className={[s.foodRow, s.menuTiles].join(" ")}>
+          {BENTO.map((food, i) => (
             <button
-              className={s.foodTile}
+              className={[
+                s.foodTile,
+                recipe.ready.includes(food) ? s.made : s.unmade,
+              ].join(" ")}
               key={food}
               onClick={() => cook(food)}
             >
-              <FoodArt
-                food={food}
-                variant={food === "carrot" ? "flower" : ""}
-              />
+              <FoodArt food={food} variant={variant(recipe, food)} />
               <span>{label(food)}</span>
-              {recipe.ready.includes(food) && (
-                <Check className={s.readyBadge} aria-label="できた" />
+              {recipe.ready.includes(food) ? (
+                <Check className={s.readyBadge} />
+              ) : (
+                i === 0 && <EntryHand />
               )}
             </button>
           ))}
         </div>
+        <div className={s.footer}>
+          <Action
+            color="green"
+            locked={!recipe.ready.length}
+            onClick={() =>
+              recipe.ready.length ? go(7) : feedback("cook-first")
+            }
+          >
+            つめよう
+            <ArrowRight />
+          </Action>
+        </div>
       </>
     );
-  else if (process)
+  else if (activeProcess)
     content = (
       <>
-        <div
-          className={`${s.taskCard} ${screen === 3 ? `${s.riceCard} ${recipe.progress.rice < 1 ? s.ricePickup : ""}` : screen === 4 || screen === 12 ? s.yellowCard : screen === 6 ? s.greenCard : s.pinkCard}`}
-        >
+        <StepPictures
+          process={activeProcess}
+          value={recipe.progress[activeProcess]}
+        />
+        {complete && (
+          <div className={s.finishSlot} aria-label="できた おりょうり">
+            <Check />
+          </div>
+        )}
+        <div className={s.missionBubble}>
+          <span className={s.themeIcon}>
+            {screen === 3
+              ? "△"
+              : screen === 4 || screen === 12
+                ? "1 2"
+                : screen === 6 && vegetable === "carrot"
+                  ? "✿"
+                  : "●"}
+          </span>
+          <span>{quest ? phrase(quest) : ""}</span>
+        </div>
+        <div className={[s.workArea, complete ? s.completed : ""].join(" ")}>
           <CookingGesture
-            key={process}
-            process={process}
+            key={activeProcess}
+            process={activeProcess}
             recipe={recipe}
             onProgress={advance}
             play={play}
           />
-          <div className={s.taskSide}>
-            <p>
-              {complete ? "できたね！" : processCue(process, recipe.progress[process])}
-            </p>
-            <ProgressDots
-              value={recipe.progress[process]}
-              max={STAGES[process].length}
-            />
-            <Action onClick={next}>
-              {complete ? "つぎへ" : "あとで"} <ArrowRight />
-            </Action>
-            {complete && screen >= 3 && screen <= 6 && (
-              <button className={s.menuReturn} onClick={() => go(2)}>
-                メニューへ
-              </button>
-            )}
-          </div>
+          <ProgressDots
+            value={
+              (recipe.progress[activeProcess] / STAGES[activeProcess].length) *
+              4
+            }
+            max={4}
+          />
         </div>
-        {screen === 3 && <RiceProgress value={recipe.progress.rice} />}
-        {screen === 3 && recipe.progress.rice >= 1 && <img className={s.riceTub} src="/akira-kitchen/illustration-rice-tub-v2.png" alt="" draggable={false} />}
-        {screen === 3 && (
+        {!complete && options.length > 0 && (
           <div className={s.foodRow}>
-            {RICE.map(([value, text]) => (
+            {options.map(([value, text]) => (
               <button
+                className={[
+                  s.foodTile,
+                  recipe[
+                    screen === 3 ? "rice" : screen === 4 ? "egg" : "chicken"
+                  ] === value
+                    ? s.chosen
+                    : "",
+                ].join(" ")}
                 key={value}
-                className={`${s.foodTile} ${recipe.rice === value ? s.chosen : ""}`}
-                aria-pressed={recipe.rice === value}
-                onClick={() => choose("rice", value)}
+                aria-pressed={
+                  recipe[
+                    screen === 3 ? "rice" : screen === 4 ? "egg" : "chicken"
+                  ] === value
+                }
+                onClick={() =>
+                  choose(
+                    screen === 3 ? "rice" : screen === 4 ? "egg" : "chicken",
+                    value,
+                  )
+                }
               >
-                <FoodArt food="onigiri" variant={value} smiling={false} />
+                <FoodArt
+                  food={
+                    screen === 3
+                      ? "onigiri"
+                      : screen === 4
+                        ? "tamago"
+                        : "karaage"
+                  }
+                  variant={value}
+                  smiling={false}
+                />
                 <span>{text}</span>
               </button>
             ))}
           </div>
         )}
-        {screen === 4 && (
+        {!complete && screen === 6 && (
           <div className={s.foodRow}>
-            {EGGS.map(([value, text]) => (
+            {(["broccoli", "tomato", "carrot"] as const).map((food) => (
               <button
-                key={value}
-                className={`${s.foodTile} ${recipe.egg === value ? s.chosen : ""}`}
-                aria-pressed={recipe.egg === value}
-                onClick={() => choose("egg", value)}
-              >
-                <FoodArt food={value === "plain" ? "tamago" : value} />
-                <span>{text}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {screen === 5 && (
-          <div className={s.foodRow}>
-            {CHICKEN.map(([value, text]) => (
-              <button
-                key={value}
-                className={`${s.foodTile} ${recipe.chicken === value ? s.chosen : ""}`}
-                aria-pressed={recipe.chicken === value}
-                onClick={() => choose("chicken", value)}
-              >
-                <FoodArt food={value} />
-                <span>{text}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {screen === 6 && (
-          <div className={s.foodRow}>
-            {(["broccoli", "carrot", "tomato"] as const).map((food) => (
-              <button
-                className={`${s.foodTile} ${vegetable === food ? s.chosen : ""}`}
                 key={food}
-                aria-pressed={vegetable === food}
+                className={[
+                  s.foodTile,
+                  vegetable === food ? s.chosen : "",
+                ].join(" ")}
                 onClick={() => {
                   setVegetable(food);
                   play("pop");
+                  feedback(
+                    food === "tomato"
+                      ? "color-red"
+                      : food === "broccoli"
+                        ? "color-green"
+                        : "shape-flower",
+                  );
                 }}
               >
-                <FoodArt
-                  food={food}
-                  variant={food === "carrot" ? recipe.carrotShape : ""}
-                />
+                <FoodArt food={food} variant={recipe.carrotShape} />
                 <span>{label(food)}</span>
                 {recipe.ready.includes(food) && (
                   <Check className={s.readyBadge} />
@@ -602,84 +847,134 @@ export function AkiraKitchen() {
               </button>
             ))}
             {vegetable === "carrot" &&
-              CARROT_SHAPES.map(([shape, shapeLabel]) => (
+              ["flower", "star", "heart"].map((shape) => (
                 <button
                   key={shape}
-                  className={`${s.foodTile} ${recipe.carrotShape === shape ? s.chosen : ""}`}
-                  aria-label={shapeLabel}
+                  className={[
+                    s.foodTile,
+                    recipe.carrotShape === shape ? s.chosen : "",
+                  ].join(" ")}
                   onClick={() => choose("carrotShape", shape)}
                 >
                   <FoodArt food="carrot" variant={shape} />
+                  <span>
+                    {shape === "flower"
+                      ? "おはな"
+                      : shape === "star"
+                        ? "ほし"
+                        : "はーと"}
+                  </span>
                 </button>
               ))}
           </div>
         )}
-        {screen === 12 && (
-          <div className={s.foodRow}>
-            {["たまご", "こむぎこ", "ミルク"].map((name, i) => (
-              <button
-                key={name}
-                className={`${s.foodTile} ${recipe.progress.batter > i ? s.chosen : ""}`}
-                onClick={() => {
-                  if (recipe.progress.batter <= i) advance("batter", 1);
-                  play("pour");
-                }}
-              >
-                <IngredientArt ingredient={(["egg", "flour", "milk"] as const)[i]} />
-                <span>{name}</span>
-              </button>
-            ))}
-            <div className={s.mixingHint}><span>ゆびで</span><span>ぐるぐる！</span></div>
+        {!complete && screen === 12 && recipe.progress.batter < 3 && (
+          <div className={s.ingredientCount}>
+            {["ingredient-flour", "ingredient-egg", "ingredient-milk"].map(
+              (name, i) => (
+                <span
+                  className={recipe.progress.batter > i ? s.doneIngredient : ""}
+                  key={name}
+                >
+                  <ArtImage name={name} />
+                  <b>{i + 1}</b>
+                </span>
+              ),
+            )}
           </div>
         )}
-        {screen === 13 && (
-          <div className={s.bakeFooter}>
-            <FoodArt food="star" />
-            <p>{complete ? "ふっくら やけたよ！" : STAGES.bake[Math.floor(recipe.progress.bake)]}</p>
+        {complete && (
+          <div className={s.footer}>
+            <Action onClick={next}>
+              つぎへ
+              <ArrowRight />
+            </Action>
+            <EntryHand />
           </div>
+        )}
+        {!complete && idle && (
+          <button className={s.cookingSkip} onClick={next}>
+            あとで あそぶ
+            <ArrowRight />
+          </button>
+        )}
+        {complete && screen < 7 && (
+          <button className={s.secondary} onClick={() => go(2)}>
+            <Home />
+            メニューへ
+          </button>
         )}
       </>
     );
   else if (screen === 7 || screen === 14)
     content = (
       <>
+        <div className={s.missionBubble}>
+          {paint ? (
+            <>
+              <FoodArt food="cream" />
+              <span>しろく ぬろう</span>
+            </>
+          ) : (
+            <>
+              <FoodArt food={challenge.food as Food} />
+              <span>
+                {challenge.voice === "pack-rice"
+                  ? "さんかくを 2こ"
+                  : challenge.voice === "strawberry-mission"
+                    ? "いちごを ちょうど 3こ"
+                    : "おかずを 2こ"}
+                <small>
+                  {challenge.count} / {challenge.target}
+                  {challenge.done && <Star fill="#ffca33" />}
+                </small>
+              </span>
+            </>
+          )}
+        </div>
         <Arrangement
           recipe={recipe}
-          onChange={change}
-          play={play}
           foods={
             screen === 7
-              ? recipe.ready
-              : [...new Set([...recipe.toppings, ...TOPPINGS])]
+              ? BENTO.filter((food) => recipe.ready.includes(food))
+              : TOPPINGS
           }
+          onChange={change}
+          play={play}
           paint={paint}
-          onPaintChange={screen === 14 ? setPaint : undefined}
+          onFeedback={feedback}
         />
-        {screen === 7 && recipe.ready.length === 0 && (
-          <div className={s.emptyPantry}>
-            <Action color="blue" onClick={() => go(2)}>
-              おかずを つくろう <ArrowRight />
+        <div className={s.footer}>
+          {paint ? (
+            <span className={s.shortCue}>くるくる ぬってね</span>
+          ) : (
+            <Action
+              color="green"
+              locked={!recipe.items.length}
+              onClick={finishDish}
+            >
+              できた！
+              <Check />
             </Action>
-          </div>
-        )}
-        <div className={s.arrangeActions}>
-          <button className={s.smallButton} disabled={!canUndo} onClick={undo}>
-            <RotateCcw /> もどす
-          </button>
-          <Action
-            color="green"
+          )}
+        </div>
+        <button className={s.secondary} aria-disabled={!canUndo} onClick={undo}>
+          <RotateCcw />
+          もどす
+        </button>
+        {paint && idle && (
+          <button
+            className={s.skipCorner}
             onClick={() => {
-              play("finish");
-              next();
+              updateRecipe({
+                ...recipe,
+                progress: { ...recipe.progress, cream: 1 },
+              });
+              feedback("praise-2");
             }}
           >
-            できた！ <Check />
-          </Action>
-        </div>
-        {recipe.items.length >= MAX_PIECES && (
-          <div className={s.limitHint}>
-            いっぱい！ はずすと また のせられるよ
-          </div>
+            あとで ぬる
+          </button>
         )}
       </>
     );
@@ -687,251 +982,272 @@ export function AkiraKitchen() {
     content = (
       <>
         <Confetti />
-        <div className={s.completionCard}>
+        <div className={s.finishedDish}>
           <DishArt recipe={recipe} />
-          <div className={s.finishActions}>
-            <p>やったね！</p>
-            {screen === 8 ? (
-              <Action onClick={next}>
-                たべてみる <ArrowRight />
-              </Action>
-            ) : (
-              <Action
-                color="green"
-                disabled={saving || isSaved}
-                onClick={() => void save()}
-              >
-                {isSaved ? (
-                  <>
-                    <Check /> ほぞんしたよ
-                  </>
-                ) : saving ? (
-                  "ほぞんちゅう…"
-                ) : (
-                  <>
-                    <Album /> ほぞんする
-                  </>
-                )}
-              </Action>
-            )}
-            {screen === 15 && (
-              <Action onClick={() => go(16)} color="purple">
-                アルバム <ArrowRight />
-              </Action>
-            )}
-            <Action color="blue" onClick={() => start(recipe.mode, true)}>
-              もういちど
-            </Action>
-          </div>
         </div>
+        <div className={s.footer}>
+          <Action
+            onClick={() => {
+              setBites({});
+              go(9);
+            }}
+          >
+            たべてみる
+            <ArrowRight />
+          </Action>
+          <EntryHand />
+        </div>
+        <button
+          className={s.secondary}
+          onClick={() => start(recipe.mode, true)}
+        >
+          <RotateCcw />
+          もういちど
+        </button>
       </>
     );
   else if (screen === 9)
     content = (
-      <div className={s.tasteCard}>
+      <>
         <div className={s.tasteDish}>
-          <DishArt recipe={{ ...recipe, items: [] }} />
+          <DishBase recipe={recipe} />
           {recipe.items
-            .filter((p) => !eaten.includes(p.id))
+            .filter((p) => (bites[p.id] ?? 0) < 2)
             .map((p) => (
               <button
                 key={p.id}
-                className={s.tastePiece}
-                style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                aria-label={`${label(p.food)}を たべる`}
-                onClick={() => {
-                  setEaten((v) => [...v, p.id]);
-                  play("eat");
-                }}
+                data-eat={p.id}
+                className={[
+                  s.piece,
+                  recipe.mode === "cake" ? s.topping : "",
+                ].join(" ")}
+                style={
+                  {
+                    left: p.x + "%",
+                    top: p.y + "%",
+                    "--turn": p.rotation + "deg",
+                    clipPath: bites[p.id]
+                      ? "polygon(0 0,70% 0,70% 35%,100% 35%,100% 100%,0 100%)"
+                      : undefined,
+                  } as CSSProperties
+                }
+                aria-label={label(p.food) + "を たべる"}
+                onClick={() => eat(p.id)}
               >
                 <FoodArt food={p.food} variant={p.variant} />
               </button>
             ))}
+          <HandHint motion="squeeze" />
         </div>
-        <p>{eaten.length ? "おいしい！" : "おかずを タップ！"}</p>
-        <Action onClick={next} color="green">
-          アルバムへ <ArrowRight />
-        </Action>
-      </div>
+        <div className={s.footer}>
+          <Action onClick={() => go(10)}>
+            <Album />
+            アルバムへ
+          </Action>
+        </div>
+      </>
     );
   else if (screen === 10)
     content = (
-      <div className={s.completionCard}>
-        <DishArt recipe={recipe} />
-        <div className={s.finishActions}>
+      <>
+        <div className={[s.finishedDish, isSaved ? s.savedFly : ""].join(" ")}>
+          <DishArt recipe={recipe} />
+        </div>
+        {isSaved && (
+          <div className={s.savedBook}>
+            <Album />
+            <Check />
+            <p>ほぞん できた！</p>
+          </div>
+        )}
+        <div className={s.footer}>
           <Action
-            color="green"
-            disabled={saving || isSaved}
-            onClick={() => void save()}
+            onClick={() => (isSaved ? go(16) : void save())}
+            color={isSaved ? "green" : "pink"}
           >
-            {isSaved ? (
+            {saving ? (
+              "ほぞんちゅう"
+            ) : isSaved ? (
               <>
-                <Check /> ほぞんしたよ
+                <Album />
+                アルバムへ
               </>
-            ) : saving ? (
-              "ほぞんちゅう…"
             ) : (
-              "ほぞんする"
+              <>
+                <Album />
+                ほぞんする
+              </>
             )}
           </Action>
-          <Action color="purple" onClick={() => go(16)}>
-            <Album /> アルバム
-          </Action>
-          <Action color="blue" onClick={() => go(1)}>
-            <Home /> ホーム
-          </Action>
+          <EntryHand />
         </div>
-      </div>
+        {isSaved && (
+          <button className={s.secondary} onClick={() => go(1)}>
+            <Home />
+            ホーム
+          </button>
+        )}
+      </>
     );
   else if (screen === 11)
     content = (
       <>
-        <div className={`${s.taskCard} ${s.pinkCard}`}>
-          <div className={s.cakePreview}>
-            <DishArt recipe={sampleRecipe("cake", recipe)} />
-          </div>
-          <div className={s.taskSide}>
-            <div className={s.flavors}>
-              {[
-                ["vanilla", "バニラ"],
-                ["chocolate", "チョコ"],
-                ["strawberry", "いちご"],
-              ].map(([value, text]) => (
-                <button
-                  key={value}
-                  aria-pressed={recipe.cake === value}
-                  onClick={() => choose("cake", value)}
-                  className={recipe.cake === value ? s.flavorActive : ""}
-                >
-                  {text}
-                </button>
-              ))}
-            </div>
-            <Action onClick={next}>
-              つくろう <ArrowRight />
-            </Action>
-          </div>
+        <div className={s.cakeMenuDish}>
+          <DishArt recipe={{ ...recipe, items: [], strokes: [] }} />
         </div>
-        <div className={s.foodRow}>
+        <div className={s.flavors}>
+          {(["vanilla", "chocolate", "strawberry"] as const).map((flavor) => (
+            <button
+              className={[
+                s.flavor,
+                recipe.cake === flavor ? s.chosen : "",
+              ].join(" ")}
+              aria-pressed={recipe.cake === flavor}
+              key={flavor}
+              onClick={() => choose("cake", flavor)}
+            >
+              <ArtImage
+                name={flavor === "vanilla" ? "cake-base" : "cake-" + flavor}
+              />
+              <span>
+                {flavor === "vanilla"
+                  ? "バニラ"
+                  : flavor === "chocolate"
+                    ? "チョコ"
+                    : "いちご"}
+              </span>
+              {recipe.cake === flavor && <Check />}
+            </button>
+          ))}
+        </div>
+        <div className={s.laterToppings}>
           {TOPPINGS.map((food) => (
             <button
               key={food}
-              className={`${s.foodTile} ${recipe.toppings.includes(food) ? s.chosen : ""}`}
-              aria-pressed={recipe.toppings.includes(food)}
-              onClick={() => {
-                setRecipe((r) => ({
-                  ...editable(r),
-                  toppings: r.toppings.includes(food)
-                    ? r.toppings.filter((f) => f !== food)
-                    : [...r.toppings, food],
-                }));
-                play("pop");
-              }}
+              aria-label={label(food) + "は あとで のせる"}
+              onClick={() => feedback("later")}
             >
               <FoodArt food={food} />
-              <span>{label(food)}</span>
             </button>
           ))}
+        </div>
+        <div className={s.footer}>
+          <Action onClick={() => go(12)}>
+            つくろう
+            <ArrowRight />
+          </Action>
+          <EntryHand />
         </div>
       </>
     );
   else if (screen === 16)
     content = (
       <>
-        <div className={`${s.albumGrid} ${deleted || notice ? s.albumFeedbackSpace : ""}`}>
-          {works.map((work) => (
-            <button
-              key={work.id}
-              className={s.albumTile}
-              onClick={() => setDetail(work)}
-            >
-              <WorkImage work={work} />
-              <span>
-                {work.recipe.mode === "bento" ? "おべんとう" : "ケーキ"}
-              </span>
-              <time dateTime={work.createdAt}>
-                {new Date(work.createdAt).toLocaleDateString("ja-JP")}
-              </time>
+        {works.length ? (
+          <div className={s.albumGrid}>
+            {works.map((work) => (
+              <button
+                className={s.workCard}
+                key={work.id}
+                onClick={() => {
+                  setDetail(work);
+                  setDeleteAllowed(false);
+                  play("pop");
+                  say("praise-1");
+                }}
+              >
+                <WorkImage work={work} />
+                <span>
+                  {new Date(work.createdAt).toLocaleDateString("ja-JP")}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className={s.emptyAlbum}>
+            <Chef small />
+            <ArtImage name="bento-box" />
+            <p>さいしょの おりょうりを つくろう</p>
+            <Action onClick={() => go(1)}>
+              つくる
+              <ArrowRight />
+            </Action>
+            <EntryHand />
+          </div>
+        )}
+        {works.length > 0 && (
+          <>
+            <EntryHand className={s.albumHand} />
+            <button className={s.secondary} onClick={() => go(1)}>
+              <Home />
+              ホーム
             </button>
-          ))}
-          {works.length > 0 && (
-            <button className={`${s.albumTile} ${s.makeAgainTile}`} onClick={() => go(1)}>
-              <Plus aria-hidden="true" />
-              <span>また つくる</span>
-            </button>
-          )}
-          {works.length === 0 && (
-            <div className={s.emptyAlbum}>
-              <Album />
-              <p>{albumError || "つくった おりょうりを ここに のこそう！"}</p>
-              {albumError ? (
-                <Action onClick={() => void refreshAlbum()}>もういちど</Action>
-              ) : (
-                <Action onClick={() => go(1)} color="green">
-                  つくりに いこう <ArrowRight />
-                </Action>
-              )}
-            </div>
-          )}
-        </div>
+          </>
+        )}
+        {deleted && (
+          <button className={s.restore} onClick={() => void restore()}>
+            <RotateCcw />
+            けした さくひんを もどす
+          </button>
+        )}
       </>
     );
-  else
+  else if (screen === 17)
     content = (
       <div className={s.settingsPanel}>
-        <div className={s.settingRow}>
-          <span>おと</span>
-          <button
-            aria-pressed={settings.sound}
-            onClick={() => setSettings((v) => ({ ...v, sound: !v.sound }))}
-          >
-            {settings.sound ? "オン" : "オフ"}
-          </button>
-        </div>
-        <div className={s.settingRow}>
-          <span>おんがく</span>
-          <button
-            aria-pressed={settings.bgm}
-            onClick={() => setSettings((v) => ({ ...v, bgm: !v.bgm }))}
-          >
-            {settings.bgm ? "オン" : "オフ"}
-          </button>
-        </div>
+        {(
+          [
+            ["sound", "こうかおん"],
+            ["bgm", "おんがく"],
+            ["narration", "こえの あんない"],
+          ] as const
+        ).map(([key, text]) => (
+          <div className={s.settingRow} key={key}>
+            <span>{text}</span>
+            <button
+              role="switch"
+              aria-checked={settings[key]}
+              aria-label={text}
+              className={settings[key] ? s.toggleOn : s.toggleOff}
+              onClick={() => {
+                setSettings((value) => ({ ...value, [key]: !value[key] }));
+                play("tap");
+              }}
+            >
+              <span />
+              {settings[key] ? "オン" : "オフ"}
+            </button>
+          </div>
+        ))}
         <label className={s.settingRow}>
-          <span>おんりょう</span>
+          <span>おとの おおきさ</span>
           <input
             type="range"
-            aria-label="おんりょう"
             min="0"
-            max="100"
-            step="5"
-            value={Math.round(settings.volume * 100)}
+            max="1"
+            step=".05"
+            aria-label="おとの おおきさ"
+            value={settings.volume}
             onChange={(e) =>
-              setSettings((v) => ({
-                ...v,
-                volume: Number(e.target.value) / 100,
+              setSettings((value) => ({
+                ...value,
+                volume: Number(e.target.value),
               }))
             }
+            onPointerUp={() => {
+              play("pop");
+              say("praise-2");
+            }}
           />
         </label>
-        <div className={s.settingRow}>
-          <span>ことば</span>
-          <span className={s.language}>にほんご</span>
+        <div className={s.parentInfo}>
+          <h2>おうちの かたへ</h2>
+          <p>作品と設定は、この端末のブラウザ内に保存します。</p>
+          <p>ブラウザのデータを消すと、作品も消えます。</p>
+          <p>実際の料理は、大人と一緒に行ってください。</p>
+          <small>{offline}</small>
         </div>
-        <details className={s.parentInfo}>
-          <summary>おうちの かたへ</summary>
-          <p>
-            作品と設定は、この端末のブラウザに保存します。ブラウザのデータを消すと作品も消えます。
-          </p>
-          <p>{offline}</p>
-          <p>
-            iPadのSafariで「共有」→「ホーム画面に追加」。最初の起動には通信が必要です。
-          </p>
-          <p>画面の料理あそびです。実際の料理は大人といっしょに。</p>
-        </details>
-        <Action color="blue" onClick={() => go(1)}>
-          <Home /> ホームへ
-        </Action>
+        <EntryHand className={s.settingsHand} />
       </div>
     );
   return (
@@ -939,98 +1255,132 @@ export function AkiraKitchen() {
       className={s.app}
       onPointerDownCapture={(event) => {
         audio.current?.unlock();
+        awake();
+        if (event.pointerType === "mouse") ignoreTouchClickUntil.current = 0;
         if (event.pointerType !== "touch" || touchButton.current) return;
-        const button = (event.target as Element).closest<HTMLButtonElement>("button");
-        if (!button || button.disabled || button.matches("[data-process], [data-piece], [data-food-drag]")) return;
-        touchButton.current = { element: button, pointer: event.pointerId, x: event.clientX, y: event.clientY };
+        const button = (event.target as Element).closest<HTMLButtonElement>(
+          "button",
+        );
+        if (
+          !button ||
+          button.disabled ||
+          button.matches(
+            "[data-process],[data-piece],[data-food-drag],[data-hold]",
+          )
+        )
+          return;
+        touchButton.current = {
+          element: button,
+          pointer: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+        };
       }}
       onPointerUpCapture={(event) => {
+        awake();
+        // WebKit can emit a trusted compatibility click with detail=0 after
+        // touch release, even when the screen changed under the finger.
+        // All touch-owned controls already commit in their pointer-up handler.
+        if (event.pointerType === "touch")
+          ignoreTouchClickUntil.current = Date.now() + 700;
         const tap = touchButton.current;
         if (!tap || tap.pointer !== event.pointerId) return;
         touchButton.current = null;
         const rect = tap.element.getBoundingClientRect();
-        if (!tap.element.isConnected || tap.element.disabled || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 24 || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+        if (
+          !tap.element.isConnected ||
+          tap.element.disabled ||
+          Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 24 ||
+          event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom
+        )
+          return;
         ignoreTouchClickUntil.current = Date.now() + 700;
         event.preventDefault();
         tap.element.click();
       }}
       onPointerCancelCapture={(event) => {
-        if (touchButton.current?.pointer === event.pointerId) touchButton.current = null;
+        if (touchButton.current?.pointer === event.pointerId)
+          touchButton.current = null;
       }}
       onClickCapture={(event) => {
-        if (event.detail > 0 && Date.now() < ignoreTouchClickUntil.current && (event.nativeEvent as PointerEvent).pointerType !== "mouse") {
+        if (
+          event.nativeEvent.isTrusted &&
+          Date.now() < ignoreTouchClickUntil.current
+        ) {
           event.preventDefault();
           event.stopPropagation();
         }
       }}
-      onKeyDownCapture={() => audio.current?.unlock()}
+      onKeyDownCapture={() => {
+        ignoreTouchClickUntil.current = 0;
+        audio.current?.unlock();
+        awake();
+      }}
     >
       <div className={s.viewport} ref={viewport}>
         <div
-          className={`${s.stage} ${screen === 1 ? s.homeStage : screen >= 16 ? s.simpleStage : ""} ${screen === 3 ? s.riceStage : ""} ${screen === 7 || screen === 14 ? s.arrangementStage : ""}`}
-          style={{ transform: `scale(${scale})` }}
+          className={[
+            s.stage,
+            screen === 1 ? s.homeStage : "",
+            screen === 7 || screen === 14 ? s.arrangementStage : "",
+          ].join(" ")}
+          style={{ transform: "scale(" + scale + ")" }}
           data-screen={screen}
-          aria-busy={!ready}
+          aria-busy={!ready || (screen === 16 && albumBusy)}
+          inert={portrait || gate !== null || resume || detail !== null}
         >
+          <ArtImage
+            name={screen === 1 ? "home-backdrop" : "kitchen"}
+            className={s.backdrop}
+            sizes="100vw"
+            fetchPriority="high"
+          />
           {screen !== 1 && (
             <>
-              <div className={s.kitchenBackdrop}>
-                <span />
-                <span />
-                <span />
-              </div>
-              {screen < 16 && (
-                <Chef
-                  key={screen === 9 ? `taste-${eaten.length}` : screen}
-                  pose={screen === 3 ? "squeeze" : screen === 9 && eaten.length > 0 ? "taste" : "wave"}
-                  reaction={screen === 9 ? "おいしい！" : "やったね！"}
-                  celebrate={
-                    screen === 8 ||
-                    screen === 15 ||
-                    (screen === 9 && eaten.length > 0)
-                  }
-                />
-              )}
-              <h1 className={s.cloud} aria-label={TITLES[screen]}>
-                <span>{TITLES[screen].split(" ")[0]}</span>
-                {TITLES[screen].includes(" ") && (
-                  <span className={s.colorTitle} aria-hidden="true">
-                    {[...TITLES[screen].split(" ").slice(1).join(" ")].map(
-                      (letter, i) => (
-                        <i key={i}>{letter}</i>
-                      ),
-                    )}
-                  </span>
-                )}
+              <h1 className={s.screenTitle}>
+                {paint ? "クリームを ぬろう！" : TITLES[screen]}
               </h1>
               <button
-                type="button"
-                className={`${s.round} ${s.back}`}
+                className={[s.round, s.back].join(" ")}
                 aria-label="もどる"
-                onClick={() => go(BACK[screen])}
+                onClick={() =>
+                  go(screen === 9 && recipe.mode === "cake" ? 15 : BACK[screen])
+                }
               >
                 <ArrowLeft />
               </button>
             </>
           )}
           <button
-            type="button"
-            className={`${s.round} ${s.sound}`}
-            aria-label={settings.sound ? "おとを けす" : "おとを つける"}
-            aria-pressed={settings.sound}
-            onClick={() => setSettings((v) => ({ ...v, sound: !v.sound }))}
+            className={[s.round, s.speaker, speaking ? s.speaking : ""].join(
+              " ",
+            )}
+            aria-label="もういちど きく"
+            data-speaking={speaking}
+            onClick={replay}
           >
-            {settings.sound ? <Volume2 /> : <VolumeX />}
+            <Volume2 />
           </button>
+          {screen > 1 && screen < 16 && (
+            <div className={s.chefWindow}>
+              <Chef
+                small={false}
+                pose={
+                  screen === 3 ? "squeeze" : screen === 9 ? "taste" : "wave"
+                }
+                celebrate={screen === 8 || screen === 15 || !!reaction}
+                reaction={reaction || "できたね！"}
+              />
+            </div>
+          )}
           {content}
-          {(notice || (screen === 16 && deleted)) && (
+          {stars && <Confetti />}
+          {notice && (
             <div className={s.notice} role="status">
-              <span>{notice || "けした さくひんを もどせるよ"}</span>
-              {screen === 16 && deleted && (
-                <button className={s.noticeUndo} aria-label="けした さくひんを もどす" onClick={() => void restore()}>
-                  <RotateCcw /> もどす
-                </button>
-              )}
+              <span>{notice}</span>
               <button
                 aria-label="おしらせを とじる"
                 onClick={() => setNotice("")}
@@ -1041,39 +1391,89 @@ export function AkiraKitchen() {
           )}
         </div>
       </div>
-      <dialog
-        ref={dialog}
-        className={s.workDialog}
-        onCancel={() => setDetail(null)}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setDetail(null);
-        }}
-      >
-        {detail && (
-          <>
-            <button
-              className={s.dialogClose}
-              aria-label="とじる"
-              onClick={() => setDetail(null)}
+      <RotateOverlay />
+      {resume && !portrait && (
+        <div
+          className={s.overlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="つづきから あそぶ？"
+        >
+          <div className={s.resume}>
+            <Chef small />
+            <h2>つづきから あそぶ？</h2>
+            <Action
+              onClick={() => {
+                setResume(false);
+                play("tap");
+              }}
             >
-              <X />
+              <Play />
+              つづきから
+            </Action>
+            <button
+              className={s.resumeRestart}
+              onClick={() => {
+                updateRecipe(newRecipe(recipe.mode));
+                setResume(false);
+                go(1);
+              }}
+            >
+              <RotateCcw />
+              さいしょから
             </button>
-            <WorkImage work={detail} />
-            <p>
-              {new Date(detail.createdAt).toLocaleDateString("ja-JP")} の{" "}
-              {detail.recipe.mode === "bento" ? "おべんとう" : "ケーキ"}
-            </p>
-            <div className={s.dialogActions}>
-              <Action color="blue" onClick={() => setDetail(null)}>
-                もどる
-              </Action>
-              <button onClick={() => void removeWork(detail)}>
-                <Trash2 /> けす
-              </button>
-            </div>
-          </>
-        )}
-      </dialog>
+          </div>
+        </div>
+      )}
+      {detail && !portrait && (
+        <div
+          className={[s.overlay, s.workDialog].join(" ")}
+          role="dialog"
+          aria-modal="true"
+          aria-label="さくひん"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setDetail(null);
+          }}
+        >
+          <WorkImage work={detail} />
+          <p>{new Date(detail.createdAt).toLocaleDateString("ja-JP")}</p>
+          <button
+            className={s.close}
+            aria-label="とじる"
+            onClick={() => setDetail(null)}
+          >
+            <X />
+          </button>
+          {deleteAllowed ? (
+            <button
+              className={s.delete}
+              onClick={() => void removeWork(detail)}
+            >
+              <Trash2 />
+              この さくひんを けす
+            </button>
+          ) : (
+            <button
+              className={s.parentButton}
+              onClick={() => setGate("delete")}
+            >
+              <LockKeyhole />
+              おうちの かたへ
+            </button>
+          )}
+        </div>
+      )}
+      {gate && !portrait && (
+        <ParentGate
+          onClose={() => setGate(null)}
+          onOpen={() => {
+            if (gate === "settings") go(17, true);
+            else setDeleteAllowed(true);
+            setGate(null);
+            play("pop");
+          }}
+        />
+      )}
     </main>
   );
 }

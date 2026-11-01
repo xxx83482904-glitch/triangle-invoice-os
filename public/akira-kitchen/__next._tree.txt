@@ -1,5 +1,5 @@
 :HL["/akira-kitchen/_next/static/css/03fa9fdec0b61211.css","style"]
-:HL["/akira-kitchen/_next/static/css/a05ab450c933c7a6.css","style"]
+:HL["/akira-kitchen/_next/static/css/c80ffb66fd8f868e.css","style"]
 2:[["children",{"s":"__PAGE__","h":160}]]
 1:[["children",{"s":"akira-kitchen","h":96,"c":"$Q2"}]]
-0:{"b":"ZsJ9WFrtic87HT9V2qLrl","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
+0:{"b":"PLmRxy2zjJX9eex45AeXt","t":{"t":{"s":"","h":80,"c":"$Q1"}}}

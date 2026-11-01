@@ -1,0 +1,126 @@
+{
+  "base": "http://127.0.0.1:54499/akira-kitchen/",
+  "checks": [
+    {
+      "name": "packing locked until a cooked food exists"
+    },
+    {
+      "name": "touch completes rice"
+    },
+    {
+      "name": "two egg taps count two eggs"
+    },
+    {
+      "name": "touch completes egg"
+    },
+    {
+      "name": "touch completes chicken"
+    },
+    {
+      "name": "touch completes broccoli"
+    },
+    {
+      "name": "touch completes tomato"
+    },
+    {
+      "name": "touch completes carrot"
+    },
+    {
+      "name": "empty bento cannot complete"
+    },
+    {
+      "name": "shelf shows exactly three large items"
+    },
+    {
+      "name": "tap, drag, variants and duplicate food placement work"
+    },
+    {
+      "name": "double tap rotates food by 90 degrees"
+    },
+    {
+      "name": "return to shelf removes food and one-step undo restores exact arrangement"
+    },
+    {
+      "name": "two bites consume display food while preserving original artwork"
+    },
+    {
+      "name": "IndexedDB album persists after reload"
+    },
+    {
+      "name": "album deletion requires parent hold; undo restores artwork"
+    },
+    {
+      "name": "cake flavor updates immediately and future toppings respond"
+    },
+    {
+      "name": "touch completes batter"
+    },
+    {
+      "name": "touch completes bake"
+    },
+    {
+      "name": "cream requires coverage and retains actual painted strokes"
+    },
+    {
+      "name": "empty cake cannot complete"
+    },
+    {
+      "name": "cake count mission reaches exactly three strawberries"
+    },
+    {
+      "name": "one resume choice restores cake draft and decorations"
+    },
+    {
+      "name": "cake and bento both survive taste/save flow in the same album"
+    },
+    {
+      "name": "narration setting prevents playback independently"
+    },
+    {
+      "name": "sound toggle prevents new oscillator sounds"
+    },
+    {
+      "name": "prerecorded narration plays through unlocked AudioContext"
+    },
+    {
+      "name": "settings persist and remain parent gated after reload"
+    },
+    {
+      "name": "portrait overlay replaces shrunken play stage"
+    },
+    {
+      "name": "small landscape phone also gets rotation/tablet guidance"
+    },
+    {
+      "name": "offline reload and saved album work"
+    },
+    {
+      "name": "no runtime errors, console errors or 404 responses"
+    },
+    {
+      "name": "all 17 screens captured at 1024 by 768"
+    }
+  ],
+  "screenshots": [
+    "01.png",
+    "02.png",
+    "03.png",
+    "04.png",
+    "05.png",
+    "06.png",
+    "07.png",
+    "08.png",
+    "09.png",
+    "10.png",
+    "11.png",
+    "12.png",
+    "13.png",
+    "14.png",
+    "15.png",
+    "16.png",
+    "17.png"
+  ],
+  "errors": [],
+  "badResponses": [],
+  "physicalIPadSafari": false
+}

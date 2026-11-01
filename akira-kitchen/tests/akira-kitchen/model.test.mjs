@@ -25,7 +25,7 @@ test("all 17 screens have a title and a route back home; workflow has no dead en
   }
   for (const path of [
     [3, 4, 5, 6, 7, 8, 9, 10, 16],
-    [11, 12, 13, 14, 15, 16],
+    [11, 12, 13, 14, 15, 9, 10, 16],
   ])
     for (let i = 0; i < path.length - 1; i++)
       assert.equal(NEXT[path[i]], path[i + 1]);
@@ -107,7 +107,7 @@ test("session round-trip preserves food, strokes, choices, settings and progress
     version: 2,
     recipe: r,
     screen: 14,
-    settings: { sound: false, bgm: true, volume: 0.25, language: "ja" },
+    settings: { sound: false, bgm: true, narration: false, volume: 0.25, language: "ja" },
   };
   assert.deepEqual(parseSession(JSON.stringify(saved)), saved);
 });
@@ -117,6 +117,7 @@ test("corrupt data is bounded, invalid numbers/ids rejected, unknown settings no
   assert.deepEqual(parseSettings({ volume: Infinity, language: "en" }), {
     sound: true,
     bgm: false,
+    narration: true,
     volume: 0.55,
     language: "ja",
   });

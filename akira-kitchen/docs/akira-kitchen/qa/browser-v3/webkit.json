@@ -1,0 +1,10 @@
+{
+  "engine": "Playwright WebKit (Windows), not a physical iPad",
+  "checks": [
+    "touch cooking, packing, tasting and persistent bento album",
+    "cake ingredients, oven, pointer icing and topping save",
+    "saved embedded-image SVG renders in WebKit",
+    "no WebKit runtime or console errors"
+  ],
+  "errors": []
+}

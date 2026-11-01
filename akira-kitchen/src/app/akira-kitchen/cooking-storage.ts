@@ -11,6 +11,7 @@ import { dishSVG } from "./cooking-art";
 import { embedIllustrations } from "./illustration-assets";
 import { readSavedState } from "./model";
 const DB_NAME = "akira-kitchen-album";
+type StoredArtwork=Omit<Artwork,"image"> & {image:Blob|ArrayBuffer;imageType?:string};
 export function openAlbum(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
@@ -53,13 +54,14 @@ async function transaction<T>(
 export async function listArtworks(): Promise<Artwork[]> {
   const all = await transaction("readonly", (s) => s.getAll());
   return all
-    .flatMap((v: Artwork) => {
+    .flatMap((v: StoredArtwork) => {
       const recipe = parseRecipe(v.recipe);
+      const image=v.image instanceof Blob?v.image:v.image instanceof ArrayBuffer?new Blob([v.image],{type:v.imageType??"image/svg+xml"}):null;
       return recipe &&
-        v.image instanceof Blob &&
+        image &&
         typeof v.createdAt === "string" &&
         !Number.isNaN(Date.parse(v.createdAt))
-        ? [{ ...v, recipe }]
+        ? [{ ...v, recipe, image }]
         : [];
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -73,11 +75,18 @@ export async function saveArtwork(recipe: Recipe): Promise<Artwork> {
       type: "image/svg+xml",
     }),
   };
-  await transaction("readwrite", (s) => s.put(work));
+  await putArtwork(work);
   return work;
 }
 export async function putArtwork(work: Artwork) {
-  await transaction("readwrite", (s) => s.put(work));
+  try { await transaction("readwrite", (s) => s.put(work)); }
+  catch(error){
+    // Some WebKit ports cannot persist Blob/File payloads. Keep the same DB,
+    // store, id and recipe; raw bytes are normalized back to Blob when read.
+    if(!error||typeof error!=="object"||!("name" in error)||!["UnknownError","DataCloneError"].includes(String(error.name)))throw error;
+    const stored:StoredArtwork={...work,image:await work.image.arrayBuffer(),imageType:work.image.type};
+    await transaction("readwrite",s=>s.put(stored));
+  }
 }
 export async function deleteArtwork(id: string) {
   await transaction("readwrite", (s) => s.delete(id));

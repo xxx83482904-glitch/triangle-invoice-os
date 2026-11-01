@@ -1,6 +1,8 @@
 {
-  "version": "eb6a36ff7bca12c2",
-  "assets": 63,
+  "version": "614df759ff0ce676",
+  "assets": 185,
+  "precacheAssets": 45,
+  "precacheBytes": 1604335,
   "scope": "/akira-kitchen/",
   "offlineEntry": "/akira-kitchen/index.html"
 }

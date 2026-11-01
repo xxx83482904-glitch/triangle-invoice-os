@@ -1,0 +1,174 @@
+{
+  "chef-home": {
+    "src": "/akira-kitchen/media/chef-home.webp",
+    "srcSet": null
+  },
+  "chef-ladle": {
+    "src": "/akira-kitchen/media/chef-ladle.webp",
+    "srcSet": null
+  },
+  "chef-squeeze": {
+    "src": "/akira-kitchen/media/chef-squeeze.webp",
+    "srcSet": null
+  },
+  "chef-celebrate": {
+    "src": "/akira-kitchen/media/chef-celebrate.webp",
+    "srcSet": null
+  },
+  "chef-taste": {
+    "src": "/akira-kitchen/media/chef-taste.webp",
+    "srcSet": null
+  },
+  "home-backdrop": {
+    "src": "/akira-kitchen/media/home-backdrop-1x.webp",
+    "srcSet": "/akira-kitchen/media/home-backdrop-1x.webp 1448w, /akira-kitchen/media/home-backdrop-2x.webp 2896w"
+  },
+  "kitchen": {
+    "src": "/akira-kitchen/media/kitchen-1x.webp",
+    "srcSet": "/akira-kitchen/media/kitchen-1x.webp 1448w, /akira-kitchen/media/kitchen-2x.webp 2896w"
+  },
+  "home-bento": {
+    "src": "/akira-kitchen/media/home-bento-1x.webp",
+    "srcSet": "/akira-kitchen/media/home-bento-small.webp 960w, /akira-kitchen/media/home-bento-1x.webp 1448w, /akira-kitchen/media/home-bento-2x.webp 2896w"
+  },
+  "home-bento-small": {
+    "src": "/akira-kitchen/media/home-bento-small.webp",
+    "srcSet": null
+  },
+  "home-cake": {
+    "src": "/akira-kitchen/media/home-cake-1x.webp",
+    "srcSet": "/akira-kitchen/media/home-cake-small.webp 960w, /akira-kitchen/media/home-cake-1x.webp 1448w, /akira-kitchen/media/home-cake-2x.webp 2896w"
+  },
+  "home-cake-small": {
+    "src": "/akira-kitchen/media/home-cake-small.webp",
+    "srcSet": null
+  },
+  "title-cloud": {
+    "src": "/akira-kitchen/media/title-cloud.webp",
+    "srcSet": null
+  },
+  "bento-box": {
+    "src": "/akira-kitchen/media/bento-box-1x.webp",
+    "srcSet": "/akira-kitchen/media/bento-box-1x.webp 1448w, /akira-kitchen/media/bento-box-2x.webp 2896w"
+  },
+  "cake-base": {
+    "src": "/akira-kitchen/media/cake-base-1x.webp",
+    "srcSet": "/akira-kitchen/media/cake-base-1x.webp 1448w, /akira-kitchen/media/cake-base-2x.webp 2896w"
+  },
+  "cake-chocolate": {
+    "src": "/akira-kitchen/media/cake-chocolate-1x.webp",
+    "srcSet": "/akira-kitchen/media/cake-chocolate-1x.webp 1448w, /akira-kitchen/media/cake-chocolate-2x.webp 2896w"
+  },
+  "cake-strawberry": {
+    "src": "/akira-kitchen/media/cake-strawberry-1x.webp",
+    "srcSet": "/akira-kitchen/media/cake-strawberry-1x.webp 1448w, /akira-kitchen/media/cake-strawberry-2x.webp 2896w"
+  },
+  "rice-round": {
+    "src": "/akira-kitchen/media/rice-round.webp",
+    "srcSet": null
+  },
+  "rice-triangle": {
+    "src": "/akira-kitchen/media/rice-triangle.webp",
+    "srcSet": null
+  },
+  "rice-tub": {
+    "src": "/akira-kitchen/media/rice-tub.webp",
+    "srcSet": null
+  },
+  "rice-nori": {
+    "src": "/akira-kitchen/media/rice-nori.webp",
+    "srcSet": null
+  },
+  "rice-ume": {
+    "src": "/akira-kitchen/media/rice-ume.webp",
+    "srcSet": null
+  },
+  "rice-wakame": {
+    "src": "/akira-kitchen/media/rice-wakame.webp",
+    "srcSet": null
+  },
+  "rice-salmon": {
+    "src": "/akira-kitchen/media/rice-salmon.webp",
+    "srcSet": null
+  },
+  "rice-yukari": {
+    "src": "/akira-kitchen/media/rice-yukari.webp",
+    "srcSet": null
+  },
+  "rice-sesame": {
+    "src": "/akira-kitchen/media/rice-sesame.webp",
+    "srcSet": null
+  },
+  "rice-smile": {
+    "src": "/akira-kitchen/media/rice-smile.webp",
+    "srcSet": null
+  },
+  "carrot-star": {
+    "src": "/akira-kitchen/media/carrot-star.webp",
+    "srcSet": null
+  },
+  "carrot-heart": {
+    "src": "/akira-kitchen/media/carrot-heart.webp",
+    "srcSet": null
+  },
+  "ingredient-egg": {
+    "src": "/akira-kitchen/media/ingredient-egg.webp",
+    "srcSet": null
+  },
+  "ingredient-flour": {
+    "src": "/akira-kitchen/media/ingredient-flour.webp",
+    "srcSet": null
+  },
+  "ingredient-milk": {
+    "src": "/akira-kitchen/media/ingredient-milk.webp",
+    "srcSet": null
+  },
+  "onigiri": {
+    "src": "/akira-kitchen/media/onigiri.webp",
+    "srcSet": null
+  },
+  "tamago": {
+    "src": "/akira-kitchen/media/tamago.webp",
+    "srcSet": null
+  },
+  "karaage": {
+    "src": "/akira-kitchen/media/karaage.webp",
+    "srcSet": null
+  },
+  "broccoli": {
+    "src": "/akira-kitchen/media/broccoli.webp",
+    "srcSet": null
+  },
+  "tomato": {
+    "src": "/akira-kitchen/media/tomato.webp",
+    "srcSet": null
+  },
+  "carrot": {
+    "src": "/akira-kitchen/media/carrot.webp",
+    "srcSet": null
+  },
+  "strawberry": {
+    "src": "/akira-kitchen/media/strawberry.webp",
+    "srcSet": null
+  },
+  "chocolate": {
+    "src": "/akira-kitchen/media/chocolate.webp",
+    "srcSet": null
+  },
+  "banana": {
+    "src": "/akira-kitchen/media/banana.webp",
+    "srcSet": null
+  },
+  "blueberry": {
+    "src": "/akira-kitchen/media/blueberry.webp",
+    "srcSet": null
+  },
+  "cream": {
+    "src": "/akira-kitchen/media/cream.webp",
+    "srcSet": null
+  },
+  "sprinkles": {
+    "src": "/akira-kitchen/media/sprinkles.webp",
+    "srcSet": null
+  }
+}

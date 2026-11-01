@@ -1,0 +1,34 @@
+[
+  {
+    "pose": "ladle",
+    "path": "public/akira-kitchen/illustration-chef-ladle-v3.png",
+    "prompt": "Use case: identity-preserve. Create a single transparent character pose for the preschool cooking app. Image 1 is the canonical character reference and the ONLY identity/style reference. Preserve this exact chibi boy's very large head to small body proportions, black tousled fringe, closed crescent smiling eyes, rosy cheeks, small nose, white chef hat, white short sleeves, and yellow apron with a brown BEAR FACE PATCH (never a green leaf). Preserve the line weight and soft flat storybook painting, NO realistic facial anatomy and NO open round eyes. Pose requested: Holding one small wooden ladle upright in his right hand, left hand waving gently. Warm welcoming closed-crescent-eye smile. Frame a complete waist-up bust with hat, hands, apron bear emblem all inside the image and a 6% transparent margin. No text, no stars, no decoration, no kitchen, no circle, no background, no props other than specified. Crisp cutout suitable for a 260px circular UI portrait. True alpha transparent background. This must be unmistakably the same character as the reference, only pose and expression appropriate to the action change.",
+    "tool": "built-in image_gen",
+    "reference": "public/akira-kitchen/illustration-chef-home-v2.png",
+    "review": "Same large head, closed crescent eyes, black fringe and yellow bear apron verified; full transparent bust."
+  },
+  {
+    "pose": "squeeze",
+    "path": "public/akira-kitchen/illustration-chef-squeeze-v3.png",
+    "prompt": "Use case: identity-preserve. Create a single transparent character pose for the preschool cooking app. Image 1 is the canonical character reference and the ONLY identity/style reference. Preserve this exact chibi boy's very large head to small body proportions, black tousled fringe, closed crescent smiling eyes, rosy cheeks, small nose, white chef hat, white short sleeves, and yellow apron with a brown BEAR FACE PATCH (never a green leaf). Preserve the line weight and soft flat storybook painting, NO realistic facial anatomy and NO open round eyes. Pose requested: Both hands gently squeezing a small white triangular rice ball at chest height. Joyful closed-crescent eyes. Keep the bear patch visible below the hands. Frame a complete waist-up bust with hat, hands, apron bear emblem all inside the image and a 6% transparent margin. No text, no stars, no decoration, no kitchen, no circle, no background, no props other than specified. Crisp cutout suitable for a 260px circular UI portrait. True alpha transparent background. This must be unmistakably the same character as the reference, only pose and expression appropriate to the action change.",
+    "tool": "built-in image_gen",
+    "reference": "public/akira-kitchen/illustration-chef-home-v2.png",
+    "review": "Same large head, closed crescent eyes, black fringe and yellow bear apron verified; full transparent bust."
+  },
+  {
+    "pose": "celebrate",
+    "path": "public/akira-kitchen/illustration-chef-celebrate-v3.png",
+    "prompt": "Use case: identity-preserve. Create a single transparent character pose for the preschool cooking app. Image 1 is the canonical character reference and the ONLY identity/style reference. Preserve this exact chibi boy's very large head to small body proportions, black tousled fringe, closed crescent smiling eyes, rosy cheeks, small nose, white chef hat, white short sleeves, and yellow apron with a brown BEAR FACE PATCH (never a green leaf). Preserve the line weight and soft flat storybook painting, NO realistic facial anatomy and NO open round eyes. Pose requested: Both arms lifted in a happy banzai celebration, both hands completely visible. Open joyful smile with small visible upper teeth; same closed crescent eyes. Frame a complete waist-up bust with hat, hands, apron bear emblem all inside the image and a 6% transparent margin. No text, no stars, no decoration, no kitchen, no circle, no background, no props other than specified. Crisp cutout suitable for a 260px circular UI portrait. True alpha transparent background. This must be unmistakably the same character as the reference, only pose and expression appropriate to the action change.",
+    "tool": "built-in image_gen",
+    "reference": "public/akira-kitchen/illustration-chef-home-v2.png",
+    "review": "Same large head, closed crescent eyes, black fringe and yellow bear apron verified; full transparent bust."
+  },
+  {
+    "pose": "taste",
+    "path": "public/akira-kitchen/illustration-chef-taste-v3.png",
+    "prompt": "Use case: identity-preserve. Create a single transparent character pose for the preschool cooking app. Image 1 is the canonical character reference and the ONLY identity/style reference. Preserve this exact chibi boy's very large head to small body proportions, black tousled fringe, closed crescent smiling eyes, rosy cheeks, small nose, white chef hat, white short sleeves, and yellow apron with a brown BEAR FACE PATCH (never a green leaf). Preserve the line weight and soft flat storybook painting, NO realistic facial anatomy and NO open round eyes. Pose requested: Holding a little rice ball in both hands near his mouth, taking a small bite with gently puffed cheeks. Closed happy crescent eyes; delighted expression. Frame a complete waist-up bust with hat, hands, apron bear emblem all inside the image and a 6% transparent margin. No text, no stars, no decoration, no kitchen, no circle, no background, no props other than specified. Crisp cutout suitable for a 260px circular UI portrait. True alpha transparent background. This must be unmistakably the same character as the reference, only pose and expression appropriate to the action change.",
+    "tool": "built-in image_gen",
+    "reference": "public/akira-kitchen/illustration-chef-home-v2.png",
+    "review": "Same large head, closed crescent eyes, black fringe and yellow bear apron verified; full transparent bust."
+  }
+]

@@ -52,6 +52,7 @@ export type Piece = Point & {
 export type Settings = {
   sound: boolean;
   bgm: boolean;
+  narration: boolean;
   volume: number;
   language: "ja";
 };
@@ -85,6 +86,7 @@ export type Artwork = {
 export const DEFAULT_SETTINGS: Settings = {
   sound: true,
   bgm: false,
+  narration: true,
   volume: 0.55,
   language: "ja",
 };
@@ -123,7 +125,7 @@ export const NEXT: Partial<Record<Screen, Screen>> = {
   12: 13,
   13: 14,
   14: 15,
-  15: 16,
+  15: 9,
 };
 export const BACK: Record<Screen, Screen> = {
   1: 1,
@@ -217,8 +219,8 @@ export const STAGES: Record<Process, string[]> = {
   carrot: ["かたちを えらぼう", "ぽんっと かたぬき！"],
   tomato: ["すきな トマトを えらぼう", "おさらへ ぽん！"],
   batter: [
-    "たまごを いれよう",
     "こむぎこを いれよう",
+    "たまごを いれよう",
     "ミルクを いれよう",
     "ぐるぐる まぜよう",
     "なめらかに まぜよう",
@@ -397,6 +399,7 @@ export function parseSettings(v: unknown): Settings {
   return {
     sound: v.sound !== false,
     bgm: v.bgm === true,
+    narration: v.narration !== false,
     volume:
       typeof v.volume === "number" && Number.isFinite(v.volume)
         ? Math.max(0, Math.min(1, v.volume))
@@ -451,7 +454,7 @@ export function parseRecipe(v: unknown): Recipe | null {
           variant: typeof p.variant === "string" ? p.variant.slice(0, 24) : "",
           rotation:
             typeof p.rotation === "number" && Number.isFinite(p.rotation)
-              ? Math.max(-30, Math.min(30, p.rotation))
+              ? ((p.rotation % 360) + 360) % 360
               : 0,
           ...bound(r.mode, { x: p.x, y: p.y }),
         });

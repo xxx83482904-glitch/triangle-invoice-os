@@ -1,6 +1,13 @@
 "use client";
 import { useRef, useState, type PointerEvent, type CSSProperties } from "react";
-import { Hand, Paintbrush, Undo2, ChevronRight, Check } from "lucide-react";
+import {
+  Hand,
+  Undo2,
+  ChevronRight,
+  ChevronLeft,
+  Check,
+  RotateCw,
+} from "lucide-react";
 import { FoodArt, DishBase } from "./cooking-art";
 import {
   addPiece,
@@ -13,6 +20,8 @@ import {
   type Process,
   type Recipe,
 } from "./cooking-model";
+import { ArtImage, mediaUrl } from "./media-assets";
+import { creamCoverage, rotatePiece, type Voice } from "./cooking-guidance";
 import type { Sound } from "./cooking-audio";
 import s from "./kitchen.module.css";
 
@@ -27,14 +36,24 @@ export function Chef({
   pose?: "wave" | "squeeze" | "taste";
   reaction?: string;
 }) {
-  const asset = small ? "chef-home-v2" : pose === "squeeze" ? "chef-squeeze-v2" : pose === "taste" ? "chef-taste-v2" : celebrate ? "chef-celebrate-v2" : "chef";
+  const asset =
+    pose === "squeeze"
+      ? "chef-squeeze"
+      : pose === "taste"
+        ? "chef-taste"
+        : celebrate
+          ? "chef-celebrate"
+          : small
+            ? "chef-home"
+            : "chef-ladle";
   return (
     <div
       className={`${s.chef} ${small ? s.smallChef : ""} ${celebrate ? s.happy : ""}`}
     >
-      <img
-        src={`/akira-kitchen/illustration-${asset}.png`}
+      <ArtImage
+        name={asset}
         alt="あきらくん"
+        fetchPriority={small ? "high" : undefined}
         draggable={false}
         className={s.chefPicture}
       />
@@ -54,18 +73,43 @@ export function HandHint({
   );
 }
 
-export function IngredientArt({ ingredient }: { ingredient: "egg" | "flour" | "milk" }) {
-  return <img className={s.ingredientArt} src={`/akira-kitchen/illustration-ingredient-${ingredient}-v2.png`} alt="" draggable={false} />;
+export function IngredientArt({
+  ingredient,
+}: {
+  ingredient: "egg" | "flour" | "milk";
+}) {
+  return (
+    <ArtImage
+      className={s.ingredientArt}
+      name={`ingredient-${ingredient}`}
+      alt=""
+      draggable={false}
+    />
+  );
 }
 
 export function RiceProgress({ value }: { value: number }) {
-  return <ol className={s.riceProgress} aria-label="おにぎりの つくりかた">
-    {[["round", "にぎる"], ["triangle", "さんかく"], ["nori", "できあがり"]].map(([asset, title], i) => <li key={asset} aria-current={Math.min(2, Math.floor(value)) === i ? "step" : undefined}>
-      <b>{value > i ? <Check /> : i + 1}</b>
-      <img src={`/akira-kitchen/illustration-rice-${asset}-${asset === "triangle" ? "v3" : "v2"}.png`} alt="" draggable={false} />
-      <span>{title}</span>{i < 2 && <ChevronRight className={s.riceStepArrow} />}
-    </li>)}
-  </ol>;
+  return (
+    <ol className={s.riceProgress} aria-label="おにぎりの つくりかた">
+      {[
+        ["round", "にぎる"],
+        ["triangle", "さんかく"],
+        ["nori", "できあがり"],
+      ].map(([asset, title], i) => (
+        <li
+          key={asset}
+          aria-current={
+            Math.min(2, Math.floor(value)) === i ? "step" : undefined
+          }
+        >
+          <b>{value > i ? <Check /> : i + 1}</b>
+          <ArtImage name={`rice-${asset}`} alt="" draggable={false} />
+          <span>{title}</span>
+          {i < 2 && <ChevronRight className={s.riceStepArrow} />}
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 export function processCue(process: Process, value: number) {
@@ -73,9 +117,18 @@ export function processCue(process: Process, value: number) {
     rice: ["とってみよう", "ぎゅっ ぎゅっ！", "さんかくに！"],
     egg: ["ぱかっ！", "ぐるぐる！", "とろ〜り！", "くるっと！", "もういちど！"],
     chicken: ["まぜまぜ！", "ころころ！", "ぽん！", "こんがり！"],
-    broccoli: ["ぽん！", "すくおう！"], carrot: ["えらぼう！", "ぽん！"],
-    tomato: ["えらぼう！", "ぽん！"], batter: ["ぱかっ！", "さらさら！", "とろ〜り！", "ぐるぐる！", "なめらか！"],
-    bake: ["とろ〜り！", "いれよう！", "ふっくら！"], cream: ["ぬりぬり！"],
+    broccoli: ["ぽん！", "すくおう！"],
+    carrot: ["えらぼう！", "ぽん！"],
+    tomato: ["えらぼう！", "ぽん！"],
+    batter: [
+      "さらさら！",
+      "ぱかっ！",
+      "とろ〜り！",
+      "ぐるぐる！",
+      "なめらか！",
+    ],
+    bake: ["とろ〜り！", "いれよう！", "ふっくら！"],
+    cream: ["ぬりぬり！"],
   };
   return cues[process][Math.min(cues[process].length - 1, Math.floor(value))];
 }
@@ -109,8 +162,24 @@ function ProcessArt({
   const phase = Math.min(Math.floor(value), STAGES[process].length - 1),
     complete = value >= STAGES[process].length,
     f = complete ? 1 : value % 1;
-  const batterColor = recipe.cake === "chocolate" ? "#97613e" : recipe.cake === "strawberry" ? "#efb6bd" : "#f8db95";
-  const bakedColor = recipe.cake === "chocolate" ? "#805237" : recipe.cake === "strawberry" ? "#de9a9a" : "#e8b553";
+  const batterColor =
+    recipe.cake === "chocolate"
+      ? "#97613e"
+      : recipe.cake === "strawberry"
+        ? "#efb6bd"
+        : "#f8db95";
+  const bakedColor =
+    recipe.cake === "chocolate"
+      ? "#805237"
+      : recipe.cake === "strawberry"
+        ? "#de9a9a"
+        : "#e8b553";
+  const middleColor =
+    recipe.cake === "chocolate"
+      ? "#8d5a3b"
+      : recipe.cake === "strawberry"
+        ? "#e8a5ae"
+        : "#edc66b";
   const bowl = (fill: string) => (
     <>
       <ellipse cx="260" cy="266" rx="207" ry="70" fill="#b8e7f5" />
@@ -148,14 +217,14 @@ function ProcessArt({
     <svg viewBox="0 0 520 400" aria-hidden="true" className={s.processArt}>
       {process === "rice" &&
         (complete ? (
-          <svg x="125" y="25" width="270" height="300">
+          <svg x="65" y="0" width="390" height="390">
             <FoodArt food="onigiri" variant={recipe.rice} />
           </svg>
         ) : (
           <>
             <ellipse cx="260" cy="340" rx="208" ry="38" fill="#d0effa" />
             {phase === 0 ? (
-              <image href="/akira-kitchen/illustration-rice-tub-v2.png" width="520" height="350" />
+              <image href={mediaUrl("rice-tub")} width="520" height="350" />
             ) : (
               <g
                 style={{
@@ -163,7 +232,13 @@ function ProcessArt({
                   transform: `scale(${1 - f * 0.11},${1 + f * 0.07})`,
                 }}
               >
-                <image href={`/akira-kitchen/illustration-rice-${phase === 1 ? "round-v2" : "triangle-v3"}.png`} x="95" y="30" width="330" height="315" />
+                <image
+                  href={mediaUrl(phase === 1 ? "rice-round" : "rice-triangle")}
+                  x="35"
+                  y="0"
+                  width="450"
+                  height="365"
+                />
               </g>
             )}
           </>
@@ -283,7 +358,9 @@ function ProcessArt({
                   }
                   fill={
                     phase === 3
-                      ? colorHex(230 - f * 45, 164 - f * 45, 90 - f * 42)
+                      ? ["#f0d09c", "#dc9d52", "#b96e2f"][
+                          Math.min(2, Math.floor(f * 3))
+                        ]
                       : phase === 1
                         ? "#e9c29e"
                         : "#eeac9b"
@@ -356,11 +433,13 @@ function ProcessArt({
               ? "#fff9ed"
               : value < 3
                 ? "#ffe3a3"
-                : recipe.cake !== "vanilla" ? batterColor : colorHex(
-                    248,
-                    218 + Math.min(25, (value - 3) * 12),
-                    155 + Math.min(30, (value - 3) * 15),
-                  ),
+                : recipe.cake !== "vanilla"
+                  ? batterColor
+                  : colorHex(
+                      248,
+                      218 + Math.min(25, (value - 3) * 12),
+                      155 + Math.min(30, (value - 3) * 15),
+                    ),
           )}
           {phase < 3 ? (
             <>
@@ -370,7 +449,13 @@ function ProcessArt({
                 strokeWidth="45"
                 strokeLinecap="round"
               />
-              <image href={`/akira-kitchen/illustration-ingredient-${["egg", "flour", "milk"][phase]}-v2.png`} x="192" y="0" width="136" height="125" />
+              <image
+                href={mediaUrl(`ingredient-${["flour", "egg", "milk"][phase]}`)}
+                x="192"
+                y="0"
+                width="136"
+                height="125"
+              />
             </>
           ) : (
             swirl
@@ -437,7 +522,15 @@ function ProcessArt({
               />
               <path
                 d={`M130 270V${phase === 1 ? 245 : 240 - f * 65}Q260 ${phase === 1 ? 215 : 195 - f * 80} 390 ${phase === 1 ? 245 : 240 - f * 65}V270Z`}
-                fill={complete ? bakedColor : batterColor}
+                fill={
+                  complete
+                    ? bakedColor
+                    : phase === 2
+                      ? [batterColor, middleColor, bakedColor][
+                          Math.min(2, Math.floor(f * 3))
+                        ]
+                      : batterColor
+                }
                 stroke={bakedColor}
                 strokeWidth="7"
               />
@@ -492,6 +585,10 @@ export function CookingGesture({
               ? "roll"
               : "pop";
   const act = (amount: number) => {
+    if (complete) {
+      play("pop");
+      return;
+    }
     if (!complete) {
       onProgress(process, amount);
       if (Date.now() - lastSound.current > 150) {
@@ -502,6 +599,7 @@ export function CookingGesture({
   };
   const move = (e: PointerEvent<HTMLButtonElement>) => {
     const d = drag.current;
+    if (process === "rice" || (process === "egg" && value < 1)) return;
     if (!d || d.id !== e.pointerId || Math.floor(value) > d.phase) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const dist =
@@ -536,7 +634,16 @@ export function CookingGesture({
       onPointerMove={move}
       onPointerUp={(e) => {
         if (drag.current?.id !== e.pointerId) return;
-        if (drag.current.travel < 12) act(0.5);
+        if (drag.current.travel < 12)
+          act(
+            process === "batter" && value < 3
+              ? 1
+              : process === "rice"
+                ? 0.5
+                : process === "bake" && value >= 2
+                  ? 0.34
+                  : 0.5,
+          );
         drag.current = null;
         setActive(false);
       }}
@@ -545,7 +652,10 @@ export function CookingGesture({
         setActive(false);
       }}
       onClick={(e) => {
-        if (e.detail === 0) act(0.5);
+        if (e.detail === 0) {
+          if (complete) play("finish");
+          else act(process === "batter" && value < 3 ? 1 : 0.5);
+        }
       }}
     >
       <ProcessArt
@@ -559,7 +669,11 @@ export function CookingGesture({
           motion={
             process === "rice"
               ? "squeeze"
-              : (process === "bake" && value < 2) || (process === "egg" && value >= 2) || (process === "chicken" && value >= 2) || process === "broccoli" || process === "tomato"
+              : (process === "bake" && value < 2) ||
+                  (process === "egg" && value >= 2) ||
+                  (process === "chicken" && value >= 2) ||
+                  process === "broccoli" ||
+                  process === "tomato"
                 ? "drag"
                 : "circle"
           }
@@ -575,7 +689,7 @@ export function CookingGesture({
 type Drag = {
   pointer: number;
   piece?: string;
-  food?: Food;
+  food: Food;
   point: Point;
   start: Point;
   travel: number;
@@ -586,64 +700,83 @@ export function Arrangement({
   play,
   foods,
   paint = false,
-  onPaintChange,
+  onFeedback,
 }: {
   recipe: Recipe;
-  onChange: (r: Recipe, history?: boolean) => void;
+  onChange: (r: Recipe, record?: boolean) => void;
   play: (s: Sound) => void;
   foods: Food[];
   paint?: boolean;
-  onPaintChange?: (v: boolean) => void;
+  onFeedback?: (voice: Voice) => void;
 }) {
   const board = useRef<HTMLDivElement>(null),
-    drag = useRef<Drag | null>(null),
-    stroke = useRef<Point[] | null>(null),
+    shelf = useRef<HTMLDivElement>(null),
+    drag = useRef<Drag | null>(null);
+  const stroke = useRef<Point[] | null>(null),
     strokePointer = useRef<number | null>(null),
-    [liveStroke, setLiveStroke] = useState<Point[]>([]),
+    lastTap = useRef({ id: "", time: 0 });
+  const [liveStroke, setLiveStroke] = useState<Point[]>([]),
     [ghost, setGhost] = useState<{
       food: Food;
       point: Point;
       piece?: string;
-    } | null>(null),
-    [selected, setSelected] = useState<string | null>(null);
+    } | null>(null);
+  const [selected, setSelected] = useState<string | null>(null),
+    [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(foods.length / 3)),
+    safePage = Math.min(page, pageCount - 1);
   const point = (e: { clientX: number; clientY: number }): Point => {
     const r = board.current!.getBoundingClientRect();
     return {
-      x: ((e.clientX - r.left) / Math.max(1, r.width)) * 100,
-      y: ((e.clientY - r.top) / Math.max(1, r.height)) * 100,
+      x: ((e.clientX - r.left) / r.width) * 100,
+      y: ((e.clientY - r.top) / r.height) * 100,
     };
+  };
+  const variant = (food: Food) =>
+    food === "onigiri"
+      ? recipe.rice
+      : food === "tamago"
+        ? recipe.egg
+        : food === "karaage"
+          ? recipe.chicken
+          : food === "carrot"
+            ? recipe.carrotShape
+            : "";
+  const remove = (id: string) => {
+    onChange({ ...recipe, items: recipe.items.filter((p) => p.id !== id) });
+    setSelected(null);
+    play("pop");
+    onFeedback?.("removed");
+  };
+  const turn = (id: string) => {
+    onChange(rotatePiece(recipe, id));
+    play("pop");
+    onFeedback?.("turn-food");
   };
   const begin = (
     e: PointerEvent<HTMLButtonElement>,
     food: Food,
     piece?: string,
   ) => {
-    if (drag.current || e.button > 0) return;
+    if (paint || drag.current || e.button > 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    const p = point(e);
     drag.current = {
       pointer: e.pointerId,
       food,
       piece,
-      point: p,
+      point: point(e),
       start: { x: e.clientX, y: e.clientY },
       travel: 0,
     };
     if (piece) setSelected(piece);
-    else setGhost({ food, point: bound(recipe.mode, p) });
-    onPaintChange?.(false);
   };
   const move = (e: PointerEvent<HTMLButtonElement>) => {
     const d = drag.current;
     if (!d || d.pointer !== e.pointerId) return;
     d.point = point(e);
     d.travel = Math.hypot(e.clientX - d.start.x, e.clientY - d.start.y);
-    setGhost({
-      food: d.food!,
-      point: bound(recipe.mode, d.point),
-      piece: d.piece,
-    });
+    setGhost({ food: d.food, point: d.point, piece: d.piece });
   };
   const end = (e: PointerEvent<HTMLButtonElement>, cancel = false) => {
     const d = drag.current;
@@ -651,12 +784,34 @@ export function Arrangement({
     drag.current = null;
     setGhost(null);
     if (cancel) return;
-    const p = d.travel < 8 ? undefined : d.point;
     if (d.piece) {
-      if (p) onChange(movePiece(recipe, d.piece, p));
-    } else {
-      onChange(addPiece(recipe, d.food!, p));
-    }
+      const r = shelf.current?.getBoundingClientRect();
+      if (
+        d.travel > 8 &&
+        r &&
+        e.clientX >= r.left &&
+        e.clientX <= r.right &&
+        e.clientY >= r.top &&
+        e.clientY <= r.bottom
+      ) {
+        remove(d.piece);
+        return;
+      }
+      if (d.travel > 8) onChange(movePiece(recipe, d.piece, d.point));
+      else {
+        if (
+          lastTap.current.id === d.piece &&
+          Date.now() - lastTap.current.time < 450
+        ) {
+          turn(d.piece);
+          lastTap.current = { id: "", time: 0 };
+          return;
+        }
+        lastTap.current = { id: d.piece, time: Date.now() };
+        onFeedback?.("tap-here");
+      }
+    } else
+      onChange(addPiece(recipe, d.food, d.travel < 8 ? undefined : d.point));
     play("pop");
   };
   const props = (food: Food, piece?: string) => ({
@@ -667,8 +822,10 @@ export function Arrangement({
     onPointerCancel: (e: PointerEvent<HTMLButtonElement>) => end(e, true),
     onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
       if (e.detail === 0) {
-        if (piece) setSelected(piece);
-        else {
+        if (piece) {
+          setSelected(piece);
+          play("pop");
+        } else {
           onChange(addPiece(recipe, food));
           play("pop");
         }
@@ -679,24 +836,20 @@ export function Arrangement({
     <>
       <div className={s.boardWrap}>
         <div
-          className={`${s.board} ${paint ? s.paintBoard : ""}`}
+          className={[s.board, paint ? s.paintBoard : ""].join(" ")}
           ref={board}
+          data-board
           aria-label={
             recipe.mode === "bento" ? "おべんとうばこ" : "ケーキの かざりだい"
           }
           onPointerDown={(e) => {
-            if (
-              !paint ||
-              strokePointer.current !== null ||
-              e.button > 0 ||
-              (e.target !== e.currentTarget &&
-                !(e.target instanceof SVGElement))
-            )
+            if (!paint || strokePointer.current !== null || e.button > 0)
               return;
             e.preventDefault();
-            e.currentTarget.setPointerCapture?.(e.pointerId);
+            e.currentTarget.setPointerCapture(e.pointerId);
             stroke.current = [bound("cake", point(e))];
             strokePointer.current = e.pointerId;
+            setLiveStroke([...stroke.current]);
           }}
           onPointerMove={(e) => {
             if (
@@ -710,19 +863,23 @@ export function Arrangement({
           }}
           onPointerUp={(e) => {
             if (stroke.current && strokePointer.current === e.pointerId) {
+              const strokes = [...recipe.strokes.slice(0, 79), stroke.current];
               onChange({
                 ...recipe,
-                strokes: [...recipe.strokes.slice(0, 79), stroke.current],
-                progress: { ...recipe.progress, cream: 1 },
+                strokes,
+                progress: {
+                  ...recipe.progress,
+                  cream: Math.min(1, creamCoverage(strokes) / 0.6),
+                },
               });
               stroke.current = null;
               strokePointer.current = null;
               setLiveStroke([]);
               play("pour");
+              onFeedback?.("praise-2");
             }
           }}
-          onPointerCancel={(e) => {
-            if (strokePointer.current !== e.pointerId) return;
+          onPointerCancel={() => {
             stroke.current = null;
             strokePointer.current = null;
             setLiveStroke([]);
@@ -740,24 +897,27 @@ export function Arrangement({
               key={p.id}
               type="button"
               data-piece={p.id}
-              className={`${s.piece} ${recipe.mode === "cake" ? s.topping : ""} ${selected === p.id ? s.selectedPiece : ""}`}
+              className={[
+                s.piece,
+                recipe.mode === "cake" ? s.topping : "",
+                selected === p.id ? s.selectedPiece : "",
+              ].join(" ")}
               style={
                 {
-                  left: `${p.x}%`,
-                  top: `${p.y}%`,
+                  left: p.x + "%",
+                  top: p.y + "%",
                   opacity: ghost?.piece === p.id ? 0.3 : 1,
-                  "--turn": `${p.rotation}deg`,
+                  "--turn": p.rotation + "deg",
                 } as CSSProperties
               }
-              aria-label={`${label(p.food)}を うごかす`}
+              aria-label={label(p.food) + "を うごかす"}
               {...props(p.food, p.id)}
               onKeyDown={(e) => {
                 if (e.key === "Delete" || e.key === "Backspace") {
                   e.preventDefault();
-                  onChange({
-                    ...recipe,
-                    items: recipe.items.filter((q) => q.id !== p.id),
-                  });
+                  remove(p.id);
+                } else if (e.key.toLowerCase() === "r") {
+                  turn(p.id);
                 } else if (e.key.startsWith("Arrow")) {
                   e.preventDefault();
                   onChange(
@@ -783,6 +943,7 @@ export function Arrangement({
                       false,
                     ),
                   );
+                  play("pop");
                 }
               }}
             >
@@ -791,80 +952,99 @@ export function Arrangement({
           ))}
           {ghost && (
             <div
-              className={`${s.piece} ${s.ghost} ${recipe.mode === "cake" ? s.topping : ""}`}
-              style={{ left: `${ghost.point.x}%`, top: `${ghost.point.y}%` }}
+              className={[
+                s.piece,
+                s.ghost,
+                recipe.mode === "cake" ? s.topping : "",
+              ].join(" ")}
+              style={{ left: ghost.point.x + "%", top: ghost.point.y + "%" }}
             >
-              <FoodArt
-                food={ghost.food}
-                variant={
-                  ghost.food === "onigiri"
-                    ? recipe.rice
-                    : ghost.food === "carrot"
-                      ? recipe.carrotShape
-                      : ""
-                }
-              />
+              <FoodArt food={ghost.food} variant={variant(ghost.food)} />
             </div>
           )}
-          {!recipe.items.length && !paint && <HandHint motion="drag" />}
+          <HandHint motion={paint ? "circle" : "drag"} />
         </div>
-        <div className={s.boardTools}>
-          {onPaintChange && (
-            <button
-              type="button"
-              aria-pressed={paint}
-              onClick={() => onPaintChange(!paint)}
-              className={s.smallButton}
-            >
-              <Paintbrush /> ぬる
-            </button>
-          )}
-          {selected && (
-            <button
-              type="button"
-              onClick={() => {
-                onChange({
-                  ...recipe,
-                  items: recipe.items.filter((p) => p.id !== selected),
-                });
-                setSelected(null);
-                play("pop");
-              }}
-              className={s.smallButton}
-            >
-              <Undo2 /> はずす
-            </button>
-          )}
-        </div>
-      </div>
-      <div className={s.foodRow}>
-        {foods.map((food) => (
-          <button
-            key={food}
-            type="button"
-            className={s.foodTile}
-            data-food-drag={food}
-            aria-label={`${label(food)}を のせる`}
-            {...props(food)}
+        {paint && (
+          <div
+            className={s.coverage}
+            role="progressbar"
+            aria-valuenow={Math.round(recipe.progress.cream * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
           >
-            <FoodArt
-              food={food}
-              variant={
-                food === "onigiri"
-                  ? recipe.rice
-                  : food === "tamago"
-                    ? recipe.egg
-                    : food === "karaage"
-                      ? recipe.chicken
-                      : food === "carrot"
-                        ? recipe.carrotShape
-                        : ""
-              }
-            />
-            <span>{label(food)}</span>
-          </button>
-        ))}
+            <span style={{ width: recipe.progress.cream * 100 + "%" }} />
+          </div>
+        )}
+        {!paint && selected && (
+          <div className={s.boardTools}>
+            <button
+              className={s.smallButton}
+              onClick={() => turn(selected)}
+              aria-label="90ど まわす"
+            >
+              <RotateCw />
+            </button>
+            <button
+              className={s.smallButton}
+              onClick={() => remove(selected)}
+              aria-label="はずす"
+            >
+              <Undo2 />
+            </button>
+          </div>
+        )}
       </div>
+      {!paint && (
+        <div className={s.shelf} ref={shelf} aria-label="おかずだな" data-shelf>
+          {foods.slice(safePage * 3, safePage * 3 + 3).map((food) => (
+            <button
+              key={food}
+              type="button"
+              className={s.shelfTile}
+              data-food-drag={food}
+              aria-label={label(food) + "を のせる"}
+              {...props(food)}
+            >
+              <FoodArt food={food} variant={variant(food)} />
+              <span>{label(food)}</span>
+              <b className={s.countBadge}>
+                {recipe.items.filter((p) => p.food === food).length}こ
+              </b>
+            </button>
+          ))}
+          {pageCount > 1 && (
+            <div className={s.shelfPages}>
+              <button
+                aria-label="まえの おかず"
+                onClick={() => {
+                  setPage((safePage + pageCount - 1) % pageCount);
+                  play("tap");
+                  onFeedback?.(
+                    recipe.mode === "cake" ? "next-topping" : "next-food",
+                  );
+                }}
+              >
+                <ChevronLeft />
+              </button>
+              <button
+                aria-label="つぎの おかず"
+                onClick={() => {
+                  setPage((safePage + 1) % pageCount);
+                  play("tap");
+                  onFeedback?.(
+                    recipe.mode === "cake" ? "next-topping" : "next-food",
+                  );
+                }}
+              >
+                <ChevronRight />
+              </button>
+              <span>
+                {safePage + 1} / {pageCount}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }

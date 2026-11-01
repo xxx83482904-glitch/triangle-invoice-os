@@ -1,13 +1,13 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 export async function generatePWA(root = process.cwd()) {
   const out = path.join(root, "out");
   async function walk(directory) {
-    const entries = await readdir(directory, { withFileTypes: true });
     return (
       await Promise.all(
-        entries.map((e) =>
+        (await readdir(directory, { withFileTypes: true })).map((e) =>
           e.isDirectory()
             ? walk(path.join(directory, e.name))
             : [path.join(directory, e.name)],
@@ -24,28 +24,44 @@ export async function generatePWA(root = process.cwd()) {
       !p.endsWith(".map")
     );
   });
-  // The Synology host redirects directory URLs to index.html. A redirected
-  // cached Response cannot satisfy a navigation request with redirect=manual.
-  const assets = files.map((f) => "/" + path.relative(out, f).replaceAll("\\", "/"));
+  const assets = files.map(
+    (f) => "/" + path.relative(out, f).replaceAll("\\", "/"),
+  );
+  const isStartup = (url) =>
+    url.includes("/_next/") ||
+    url.endsWith("/index.html") ||
+    url.endsWith(".webmanifest") ||
+    url.includes("/fonts/") ||
+    /\/(?:icon[^/]*|apple-touch-icon)\.(?:png|svg)$/.test(url) ||
+    /\/media\/(?:home-|chef-home|title-cloud)/.test(url) ||
+    /\/audio\/(?:home|rotate-device|tap-here)\.mp3$/.test(url);
+  const precache = assets.filter(isStartup);
+  const precacheBytes = (
+    await Promise.all(
+      files
+        .filter((_, i) => isStartup(assets[i]))
+        .map(async (f) => (await stat(f)).size),
+    )
+  ).reduce((a, b) => a + b, 0);
+  if (precacheBytes > 8000000) throw new Error("Startup precache exceeds 8MB");
+  const runtime = await readFile(new URL("./worker-runtime.js", import.meta.url), "utf8");
   const hash = createHash("sha256");
+  hash.update(runtime);
   hash.update(JSON.stringify(assets));
-  for (const file of files) hash.update(await readFile(file));
+  for (const f of files) hash.update(await readFile(f));
   const version = hash.digest("hex").slice(0, 16);
-  const worker = `/* Generated from the complete static build. */
-const CACHE='akira-cooking-${version}';
-const ASSETS=${JSON.stringify(assets)};
-self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));});
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('akira-cooking-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
-self.addEventListener('fetch',event=>{
- const url=new URL(event.request.url);
- if(event.request.method!=='GET'||url.origin!==self.location.origin)return;
- if(event.request.mode==='navigate'&&url.pathname.startsWith('/akira-kitchen/')){
-  event.respondWith(caches.open(CACHE).then(async cache=>(await cache.match('/akira-kitchen/index.html'))||fetch(event.request)));return;
- }
- if(!ASSETS.includes(url.pathname))return;
- event.respondWith(caches.open(CACHE).then(async cache=>(await cache.match(url.pathname))||fetch(event.request)));
-});
-`;
+  const worker =
+    "/* Home-only precache; scoped runtime cache and idle warm-up. */\n" +
+    "const CACHE='akira-cooking-" +
+    version +
+    "';\n" +
+    "const ASSETS=" +
+    JSON.stringify(assets) +
+    ";\n" +
+    "const PRECACHE=" +
+    JSON.stringify(precache) +
+    ";\n" +
+    runtime;
   await writeFile(path.join(out, "akira-kitchen/sw.js"), worker);
   await writeFile(
     path.join(root, "pwa-build.json"),
@@ -53,6 +69,8 @@ self.addEventListener('fetch',event=>{
       {
         version,
         assets: assets.length,
+        precacheAssets: precache.length,
+        precacheBytes,
         scope: "/akira-kitchen/",
         offlineEntry: "/akira-kitchen/index.html",
       },
@@ -60,14 +78,19 @@ self.addEventListener('fetch',event=>{
       2,
     ) + "\n",
   );
-  console.log(`PWA: ${assets.length} local assets, cache ${version}`);
-  return { assets, version, worker };
+  console.log(
+    "PWA: " +
+      precache.length +
+      " startup assets, " +
+      precacheBytes +
+      " bytes; " +
+      assets.length +
+      " allowed runtime files.",
+  );
+  return { assets, precache, precacheBytes, version, worker };
 }
 if (
   process.argv[1] &&
-  path.resolve(process.argv[1]) ===
-    path.resolve(
-      new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/i, "$1"),
-    )
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 )
   await generatePWA();

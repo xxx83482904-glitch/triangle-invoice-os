@@ -1,0 +1,364 @@
+{
+  "images": 51,
+  "imageBytes": 1377480,
+  "fontBytes": 31380,
+  "files": [
+    {
+      "file": "chef-home.webp",
+      "bytes": 20512,
+      "width": 512,
+      "height": 512,
+      "quality": 75
+    },
+    {
+      "file": "chef-ladle.webp",
+      "bytes": 24342,
+      "width": 512,
+      "height": 512,
+      "quality": 75
+    },
+    {
+      "file": "chef-squeeze.webp",
+      "bytes": 20124,
+      "width": 512,
+      "height": 512,
+      "quality": 75
+    },
+    {
+      "file": "chef-celebrate.webp",
+      "bytes": 22996,
+      "width": 512,
+      "height": 512,
+      "quality": 75
+    },
+    {
+      "file": "chef-taste.webp",
+      "bytes": 20668,
+      "width": 512,
+      "height": 512,
+      "quality": 75
+    },
+    {
+      "file": "home-backdrop-1x.webp",
+      "bytes": 14954,
+      "width": 1448,
+      "height": 1086,
+      "quality": 65
+    },
+    {
+      "file": "home-backdrop-2x.webp",
+      "bytes": 38748,
+      "width": 2896,
+      "height": 2172,
+      "quality": 65
+    },
+    {
+      "file": "kitchen-1x.webp",
+      "bytes": 21766,
+      "width": 1448,
+      "height": 1086,
+      "quality": 65
+    },
+    {
+      "file": "kitchen-2x.webp",
+      "bytes": 53416,
+      "width": 2896,
+      "height": 2172,
+      "quality": 65
+    },
+    {
+      "file": "home-bento-1x.webp",
+      "bytes": 52596,
+      "width": 1448,
+      "height": 965,
+      "quality": 25
+    },
+    {
+      "file": "home-bento-2x.webp",
+      "bytes": 128394,
+      "width": 2896,
+      "height": 1931,
+      "quality": 25
+    },
+    {
+      "file": "home-bento-small.webp",
+      "bytes": 30368,
+      "width": 960,
+      "height": 640,
+      "quality": 25
+    },
+    {
+      "file": "home-cake-1x.webp",
+      "bytes": 59394,
+      "width": 1448,
+      "height": 793,
+      "quality": 65
+    },
+    {
+      "file": "home-cake-2x.webp",
+      "bytes": 92558,
+      "width": 2896,
+      "height": 1586,
+      "quality": 25
+    },
+    {
+      "file": "home-cake-small.webp",
+      "bytes": 31622,
+      "width": 960,
+      "height": 526,
+      "quality": 55
+    },
+    {
+      "file": "title-cloud.webp",
+      "bytes": 4358,
+      "width": 768,
+      "height": 384,
+      "quality": 75
+    },
+    {
+      "file": "bento-box-1x.webp",
+      "bytes": 18454,
+      "width": 1448,
+      "height": 680,
+      "quality": 75
+    },
+    {
+      "file": "bento-box-2x.webp",
+      "bytes": 47168,
+      "width": 2896,
+      "height": 1361,
+      "quality": 75
+    },
+    {
+      "file": "cake-base-1x.webp",
+      "bytes": 55534,
+      "width": 1448,
+      "height": 906,
+      "quality": 75
+    },
+    {
+      "file": "cake-base-2x.webp",
+      "bytes": 105864,
+      "width": 2896,
+      "height": 1811,
+      "quality": 45
+    },
+    {
+      "file": "cake-chocolate-1x.webp",
+      "bytes": 73098,
+      "width": 1448,
+      "height": 906,
+      "quality": 75
+    },
+    {
+      "file": "cake-chocolate-2x.webp",
+      "bytes": 98460,
+      "width": 2896,
+      "height": 1811,
+      "quality": 25
+    },
+    {
+      "file": "cake-strawberry-1x.webp",
+      "bytes": 64540,
+      "width": 1448,
+      "height": 906,
+      "quality": 75
+    },
+    {
+      "file": "cake-strawberry-2x.webp",
+      "bytes": 104280,
+      "width": 2896,
+      "height": 1813,
+      "quality": 35
+    },
+    {
+      "file": "rice-round.webp",
+      "bytes": 14008,
+      "width": 768,
+      "height": 768,
+      "quality": 75
+    },
+    {
+      "file": "rice-triangle.webp",
+      "bytes": 15318,
+      "width": 768,
+      "height": 768,
+      "quality": 75
+    },
+    {
+      "file": "rice-tub.webp",
+      "bytes": 17256,
+      "width": 768,
+      "height": 512,
+      "quality": 75
+    },
+    {
+      "file": "rice-nori.webp",
+      "bytes": 3062,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "rice-ume.webp",
+      "bytes": 5014,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "rice-wakame.webp",
+      "bytes": 6016,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "rice-salmon.webp",
+      "bytes": 4834,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "rice-yukari.webp",
+      "bytes": 6418,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "rice-sesame.webp",
+      "bytes": 6446,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "rice-smile.webp",
+      "bytes": 2212,
+      "width": 256,
+      "height": 88,
+      "quality": 75
+    },
+    {
+      "file": "carrot-star.webp",
+      "bytes": 4188,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "carrot-heart.webp",
+      "bytes": 4300,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "ingredient-egg.webp",
+      "bytes": 2438,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "ingredient-flour.webp",
+      "bytes": 5488,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "ingredient-milk.webp",
+      "bytes": 5302,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "onigiri.webp",
+      "bytes": 4056,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "tamago.webp",
+      "bytes": 4662,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "karaage.webp",
+      "bytes": 5910,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "broccoli.webp",
+      "bytes": 5312,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "tomato.webp",
+      "bytes": 4438,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "carrot.webp",
+      "bytes": 4588,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "strawberry.webp",
+      "bytes": 9198,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "chocolate.webp",
+      "bytes": 6200,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "banana.webp",
+      "bytes": 5410,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "blueberry.webp",
+      "bytes": 6860,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "cream.webp",
+      "bytes": 4500,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    },
+    {
+      "file": "sprinkles.webp",
+      "bytes": 9832,
+      "width": 256,
+      "height": 256,
+      "quality": 75
+    }
+  ]
+}

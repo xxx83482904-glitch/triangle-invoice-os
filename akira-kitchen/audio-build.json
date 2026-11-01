@@ -1,0 +1,618 @@
+{
+  "generator": "Microsoft Sayaka / System.Speech offline synthesis; MP3 encoding",
+  "runtime": "local pre-generated MP3; no speechSynthesis or API",
+  "clips": [
+    {
+      "id": "home",
+      "text": "なにをつくる？",
+      "seconds": 1.538,
+      "bytes": 9884
+    },
+    {
+      "id": "bento-menu",
+      "text": "おかずをつくろう！",
+      "seconds": 1.758,
+      "bytes": 11180
+    },
+    {
+      "id": "rice-title",
+      "text": "おにぎりをつくろう！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "egg-title",
+      "text": "たまごやきをつくろう！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "chicken-title",
+      "text": "からあげをつくろう！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "vegetables-title",
+      "text": "やさいであそぼう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "pack-title",
+      "text": "おべんとうにつめよう！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "finish",
+      "text": "できあがり！",
+      "seconds": 1.475,
+      "bytes": 9452
+    },
+    {
+      "id": "taste",
+      "text": "たべてみよう！",
+      "seconds": 1.493,
+      "bytes": 9596
+    },
+    {
+      "id": "save",
+      "text": "アルバムにのこそう！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "cake-menu",
+      "text": "ケーキをつくろう！",
+      "seconds": 1.759,
+      "bytes": 11180
+    },
+    {
+      "id": "mix-title",
+      "text": "まぜまぜしよう！",
+      "seconds": 1.722,
+      "bytes": 10892
+    },
+    {
+      "id": "bake-title",
+      "text": "スポンジをやこう！",
+      "seconds": 1.759,
+      "bytes": 11180
+    },
+    {
+      "id": "decorate-title",
+      "text": "ケーキをかざろう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "album",
+      "text": "アルバムをみよう！",
+      "seconds": 1.757,
+      "bytes": 11180
+    },
+    {
+      "id": "settings",
+      "text": "おうちのかたへ",
+      "seconds": 1.7,
+      "bytes": 10748
+    },
+    {
+      "id": "triangle-mission",
+      "text": "さんかくをつくろう！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "triangle-done",
+      "text": "さんかく、できた！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "egg-mission",
+      "text": "たまごを、ふたつわろう！",
+      "seconds": 1.763,
+      "bytes": 11180
+    },
+    {
+      "id": "brown-mission",
+      "text": "きつねいろにしよう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "red-mission",
+      "text": "あかいのはどれ？",
+      "seconds": 1.654,
+      "bytes": 10460
+    },
+    {
+      "id": "green-mission",
+      "text": "みどりのやさいだね！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "flower-mission",
+      "text": "おはなのかたちはどれ？",
+      "seconds": 1.763,
+      "bytes": 11180
+    },
+    {
+      "id": "pack-rice",
+      "text": "さんかくのおにぎり",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "put-two",
+      "text": "ふたつ、いれよう！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "three-colors",
+      "text": "みっつのいろを、いれよう！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "ingredients-mission",
+      "text": "ざいりょう、みっつ！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "cream-mission",
+      "text": "しろく、ぬろう！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "strawberry-mission",
+      "text": "いちごを、みっつのせよう！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "clear",
+      "text": "おだい、クリア！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "take-rice",
+      "text": "ごはんをとろう！",
+      "seconds": 1.717,
+      "bytes": 10892
+    },
+    {
+      "id": "squeeze",
+      "text": "ぎゅっ、ぎゅっ！",
+      "seconds": 1.749,
+      "bytes": 11036
+    },
+    {
+      "id": "crack",
+      "text": "たまごを、ぱかっ！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "mix",
+      "text": "ぐるぐる、まぜよう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "pour",
+      "text": "とろーり、いれよう！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "roll",
+      "text": "くるっと、まこう！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "round-meat",
+      "text": "ころころ、まるめよう！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "pot",
+      "text": "おなべに、ぽん！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "lift",
+      "text": "すくってみよう！",
+      "seconds": 1.592,
+      "bytes": 10172
+    },
+    {
+      "id": "cut-shape",
+      "text": "かたちを、ぽん！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "plate",
+      "text": "おさらに、のせよう！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "flour",
+      "text": "こむぎこを、いれよう！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "egg",
+      "text": "たまごを、いれよう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "milk",
+      "text": "ミルクを、いれよう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "oven",
+      "text": "オーブンに、いれよう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "bake",
+      "text": "タップで、ふっくら！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "cream",
+      "text": "クリームを、ぬろう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "place",
+      "text": "ここに、のせよう！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "chew",
+      "text": "もぐもぐ！",
+      "seconds": 1.327,
+      "bytes": 8588
+    },
+    {
+      "id": "yummy",
+      "text": "おいしい！",
+      "seconds": 1.358,
+      "bytes": 8732
+    },
+    {
+      "id": "saved",
+      "text": "ほぞん、できたよ！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "later",
+      "text": "あとで、のせようね！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "cook-first",
+      "text": "さきに、おかずをつくろう！",
+      "seconds": 1.765,
+      "bytes": 11180
+    },
+    {
+      "id": "place-first",
+      "text": "ひとつ、のせてみよう！",
+      "seconds": 1.763,
+      "bytes": 11180
+    },
+    {
+      "id": "rotate-device",
+      "text": "よこにしてね！",
+      "seconds": 1.587,
+      "bytes": 10172
+    },
+    {
+      "id": "tap-here",
+      "text": "ここを、タップ！",
+      "seconds": 1.763,
+      "bytes": 11180
+    },
+    {
+      "id": "resume",
+      "text": "つづきから、あそぶ？",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "parent",
+      "text": "おうちのひとと、みてね！",
+      "seconds": 1.763,
+      "bytes": 11180
+    },
+    {
+      "id": "hold",
+      "text": "さんびょう、おしてね！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "next-food",
+      "text": "ほかの、おかずだよ！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "next-topping",
+      "text": "ほかの、かざりだよ！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "undo",
+      "text": "ひとつ、もどしたよ！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "removed",
+      "text": "おたなに、もどしたよ！",
+      "seconds": 1.762,
+      "bytes": 11180
+    },
+    {
+      "id": "turn-food",
+      "text": "くるっと、まわった！",
+      "seconds": 1.761,
+      "bytes": 11180
+    },
+    {
+      "id": "try-again",
+      "text": "もういちど、やってみよう！",
+      "seconds": 1.764,
+      "bytes": 11180
+    },
+    {
+      "id": "count-1",
+      "text": "いち！",
+      "seconds": 1.228,
+      "bytes": 8012
+    },
+    {
+      "id": "count-2",
+      "text": "に！",
+      "seconds": 0.99,
+      "bytes": 6572
+    },
+    {
+      "id": "count-3",
+      "text": "さん！",
+      "seconds": 1.12,
+      "bytes": 7292
+    },
+    {
+      "id": "count-4",
+      "text": "よん！",
+      "seconds": 1.12,
+      "bytes": 7292
+    },
+    {
+      "id": "count-5",
+      "text": "ご！",
+      "seconds": 1.103,
+      "bytes": 7148
+    },
+    {
+      "id": "count-6",
+      "text": "ろく！",
+      "seconds": 1.246,
+      "bytes": 8012
+    },
+    {
+      "id": "shape-triangle",
+      "text": "さんかく！",
+      "seconds": 1.394,
+      "bytes": 9020
+    },
+    {
+      "id": "shape-circle",
+      "text": "まる！",
+      "seconds": 1.169,
+      "bytes": 7580
+    },
+    {
+      "id": "shape-star",
+      "text": "ほし！",
+      "seconds": 1.282,
+      "bytes": 8300
+    },
+    {
+      "id": "shape-heart",
+      "text": "はーと！",
+      "seconds": 1.263,
+      "bytes": 8156
+    },
+    {
+      "id": "shape-flower",
+      "text": "おはな！",
+      "seconds": 1.228,
+      "bytes": 8012
+    },
+    {
+      "id": "color-red",
+      "text": "あか！",
+      "seconds": 1.12,
+      "bytes": 7292
+    },
+    {
+      "id": "color-yellow",
+      "text": "きいろ！",
+      "seconds": 1.259,
+      "bytes": 8156
+    },
+    {
+      "id": "color-green",
+      "text": "みどり！",
+      "seconds": 1.286,
+      "bytes": 8300
+    },
+    {
+      "id": "color-white",
+      "text": "しろ！",
+      "seconds": 1.156,
+      "bytes": 7580
+    },
+    {
+      "id": "color-brown",
+      "text": "ちゃいろ！",
+      "seconds": 1.331,
+      "bytes": 8588
+    },
+    {
+      "id": "color-pink",
+      "text": "ぴんく！",
+      "seconds": 1.246,
+      "bytes": 8012
+    },
+    {
+      "id": "praise-1",
+      "text": "じょうず！",
+      "seconds": 1.3,
+      "bytes": 8444
+    },
+    {
+      "id": "praise-2",
+      "text": "いいね！",
+      "seconds": 1.21,
+      "bytes": 7868
+    },
+    {
+      "id": "praise-3",
+      "text": "すてき！",
+      "seconds": 1.268,
+      "bytes": 8156
+    },
+    {
+      "id": "praise-4",
+      "text": "できたね！",
+      "seconds": 1.335,
+      "bytes": 8588
+    },
+    {
+      "id": "praise-5",
+      "text": "わあ、すごい！",
+      "seconds": 1.76,
+      "bytes": 11180
+    },
+    {
+      "id": "praise-6",
+      "text": "たのしいね！",
+      "seconds": 1.466,
+      "bytes": 9452
+    },
+    {
+      "id": "praise-7",
+      "text": "おいしそう！",
+      "seconds": 1.43,
+      "bytes": 9164
+    },
+    {
+      "id": "praise-8",
+      "text": "そのちょうし！",
+      "seconds": 1.601,
+      "bytes": 10172
+    },
+    {
+      "id": "food-onigiri",
+      "text": "おにぎり！",
+      "seconds": 1.358,
+      "bytes": 8732
+    },
+    {
+      "id": "food-tamago",
+      "text": "たまごやき！",
+      "seconds": 1.471,
+      "bytes": 9452
+    },
+    {
+      "id": "food-karaage",
+      "text": "からあげ！",
+      "seconds": 1.403,
+      "bytes": 9020
+    },
+    {
+      "id": "food-broccoli",
+      "text": "ぶろっこりー！",
+      "seconds": 1.511,
+      "bytes": 9596
+    },
+    {
+      "id": "food-tomato",
+      "text": "とまと！",
+      "seconds": 1.346,
+      "bytes": 8732
+    },
+    {
+      "id": "food-carrot",
+      "text": "にんじん！",
+      "seconds": 1.242,
+      "bytes": 8012
+    },
+    {
+      "id": "food-strawberry",
+      "text": "いちご！",
+      "seconds": 1.323,
+      "bytes": 8588
+    },
+    {
+      "id": "food-chocolate",
+      "text": "ちょこ！",
+      "seconds": 1.309,
+      "bytes": 8444
+    },
+    {
+      "id": "food-banana",
+      "text": "ばなな！",
+      "seconds": 1.259,
+      "bytes": 8156
+    },
+    {
+      "id": "food-cream",
+      "text": "くりーむ！",
+      "seconds": 1.346,
+      "bytes": 8732
+    },
+    {
+      "id": "food-blueberry",
+      "text": "ぶるーべりー！",
+      "seconds": 1.475,
+      "bytes": 9452
+    },
+    {
+      "id": "food-sprinkles",
+      "text": "からふる！",
+      "seconds": 1.323,
+      "bytes": 8588
+    }
+  ]
+}

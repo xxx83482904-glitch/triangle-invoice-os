@@ -7,7 +7,10 @@ import os from "node:os";
 import path from "node:path";
 import { generatePWA } from "../../scripts/build-akira-pwa.mjs";
 const root = await mkdtemp(path.join(os.tmpdir(), "akira-pwa-test-"));
-for (const folder of ["out/akira-kitchen/_next/static/chunks", "out/_next/static/chunks"])
+for (const folder of [
+  "out/akira-kitchen/_next/static/chunks",
+  "out/_next/static/chunks",
+])
   await mkdir(path.join(root, folder), { recursive: true });
 for (const [file, body] of [
   ["akira-kitchen/index.html", "<h1>offline cooking</h1>"],
@@ -24,7 +27,8 @@ const listeners = {},
     ["akira-cooking-old", new Map()],
   ]);
 let claimed = false,
-  network = 0;
+  network = 0,
+  online = false;
 const caches = {
   keys: async () => [...stores.keys()],
   delete: async (key) => stores.delete(key),
@@ -37,6 +41,7 @@ const caches = {
       },
       match: async (key) =>
         store.get(typeof key === "string" ? key : key.url)?.clone(),
+      put: async (key, response) => store.set(key, response.clone()),
     };
   },
 };
@@ -46,6 +51,7 @@ vm.runInNewContext(generated.worker, {
   caches,
   fetch: async () => {
     network++;
+    if (online) return new Response("runtime image");
     throw new Error("offline");
   },
   self: {
@@ -60,7 +66,7 @@ vm.runInNewContext(generated.worker, {
     },
   },
 });
-test("precache includes app shell, character and all chunk files", () => {
+test("runtime allowlist includes assets while startup precache only includes shell", () => {
   assert.deepEqual(
     generated.assets.sort(),
     [
@@ -70,6 +76,7 @@ test("precache includes app shell, character and all chunk files", () => {
     ].sort(),
   );
   assert.ok(!generated.assets.includes("/akira-kitchen/sw.js"));
+  assert.ok(!generated.precache.includes("/akira-kitchen/chef.png"));
 });
 test("installation caches atomically; activation removes only this apps old cache", async () => {
   let p;
@@ -83,7 +90,11 @@ test("installation caches atomically; activation removes only this apps old cach
 });
 test("offline navigation and JS respond from precache without network", async () => {
   for (const [url, mode, expected] of [
-    ["https://example.test/akira-kitchen/?x=1", "navigate", "/akira-kitchen/index.html"],
+    [
+      "https://example.test/akira-kitchen/?x=1",
+      "navigate",
+      "/akira-kitchen/index.html",
+    ],
     [
       "https://example.test/akira-kitchen/_next/static/chunks/app.js",
       "cors",
@@ -103,7 +114,11 @@ test("offline navigation and JS respond from precache without network", async ()
 test("worker ignores unrelated application routes, writes and external requests", () => {
   for (const request of [
     { url: "https://example.test/invoices", method: "GET", mode: "navigate" },
-    { url: "https://example.test/akira-kitchen-other/", method: "GET", mode: "navigate" },
+    {
+      url: "https://example.test/akira-kitchen-other/",
+      method: "GET",
+      mode: "navigate",
+    },
     { url: "https://example.test/api/data", method: "POST" },
     { url: "https://example.test/_next/static/chunks/host.js", method: "GET" },
     { url: "https://outside.test/image.png", method: "GET" },
@@ -127,9 +142,14 @@ test("offline reload returns a non-redirected response when the host redirects d
   try {
     const origin = `http://127.0.0.1:${server.address().port}`;
     const redirected = await fetch(origin + "/akira-kitchen/");
-    assert.equal(redirected.redirected, true, "fixture reproduces Synology's directory redirect");
+    assert.equal(
+      redirected.redirected,
+      true,
+      "fixture reproduces Synology's directory redirect",
+    );
     await redirected.text();
-    const handlers = {}, stored = new Map();
+    const handlers = {},
+      stored = new Map();
     const cache = {
       addAll: async (urls) => {
         for (const url of urls) stored.set(url, await fetch(origin + url));
@@ -137,21 +157,45 @@ test("offline reload returns a non-redirected response when the host redirects d
       match: async (url) => stored.get(url)?.clone(),
     };
     vm.runInNewContext(generated.worker, {
-      URL, Response, caches: { open: async () => cache },
-      fetch: () => { throw new Error("offline"); },
-      self: { location: { origin }, addEventListener: (type, handler) => { handlers[type] = handler; } },
+      URL,
+      Response,
+      caches: { open: async () => cache },
+      fetch: () => {
+        throw new Error("offline");
+      },
+      self: {
+        location: { origin },
+        addEventListener: (type, handler) => {
+          handlers[type] = handler;
+        },
+      },
     });
     let installation;
-    handlers.install({ waitUntil: (promise) => { installation = promise; } });
+    handlers.install({
+      waitUntil: (promise) => {
+        installation = promise;
+      },
+    });
     await installation;
     for (const path of ["/akira-kitchen/", "/akira-kitchen/index.html"]) {
       let navigation;
       handlers.fetch({
-        request: { url: origin + path, method: "GET", mode: "navigate", redirect: "manual" },
-        respondWith: (promise) => { navigation = promise; },
+        request: {
+          url: origin + path,
+          method: "GET",
+          mode: "navigate",
+          redirect: "manual",
+        },
+        respondWith: (promise) => {
+          navigation = promise;
+        },
       });
       const response = await navigation;
-      assert.equal(response.redirected, false, "redirected responses cause browser navigation errors");
+      assert.equal(
+        response.redirected,
+        false,
+        "redirected responses cause browser navigation errors",
+      );
       assert.equal(response.status, 200);
       assert.equal(await response.text(), "/akira-kitchen/index.html");
     }
@@ -166,4 +210,30 @@ test("build changes invalidate the app cache", async () => {
     "/* new build */",
   );
   assert.notEqual((await generatePWA(root)).version, generated.version);
+});
+test("first display stores a runtime image and subsequent offline requests reuse it", async () => {
+  const request = {
+    url: "https://example.test/akira-kitchen/chef.png",
+    method: "GET",
+    mode: "cors",
+  };
+  let response;
+  online = true;
+  const before = network;
+  listeners.fetch({
+    request,
+    respondWith: (promise) => {
+      response = promise;
+    },
+  });
+  assert.equal(await (await response).text(), "runtime image");
+  online = false;
+  listeners.fetch({
+    request,
+    respondWith: (promise) => {
+      response = promise;
+    },
+  });
+  assert.equal(await (await response).text(), "runtime image");
+  assert.equal(network, before + 1);
 });
