@@ -473,6 +473,7 @@ function clamp(value: number, min: number, max: number) {
 export function OcrDocumentsTable({
   canEdit,
   canExport = false,
+  linkRequiredOnly = false,
   company,
   linkTargets = [],
   projects,
@@ -483,6 +484,7 @@ export function OcrDocumentsTable({
 }: {
   canEdit: boolean;
   canExport?: boolean;
+  linkRequiredOnly?: boolean;
   company: CompanyScope;
   folders: FolderOption[];
   linkTargets?: Option[];
@@ -616,8 +618,9 @@ export function OcrDocumentsTable({
       }))
       .filter((edit) => edit.category);
   }, [pendingCategories, rows]);
+  const exportRows = selectedRows.length ? selectedRows : linkRequiredOnly ? rows : [];
   const exportHref = canExport ? `/api/export/ocr-documents?company=${company}${
-    selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
+    exportRows.length ? `&ids=${encodeURIComponent(exportRows.map((row) => row.id).join(","))}` : ""
   }` : "#";
 
   const chooseMonth = (month: string, monthRows: OcrDocumentListItem[]) => {
@@ -908,7 +911,7 @@ export function OcrDocumentsTable({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold">郵便物 <span className="ml-1 text-sm font-normal text-muted-foreground">{filteredRows.length} / {rows.length}件</span></h2>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {canExport ? <Button asChild size="icon" variant="outline" className="size-11 lg:size-11"><a href={exportHref} title={selectedRows.length ? `${selectedRows.length}件をCSV出力` : "全件をCSV出力"} aria-label="郵便物をCSV出力"><Download className="size-4" /></a></Button> : null}
+            {canExport ? <Button asChild size="icon" variant="outline" className="size-11 lg:size-11"><a href={exportHref} title={exportRows.length ? `${exportRows.length}件をCSV出力` : "全件をCSV出力"} aria-label="郵便物をCSV出力"><Download className="size-4" /></a></Button> : null}
             <Button type="button" className="min-h-11 lg:min-h-11" variant="outline" disabled={!canEdit} onClick={() => { setFolderError(""); setFolderCreateOpen(true); }}><FolderPlus className="size-4" />月フォルダー</Button>
             <Button type="button" className="min-h-11 lg:min-h-11" disabled={!canEdit} onClick={openDropzone}><Plus className="size-4" />郵便物を追加</Button>
           </div>

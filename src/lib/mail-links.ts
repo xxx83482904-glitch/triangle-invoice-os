@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isMailProcessed } from "@/lib/mail-processing";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
 import { can, canAccessCompany } from "@/lib/rbac";
@@ -21,6 +22,20 @@ export function resolveMailLink(data: AppData, company: CompanyScope, mail: Mail
   const invoice = activeReceivedInvoice(data, company, mail.relatedReceivedInvoiceId);
   return { invoice, broken: !invoice, targetId: mail.relatedReceivedInvoiceId };
 }
+
+// Link-required is a workflow task, separate from structural integrity or payment eligibility.
+// Missing files and duplicate suggestions are not proof that an unprocessed invoice is unnecessary.
+export function mailNeedsReceivedInvoice(data: AppData, company: CompanyScope, mail: MailDocument) {
+  return !mail.deletedAt && companyFromParam(mail.company) === company
+    && ["INVOICE", "RECEIPT"].includes(mail.category) && !isMailProcessed(mail)
+    && !resolveMailLink(data, company, mail).invoice;
+}
+
+export function mailsNeedingReceivedInvoice(data: AppData, company: CompanyScope) {
+  return data.mailDocuments.filter((mail) => mailNeedsReceivedInvoice(data, company, mail));
+}
+
+export const mailInvoiceLinkRequiredHref = (company: CompanyScope) => "/mail-sorter?company=" + company + "&link=required";
 
 // Deleting a received invoice returns its mail documents to "未連携" instead of leaving a dangling reference.
 export function unlinkMailDocumentsForInvoice(data: AppData, invoiceId: string) {

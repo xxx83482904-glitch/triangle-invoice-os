@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { mailInvoiceLinkRequiredHref } from "@/lib/mail-links";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ArrowUpRight, Check, LoaderCircle, RefreshCw, Search, SlidersHorizontal, Unlink, X } from "lucide-react";
@@ -85,7 +86,7 @@ export function BankReconciliationWorkspace({ company, filters, rows, selected, 
     <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"><h1 className="text-xl font-semibold">{view === "checks" ? "AI・確認事項" : "銀行・請求書の照合"}</h1><div className="flex flex-wrap gap-2">{aiSettings ? <BankAiSettings configured={aiConfigured} model={aiModel} {...aiSettings} /> : null}<Button className={touch} variant="outline" disabled={pending} onClick={() => startTransition(() => router.refresh())}><RefreshCw className={`size-4 ${pending ? "animate-spin" : ""}`} />更新</Button></div></header>
     {view !== "bank" ? <dl className="grid grid-cols-2 gap-4 border-b pb-4 lg:grid-cols-4">{[["未照合の銀行明細", counts.unmatched], ["支払い登録済み・銀行未照合", counts.recorded], ["期限超過の請求書", counts.overdue], ["要再確認・状態の不整合", counts.conflicts]].map(([label, count]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="text-xl font-semibold tabular-nums">{count}件</dd></div>)}</dl> : null}
     {company === "JAPAN" ? <p className="break-words text-xs text-muted-foreground">照合口座: 三菱UFJ銀行 / PayPay銀行（末尾7691）<span className="ml-3">その他の口座・カード: 経費中心</span></p> : null}
-    {unlinkedMailCount ? <p className="border-l-2 border-amber-500 pl-3 text-sm">受領請求書と未連携の郵便物が {unlinkedMailCount}件あります。<Link className="inline-flex min-h-11 items-center gap-1 text-primary underline" href={`/mail-sorter?company=${company}`}>郵便物を確認<ArrowUpRight className="size-4" /></Link></p> : null}
+    {unlinkedMailCount ? <p className="border-l-2 border-amber-500 pl-3 text-sm">受領請求書への連携が必要な郵便物が {unlinkedMailCount}件あります。<Link className="inline-flex min-h-11 items-center gap-1 text-primary underline" href={mailInvoiceLinkRequiredHref(company)}>連携が必要な郵便物を確認<ArrowUpRight className="size-4" /></Link></p> : null}
     {view !== "checks" ? <div className="flex flex-wrap gap-1" role="group" aria-label="照合の表示">{(["bank", "invoices"] as const).map((value) => <button className={`min-h-11 min-w-0 rounded-md border px-3 text-sm ${view === value ? "border-primary/30 bg-primary/10 font-medium text-primary" : "border-transparent text-muted-foreground hover:bg-muted"}`} key={value} aria-pressed={view === value} disabled={pending} onClick={() => navigate({ view: value })}>{value === "bank" ? "銀行から照合" : "請求書から確認"}</button>)}{view === "bank" ? <Button size="icon" variant="ghost" className="ml-auto size-11 md:hidden" aria-label="絞り込み" title="絞り込み" aria-expanded={filtersOpen} aria-controls="reconciliation-filters" onClick={() => setFiltersOpen(!filtersOpen)}><SlidersHorizontal className="size-4" /></Button> : null}</div> : null}
     {view === "bank" ? <>
       <div id="reconciliation-filters" className={`min-w-0 gap-2 md:grid md:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.2fr)] ${filtersOpen ? "grid" : "hidden"}`}>

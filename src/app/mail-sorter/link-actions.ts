@@ -14,7 +14,7 @@ function liveActor(data: AppData, id: string) {
   return user;
 }
 function refresh() {
-  for (const path of ["/mail-sorter", "/received-invoices", "/documents", "/dashboard", "/payments", "/banking/reconcile"]) revalidatePath(path);
+  for (const path of ["/mail-sorter", "/received-invoices", "/documents", "/dashboard", "/payments", "/banking/reconcile", "/banking/integrity"]) revalidatePath(path);
 }
 function message(error: unknown, fallback: string) {
   if (error instanceof ZodError) return error.issues[0]?.message || "入力内容を確認してください";

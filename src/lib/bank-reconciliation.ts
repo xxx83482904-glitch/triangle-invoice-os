@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mailsNeedingReceivedInvoice } from "@/lib/mail-links";
 import { assertBankAccess, bankToday, isBankDate } from "@/lib/banking";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
@@ -371,13 +372,12 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const key = `${kind}:${id}`, rows = paymentsByInvoice.get(key) || [];
     rows.push(payment); paymentsByInvoice.set(key, rows);
   }
-  let unlinkedMailCount = 0;
+  const unlinkedMailCount = mailsNeedingReceivedInvoice(data, company).length;
   for (const mail of data.mailDocuments) {
     if (mail.deletedAt || companyFromParam(mail.company) !== company) continue;
     const invoice = mail.relatedReceivedInvoiceId && index.received.get(mail.relatedReceivedInvoiceId);
     const project = invoice && index.projects.get(invoice.projectId);
     if (!invoice || invoice.deletedAt || !project || project.deletedAt || companyFromParam(project.company) !== company) {
-      if (["INVOICE", "RECEIPT"].includes(mail.category)) unlinkedMailCount++;
       continue;
     }
     const rows = mailByInvoice.get(invoice.id) || []; rows.push(mail); mailByInvoice.set(invoice.id, rows);

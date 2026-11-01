@@ -863,7 +863,7 @@ export async function updateMailDocumentCategory(formData: FormData) {
     return mailDocument;
   }, before);
 
-  revalidatePath("/mail-sorter");
+  for (const path of ["/mail-sorter", "/banking/reconcile", "/banking/integrity"]) revalidatePath(path);
 }
 
 async function saveManualMailEdits(actorId: string, edits: unknown, action: string) {
@@ -927,7 +927,7 @@ export async function updateMailDocumentsBulkCategory(formData: FormData) {
     return { category, updated };
   }, before);
 
-  revalidatePath("/mail-sorter");
+  for (const path of ["/mail-sorter", "/banking/reconcile", "/banking/integrity"]) revalidatePath(path);
 }
 
 export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {

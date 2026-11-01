@@ -1,5 +1,6 @@
 import { bankReconciliationOverview, type ReconciliationOverview } from "@/lib/bank-reconciliation";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
+import { mailsNeedingReceivedInvoice, mailInvoiceLinkRequiredHref } from "@/lib/mail-links";
 import { isBankDate } from "@/lib/banking";
 import type { AppData } from "@/lib/types";
 
@@ -20,7 +21,7 @@ export function bankDocumentReview(data: AppData, company: CompanyScope, overvie
   for (const row of overview.banks) if (row.side === "EXPENSE" && row.state === "unmatched") issues.push({ id: `bank:${row.id}`, kind: "bank_unmatched", title: `${row.date} / ${row.content || "摘要なし"}`, detail: `出金のうち ${money(row.remaining)} が書類と未照合です。書類不足とは限りません。給与・税金など、請求書を伴わない出金もあります。`, links: [{ label: "銀行・書類を確認", href: `/banking/reconcile?company=${company}&transaction=${encodeURIComponent(row.id)}&status=all` }] });
   const mails = data.mailDocuments.filter((row) => !row.deletedAt && companyFromParam(row.company) === company && ["INVOICE", "RECEIPT"].includes(row.category));
   const mailLink = (row: typeof mails[number]) => invoices.get(`received:${row.relatedReceivedInvoiceId}`)?.href || `/documents?company=${company}&document=${encodeURIComponent(`mail:${row.id}`)}`;
-  for (const mail of mails) if (!invoices.has(`received:${mail.relatedReceivedInvoiceId}`)) issues.push({ id: `mail:${mail.id}`, kind: "unlinked_mail", title: mail.title || mail.originalFileName, detail: "郵便物が有効な受領請求書と連携していません。分類・金額・連携先を確認してください。", links: [{ label: "書類", href: mailLink(mail) }, { label: "郵便物", href: `/mail-sorter?company=${company}` }] });
+  for (const mail of mailsNeedingReceivedInvoice(data, company)) issues.push({ id: `mail:${mail.id}`, kind: "unlinked_mail", title: mail.title || mail.originalFileName, detail: "未処理の請求書・領収書が、有効な受領請求書と連携していません。分類・原本・連携先を確認し、連携不要なら処理済みにしてください。", links: [{ label: "書類", href: mailLink(mail) }, { label: "連携が必要な郵便物", href: mailInvoiceLinkRequiredHref(company) }] });
   const groups = new Map<string, Array<{ key: string; title: string; href: string }>>();
   const add = (key: string, row: { key: string; title: string; href: string }) => { const rows = groups.get(key) || []; rows.push(row); groups.set(key, rows); };
   for (const row of overview.invoices) {
