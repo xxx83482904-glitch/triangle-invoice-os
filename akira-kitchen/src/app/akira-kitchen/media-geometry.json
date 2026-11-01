@@ -1,0 +1,389 @@
+{
+  "chef-home": {
+    "src": "/akira-kitchen/media/chef-home.webp",
+    "width": 512,
+    "height": 512,
+    "x": 33,
+    "y": 12,
+    "paintWidth": 472,
+    "paintHeight": 486
+  },
+  "chef-ladle": {
+    "src": "/akira-kitchen/media/chef-ladle.webp",
+    "width": 512,
+    "height": 512,
+    "x": 30,
+    "y": 12,
+    "paintWidth": 469,
+    "paintHeight": 491
+  },
+  "chef-squeeze": {
+    "src": "/akira-kitchen/media/chef-squeeze.webp",
+    "width": 512,
+    "height": 512,
+    "x": 45,
+    "y": 10,
+    "paintWidth": 379,
+    "paintHeight": 495
+  },
+  "chef-celebrate": {
+    "src": "/akira-kitchen/media/chef-celebrate.webp",
+    "width": 512,
+    "height": 512,
+    "x": 17,
+    "y": 18,
+    "paintWidth": 483,
+    "paintHeight": 480
+  },
+  "chef-taste": {
+    "src": "/akira-kitchen/media/chef-taste.webp",
+    "width": 512,
+    "height": 512,
+    "x": 38,
+    "y": 5,
+    "paintWidth": 403,
+    "paintHeight": 501
+  },
+  "home-backdrop": {
+    "src": "/akira-kitchen/media/home-backdrop-2x.webp",
+    "width": 2896,
+    "height": 2172,
+    "x": 0,
+    "y": 0,
+    "paintWidth": 2896,
+    "paintHeight": 2172
+  },
+  "kitchen": {
+    "src": "/akira-kitchen/media/kitchen-2x.webp",
+    "width": 2896,
+    "height": 2172,
+    "x": 0,
+    "y": 0,
+    "paintWidth": 2896,
+    "paintHeight": 2172
+  },
+  "home-bento": {
+    "src": "/akira-kitchen/media/home-bento-2x.webp",
+    "width": 2896,
+    "height": 1931,
+    "x": 167,
+    "y": 162,
+    "paintWidth": 2622,
+    "paintHeight": 1644
+  },
+  "home-bento-small": {
+    "src": "/akira-kitchen/media/home-bento-small.webp",
+    "width": 960,
+    "height": 640,
+    "x": 55,
+    "y": 54,
+    "paintWidth": 870,
+    "paintHeight": 545
+  },
+  "home-cake": {
+    "src": "/akira-kitchen/media/home-cake-2x.webp",
+    "width": 2896,
+    "height": 1586,
+    "x": 261,
+    "y": 18,
+    "paintWidth": 2374,
+    "paintHeight": 1566
+  },
+  "home-cake-small": {
+    "src": "/akira-kitchen/media/home-cake-small.webp",
+    "width": 960,
+    "height": 526,
+    "x": 87,
+    "y": 6,
+    "paintWidth": 786,
+    "paintHeight": 520
+  },
+  "title-cloud": {
+    "src": "/akira-kitchen/media/title-cloud.webp",
+    "width": 768,
+    "height": 384,
+    "x": 13,
+    "y": 23,
+    "paintWidth": 745,
+    "paintHeight": 337
+  },
+  "bento-box": {
+    "src": "/akira-kitchen/media/bento-box-2x.webp",
+    "width": 2896,
+    "height": 1361,
+    "x": 0,
+    "y": 0,
+    "paintWidth": 2896,
+    "paintHeight": 1361
+  },
+  "cake-base": {
+    "src": "/akira-kitchen/media/cake-base-2x.webp",
+    "width": 2896,
+    "height": 1811,
+    "x": 31,
+    "y": 181,
+    "paintWidth": 2832,
+    "paintHeight": 1597
+  },
+  "cake-chocolate": {
+    "src": "/akira-kitchen/media/cake-chocolate-2x.webp",
+    "width": 2896,
+    "height": 1811,
+    "x": 31,
+    "y": 179,
+    "paintWidth": 2833,
+    "paintHeight": 1602
+  },
+  "cake-strawberry": {
+    "src": "/akira-kitchen/media/cake-strawberry-2x.webp",
+    "width": 2896,
+    "height": 1813,
+    "x": 34,
+    "y": 177,
+    "paintWidth": 2830,
+    "paintHeight": 1606
+  },
+  "rice-round": {
+    "src": "/akira-kitchen/media/rice-round.webp",
+    "width": 768,
+    "height": 768,
+    "x": 56,
+    "y": 104,
+    "paintWidth": 655,
+    "paintHeight": 622
+  },
+  "rice-triangle": {
+    "src": "/akira-kitchen/media/rice-triangle.webp",
+    "width": 768,
+    "height": 768,
+    "x": 49,
+    "y": 97,
+    "paintWidth": 670,
+    "paintHeight": 603
+  },
+  "rice-tub": {
+    "src": "/akira-kitchen/media/rice-tub.webp",
+    "width": 768,
+    "height": 512,
+    "x": 57,
+    "y": 30,
+    "paintWidth": 654,
+    "paintHeight": 460
+  },
+  "rice-nori": {
+    "src": "/akira-kitchen/media/rice-nori.webp",
+    "width": 256,
+    "height": 256,
+    "x": 16,
+    "y": 32,
+    "paintWidth": 224,
+    "paintHeight": 202
+  },
+  "rice-ume": {
+    "src": "/akira-kitchen/media/rice-ume.webp",
+    "width": 256,
+    "height": 256,
+    "x": 14,
+    "y": 32,
+    "paintWidth": 228,
+    "paintHeight": 201
+  },
+  "rice-wakame": {
+    "src": "/akira-kitchen/media/rice-wakame.webp",
+    "width": 256,
+    "height": 256,
+    "x": 22,
+    "y": 37,
+    "paintWidth": 213,
+    "paintHeight": 193
+  },
+  "rice-salmon": {
+    "src": "/akira-kitchen/media/rice-salmon.webp",
+    "width": 256,
+    "height": 256,
+    "x": 14,
+    "y": 35,
+    "paintWidth": 228,
+    "paintHeight": 196
+  },
+  "rice-yukari": {
+    "src": "/akira-kitchen/media/rice-yukari.webp",
+    "width": 256,
+    "height": 256,
+    "x": 13,
+    "y": 36,
+    "paintWidth": 230,
+    "paintHeight": 196
+  },
+  "rice-sesame": {
+    "src": "/akira-kitchen/media/rice-sesame.webp",
+    "width": 256,
+    "height": 256,
+    "x": 15,
+    "y": 37,
+    "paintWidth": 226,
+    "paintHeight": 201
+  },
+  "rice-smile": {
+    "src": "/akira-kitchen/media/rice-smile.webp",
+    "width": 256,
+    "height": 88,
+    "x": 3,
+    "y": 2,
+    "paintWidth": 251,
+    "paintHeight": 83
+  },
+  "carrot-star": {
+    "src": "/akira-kitchen/media/carrot-star.webp",
+    "width": 256,
+    "height": 256,
+    "x": 17,
+    "y": 25,
+    "paintWidth": 221,
+    "paintHeight": 209
+  },
+  "carrot-heart": {
+    "src": "/akira-kitchen/media/carrot-heart.webp",
+    "width": 256,
+    "height": 256,
+    "x": 14,
+    "y": 37,
+    "paintWidth": 228,
+    "paintHeight": 188
+  },
+  "ingredient-egg": {
+    "src": "/akira-kitchen/media/ingredient-egg.webp",
+    "width": 256,
+    "height": 256,
+    "x": 38,
+    "y": 25,
+    "paintWidth": 180,
+    "paintHeight": 220
+  },
+  "ingredient-flour": {
+    "src": "/akira-kitchen/media/ingredient-flour.webp",
+    "width": 256,
+    "height": 256,
+    "x": 7,
+    "y": 14,
+    "paintWidth": 246,
+    "paintHeight": 231
+  },
+  "ingredient-milk": {
+    "src": "/akira-kitchen/media/ingredient-milk.webp",
+    "width": 256,
+    "height": 256,
+    "x": 15,
+    "y": 24,
+    "paintWidth": 241,
+    "paintHeight": 217
+  },
+  "onigiri": {
+    "src": "/akira-kitchen/media/onigiri.webp",
+    "width": 256,
+    "height": 256,
+    "x": 6,
+    "y": 18,
+    "paintWidth": 244,
+    "paintHeight": 220
+  },
+  "tamago": {
+    "src": "/akira-kitchen/media/tamago.webp",
+    "width": 256,
+    "height": 256,
+    "x": 6,
+    "y": 20,
+    "paintWidth": 244,
+    "paintHeight": 215
+  },
+  "karaage": {
+    "src": "/akira-kitchen/media/karaage.webp",
+    "width": 256,
+    "height": 256,
+    "x": 6,
+    "y": 16,
+    "paintWidth": 244,
+    "paintHeight": 224
+  },
+  "broccoli": {
+    "src": "/akira-kitchen/media/broccoli.webp",
+    "width": 256,
+    "height": 256,
+    "x": 6,
+    "y": 15,
+    "paintWidth": 244,
+    "paintHeight": 226
+  },
+  "tomato": {
+    "src": "/akira-kitchen/media/tomato.webp",
+    "width": 256,
+    "height": 256,
+    "x": 10,
+    "y": 7,
+    "paintWidth": 236,
+    "paintHeight": 242
+  },
+  "carrot": {
+    "src": "/akira-kitchen/media/carrot.webp",
+    "width": 256,
+    "height": 256,
+    "x": 6,
+    "y": 11,
+    "paintWidth": 244,
+    "paintHeight": 233
+  },
+  "strawberry": {
+    "src": "/akira-kitchen/media/strawberry.webp",
+    "width": 256,
+    "height": 256,
+    "x": 13,
+    "y": 6,
+    "paintWidth": 229,
+    "paintHeight": 243
+  },
+  "chocolate": {
+    "src": "/akira-kitchen/media/chocolate.webp",
+    "width": 256,
+    "height": 256,
+    "x": 7,
+    "y": 15,
+    "paintWidth": 242,
+    "paintHeight": 226
+  },
+  "banana": {
+    "src": "/akira-kitchen/media/banana.webp",
+    "width": 256,
+    "height": 256,
+    "x": 6,
+    "y": 27,
+    "paintWidth": 244,
+    "paintHeight": 202
+  },
+  "blueberry": {
+    "src": "/akira-kitchen/media/blueberry.webp",
+    "width": 256,
+    "height": 256,
+    "x": 7,
+    "y": 35,
+    "paintWidth": 242,
+    "paintHeight": 186
+  },
+  "cream": {
+    "src": "/akira-kitchen/media/cream.webp",
+    "width": 256,
+    "height": 256,
+    "x": 7,
+    "y": 12,
+    "paintWidth": 242,
+    "paintHeight": 232
+  },
+  "sprinkles": {
+    "src": "/akira-kitchen/media/sprinkles.webp",
+    "width": 256,
+    "height": 256,
+    "x": 7,
+    "y": 29,
+    "paintWidth": 242,
+    "paintHeight": 197
+  }
+}

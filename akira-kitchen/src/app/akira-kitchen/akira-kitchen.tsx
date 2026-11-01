@@ -38,7 +38,8 @@ import {
   RotateOverlay,
   StepPictures,
 } from "./kitchen-ui";
-import { ArtImage, preloadMedia, screenMedia } from "./media-assets";
+import { ArtImage, CroppedArt, preloadMedia, screenMedia } from "./media-assets";
+import { dishBox, pieceStyle } from "./art-layout";
 import {
   SCREEN_VOICE,
   instruction,
@@ -635,6 +636,8 @@ export function AkiraKitchen() {
   };
   const options =
     screen === 3 ? RICE : screen === 4 ? EGGS : screen === 5 ? CHICKEN : [];
+  const dish = dishBox(recipe);
+  const dishStyle = { aspectRatio: `${dish.width} / ${dish.height}` };
   let content: ReactNode = null;
   if (screen === 1)
     content = (
@@ -663,11 +666,7 @@ export function AkiraKitchen() {
               ].join(" ")}
               onClick={() => start(mode)}
             >
-              <ArtImage
-                name={"home-" + mode}
-                sizes="46vw"
-                fetchPriority="high"
-              />
+              <CroppedArt name={"home-" + mode} className={s.homeFood} />
               <span>
                 {mode === "bento" ? "おべんとう" : "ケーキ"}
                 <ArrowRight />
@@ -692,23 +691,15 @@ export function AkiraKitchen() {
   else if (screen === 2)
     content = (
       <>
-        <div className={s.menuDish}>
-          <DishArt recipe={recipe} />
-          {!recipe.items.length && (
-            <div className={s.silhouettes}>
-              <FoodArt food="onigiri" />
-              <FoodArt food="tamago" />
-              <FoodArt food="broccoli" />
-            </div>
-          )}
-        </div>
-        <p className={s.menuPrompt}>ここに なにを いれる？</p>
-        <div className={[s.foodRow, s.menuTiles].join(" ")}>
+        <div className={s.menuDish} style={dishStyle}>
+          <DishBase recipe={recipe} />
+        <div className={s.menuTiles}>
           {BENTO.map((food, i) => (
             <button
               className={[
                 s.foodTile,
-                recipe.ready.includes(food) ? s.made : s.unmade,
+                s.menuFood,
+                recipe.ready.includes(food) ? s.made : "",
               ].join(" ")}
               key={food}
               onClick={() => cook(food)}
@@ -723,6 +714,8 @@ export function AkiraKitchen() {
             </button>
           ))}
         </div>
+        </div>
+        <p className={s.menuPrompt}>なにから つくる？</p>
         <div className={s.footer}>
           <Action
             color="green"
@@ -744,11 +737,7 @@ export function AkiraKitchen() {
           process={activeProcess}
           value={recipe.progress[activeProcess]}
         />
-        {complete && (
-          <div className={s.finishSlot} aria-label="できた おりょうり">
-            <Check />
-          </div>
-        )}
+        {complete && <Confetti />}
         <div className={s.missionBubble}>
           <span className={s.themeIcon}>
             {screen === 3
@@ -761,7 +750,7 @@ export function AkiraKitchen() {
           </span>
           <span>{quest ? phrase(quest) : ""}</span>
         </div>
-        <div className={[s.workArea, complete ? s.completed : ""].join(" ")}>
+        <div className={[s.workArea, complete ? s.completed : ""].join(" ")} data-cooking-hero data-complete={complete}>
           <CookingGesture
             key={activeProcess}
             process={activeProcess}
@@ -982,7 +971,7 @@ export function AkiraKitchen() {
     content = (
       <>
         <Confetti />
-        <div className={s.finishedDish}>
+        <div className={s.finishedDish} style={dishStyle}>
           <DishArt recipe={recipe} />
         </div>
         <div className={s.footer}>
@@ -1009,7 +998,7 @@ export function AkiraKitchen() {
   else if (screen === 9)
     content = (
       <>
-        <div className={s.tasteDish}>
+        <div className={s.tasteDish} style={dishStyle}>
           <DishBase recipe={recipe} />
           {recipe.items
             .filter((p) => (bites[p.id] ?? 0) < 2)
@@ -1023,8 +1012,7 @@ export function AkiraKitchen() {
                 ].join(" ")}
                 style={
                   {
-                    left: p.x + "%",
-                    top: p.y + "%",
+                    ...pieceStyle(recipe, p),
                     "--turn": p.rotation + "deg",
                     clipPath: bites[p.id]
                       ? "polygon(0 0,70% 0,70% 35%,100% 35%,100% 100%,0 100%)"
@@ -1050,7 +1038,7 @@ export function AkiraKitchen() {
   else if (screen === 10)
     content = (
       <>
-        <div className={[s.finishedDish, isSaved ? s.savedFly : ""].join(" ")}>
+        <div className={[s.finishedDish, isSaved ? s.savedFly : ""].join(" ")} style={dishStyle}>
           <DishArt recipe={recipe} />
         </div>
         {isSaved && (
@@ -1092,7 +1080,7 @@ export function AkiraKitchen() {
   else if (screen === 11)
     content = (
       <>
-        <div className={s.cakeMenuDish}>
+        <div className={s.cakeMenuDish} style={dishStyle}>
           <DishArt recipe={{ ...recipe, items: [], strokes: [] }} />
         </div>
         <div className={s.flavors}>
@@ -1117,17 +1105,6 @@ export function AkiraKitchen() {
                     : "いちご"}
               </span>
               {recipe.cake === flavor && <Check />}
-            </button>
-          ))}
-        </div>
-        <div className={s.laterToppings}>
-          {TOPPINGS.map((food) => (
-            <button
-              key={food}
-              aria-label={label(food) + "は あとで のせる"}
-              onClick={() => feedback("later")}
-            >
-              <FoodArt food={food} />
             </button>
           ))}
         </div>
@@ -1329,6 +1306,7 @@ export function AkiraKitchen() {
           ].join(" ")}
           style={{ transform: "scale(" + scale + ")" }}
           data-screen={screen}
+          data-kind={recipe.mode}
           aria-busy={!ready || (screen === 16 && albumBusy)}
           inert={portrait || gate !== null || resume || detail !== null}
         >

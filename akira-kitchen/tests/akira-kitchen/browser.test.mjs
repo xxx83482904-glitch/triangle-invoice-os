@@ -4,6 +4,7 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import { chromium } from "playwright";
 import { startServer } from "./test-server.mjs";
+import { measureLayout } from "./layout-measurements.mjs";
 const server = process.env.AKIRA_BASE_URL ? null : await startServer(),
   base = process.env.AKIRA_BASE_URL || server.base;
 const output = path.resolve(
@@ -18,7 +19,7 @@ const browser = await chromium.launch({
 });
 const context = await browser.newContext({
   viewport: { width: 1024, height: 768 },
-  deviceScaleFactor: 1,
+  deviceScaleFactor: 2,
   hasTouch: true,
   isMobile: true,
   locale: "ja-JP",
@@ -54,7 +55,8 @@ const page = await context.newPage(),
 const errors = [],
   badResponses = [],
   checks = [],
-  screenshots = [];
+  screenshots = [],
+  measurements = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => {
   if (m.type() === "error") errors.push(m.text());
@@ -92,6 +94,7 @@ async function shot(n, suffix = "") {
   const file = String(n).padStart(2, "0") + suffix + ".png";
   await page.screenshot({ path: path.join(output, file) });
   screenshots.push(file);
+  measurements.push({ screen: n, suffix, ...await measureLayout(page), session: await session() });
   const layout = await page
     .locator("[data-screen] button")
     .evaluateAll((buttons) =>
@@ -123,6 +126,32 @@ async function shot(n, suffix = "") {
     await page.locator("[data-screen] .lucide-hand").count(),
     "hand hint on screen " + n,
   );
+  const scale = 1024 / 1448;
+  assert.ok(layout.every(b => b.width / scale >= 99.8 && b.height / scale >= 99.8),
+    "secondary targets are at least 100 stage px: " + JSON.stringify(layout.filter(b=>b.width/scale<99.8||b.height/scale<99.8)));
+  if ([2,7,8,11,14,15].includes(n)) {
+    const dish = await page.locator('[data-dish]').first().boundingBox();
+    assert.ok(Math.abs(dish.x + dish.width/2 - 512) < .8, "dish centered on the whole stage");
+    assert.ok(dish.width/1024 >= .84 && dish.width/1024 <= .86, "paint-cropped dish is about 85% wide");
+    if (await page.locator('[data-shelf]').count()) {
+      const shelf = await page.locator('[data-shelf]').boundingBox();
+      assert.ok(dish.x+dish.width <= shelf.x, "shelf stays outside the dish");
+    }
+  }
+  if ([3,4,5,6,12,13].includes(n)) {
+    const guide = await page.locator('[class*="missionBubble"]').boundingBox();
+    const steps = await page.locator('[class*="steps"]').boundingBox();
+    assert.ok(guide.x+guide.width <= steps.x, "mission and steps have separate space");
+  }
+  if (n===11) {
+    const flavor = await page.locator('[class*="flavors"]').boundingBox();
+    const dish = await page.locator('[data-dish]').boundingBox();
+    assert.ok(flavor.y+flavor.height < dish.y,"flavors do not cover cake");
+  }
+  if (n===2) {
+    assert.equal(await page.locator('[class*="menuFood"]').count(),6);
+    assert.ok(await page.locator('[class*="menuFood"] svg').evaluateAll(es=>es.every(e=>getComputedStyle(e).filter==='none')),"unmade food remains colored");
+  }
 }
 async function pathTouch(locator, points) {
   const b = await locator.boundingBox();
@@ -166,6 +195,12 @@ async function cook(name) {
     await page.waitForTimeout(60);
   }
   assert.equal(await el.getAttribute("aria-label"), "できた！");
+  await page.waitForTimeout(650);
+  const hero = await page.locator('[data-cooking-hero][data-complete="true"]').boundingBox();
+  const art = await el.locator('svg').first().boundingBox();
+  assert.ok(hero && art.width >= 700 && art.height >= 440, "completed food stays large on the work surface");
+  await page.screenshot({ path: path.join(output, "complete-" + name + ".png") });
+  measurements.push({ process: name, completed: true, ...await measureLayout(page) });
   check("touch completes " + name);
 }
 async function drag(source, fx, fy, target = page.locator("[data-board]")) {
@@ -336,8 +371,10 @@ try {
   await shot(11);
   await tap("チョコ");
   assert.ok(await page.locator('svg image[href*="cake-chocolate"]').count());
-  await tap("バナナは あとで のせる");
-  check("cake flavor updates immediately and future toppings respond");
+  assert.equal(await page.locator('[class*="flavors"] button').count(), 3);
+  assert.equal(await page.locator('[data-shelf]').count(), 0);
+  assert.equal((await session()).recipe.cake, "chocolate");
+  check("cake entrance has three working flavors; toppings are on the decorating screen");
   await tap("つくろう");
   await shot(12);
   await cook("batter");
@@ -473,6 +510,8 @@ try {
         screenshots,
         errors,
         badResponses,
+        viewport: { width: 1024, height: 768, deviceScaleFactor: 2, hasTouch: true },
+        measurements,
         physicalIPadSafari: false,
       },
       null,

@@ -8,7 +8,8 @@ import {
   Check,
   RotateCw,
 } from "lucide-react";
-import { FoodArt, DishBase } from "./cooking-art";
+import { FoodArt, DishArt, DishBase } from "./cooking-art";
+import { dishBox, modelPoint, pieceStyle } from "./art-layout";
 import {
   addPiece,
   bound,
@@ -20,7 +21,7 @@ import {
   type Process,
   type Recipe,
 } from "./cooking-model";
-import { ArtImage, mediaUrl } from "./media-assets";
+import { ArtImage, CroppedArt, mediaUrl } from "./media-assets";
 import { creamCoverage, rotatePiece, type Voice } from "./cooking-guidance";
 import type { Sound } from "./cooking-audio";
 import s from "./kitchen.module.css";
@@ -180,6 +181,22 @@ function ProcessArt({
       : recipe.cake === "strawberry"
         ? "#e8a5ae"
         : "#edc66b";
+  // Completion stays on the same large work surface; no flight to a small card.
+  const finishedFood = ({ rice: "onigiri", egg: "tamago", chicken: "karaage",
+    broccoli: "broccoli", tomato: "tomato", carrot: "carrot" } as Partial<Record<Process, Food>>)[process];
+  if (complete && finishedFood) return <FoodArt className={s.processArt} food={finishedFood}
+    variant={process === "rice" ? recipe.rice : process === "egg" ? recipe.egg : process === "chicken" ? recipe.chicken : recipe.carrotShape} cropped />;
+  if (complete && process === "bake") return <DishArt recipe={{ ...recipe, items: [], strokes: [] }} className={s.processArt} />;
+  if (process === "rice") return <CroppedArt name={phase === 0 ? "rice-tub" : phase === 1 ? "rice-round" : "rice-triangle"} className={s.processArt} />;
+  if (process === "carrot" || process === "tomato") return <FoodArt food={process} variant={recipe.carrotShape} className={s.processArt} cropped />;
+  const viewBox = process === "egg"
+    ? phase === 0 ? "44 28 432 346" : phase === 1 ? "44 60 432 320"
+      : phase === 2 ? "46 20 473 325" : "46 88 473 257"
+    : process === "chicken"
+      ? phase === 0 ? "44 60 432 320" : phase === 2 ? "44 80 432 294" : "44 128 432 246"
+    : process === "batter" && phase >= 3 ? "44 60 432 320"
+    : process === "bake" ? (phase === 0 ? "85 8 350 312" : "35 23 450 344")
+    : process === "broccoli" ? "50 36 420 310" : "44 0 432 374";
   const bowl = (fill: string) => (
     <>
       <ellipse cx="260" cy="266" rx="207" ry="70" fill="#b8e7f5" />
@@ -214,35 +231,7 @@ function ProcessArt({
     </g>
   );
   return (
-    <svg viewBox="0 0 520 400" aria-hidden="true" className={s.processArt}>
-      {process === "rice" &&
-        (complete ? (
-          <svg x="65" y="0" width="390" height="390">
-            <FoodArt food="onigiri" variant={recipe.rice} />
-          </svg>
-        ) : (
-          <>
-            <ellipse cx="260" cy="340" rx="208" ry="38" fill="#d0effa" />
-            {phase === 0 ? (
-              <image href={mediaUrl("rice-tub")} width="520" height="350" />
-            ) : (
-              <g
-                style={{
-                  transformOrigin: "260px 220px",
-                  transform: `scale(${1 - f * 0.11},${1 + f * 0.07})`,
-                }}
-              >
-                <image
-                  href={mediaUrl(phase === 1 ? "rice-round" : "rice-triangle")}
-                  x="35"
-                  y="0"
-                  width="450"
-                  height="365"
-                />
-              </g>
-            )}
-          </>
-        ))}
+    <svg viewBox={viewBox} aria-hidden="true" className={s.processArt}>
       {process === "egg" &&
         (complete ? (
           <svg x="100" y="25" width="320" height="320">
@@ -383,49 +372,11 @@ function ProcessArt({
               ))}
           </>
         ))}
-      {["broccoli", "carrot", "tomato"].includes(process) && (
-        <>
-          {process === "broccoli" ? (
-            <>
-              <rect
-                x="60"
-                y="170"
-                width="400"
-                height="170"
-                rx="70"
-                fill="#8bd5ee"
-              />
-              <ellipse
-                cx="260"
-                cy="180"
-                rx="200"
-                ry="65"
-                fill="#d7f6ff"
-                stroke="#78bed9"
-                strokeWidth="10"
-              />
-            </>
-          ) : (
-            <ellipse cx="260" cy="320" rx="215" ry="48" fill="#d5eff9" />
-          )}
-          <svg
-            x="145"
-            y={process === "broccoli" && !complete ? 30 + f * 85 : 50}
-            width="230"
-            height="230"
-          >
-            <FoodArt
-              food={process}
-              variant={process === "carrot" ? recipe.carrotShape : ""}
-            />
-          </svg>
-          {complete && (
-            <text x="430" y="90" fill="#32b66c" fontSize="70">
-              ✓
-            </text>
-          )}
-        </>
-      )}
+      {process === "broccoli" && <>
+        <rect x="60" y="170" width="400" height="170" rx="70" fill="#8bd5ee" />
+        <ellipse cx="260" cy="180" rx="200" ry="65" fill="#d7f6ff" stroke="#78bed9" strokeWidth="10" />
+        <svg x="145" y={30 + f * 85} width="230" height="230"><FoodArt food="broccoli" /></svg>
+      </>}
       {process === "batter" && (
         <>
           {bowl(
@@ -727,10 +678,10 @@ export function Arrangement({
     safePage = Math.min(page, pageCount - 1);
   const point = (e: { clientX: number; clientY: number }): Point => {
     const r = board.current!.getBoundingClientRect();
-    return {
+    return modelPoint(recipe, {
       x: ((e.clientX - r.left) / r.width) * 100,
       y: ((e.clientY - r.top) / r.height) * 100,
-    };
+    });
   };
   const variant = (food: Food) =>
     food === "onigiri"
@@ -834,7 +785,7 @@ export function Arrangement({
   });
   return (
     <>
-      <div className={s.boardWrap}>
+      <div className={s.boardWrap} style={{ aspectRatio: `${dishBox(recipe).width} / ${dishBox(recipe).height}` }}>
         <div
           className={[s.board, paint ? s.paintBoard : ""].join(" ")}
           ref={board}
@@ -904,8 +855,7 @@ export function Arrangement({
               ].join(" ")}
               style={
                 {
-                  left: p.x + "%",
-                  top: p.y + "%",
+                  ...pieceStyle(recipe, p),
                   opacity: ghost?.piece === p.id ? 0.3 : 1,
                   "--turn": p.rotation + "deg",
                 } as CSSProperties
@@ -957,7 +907,7 @@ export function Arrangement({
                 s.ghost,
                 recipe.mode === "cake" ? s.topping : "",
               ].join(" ")}
-              style={{ left: ghost.point.x + "%", top: ghost.point.y + "%" }}
+              style={pieceStyle(recipe, ghost.point)}
             >
               <FoodArt food={ghost.food} variant={variant(ghost.food)} />
             </div>

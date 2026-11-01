@@ -1,8 +1,16 @@
-# あきらくんと おりょうり 3.0
+# あきらくんと おりょうり 3.1.0
 
 3〜6歳向けの料理あそび。17画面を音声・絵・手のヒントで案内します。iPad横向き4:3、1448×1086の固定ステージを画面に合わせて縮小。Next.js App Routerの静的書き出しと公開パス `/akira-kitchen/` を維持しています。
 
 公開先: https://akira.kuremasato.com/akira-kitchen/
+
+## 3.1.0：料理を大きく中央に（第1弾）
+
+ホームの透明余白を除き、メニュー・配置・完成画面の箱とケーキを舞台幅約85%で中央表示。未調理食材も彩色し、調理済みはチェックで区別します。調理中の対象と完成した料理を大きく残し、短い紙吹雪と「つぎへ」で進みます。おだいと手順を分離し、クリームは上面の楕円内へクリップします。
+
+寸法は1448×1086舞台座標で主操作120px以上・副操作100px以上という解釈で実装しています。1024×768へ縮小すると、棚の幅は73.5 CSS px、主ボタンの高さは90.5 CSS pxです。CSS pxで120／100以上とする解釈には未達で、85%中央表示と右棚の完全非重複を同時に保つ場合は配置条件の調整が必要です。右端の棚は3個切替と大きな矢印を保持します。Recipe/Pieceは旧座標のまま、`art-layout.ts`で表示側と入力側を相互変換し、画面・味見・保存SVGへ同じ幾何を使います。IndexedDB v1とsession v2は変更しません。
+
+指への追従、クリーム道具の往復、音声の優先度、ヒント、置き場所予告は次の第2弾です。本版の実装はローカルでの検証・配布物生成までで、公開操作は別途行います。
 
 ## 起動とビルド
 
@@ -61,6 +69,7 @@ Pythonに `Pillow`、`fonttools[woff]`、`brotli`、`zopfli`、`imageio-ffmpeg` 
 
 ```powershell
 python scripts/optimize-media.py
+python scripts/measure-media-geometry.py
 powershell -NoProfile -File scripts/generate-narration.ps1
 python scripts/encode-narration.py
 ```
@@ -69,9 +78,9 @@ python scripts/encode-narration.py
 
 ## 検証と残る確認
 
-自動チェック、Chromiumの1024×768タッチ操作、WebKitでの両料理の作成・保存・再表示、17画面の撮影を行っています。結果・数値・実行条件は [検証報告](docs/preschool-ux-results.md)、画面比較は [Before / After](docs/akira-kitchen/qa/browser-v3/comparison.html) を参照してください。
+3.1.0の実測値、旧データ互換、テスト結果は [v2レイアウトの検証](docs/v3.1-layout-results.md) を参照してください。以前の検証は [検証報告](docs/preschool-ux-results.md)、画面比較は [Before / After](docs/akira-kitchen/qa/browser-v3/comparison.html) に保持しています。
 
-実機iPad Safariでの指への追従、音声の聴感、ホーム画面追加、3〜6歳の子どもによる理解度は未確認です。WindowsのPlaywright WebKitを実機Safariとして扱っていません。調理中の変形するご飯・卵液・鍋・オーブンは操作と同期するSVGで描画し、静止イラストの差し替えだけにはしていません。
+実機iPad Safariでの指への追従、音声の聴感、ホーム画面追加、3〜6歳の子どもによる理解度は未確認です。WindowsのPlaywright WebKitを実機Safariとして扱っていません。調理の入力しきい値・進行を保持して対象を拡大し、ご飯は段階ごとのイラスト、ボウル・鍋・オーブンは既存のSVGで表示します。指への細かな追従は第2弾です。
 
 ## Synologyへ公開
 
