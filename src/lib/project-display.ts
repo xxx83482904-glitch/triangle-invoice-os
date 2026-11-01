@@ -30,6 +30,12 @@ export function projectContractSummary(rows: Array<{ contractAmount: number | nu
   }, { uninvoicedAmount: 0, unsetContractCount: 0 });
 }
 
+// 要対応 means a deadline. Document review stays on the row and has its own filter.
+// People who cannot see money get no deadlines, so document review remains their signal.
+export function projectNeedsAction(items: Array<{ financial: boolean }>, showFinancials: boolean) {
+  return items.some((item) => (showFinancials ? item.financial : !item.financial));
+}
+
 export function projectAttentionPriority(items: Array<{ financial: boolean; priority: number }>, showFinancials: boolean) {
   return items.filter((item) => showFinancials || !item.financial).reduce((highest, item) => Math.max(highest, item.priority), 0);
 }

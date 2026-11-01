@@ -5,6 +5,7 @@ import type { UserRole } from "@/lib/types";
 export const appNavigation = [
   { label: "全体", items: [
     { href: "/dashboard", label: "ダッシュボード", permission: "view:dashboard" },
+    { href: "/banking", label: "口座一覧", permission: "view:banking" },
     { href: "/documents", label: "全書類", permission: "view:documents" },
   ] },
   { label: "案件・書類", items: [
@@ -15,7 +16,6 @@ export const appNavigation = [
     { href: "/received-invoices", label: "受領請求書", permission: "view:receivedInvoices" },
   ] },
   { label: "入出金・分析", items: [
-    { href: "/banking", label: "口座一覧", permission: "view:banking" },
     { href: "/payments", label: "入金・支払い", permission: "view:payments" },
     { href: "/reports", label: "集計", permission: "view:reports" },
   ] },

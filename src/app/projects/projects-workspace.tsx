@@ -32,12 +32,12 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate, percent, yen } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { projectAttentionPriority, projectContractSummary, projectStageLabel, projectStageOptions, projectUninvoiced } from "@/lib/project-display";
+import { projectAttentionPriority, projectContractSummary, projectNeedsAction, projectStageLabel, projectStageOptions, projectUninvoiced } from "@/lib/project-display";
 import type { ProjectAttention } from "@/lib/project-attention";
 import type { ProjectStatus } from "@/lib/types";
 
 type Company = "CHINA" | "JAPAN";
-type WorkFilter = "all" | "needsAction" | "uninvoiced" | "unpaidIncome" | "unpaidExpense" | "missingContract" | "completed";
+type WorkFilter = "all" | "needsAction" | "documentReview" | "uninvoiced" | "unpaidIncome" | "unpaidExpense" | "missingContract" | "completed";
 
 type Option = {
   label: string;
@@ -98,7 +98,7 @@ export function ProjectsWorkspace({
   const [clientFilter, setClientFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(rows.length === 0);
-  const [workFilter, setWorkFilter] = useState<WorkFilter>("needsAction");
+  const [workFilter, setWorkFilter] = useState<WorkFilter>(() => company === "JAPAN" && !rows.some((row) => needsAction(row, showFinancials)) ? "all" : "needsAction");
 
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -175,7 +175,7 @@ export function ProjectsWorkspace({
             ) : null}
           </div>
           <div className="mt-3 flex flex-wrap gap-2 pb-1">
-            {filterOptions(showFinancials).map((option) => (
+            {filterOptions(rows, showFinancials).map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -358,7 +358,7 @@ function ProjectListItem({
       role="button"
       className={cn(
         "block w-full border-b px-3 py-3 text-left transition-colors hover:bg-muted/60",
-        selection.selected.has(row.id) ? "bg-primary/10" : active ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : "bg-background",
+        selection.selected.has(row.id) ? "bg-selected" : active ? "bg-selected ring-1 ring-inset ring-primary/30" : "bg-background",
       )}
       onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) onSelect(); }}
       onKeyDown={(event) => {
@@ -732,8 +732,9 @@ function InfoLine({ label, strong, value }: { label: string; strong?: boolean; v
 }
 
 function ActionBadge({ children }: { children: string }) {
+  const tone = children.includes("期限超過") ? "border-red-200 bg-red-50 text-red-800" : children.includes("書類確認待ち") ? "border-violet-200 bg-violet-50 text-violet-800" : "border-amber-200 bg-amber-50 text-amber-800";
   return (
-    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+    <Badge variant="outline" className={tone}>
       {children}
     </Badge>
   );
@@ -763,10 +764,18 @@ function projectPriority(row: ProjectWorkspaceRow, showFinancials: boolean) {
   return projectActionLabels(row, showFinancials).length;
 }
 
+function needsAction(row: ProjectWorkspaceRow, showFinancials: boolean) {
+  if (row.company === "JAPAN") return projectNeedsAction(row.attention || [], showFinancials);
+  return projectPriority(row, showFinancials) > 0;
+}
+
+const hasDocumentReview = (row: ProjectWorkspaceRow) => Boolean(row.attention?.some((item) => item.kind === "documentReview"));
+
 function matchesFilter(row: ProjectWorkspaceRow, filter: WorkFilter, showFinancials: boolean) {
   const uninvoicedAmount = projectUninvoiced(row.contractAmount, row.invoicedAmount);
   if (filter === "all") return true;
-  if (filter === "needsAction") return projectPriority(row, showFinancials) > 0;
+  if (filter === "needsAction") return needsAction(row, showFinancials);
+  if (filter === "documentReview") return hasDocumentReview(row);
   if (filter === "uninvoiced") return showFinancials && (uninvoicedAmount ?? 0) > 0;
   if (filter === "unpaidIncome") return showFinancials && row.unpaidIncomeAmount > 0;
   if (filter === "unpaidExpense") return showFinancials && row.unpaidExpenseAmount > 0;
@@ -775,12 +784,13 @@ function matchesFilter(row: ProjectWorkspaceRow, filter: WorkFilter, showFinanci
   return true;
 }
 
-function filterOptions(showFinancials: boolean): Array<{ label: string; value: WorkFilter }> {
+function filterOptions(rows: ProjectWorkspaceRow[], showFinancials: boolean): Array<{ label: string; value: WorkFilter }> {
   const options: Array<{ label: string; value: WorkFilter }> = [
     { label: "要対応", value: "needsAction" },
     { label: "すべて", value: "all" },
     { label: "契約書なし", value: "missingContract" },
   ];
+  if (rows.some(hasDocumentReview)) options.splice(1, 0, { label: "書類確認待ち", value: "documentReview" });
   if (showFinancials) {
     options.splice(
       2,
@@ -803,7 +813,7 @@ function buildSummary(rows: ProjectWorkspaceRow[], showFinancials: boolean) {
     (summary, row) => {
       const uninvoicedAmount = projectUninvoiced(row.contractAmount, row.invoicedAmount);
       summary.total += 1;
-      summary.needsAction += projectPriority(row, showFinancials) > 0 ? 1 : 0;
+      summary.needsAction += needsAction(row, showFinancials) ? 1 : 0;
       summary.uninvoicedAmount += uninvoicedAmount ?? 0;
       summary.unpaidIncomeAmount += row.unpaidIncomeAmount;
       summary.missingContract += row.contractFileUrl ? 0 : 1;

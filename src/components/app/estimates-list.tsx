@@ -27,7 +27,7 @@ type RowAction = { label: string; icon: typeof Pencil; action: () => void; destr
 const selectClass = "h-11 min-w-0 max-w-full rounded-md border bg-background px-2 text-sm";
 const money = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" });
 const monthLabel = (month: string) => month === "undated" ? "日付未設定" : month.replace("-", "年") + "月";
-const gridClass = "md:grid-cols-[44px_minmax(140px,2fr)_minmax(100px,1fr)_90px_90px_140px_44px]";
+const gridClass = "md:grid-cols-[44px_minmax(140px,2fr)_minmax(100px,1fr)_124px_90px_140px_44px]";
 
 function EstimateActions({ actions, label, disabled, children }: { actions: RowAction[]; label: string; disabled: boolean; children?: ReactNode }) {
   if (children) return <ContextMenu.Root><ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger><ContextMenu.Portal>
@@ -174,7 +174,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
     </div>
     <RecordMonthNavigation label="見積月" months={months} value={month === "all" ? "" : month} disabled={busy} onChange={(value) => { setMonth(value || "all"); setLimit(50); }} />
     <SelectionToolbar selection={selection} />
-    {selected.length ? <div aria-label="選択した見積書の一括操作" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+    {selected.length ? <div aria-label="選択した見積書の一括操作" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-selected px-3 py-2">
       <span className="mr-auto text-sm">{selected.length}件選択{selection.hiddenCount ? `（表示外 ${selection.hiddenCount}件を含む）` : ""}</span>
       {editableSelected.length ? <select aria-label="選択した見積書の状態を一括変更" className={selectClass} disabled={busy} value="" onChange={(event) => {
         const value = event.target.value as EstimateListEdit["status"]; if (!value) return;
@@ -195,7 +195,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
               const e = estimateMap.get(row.sourceId); if (!e) return null;
               const edit = edits[e.id];
               return <EstimateActions key={e.id} label={e.estimateNumber} actions={actions(e)} disabled={busy}>
-                <div {...selection.rowProps(e.id)} data-estimate-id={e.id} className={`grid grid-cols-[44px_minmax(0,1fr)_44px] items-start gap-2 border-b py-3 text-sm ${gridClass} ${selection.selected.has(e.id) || activeId === e.id ? "bg-primary/10" : "hover:bg-muted/30"}`}>
+                <div {...selection.rowProps(e.id)} data-estimate-id={e.id} className={`grid grid-cols-[44px_minmax(0,1fr)_44px] items-start gap-2 border-b py-3 text-sm ${gridClass} ${selection.selected.has(e.id) || activeId === e.id ? "bg-selected" : "hover:bg-muted/30"}`}>
                   <RowSelectionCheckbox selection={selection} id={e.id} label={`${e.estimateNumber}を選択`} />
                   <div className="min-w-0">{projectControl(e)}<button data-selection-open className="min-h-11 w-full break-words text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary" onClick={() => onOpen(e.id)}>{e.estimateNumber}<span className="block">発行見積書{edit ? " · 未保存" : ""}</span></button>{row.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {row.billingLabel}</span> : null}</div>
                   <span className="col-start-2 break-words md:col-start-auto md:pt-3">{counterpart(e)}</span>

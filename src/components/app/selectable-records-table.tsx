@@ -11,7 +11,7 @@ export function SelectableRecordsTable({ headers, rows }: { headers: string[]; r
     <SelectionToolbar selection={selection} />
     <Table>
       <TableHeader><TableRow><TableHead className="w-11 p-0"><SelectAllCheckbox selection={selection} label="表示中の取引先をすべて選択" /></TableHead>{headers.map((title) => <TableHead key={title}>{title}</TableHead>)}</TableRow></TableHeader>
-      <TableBody>{rows.map((row) => <TableRow key={row.id} {...selection.rowProps(row.id)} className={selection.selected.has(row.id) ? "bg-primary/10" : ""}>
+      <TableBody>{rows.map((row) => <TableRow key={row.id} {...selection.rowProps(row.id)} className={selection.selected.has(row.id) ? "bg-selected" : ""}>
         <TableCell className="p-0"><RowSelectionCheckbox selection={selection} id={row.id} label={`${row.label}を選択`} /></TableCell>
         {row.cells.map((cell, index) => <TableCell key={index}>{cell}</TableCell>)}
       </TableRow>)}</TableBody>

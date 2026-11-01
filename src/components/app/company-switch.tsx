@@ -170,7 +170,7 @@ export function AppNav({ role }: { role: UserRole }) {
             aria-current={active ? "page" : undefined}
             className={`flex min-h-9 w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition focus-visible:outline-2 focus-visible:outline-ring ${
               active
-                ? "bg-primary/10 font-semibold text-primary"
+                ? "bg-selected font-semibold text-primary"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >

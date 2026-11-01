@@ -68,8 +68,8 @@ export default async function GuestInvoicesPage({
         </div>
       </header>
 
-      <div className="workspace-main mx-auto grid min-w-0 gap-5 px-4 py-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="space-y-5">
+      <div className="workspace-main mx-auto grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 px-4 py-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <section className="min-w-0 space-y-5">
           <div className="sm:hidden">
             <CompanySwitch />
           </div>

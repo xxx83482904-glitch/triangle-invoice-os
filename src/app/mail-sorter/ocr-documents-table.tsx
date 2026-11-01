@@ -6,6 +6,7 @@ import { useOperationError } from "@/hooks/use-operation-error";
 import { unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
 import { OperationPending, OperationError } from "@/components/app/operation-feedback";
 import { saveOcrDocumentDetails } from "./edit-actions";
+import { OnScreenPdfFrame } from "@/components/app/on-screen-pdf-frame";
 import { OriginalDocumentPreview } from "@/app/received-invoices/original-document-preview";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, List, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Search, Trash2, UploadCloud, X } from "lucide-react";
@@ -158,10 +159,15 @@ function selectClass() {
 }
 
 function categorySelectClass(category: MailDocumentCategory) {
-  const tone =
-    category === "INVOICE"
-      ? "border-primary bg-primary text-primary-foreground"
-      : "border-border bg-secondary text-secondary-foreground";
+  const tone = {
+    INVOICE: "border-blue-300 bg-blue-100 text-blue-800",
+    RECEIPT: "border-emerald-300 bg-emerald-100 text-emerald-800",
+    CONTRACT: "border-violet-300 bg-violet-100 text-violet-800",
+    ESTIMATE: "border-orange-300 bg-orange-100 text-orange-800",
+    DELIVERY_NOTE: "border-orange-300 bg-orange-100 text-orange-800",
+    NOTICE: "border-amber-300 bg-amber-100 text-amber-800",
+    OTHER: "border-border bg-secondary text-secondary-foreground",
+  }[category];
   return `h-6 max-w-[104px] rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
 }
 
@@ -312,7 +318,7 @@ function DocumentPreview({ compact = false, row, company }: { compact?: boolean;
       <div className="space-y-2">
         {/* スマホ向けフォールバック: iframe は md 以上のみ */}
         <div className="hidden md:block">
-          <iframe title={row.fileName} src={row.fileUrl} className={`${frameClass} w-full rounded-md border bg-muted`} />
+          <OnScreenPdfFrame title={row.fileName} src={row.fileUrl} className={`${frameClass} w-full rounded-md border bg-muted`} />
         </div>
         <div className="flex items-center justify-center rounded-md bg-muted py-10 md:hidden">
           <Button asChild variant="outline">
@@ -1106,7 +1112,7 @@ export function OcrDocumentsTable({
                           return (
                           <Fragment key={month}>
                             <tr
-                              className={`border-t bg-muted/30 ${isFileDragOver || isDocumentDragOver ? "bg-primary/10" : ""}`}
+                              className={`border-t bg-muted/30 ${isFileDragOver || isDocumentDragOver ? "bg-selected" : ""}`}
                               onDragOver={(event) => {
                                 if (!canEdit) return;
                                 if (isFileDrag(event)) {
@@ -1179,8 +1185,8 @@ export function OcrDocumentsTable({
                                     {...selection.rowProps(row.id)}
                                     draggable={canEdit}
                                     className={`cursor-pointer border-t transition hover:bg-muted/50 ${
-                                      isActive ? "bg-primary/5" : ""
-                                    } ${isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""} ${
+                                      isActive ? "bg-selected" : ""
+                                    } ${isSelected ? "bg-selected ring-1 ring-inset ring-primary/30" : ""} ${
                                       processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"
                                     } ${
                                       isDragging ? "opacity-50" : ""
@@ -1498,8 +1504,8 @@ export function OcrDocumentsTable({
                         role="button"
                         draggable={canEdit}
                         className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"} ${
-                          isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"
-                        } ${isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""} ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
+                          isActive ? "border-primary bg-selected" : "border-transparent hover:bg-muted"
+                        } ${isSelected ? "bg-selected ring-1 ring-inset ring-primary/30" : ""} ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
                         onClick={(event) => {
                           if (isSelectionControl(event.target, event.currentTarget)) return;
                           setActiveRowId(row.id);

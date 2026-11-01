@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { IssuedInvoiceStatus, ProjectStatus, ReceivedInvoiceStatus } from "@/lib/types";
 import { issuedStatusLabels } from "@/lib/invoice-status";
+import { statusToneClass } from "@/lib/status-tone";
 
 const labels = {
   PLANNING: "計画中",
@@ -33,14 +34,7 @@ export function StatusBadge({
   status: ProjectStatus | IssuedInvoiceStatus | ReceivedInvoiceStatus | string;
   kind?: "issued" | "received";
 }) {
-  const tone =
-    status === "OVERDUE" || status === "REJECTED"
-      ? "border-red-300 bg-red-50 text-red-700"
-      : status === "APPROVAL_PENDING" || status === "WAITING_PAYMENT" || status === "PARTIALLY_PAID"
-        ? "border-amber-300 bg-amber-50 text-amber-800"
-        : status === "PAID" || status === "COMPLETED"
-          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-          : "border-border bg-muted text-foreground";
+  const tone = statusToneClass(status);
 
   return (
     <Badge variant="outline" className={tone}>

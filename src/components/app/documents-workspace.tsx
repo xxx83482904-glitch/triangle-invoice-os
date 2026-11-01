@@ -1,4 +1,5 @@
 "use client";
+import { statusToneClass } from "@/lib/status-tone";
 import { OperationError, OperationPending } from "@/components/app/operation-feedback";
 
 import Image from "next/image";
@@ -68,7 +69,7 @@ function DocumentStatusControl({ row, edit, onEdit, company, disabled }: { row: 
   if (row.kind === "estimate") return <EstimateStatusSelect id={row.sourceId} updatedAt={row.updatedAt} status={row.status as Estimate["status"]} label={row.title} company={company} disabled={!row.editable || disabled} />;
   if (row.kind !== "issued" || !row.editable) return <StateBadge row={row} />;
   const current = edit || editFrom(row);
-  return <select aria-label={`${row.title}のステータス`} value={current.status} disabled={disabled} className={`${selectClass} h-11 w-full min-w-0 px-2 text-xs ${current.status === "PAID" ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300" : ""}`} onChange={(e) => onEdit({ ...current, status: e.target.value as IssuedEdit["status"] })}>
+  return <select aria-label={`${row.title}のステータス`} value={current.status} disabled={disabled} className={`${selectClass} h-11 w-full min-w-0 px-2 text-xs ${statusToneClass(current.status)}`} onChange={(e) => onEdit({ ...current, status: e.target.value as IssuedEdit["status"] })}>
     {Object.entries(issuedStatusLabels).map(([value, label]) => <option key={value} value={value} disabled={value === "PARTIALLY_PAID"}>{label}</option>)}
   </select>;
 }
@@ -332,7 +333,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       {issuedOnly && rows.some((row) => row.editable) ? <Button className="min-h-11" disabled={!changes || saving || deleting} onClick={() => save()}><OperationPending pending={company === "JAPAN" && saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{changes ? ` (${changes})` : ""}</OperationPending></Button> : null}
     </SelectionToolbar>
     {company === "JAPAN" ? <OperationError message={operationError} /> : null}
-    {selectedRows.length ? <div aria-label="選択した書類の一括操作" className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 shadow-sm [&_button]:min-h-11">
+    {selectedRows.length ? <div aria-label="選択した書類の一括操作" className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-selected p-3 shadow-sm [&_button]:min-h-11">
       <span className="mr-auto text-sm font-medium">{selectedRows.length}件選択{hiddenSelectedCount ? <span className="ml-2 text-xs font-normal text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}</span>
       {selectedRows.length > 0 && selectedRows.every((r) => r.kind === "issued" && r.editable) ? <Button variant="outline" size="sm" disabled={saving || deleting} className="text-destructive" onClick={() => askDelete(selectedRows)}><Trash2 className="size-4" />選択した{selectedRows.length}件を削除</Button> : null}
       {editableSelected.length ? <select aria-label="選択した発行請求書の状態を一括変更" disabled={saving || deleting} className={selectClass} value="" onChange={(e) => { const status = e.target.value as IssuedEdit["status"]; if (!status) return; setEdits((old) => { const next = { ...old }; for (const r of editableSelected) next[r.id] = { ...(old[r.id] || editFrom(r)), status }; return next; }); }}>
@@ -352,7 +353,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
           <div className="md:hidden">
             {groups.map(([m, list]) => <Fragment key={m}>
               {grouped ? <button className="flex min-h-11 w-full items-center gap-2 bg-muted/60 px-3 text-sm font-medium" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button> : null}
-              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div {...selection.rowProps(r.id)} className={"flex min-w-0 items-start gap-2 border-b p-2 " + (selected.has(r.id) || activeId === r.id ? "bg-primary/10" : "")}>
+              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div {...selection.rowProps(r.id)} className={"flex min-w-0 items-start gap-2 border-b p-2 " + (selected.has(r.id) || activeId === r.id ? "bg-selected" : "")}>
                 <RowSelectionCheckbox selection={selection} id={r.id} label={r.title + "を選択"} />
                 <div className="grid min-w-0 flex-1 gap-1 text-left text-sm">
                   <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button data-selection-open onClick={() => open(r)} className="min-h-11 break-words text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}</button>
@@ -375,7 +376,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
             </tr></thead>
             <tbody>{groups.map(([m, list]) => <Fragment key={m}>
               {grouped ? <tr className="border-t bg-muted/60"><td colSpan={issuedOnly ? 8 : 7} className="p-0"><button className="sticky left-0 flex min-h-11 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button></td></tr> : null}
-              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><tr {...selection.rowProps(r.id)} data-document-id={r.id} className={"border-t align-top " + (selected.has(r.id) || activeId === r.id ? "bg-primary/10" : "hover:bg-muted/30")}>
+              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><tr {...selection.rowProps(r.id)} data-document-id={r.id} className={"border-t align-top " + (selected.has(r.id) || activeId === r.id ? "bg-selected" : "hover:bg-muted/30")}>
                 <td className="p-0"><RowSelectionCheckbox selection={selection} id={r.id} label={r.title + "を選択"} /></td>
                 <td className="px-2 py-3"><DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button data-selection-open className="min-h-11 w-full text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary" onClick={() => open(r)}><span className="block break-words">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button>{r.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}</td>
                 <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span></td>

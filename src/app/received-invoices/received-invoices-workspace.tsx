@@ -1,4 +1,5 @@
 "use client";
+import { statusToneClass } from "@/lib/status-tone";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/components/app/list-selection";
 import { isSelectionControl } from "@/lib/list-selection";
@@ -279,7 +280,7 @@ export function ReceivedInvoicesWorkspace({
                             <tr
                               key={invoice.id}
                               {...selection.rowProps(invoice.id)}
-                              className={`cursor-pointer border-t border-l-2 transition hover:bg-muted/40 ${paymentTone(invoice, today)} ${selection.selected.has(invoice.id) ? "bg-primary/10" : active ? "bg-primary/5" : ""}`}
+                              className={`cursor-pointer border-t border-l-2 transition hover:bg-muted/40 ${paymentTone(invoice, today)} ${selection.selected.has(invoice.id) ? "bg-selected" : active ? "bg-selected" : ""}`}
                               onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) setActiveId(invoice.id); }}
                             >
                               <td className="p-0"><RowSelectionCheckbox selection={selection} id={invoice.id} label={`${invoice.vendorName} ${invoice.issueDate}を選択`} /></td>
@@ -305,7 +306,7 @@ export function ReceivedInvoicesWorkspace({
                                       name="status"
                                       disabled={company === "JAPAN" && (statusSave.pending || saving)}
                                       defaultValue={invoice.status}
-                                      className="h-7 max-w-[140px] rounded-full border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                                      className={`h-7 max-w-[140px] rounded-full border px-2 text-xs ${statusToneClass(invoice.status)} outline-none focus-visible:ring-2 focus-visible:ring-ring/50`}
                                       onChange={(event) => {
                                         // A status change never creates a payment; paid is reached through payment records or bank reconciliation.
                                         if (event.currentTarget.value === "PAID" && invoice.paymentOutstandingAmount > 0) { event.currentTarget.value = invoice.status; setActiveId(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); if (company === "JAPAN") toast(operationFailureToast(paidGuardMessage)); return; }

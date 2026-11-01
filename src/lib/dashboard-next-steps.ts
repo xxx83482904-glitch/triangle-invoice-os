@@ -1,4 +1,5 @@
 import { bankReconciliationOverview } from "@/lib/bank-reconciliation";
+import { isReconcileTodo, RECONCILE_TODO_NOTE, RECONCILE_TODO_STATUS } from "@/lib/bank-reconcile-todo";
 import type { DashboardSummary } from "@/lib/dashboard";
 import { dashboardWorkRows, type DashboardNextStep } from "@/lib/dashboard-work";
 import { integrityReport } from "@/lib/integrity";
@@ -27,7 +28,8 @@ export function dashboardNextSteps(data: AppData, user: Pick<User, "id" | "role"
   steps.push({ id: "documents", label: "書類確認", count: summary.review.length, reason: "下書き・入力不足・支払記録の確認が残っています。", target: { view: "review", timing: "all" } });
   if (overview) {
     steps.push({ id: "bank-unreviewed", label: "未確認の口座明細", count: summary.banking.unreviewed, reason: "科目と内容の確認が残っています。", target: { href: `/banking?${query}&status=unreviewed` } });
-    steps.push({ id: "bank-unmatched", label: "銀行・書類照合の未照合", count: overview.banks.filter((row) => row.state === "unmatched").length, reason: "対応する書類との照合が残っています。", target: { href: `/banking/reconcile?${query}&status=unmatched` } });
+    steps.push({ id: "bank-unmatched", label: "直近2か月の未照合", count: overview.banks.filter((row) => isReconcileTodo(row, summary.today)).length, reason: RECONCILE_TODO_NOTE,
+      caveat: "全期間の未照合は、開いた先の絞り込みで「未照合・一部照合」を選ぶと見られます。", target: { href: `/banking/reconcile?${query}&status=${RECONCILE_TODO_STATUS}` } });
   }
   if (can(user, "view:mailSorter")) steps.push({ id: "mail", label: "未処理の郵便物", count: summary.pendingMail, reason: "手動の書類整理が未処理です。",
     caveat: "未処理の受領請求書を含む件数です。開く先は郵便物全件のため件数が異なります。", target: { href: `/mail-sorter?${query}` } });
