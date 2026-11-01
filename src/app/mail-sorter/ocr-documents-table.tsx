@@ -1,6 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useFeedbackForm } from "@/hooks/use-feedback-form";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
+import { OperationPending, OperationError } from "@/components/app/operation-feedback";
+import { saveOcrDocumentDetails } from "./edit-actions";
+import { OriginalDocumentPreview } from "@/app/received-invoices/original-document-preview";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, List, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Search, Trash2, UploadCloud, X } from "lucide-react";
 import { useListSelection } from "@/hooks/use-list-selection";
@@ -283,7 +289,8 @@ function duplicateDescription(row: OcrDocumentListItem) {
 
 const isProcessed = isMailProcessed;
 
-function DocumentPreview({ compact = false, row }: { compact?: boolean; row: OcrDocumentListItem }) {
+function DocumentPreview({ compact = false, row, company }: { compact?: boolean; row: OcrDocumentListItem; company: CompanyScope }) {
+  if (company === "JAPAN") return <OriginalDocumentPreview company={company} fileUrl={row.fileUrl} fileName={row.fileName} mimeType={row.mimeType} sourceMissing={row.fileMissing} />;
   const frameClass = compact ? "h-[56vh] min-h-[360px]" : "h-[68vh] min-h-96";
   const boxClass = compact ? "min-h-[360px]" : "min-h-80";
 
@@ -330,7 +337,7 @@ function stopEditClick(event: React.MouseEvent<HTMLElement>) {
 }
 
 function DocumentEditor({
-  canEdit,
+  canEdit: allowedEdit,
   company,
   compact = false,
   linkTargets = [],
@@ -350,11 +357,14 @@ function DocumentEditor({
   surface: "folder" | "list";
   vendors: Option[];
 }) {
+  const detailSave = useFeedbackForm(company, saveOcrDocumentDetails, "郵便物の詳細を保存しました");
+  const canEdit = allowedEdit && !(company === "JAPAN" && detailSave.pending);
   const editFormId = `ocr-edit-${surface}-${row.id}`;
 
   return (
     <div className="space-y-4" onClick={stopEditClick}>
-      <form id={editFormId} action={updateOcrDocumentInline} />
+      <form id={editFormId} action={updateOcrDocumentInline} onSubmit={detailSave.onSubmit} />
+      <OperationError message={detailSave.feedback?.formId === editFormId && detailSave.feedback.error ? detailSave.feedback.message : undefined} />
       <input type="hidden" form={editFormId} name="company" value={company} />
       {row.mailDocumentId ? <input type="hidden" form={editFormId} name="mailDocumentId" value={row.mailDocumentId} /> : null}
       {row.receivedInvoiceId ? <input type="hidden" form={editFormId} name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
@@ -368,8 +378,7 @@ function DocumentEditor({
           この郵便物を編集
         </div>
         <Button type="submit" form={editFormId} disabled={!canEdit} size="sm" className="gap-1">
-          <Save className="h-4 w-4" />
-          保存
+          <OperationPending pending={company === "JAPAN" && detailSave.pending}><Save className="h-4 w-4" />保存</OperationPending>
         </Button>
       </div>
 
@@ -448,7 +457,7 @@ function DocumentEditor({
             </div>
           ) : (
             <>
-            {row.mailDocumentId ? <MailInvoiceReflectionForm key={row.id} mailDocumentId={row.mailDocumentId} mailUpdatedAt={row.mailUpdatedAt} defaults={row.reflectDefaults} vendors={vendors} projects={projects} statusOptions={statusOptions} broken={row.linkBroken} disabled={!canEdit} /> : null}
+            {row.mailDocumentId ? <MailInvoiceReflectionForm company={company} key={row.id} mailDocumentId={row.mailDocumentId} mailUpdatedAt={row.mailUpdatedAt} defaults={row.reflectDefaults} vendors={vendors} projects={projects} statusOptions={statusOptions} broken={row.linkBroken} disabled={!canEdit} /> : null}
             {row.mailDocumentId ? <MailRelinkForm company={company} mailDocumentId={row.mailDocumentId} mailUpdatedAt={row.mailUpdatedAt} candidates={row.linkCandidates ?? []} targets={linkTargets} broken={row.linkBroken} brokenTargetId={row.brokenTargetId} disabled={!canEdit} /> : null}
             </>
           )}
@@ -501,7 +510,8 @@ export function OcrDocumentsTable({
   const [folderCreateOpen, setFolderCreateOpen] = useState(false);
   const [newFolderMonth, setNewFolderMonth] = useState("");
   const [creatingFolder, startCreateFolder] = useTransition();
-  const [folderError, setFolderError] = useState("");
+  const [folderError, setFolderError] = useOperationError(company);
+  const detailSave = useFeedbackForm(company, saveOcrDocumentDetails, "郵便物の詳細を保存しました");
   const folderUploadInputRef = useRef<HTMLInputElement>(null);
   const [draggedIds, setDraggedIds] = useState<Set<string>>(new Set());
   const [dragOverMonth, setDragOverMonth] = useState<string | null>(null);
@@ -512,6 +522,9 @@ export function OcrDocumentsTable({
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [visibleListCount, setVisibleListCount] = useState(LIST_BATCH_SIZE);
   const [uploadTargetMonth, setUploadTargetMonth] = useState<string | null>(null);
+  const folderUploadBusy = useRef(false);
+  const [folderRetry, setFolderRetry] = useState<{ files: File[]; month: string }>();
+  const [folderOperationError, setFolderOperationError] = useState("");
   const [uploadingMonth, setUploadingMonth] = useState<string | null>(null);
   const [folderMonthWidth, setFolderMonthWidth] = useState(180);
   const [folderSenderWidth, setFolderSenderWidth] = useState(220);
@@ -697,7 +710,8 @@ export function OcrDocumentsTable({
 
   const uploadFilesToMonth = useCallback(async (files: FileList | File[], targetMonth: string) => {
     const selected = Array.from(files);
-    if (!canEdit || !selected.length) return;
+    if (!canEdit || !selected.length || (company === "JAPAN" && folderUploadBusy.current)) return;
+    if (company === "JAPAN") { folderUploadBusy.current = true; setFolderOperationError(""); setFolderRetry({ files: selected, month: targetMonth }); }
     setUploadingMonth(targetMonth);
     try {
       const formData = new FormData();
@@ -717,6 +731,16 @@ export function OcrDocumentsTable({
       const results = Array.isArray(body.results) ? body.results : [];
       const errorCount = results.filter((result: { error?: string }) => result.error).length;
       const okCount = Math.max(0, results.length - errorCount);
+      if (company === "JAPAN") {
+        const retained = unconfirmedUploadFiles(selected, results);
+        setFolderRetry(retained.length ? { files: retained, month: targetMonth } : undefined);
+        if (retained.length || errorCount) {
+          const feedback = uploadFeedback(results, retained.length);
+          setFolderOperationError([feedback.title, feedback.description, ...results.map((r: { error?: string }) => r.error)].filter(Boolean).join("。"));
+          toast(feedback); router.refresh(); return;
+        }
+        if (folderUploadInputRef.current) folderUploadInputRef.current.value = "";
+      }
       setActiveMonth(targetMonth);
       setActiveRowId(null);
       setViewMode("list");
@@ -726,19 +750,21 @@ export function OcrDocumentsTable({
         variant: errorCount ? "default" : "success",
       });
     } catch (error) {
+      if (company === "JAPAN") setFolderOperationError(error instanceof Error ? error.message : "収納結果を確認できませんでした。登録済みの内容を確認してから再試行してください。");
       toast({
         title: "収納に失敗しました",
         description: error instanceof Error ? error.message : "郵便物の収納に失敗しました",
         variant: "destructive",
       });
     } finally {
+      folderUploadBusy.current = false;
       setUploadingMonth(null);
       setUploadTargetMonth(null);
     }
   }, [canEdit, company, router]);
 
   const openFolderUpload = (month: string) => {
-    if (!canEdit) return;
+    if (!canEdit || (company === "JAPAN" && folderUploadBusy.current)) return;
     setUploadTargetMonth(month);
     folderUploadInputRef.current?.click();
   };
@@ -774,7 +800,8 @@ export function OcrDocumentsTable({
 
   // #2: multi-row drag support
   const moveRowsToMonth = (ids: Set<string>, targetMonth: string) => {
-    if (!ids.size || !canEdit) return;
+    if (!ids.size || !canEdit || (company === "JAPAN" && isMoving)) return;
+    if (company === "JAPAN") setFolderOperationError("");
     const rowsToMove = rows.filter((r) => ids.has(r.id) && (r.folderMonth || monthKey(r.createdAt)) !== targetMonth);
     if (!rowsToMove.length) return;
     startMoveTransition(async () => {
@@ -795,6 +822,7 @@ export function OcrDocumentsTable({
         toast({ title: `${rowsToMove.length}件を${monthLabel(targetMonth)}へ移動しました`, variant: "success" });
         router.refresh();
       } catch (error) {
+        if (company === "JAPAN") setFolderOperationError(error instanceof Error ? error.message : "郵便物を移動できませんでした");
         toast({
           title: "移動に失敗しました",
           description: error instanceof Error ? error.message : "郵便物を移動できませんでした",
@@ -904,7 +932,7 @@ export function OcrDocumentsTable({
         multiple
         onChange={(event) => {
           if (event.target.files && uploadTargetMonth) void uploadFilesToMonth(event.target.files, uploadTargetMonth);
-          event.target.value = "";
+          if (company !== "JAPAN") event.target.value = "";
         }}
       />
       <section aria-label="郵便物一覧" className="min-w-0 space-y-6">
@@ -916,6 +944,9 @@ export function OcrDocumentsTable({
             <Button type="button" className="min-h-11 lg:min-h-11" disabled={!canEdit} onClick={openDropzone}><Plus className="size-4" />郵便物を追加</Button>
           </div>
         </div>
+        {company === "JAPAN" ? <><OperationError message={folderOperationError} />
+          {folderRetry && !uploadingMonth ? <div className="flex flex-wrap items-center gap-2 text-xs"><p className="text-muted-foreground">{monthLabel(folderRetry.month)}への選択{folderRetry.files.length}件を保持しています。登録済みの内容を確認してから再試行してください。</p><Button type="button" variant="outline" size="sm" onClick={() => void uploadFilesToMonth(folderRetry.files, folderRetry.month)}>保持したファイルを再試行（{folderRetry.files.length}件）</Button></div> : null}
+        </> : null}
         <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み・表示</h2>
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <div className="relative min-w-0 basis-64 flex-1"><Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} aria-label="郵便物を検索" placeholder="発送元・ファイル名・案件を検索" className="min-h-11 pl-9 lg:min-h-11 lg:pl-9" onChange={(event) => { setQuery(event.target.value); setVisibleListCount(LIST_BATCH_SIZE); }} /></div>
@@ -970,7 +1001,7 @@ export function OcrDocumentsTable({
         </div>
         </section>
         <p className="text-xs text-muted-foreground">処理状態は書類整理のための手動設定です。変更すると保存します。支払状況とは連動しません。</p>
-        {isSaving ? <p role="status" className="text-sm">保存中…</p> : saveFeedback ? <p role={saveFeedback.error ? "alert" : "status"} className={saveFeedback.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>{saveFeedback.message}</p> : null}
+        {isSaving ? <p role="status" className="flex items-center gap-1 text-sm"><OperationPending pending={company === "JAPAN"}>保存中…</OperationPending></p> : saveFeedback ? <p role={saveFeedback.error ? "alert" : "status"} className={saveFeedback.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>{saveFeedback.message}</p> : null}
         <SelectionToolbar selection={selection} />
         <div>
           {selectedRows.length || pendingEdits.length ? (
@@ -1027,8 +1058,7 @@ export function OcrDocumentsTable({
                 ))}
               </select>
               <Button type="button" size="sm" className="ml-auto h-9 gap-1" disabled={isSaving || !pendingEdits.length} onClick={() => saveEdits(pendingEdits)}>
-                <Save className="h-3.5 w-3.5" />
-                分類を保存
+                <OperationPending pending={company === "JAPAN" && isSaving}><Save className="h-3.5 w-3.5" />分類を保存</OperationPending>
               </Button>
               <Button
                 type="button"
@@ -1322,7 +1352,7 @@ export function OcrDocumentsTable({
                             拡大表示
                           </Button>
                         </div>
-                        <DocumentPreview compact row={listPreviewRow} />
+                        <DocumentPreview company={company} compact row={listPreviewRow} />
                       </div>
 
                       <div className="space-y-2 rounded-lg border p-3">
@@ -1558,7 +1588,7 @@ export function OcrDocumentsTable({
                       </div>
                     </div>
 
-                    <form id={`ocr-edit-${activeRow.id}`} action={updateOcrDocumentInline} />
+                    <form id={`ocr-edit-${activeRow.id}`} action={updateOcrDocumentInline} onSubmit={detailSave.onSubmit} />
                     <input type="hidden" form={`ocr-edit-${activeRow.id}`} name="company" value={company} />
                     {activeRow.mailDocumentId ? <input type="hidden" form={`ocr-edit-${activeRow.id}`} name="mailDocumentId" value={activeRow.mailDocumentId} /> : null}
                     {activeRow.receivedInvoiceId ? (
@@ -1622,7 +1652,7 @@ export function OcrDocumentsTable({
                             </Button>
                           ) : null}
                         </div>
-                        <DocumentPreview compact row={activeRow} />
+                        <DocumentPreview company={company} compact row={activeRow} />
                       </div>
                     </div>
 
@@ -1642,10 +1672,10 @@ export function OcrDocumentsTable({
                       </button>
 
                       {showEditor ? <div className="border-t p-4" onClick={stopEditClick}>
+                        <OperationError message={detailSave.feedback?.formId === `ocr-edit-${activeRow.id}` && detailSave.feedback.error ? detailSave.feedback.message : undefined} />
                         <div className="mb-3 flex items-center justify-end gap-3">
-                          <Button type="submit" form={`ocr-edit-${activeRow.id}`} disabled={!canEdit} size="sm" className="gap-1">
-                            <Save className="h-4 w-4" />
-                            保存
+                          <Button type="submit" form={`ocr-edit-${activeRow.id}`} disabled={!canEdit || (company === "JAPAN" && detailSave.pending)} size="sm" className="gap-1">
+                            <OperationPending pending={company === "JAPAN" && detailSave.pending}><Save className="h-4 w-4" />保存</OperationPending>
                           </Button>
                         </div>
                         <div className="grid gap-4 xl:grid-cols-2">
@@ -1727,7 +1757,7 @@ export function OcrDocumentsTable({
                           ) : (
                             /* #26: Default values from OCR extraction when available */
                             <>
-                            {activeRow.mailDocumentId ? <MailInvoiceReflectionForm key={activeRow.id} mailDocumentId={activeRow.mailDocumentId} mailUpdatedAt={activeRow.mailUpdatedAt} defaults={activeRow.reflectDefaults} vendors={vendors} projects={projects} statusOptions={statusOptions} broken={activeRow.linkBroken} disabled={!canEdit} /> : null}
+                            {activeRow.mailDocumentId ? <MailInvoiceReflectionForm company={company} key={activeRow.id} mailDocumentId={activeRow.mailDocumentId} mailUpdatedAt={activeRow.mailUpdatedAt} defaults={activeRow.reflectDefaults} vendors={vendors} projects={projects} statusOptions={statusOptions} broken={activeRow.linkBroken} disabled={!canEdit} /> : null}
                             {activeRow.mailDocumentId ? <MailRelinkForm company={company} mailDocumentId={activeRow.mailDocumentId} mailUpdatedAt={activeRow.mailUpdatedAt} candidates={activeRow.linkCandidates ?? []} targets={linkTargets} broken={activeRow.linkBroken} brokenTargetId={activeRow.brokenTargetId} disabled={!canEdit} /> : null}
                             </>
                           )}
@@ -1780,7 +1810,7 @@ export function OcrDocumentsTable({
             <input type="hidden" name="company" value={company} />
             <label className="grid gap-2 text-sm">年月<Input name="month" type="month" value={newFolderMonth} onChange={(event) => setNewFolderMonth(event.target.value)} className="min-h-11 lg:min-h-11" required disabled={creatingFolder} /></label>
             {folderError ? <p role="alert" className="text-sm text-destructive">{folderError}</p> : null}
-            <Button type="submit" className="min-h-11 lg:min-h-11" disabled={creatingFolder}>{creatingFolder ? <LoaderCircle className="size-4 animate-spin" /> : <FolderPlus className="size-4" />}作成</Button>
+            <Button type="submit" className="min-h-11 lg:min-h-11" disabled={creatingFolder}><OperationPending pending={company === "JAPAN" && creatingFolder}>{creatingFolder ? <LoaderCircle className="size-4 animate-spin" /> : <FolderPlus className="size-4" />}作成</OperationPending></Button>
           </form>
         </DialogContent>
       </Dialog>
@@ -1842,7 +1872,7 @@ export function OcrDocumentsTable({
                       </Button>
                     ) : null}
                   </div>
-                  <DocumentPreview row={dialogRow} />
+                  <DocumentPreview company={company} row={dialogRow} />
                 </div>
               </div>
             </>

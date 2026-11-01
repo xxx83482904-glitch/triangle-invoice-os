@@ -244,6 +244,9 @@
 .bank-account-filter { width: 270px; max-width: 100%; }
 .bank-ledger-header > div:first-child { flex: 1 1 450px; }
 .bank-toolbar-group + .bank-toolbar-group { border-inline-start: 1px solid var(--border); padding-inline-start: 12px; }
+@media (width < 64rem) {
+  .bank-ledger[data-company="JAPAN"] .bank-toolbar-group + .bank-toolbar-group { border-inline-start: 0; padding-inline-start: 0; }
+}
 .bank-workflow-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; }
 .bank-workflow-line > nav { border-bottom: 0; }
 .bank-ledger-totals { padding-block: 0; }

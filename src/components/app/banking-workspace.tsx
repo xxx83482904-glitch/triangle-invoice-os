@@ -1,4 +1,6 @@
 "use client";
+import { bankSaveFailureMessage, operationFailureToast } from "@/lib/operation-feedback";
+import { OperationError } from "@/components/app/operation-feedback";
 import { SectionExportDialog } from "@/components/app/section-export-dialog";
 
 import type { BankAccountOption } from "@/lib/bank-account-options";
@@ -289,7 +291,7 @@ export function BankingWorkspace(props: Props) {
         setSavedRows((current) => ({ ...current, ...Object.fromEntries(unchanged.map((row) => [row.id, { ...rows.find((item) => item.id === row.id), ...row, predictionPending: false }])) }));
         if (!changes.length && destination) { setLeaveUrl(null); router.push(destination); return; }
         setSavePreview({ scope, choice, changes, destination, omitted: (scope === "selected" ? selected.size : ids.length) - changes.length, unselected: matchingSnapshot?.filter((id) => !selected.has(id)).length || 0 });
-      } catch (error) { setError(error instanceof Error ? error.message : "保存内容を取得できませんでした。編集内容は保持されています"); }
+      } catch (error) { const message = error instanceof Error ? error.message : "保存内容を取得できませんでした。編集内容は保持されています"; setError(message); if (company === "JAPAN") { setSaveResult({ saved: 0, remaining: bankSaveIds(rows, drafts, selected, scope).length, uncertain: false }); toast(operationFailureToast(message)); } }
     });
   }
   function chooseSave(value?: string) {
@@ -330,7 +332,9 @@ export function BankingWorkspace(props: Props) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "通信に失敗しました";
         setSaveResult({ saved, remaining: edits.length - saved, uncertain });
-        setError(`${saved}件保存済み。${message}。${uncertain ? "応答のないバッチは結果未確認です。再保存前に最新状態を確認してください。" : ""}残りの変更・選択は保持されています`);
+        const feedback = company === "JAPAN" ? bankSaveFailureMessage(message, saved, uncertain) : `${saved}件保存済み。${message}。${uncertain ? "応答のないバッチは結果未確認です。再保存前に最新状態を確認してください。" : ""}残りの変更・選択は保持されています`;
+        setError(feedback);
+        if (company === "JAPAN") toast(operationFailureToast(feedback));
       } finally { setSaving(false); }
     });
   }
@@ -455,7 +459,7 @@ export function BankingWorkspace(props: Props) {
   const matchedContent = (text: string) => bankSearchHighlights(text || "摘要なし", filters.query).map((part, index) => part.matched ? <mark key={index} className="bg-yellow-200 text-black">{part.text}</mark> : part.text);
   const categoryDisabled = pending || filterDirty || categoryTargets.some((row) => Boolean(row.bookkeeping?.splits?.length));
 
-  return <div className="bank-ledger min-w-0 space-y-2 pb-48 md:pb-24">
+  return <div data-company={company} className="bank-ledger min-w-0 space-y-2 pb-48 md:pb-24">
     <header className="bank-ledger-header flex flex-wrap items-center justify-between gap-2 border-b py-2 lg:py-1">
       <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 className="break-words text-2xl font-semibold">口座・カード明細</h1><select className={`${bankSelectClass} bank-account-filter`} aria-label="口座で絞り込み" value={filterEdits.account ?? props.selectedAccountOption} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, account: e.target.value, analysisThrough: "" }))}><option value="">すべての口座・カード</option>{props.accountOptions.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select></div>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
@@ -487,7 +491,7 @@ export function BankingWorkspace(props: Props) {
         });
       }} />自動同期（6時間ごと）</label>
     </div>
-    {error || sync?.error ? <div role="alert" className="flex items-start gap-2 border-l-2 border-destructive bg-destructive/5 p-3 text-sm"><CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" /><span className="min-w-0 break-words">{error || sync?.error}</span>{error ? <Button size="icon" variant="ghost" className="ml-auto size-11 shrink-0" aria-label="エラーを閉じる" title="閉じる" onClick={() => setError("")}><X className="size-4" /></Button> : null}</div> : null}
+    {(error || sync?.error) && !(company === "JAPAN" && error && saveResult) ? <div role="alert" className="flex items-start gap-2 border-l-2 border-destructive bg-destructive/5 p-3 text-sm"><CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" /><span className="min-w-0 break-words">{error || sync?.error}</span>{error ? <Button size="icon" variant="ghost" className="ml-auto size-11 shrink-0" aria-label="エラーを閉じる" title="閉じる" onClick={() => setError("")}><X className="size-4" /></Button> : null}</div> : null}
     {props.selectedBalance?.kind === "BANK" && !props.selectedBalance.unspecified ? <details className="bank-balance-details border-b py-2"><summary className="cursor-pointer text-sm">計算残高 <strong className="tabular-nums">{props.selectedBalance.balanceCalculation ? money.format(props.selectedBalance.balanceCalculation.amount) : "未計算"}</strong>{props.selectedBalance.balanceCalculation && !props.selectedBalance.balanceCalculation.complete ? <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">暫定</span> : null}</summary><section aria-label="選択口座の計算残高" className="flex min-w-0 flex-wrap items-start justify-between gap-4 py-3">
       <div className="min-w-0 flex-1 basis-56"><h2 className="mb-2 break-words text-sm font-medium">{props.selectedBalance.name}</h2><BankBalanceSummary row={props.selectedBalance} /></div>
       <div className="min-w-0 space-y-2 text-xs text-muted-foreground">
@@ -574,6 +578,7 @@ export function BankingWorkspace(props: Props) {
       <aside ref={categoryRail} aria-label="勘定科目の選択" className="bank-category-rail hidden xl:flex">{reviewPanel}<div className="min-h-0 flex-1"><BankCategoryPicker categories={categories} targets={categoryTargets} disabled={categoryDisabled} onApply={applyCategory} /></div></aside>
     </div>
     {company === "JAPAN" ? <footer className="bank-ledger-savebar is-unified shadow-sm" aria-label="明細の保存">
+      {error && saveResult ? <div className="absolute inset-x-0 bottom-full mb-2 flex max-h-36 items-start gap-2 overflow-y-auto rounded-lg border border-destructive/40 bg-card p-3 shadow-sm"><OperationError message={error} className="min-w-0 flex-1" /><Button type="button" size="icon" variant="ghost" aria-label="保存エラーを閉じる" onClick={() => setError("")}><X className="size-4" /></Button></div> : null}
       <div className="flex w-full min-w-0 items-center gap-2">
         <div role="status" className="min-w-0 flex-1 text-[10px] leading-3 lg:flex lg:flex-wrap lg:gap-x-2 lg:text-xs lg:leading-4"><span className="block">選択 {selected.size}件</span><span className="block">未保存の編集 {dirty}件</span><span className="block">自動候補 {candidates.length}件</span></div>
         <div className="hidden items-center gap-2 lg:flex">

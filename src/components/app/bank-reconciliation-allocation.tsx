@@ -1,4 +1,6 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
@@ -16,7 +18,7 @@ import { toast } from "@/hooks/use-toast";
 const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
 
 function PayerAlias({ company, bank, invoice, disabled, onBusy }: { company: CompanyScope; bank: ReconciliationBank; invoice: ReconciliationInvoice; disabled: boolean; onBusy: (value: boolean) => void }) {
-  const [pending, startTransition] = useTransition(), [error, setError] = useState("");
+  const [pending, startTransition] = useTransition(), [error, setError] = useOperationError(company);
   const [confirmed, setConfirmed] = useState(false);
   const [alias, setAlias] = useState(() => invoice.bankAliases.find((row) => row.accountId === bank.accountId && row.content === normalizeReconciliationName(bank.content)));
   function save(removeId?: string) {
@@ -34,7 +36,7 @@ function PayerAlias({ company, bank, invoice, disabled, onBusy }: { company: Com
   }
   return <details className="text-xs"><summary className="min-h-11 cursor-pointer content-center">名義対応 {alias ? "登録済み" : "未登録"}</summary>
     <p className="break-words">{bank.content} → {invoice.party}</p>
-    {alias ? <Button variant="ghost" size="sm" disabled={disabled || pending} onClick={() => save(alias.id)}><Trash2 className="size-4" />名義対応を解除</Button> : <><label className="flex min-h-11 items-center gap-2"><input type="checkbox" disabled={disabled || pending} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />この口座の名義と取引先の対応を確認済み</label><Button variant="outline" size="sm" disabled={disabled || pending || !confirmed} onClick={() => save()}><Check className="size-4" />名義対応を保存</Button></>}
+    {alias ? <Button variant="ghost" size="sm" disabled={disabled || pending} onClick={() => save(alias.id)}><OperationPending pending={company === "JAPAN" && pending}><Trash2 className="size-4" />名義対応を解除</OperationPending></Button> : <><label className="flex min-h-11 items-center gap-2"><input type="checkbox" disabled={disabled || pending} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />この口座の名義と取引先の対応を確認済み</label><Button variant="outline" size="sm" disabled={disabled || pending || !confirmed} onClick={() => save()}><OperationPending pending={company === "JAPAN" && pending}><Check className="size-4" />名義対応を保存</OperationPending></Button></>}
     {error ? <p role="alert" className="text-destructive">{error}</p> : null}
   </details>;
 }
@@ -54,7 +56,7 @@ export function BankReconciliationAllocation({ company, bank, invoice, invoices 
     return keys.flatMap((key, index) => { const item = invoices.find((entry) => entry.key === key); if (!item) return []; const row = makeRow(item, remaining, index ? `initial-${index}` : "initial"); remaining = Math.max(0, remaining - Number(row.amount)); return [row]; });
   });
   const [pending, startTransition] = useTransition(), [aliasBusy, setAliasBusy] = useState(false);
-  const [acknowledged, setAcknowledged] = useState(false), [note, setNote] = useState(""), [error, setError] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false), [note, setNote] = useState(""), [error, setError] = useOperationError(company);
   const [addKey, setAddKey] = useState(""), [submitted, setSubmitted] = useState(false), [uncertain, setUncertain] = useState(false);
   const currentRevision = useMemo(() => JSON.stringify([bank.updatedAt, bank.remaining, bank.issue, bank.conflict, invoices.map((item) => [item.key, item.updatedAt, item.outstanding, item.payments])]), [bank, invoices]);
   const [reviewedRevision, setReviewedRevision] = useState(currentRevision);
@@ -113,6 +115,6 @@ export function BankReconciliationAllocation({ company, bank, invoice, invoices 
     <Input aria-label="配賦メモ" placeholder="配賦メモ" disabled={busy} maxLength={1000} value={note} onChange={(e) => { setNote(e.target.value); setAcknowledged(false); }} />
     <label className="flex min-h-11 items-center gap-3 text-sm"><input className="size-5 shrink-0" type="checkbox" checked={acknowledged} disabled={busy || stale} onChange={(e) => setAcknowledged(e.target.checked)} />{rows.length}件の原本・配賦額・通貨・二重計上なしを確認済み</label>
     {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
-    <Button className="min-h-11 w-full" disabled={busy || stale || !preview.valid || !acknowledged} onClick={submit}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}{submitted ? "配賦保存済み" : `${rows.length}件の配賦を一括確定`}</Button>
+    <Button className="min-h-11 w-full" disabled={busy || stale || !preview.valid || !acknowledged} onClick={submit}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}{submitted ? "配賦保存済み" : `${rows.length}件の配賦を一括確定`}</OperationPending></Button>
   </section>;
 }

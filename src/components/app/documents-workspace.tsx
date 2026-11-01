@@ -1,4 +1,5 @@
 "use client";
+import { OperationError, OperationPending } from "@/components/app/operation-feedback";
 
 import Image from "next/image";
 import { useListSelection } from "@/hooks/use-list-selection";
@@ -171,6 +172,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
   const [activeId, setActiveId] = useState(initialId || "");
   const [edits, setEdits] = useState<Record<string, IssuedEdit>>({});
   const [saving, startSave] = useTransition();
+  const [operationError, setOperationError] = useState("");
+  const saveInFlight = useRef(false);
   const [deleting, startDelete] = useTransition();
   const [deleteTargets, setDeleteTargets] = useState<DocumentRow[]>([]);
   const [paymentConfirm, setPaymentConfirm] = useState(false);
@@ -238,16 +241,19 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     if (!issuedOnly && window.innerWidth < 1280) requestAnimationFrame(() => preview.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
   function save(paymentDate?: string, destination?: string) {
+    if (company === "JAPAN" && (saving || deleting || saveInFlight.current)) return;
     if (paymentChanges.length && !paymentConfirm) { setAfterSave(destination || null); setPaymentConfirm(true); return; }
+    if (company === "JAPAN") { saveInFlight.current = true; setOperationError(""); }
     startSave(async () => {
       try {
         const result = await saveIssuedInvoiceEdits(company, Object.values(edits).map((edit) => ({ ...edit, ...(edit.status === "PAID" && paymentDate ? { paymentDate } : {}) })));
-        if (result.error) { setAfterSave(null); toast({ title: result.error, variant: "destructive" }); return; }
+        if (result.error) { setAfterSave(null); if (company === "JAPAN") setOperationError(result.error); toast({ title: result.error, variant: "destructive" }); return; }
         const target = destination || afterSave;
         setEdits({}); setPaymentConfirm(false); setAfterSave(null); setLeaveUrl(null);
         if (target) router.push(target); else router.refresh();
         toast({ title: changes + "件を保存しました", variant: "success" });
-      } catch { setAfterSave(null); toast({ title: "保存に失敗しました。変更内容を保持しています", variant: "destructive" }); }
+      } catch { setAfterSave(null); if (company === "JAPAN") setOperationError("保存に失敗しました。変更内容を保持しています"); toast({ title: "保存に失敗しました。変更内容を保持しています", variant: "destructive" }); }
+      finally { saveInFlight.current = false; }
     });
   }
   function askDelete(targets: DocumentRow[]) {
@@ -255,16 +261,18 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     setDeleteTargets(targets);
   }
   function confirmDelete() {
+    if (company === "JAPAN" && (saving || deleting)) return;
+    if (company === "JAPAN") setOperationError("");
     startDelete(async () => {
       try {
         const result = await deleteIssuedInvoices(company, deleteTargets.map((r) => ({ id: r.sourceId, updatedAt: r.updatedAt })));
-        if (result.error) { toast({ title: result.error, variant: "destructive" }); return; }
+        if (result.error) { if (company === "JAPAN") setOperationError(result.error); toast({ title: result.error, variant: "destructive" }); return; }
         const ids = new Set(deleteTargets.map((r) => r.id));
         setSelected((old) => new Set([...old].filter((id) => !ids.has(id))));
         if (ids.has(activeId)) setActiveId("");
         setDeleteTargets([]); router.refresh();
         toast({ title: deleteTargets.length + "件の請求書を削除しました", variant: "success" });
-      } catch { toast({ title: "削除に失敗しました。再度お試しください", variant: "destructive" }); }
+      } catch { if (company === "JAPAN") setOperationError("削除に失敗しました。再度お試しください"); toast({ title: "削除に失敗しました。再度お試しください", variant: "destructive" }); }
     });
   }
   function exportCsv() {
@@ -321,8 +329,9 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     </section>}
     <SelectionToolbar selection={selection}>
       {issuedOnly && canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="size-11" onClick={exportCsv}><Download className="size-4" /></Button> : null}
-      {issuedOnly && rows.some((row) => row.editable) ? <Button className="min-h-11" disabled={!changes || saving || deleting} onClick={() => save()}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{changes ? ` (${changes})` : ""}</Button> : null}
+      {issuedOnly && rows.some((row) => row.editable) ? <Button className="min-h-11" disabled={!changes || saving || deleting} onClick={() => save()}><OperationPending pending={company === "JAPAN" && saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{changes ? ` (${changes})` : ""}</OperationPending></Button> : null}
     </SelectionToolbar>
+    {company === "JAPAN" ? <OperationError message={operationError} /> : null}
     {selectedRows.length ? <div aria-label="選択した書類の一括操作" className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 shadow-sm [&_button]:min-h-11">
       <span className="mr-auto text-sm font-medium">{selectedRows.length}件選択{hiddenSelectedCount ? <span className="ml-2 text-xs font-normal text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}</span>
       {selectedRows.length > 0 && selectedRows.every((r) => r.kind === "issued" && r.editable) ? <Button variant="outline" size="sm" disabled={saving || deleting} className="text-destructive" onClick={() => askDelete(selectedRows)}><Trash2 className="size-4" />選択した{selectedRows.length}件を削除</Button> : null}
@@ -398,7 +407,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
           <TabsContent value="edit"><DocumentDetails row={active} company={company} projects={projects} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} view="edit" /></TabsContent>
           <TabsContent value="file"><DocumentDetails row={active} company={company} projects={projects} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} view="file" /></TabsContent>
         </Tabs> : null}
-        <DialogFooter className="sticky bottom-0 border-t bg-background pt-3"><Button variant="outline" disabled={saving || deleting} onClick={() => setActiveId("")}>一覧に戻る</Button>{changes ? <Button disabled={saving || deleting} onClick={() => save()}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存 ({changes})</Button> : null}</DialogFooter>
+        {company === "JAPAN" ? <OperationError message={operationError} /> : null}
+        <DialogFooter className="sticky bottom-0 border-t bg-background pt-3"><Button variant="outline" disabled={saving || deleting} onClick={() => setActiveId("")}>一覧に戻る</Button>{changes ? <Button disabled={saving || deleting} onClick={() => save()}><OperationPending pending={company === "JAPAN" && saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存 ({changes})</OperationPending></Button> : null}</DialogFooter>
       </DialogContent>
     </Dialog>
     <Dialog open={discardOpen} onOpenChange={(open) => { if (!saving && !deleting) setDiscardOpen(open); }}><DialogContent>
@@ -413,7 +423,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       <DialogContent showCloseButton={!deleting}>
         <DialogHeader><DialogTitle>請求書を削除しますか？</DialogTitle><DialogDescription>{deleteTargets.length}件を一覧から削除します。履歴と原本は保持されます。</DialogDescription></DialogHeader>
         <ul className="max-h-40 space-y-1 overflow-auto break-all text-sm">{deleteTargets.map((r) => <li key={r.id}>{r.title}</li>)}</ul>
-        <DialogFooter><Button variant="outline" disabled={deleting} onClick={() => setDeleteTargets([])}>キャンセル</Button><Button variant="destructive" disabled={deleting} onClick={confirmDelete}>{deleting ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}{deleting ? "削除中..." : "削除する"}</Button></DialogFooter>
+        {company === "JAPAN" ? <OperationError message={operationError} /> : null}
+        <DialogFooter><Button variant="outline" disabled={deleting} onClick={() => setDeleteTargets([])}>キャンセル</Button><Button variant="destructive" disabled={deleting} onClick={confirmDelete}><OperationPending pending={company === "JAPAN" && deleting} label="削除中…">{deleting ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}{deleting ? "削除中..." : "削除する"}</OperationPending></Button></DialogFooter>
       </DialogContent>
     </Dialog>
     <Dialog open={paymentConfirm} onOpenChange={(open) => { if (!saving) { setPaymentConfirm(open); if (!open) setAfterSave(null); } }}>
@@ -422,7 +433,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
         <ul className="max-h-48 space-y-2 overflow-auto text-sm">{paymentChanges.map((item) => <li key={item.id} className="flex flex-wrap justify-between gap-2"><span className="break-all">{item.title}</span><span className="tabular-nums">{item.reversal ? "取消" : "入金"} {number.format(item.amount)}</span></li>)}</ul>
         <form onSubmit={(event) => { event.preventDefault(); save(String(new FormData(event.currentTarget).get("paymentDate") || "")); }} className="space-y-4">
           {paymentChanges.some((item) => !item.reversal) ? <label className="block space-y-1 text-sm">入金日<Input aria-label="入金日" name="paymentDate" type="date" required defaultValue={todayIso()} disabled={saving} /></label> : null}
-          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => { setPaymentConfirm(false); setAfterSave(null); }}>キャンセル</Button><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}確認して保存</Button></DialogFooter>
+          {company === "JAPAN" ? <OperationError message={operationError} /> : null}
+          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => { setPaymentConfirm(false); setAfterSave(null); }}>キャンセル</Button><Button type="submit" disabled={saving}><OperationPending pending={company === "JAPAN" && saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}確認して保存</OperationPending></Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

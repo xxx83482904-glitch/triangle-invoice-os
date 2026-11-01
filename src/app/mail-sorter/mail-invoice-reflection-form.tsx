@@ -1,5 +1,8 @@
 "use client";
 
+import type { CompanyScope } from "@/lib/company";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 import { useState, useTransition } from "react";
 import { reflectMailDocumentToReceivedInvoice } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -8,12 +11,12 @@ import { toast } from "@/hooks/use-toast";
 import type { MailInvoiceDefaults } from "@/lib/mail-invoice-defaults";
 
 type Option = { value: string; label: string };
-export function MailInvoiceReflectionForm({ mailDocumentId, mailUpdatedAt, defaults, vendors, projects, statusOptions, broken, disabled }: {
-  mailDocumentId: string; mailUpdatedAt?: string; defaults?: MailInvoiceDefaults;
+export function MailInvoiceReflectionForm({ company, mailDocumentId, mailUpdatedAt, defaults, vendors, projects, statusOptions, broken, disabled }: {
+  company: CompanyScope; mailDocumentId: string; mailUpdatedAt?: string; defaults?: MailInvoiceDefaults;
   vendors: Option[]; projects: Option[]; statusOptions: Option[]; broken?: boolean; disabled?: boolean;
 }) {
   const [fields, setFields] = useState<{ vendorId: string; projectId: string; status: string; issueDate: string; dueDate: string; total: string }>(() => ({ vendorId: "", projectId: "", status: "REVIEWING", issueDate: "", dueDate: "", total: "", ...defaults }));
-  const [error, setError] = useState("");
+  const [error, setError] = useOperationError(company);
   const [pending, startTransition] = useTransition();
   const change = (key: keyof typeof fields, value: string) => setFields((current) => ({ ...current, [key]: value }));
   const selectClass = "h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm";
@@ -42,6 +45,6 @@ export function MailInvoiceReflectionForm({ mailDocumentId, mailUpdatedAt, defau
       <label className="grid gap-1 text-xs">合計<Input name="total" type="number" min="0" step="1" value={fields.total} onChange={(event) => change("total", event.target.value)} className="font-mono" /></label>
     </fieldset>
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-    <Button type="submit" disabled={disabled || pending} size="sm">{pending ? "保存中…" : "反映"}</Button>
+    <Button type="submit" disabled={disabled || pending} size="sm"><OperationPending pending={company === "JAPAN" && pending}>{pending ? "保存中…" : "反映"}</OperationPending></Button>
   </form>;
 }

@@ -1,5 +1,8 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 
+import { toast } from "@/hooks/use-toast";
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, LoaderCircle, Plus, Save, Trash2 } from "lucide-react";
@@ -30,7 +33,7 @@ export function BankBookkeepingDialog({ company, transaction, categories, disabl
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<BankBookkeepingDetail | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useOperationError(company);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, startTransition] = useTransition();
@@ -90,7 +93,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
     invoiceRequirement: row.bookkeeping?.invoiceRequirement || "UNDECIDED", memo: row.memo, reviewed: row.reviewed,
   }));
   const [splitMode, setSplitMode] = useState(Boolean(draft.splits.length));
-  const [error, setError] = useState("");
+  const [error, setError] = useOperationError(company);
   const [busy, startTransition] = useTransition();
   const locked = Boolean(detail.lockedReason);
   const available = categories.filter((category) => category.company === company && category.available && !category.deletedAt && (!category.officeCode || category.officeCode === row.officeCode));
@@ -111,6 +114,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
       try {
         const result = await saveBankBookkeepingAction(company, draft);
         if (!result.success) throw new Error(result.error);
+        if (company === "JAPAN") toast({ title: "記帳詳細を保存しました", variant: "success" });
         onSaved(result.transaction);
       } catch (cause) { setError(cause instanceof Error ? cause.message : "保存結果を確認できません。再度保存する前に詳細を開き直してください"); }
       finally { onBusy(false); }
@@ -152,6 +156,6 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
       </li>)}</ul></> : <p className="text-xs text-muted-foreground">一致する重複候補はありません</p>}
     </section>
     {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
-    <div className="flex justify-end border-t pt-3"><Button type="submit" className="min-h-11" disabled={locked || busy || Boolean(validation.issue) || holdInvalid || reviewInvalid}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{busy ? "保存中..." : "詳細を保存"}</Button></div>
+    <div className="flex justify-end border-t pt-3"><Button type="submit" className="min-h-11" disabled={locked || busy || Boolean(validation.issue) || holdInvalid || reviewInvalid}><OperationPending pending={company === "JAPAN" && busy}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{busy ? "保存中..." : "詳細を保存"}</OperationPending></Button></div>
   </form>;
 }

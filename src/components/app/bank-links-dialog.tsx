@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
+import { toast } from "@/hooks/use-toast";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, Check, CreditCard, FileCheck2, LoaderCircle, Search, Unlink } from "lucide-react";
@@ -20,7 +23,7 @@ const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase(
 
 export function BankLinksDialog({ company, initial, onClose }: { company: CompanyScope; initial: BankLinkData; onClose: () => void }) {
   const [data, setData] = useState(initial), [pending, startTransition] = useTransition();
-  const [saving, setSaving] = useState(false), [error, setError] = useState("");
+  const [saving, setSaving] = useState(false), [error, setError] = useOperationError(company);
   const [tab, setTab] = useState(initial.transfer.link ? "transfer" : initial.links.length ? "invoice" : initial.settlement ? "card" : "invoice");
   const [query, setQuery] = useState(""), [chosenKey, setChosenKey] = useState("");
   const [counterpartId, setCounterpartId] = useState(""), [acknowledged, setAcknowledged] = useState(false);
@@ -40,8 +43,9 @@ export function BankLinksDialog({ company, initial, onClose }: { company: Compan
     setData(result); setChosenKey(""); setCounterpartId(""); setAcknowledged(false); setRemoving(""); router.refresh();
   }
   function run(action: () => Promise<{ success: boolean; error?: string }>) {
+    if (company === "JAPAN" && busy) return;
     setError(""); startTransition(async () => {
-      try { const result = await action(); if (!result.success) throw new Error(result.error); await reload(); }
+      try { const result = await action(); if (!result.success) throw new Error(result.error); if (company === "JAPAN") toast({ title: "照合を更新しました", variant: "success" }); await reload(); }
       catch (error) { setError(error instanceof Error ? error.message : "結果を確認できません。再実行する前に画面を更新してください"); }
     });
   }
@@ -85,7 +89,7 @@ export function BankLinksDialog({ company, initial, onClose }: { company: Compan
           {links.length ? <ul aria-label="照合済みの請求書" className="divide-y border-t">{links.map((link) => {
             const invoice = invoices.find((row) => row.key === link.invoiceKey);
             return <li key={link.id} className="space-y-2 py-2"><div className="flex flex-wrap items-center justify-between gap-2"><span className="min-w-0 break-words">{invoice ? <Link href={invoice.href} className="text-primary hover:underline underline-offset-4 hover:text-primary" target="_blank" rel="noreferrer">{invoice.party} / {invoice.title}</Link> : "削除・移動された請求書"} / {money(link.amount)}{link.fee ? <span className="text-xs text-muted-foreground">（手数料 {money(link.fee.amount)} {link.fee.borneBy === "payer" ? "先方差引" : "込み"}）</span> : null}</span><Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => setRemoving(link.id)}><Unlink className="size-4" />解除</Button></div>{link.issue ? <p className="text-destructive">{link.issue}</p> : null}
-              {removing === link.id ? <div className="flex flex-wrap items-center gap-2 border-l-2 border-destructive p-2"><p className="text-xs">{link.createdPayment ? "照合時に作成した入金・支払い記録も取り消します。" : "既存の支払い記録は残ります。"}</p><Button variant="destructive" className="min-h-11" disabled={busy} onClick={() => run(() => removeBankReconciliationAction(company, link.id, link.updatedAt))}>照合解除を確定</Button><Button variant="ghost" disabled={busy} className="min-h-11" onClick={() => setRemoving("")}>キャンセル</Button></div> : null}
+              {removing === link.id ? <div className="flex flex-wrap items-center gap-2 border-l-2 border-destructive p-2"><p className="text-xs">{link.createdPayment ? "照合時に作成した入金・支払い記録も取り消します。" : "既存の支払い記録は残ります。"}</p><Button variant="destructive" className="min-h-11" disabled={busy} onClick={() => run(() => removeBankReconciliationAction(company, link.id, link.updatedAt))}><OperationPending pending={company === "JAPAN" && pending}>照合解除を確定</OperationPending></Button><Button variant="ghost" disabled={busy} className="min-h-11" onClick={() => setRemoving("")}>キャンセル</Button></div> : null}
             </li>;
           })}</ul> : null}
         </TabsContent>
@@ -94,13 +98,13 @@ export function BankLinksDialog({ company, initial, onClose }: { company: Compan
           {transfer.link ? <>
             <h3 className="text-sm font-semibold">資金移動の照合済み</h3><p className="break-words">{transfer.link.counterpart?.account} / {transfer.link.counterpart?.date}</p><p className="break-words text-muted-foreground">{transfer.link.counterpart?.content}</p>
             {transfer.link.counterpart ? <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><Link href={`/banking?${new URLSearchParams({ company, transaction: transfer.link.counterpart.id })}`} target="_blank" rel="noreferrer"><ArrowLeftRight className="size-4" />相手側の明細 / {money(transfer.link.counterpart.amount)}</Link></Button> : null}
-            {removing === transfer.link.id ? <div className="space-y-2 border-l-2 border-destructive p-3"><p>両側の振替扱いを照合前に戻します。</p><Button className="min-h-11" variant="destructive" disabled={busy} onClick={() => run(() => removeBankTransferAction(company, transfer.link!.id, transfer.link!.updatedAt))}>資金移動の照合解除を確定</Button><Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => setRemoving("")}>キャンセル</Button></div> : <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => setRemoving(transfer.link!.id)}><Unlink className="size-4" />資金移動の照合を解除</Button>}
+            {removing === transfer.link.id ? <div className="space-y-2 border-l-2 border-destructive p-3"><p>両側の振替扱いを照合前に戻します。</p><Button className="min-h-11" variant="destructive" disabled={busy} onClick={() => run(() => removeBankTransferAction(company, transfer.link!.id, transfer.link!.updatedAt))}><OperationPending pending={company === "JAPAN" && pending}>資金移動の照合解除を確定</OperationPending></Button><Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => setRemoving("")}>キャンセル</Button></div> : <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => setRemoving(transfer.link!.id)}><Unlink className="size-4" />資金移動の照合を解除</Button>}
           </> : !transfer.issue ? <>
             <h3 className="text-sm font-semibold">{bank.side === "INCOME" ? "移動元の出金明細" : "移動先の入金明細"}</h3>
             <Input className="min-h-11" aria-label="資金移動の相手明細を検索" placeholder="口座名・摘要・日付" value={query} disabled={busy} onChange={(e) => setQuery(e.target.value)} />
             <ul aria-label="資金移動の候補" className="max-h-72 divide-y overflow-y-auto border-y">{transfer.candidates.filter((row) => normalized(`${row.account} ${row.content} ${row.date}`).includes(normalized(query))).map((row) => <li key={row.id}><button className={`flex min-h-11 w-full items-start gap-2 p-3 text-left ${counterpartId === row.id ? "bg-primary/10" : "hover:bg-muted"}`} aria-pressed={counterpartId === row.id} disabled={busy} onClick={() => { setCounterpartId(row.id); setAcknowledged(false); }}><Check className={`mt-0.5 size-4 shrink-0 ${counterpartId === row.id ? "text-primary" : "invisible"}`} /><span className="min-w-0"><strong className="block break-words">{row.account}</strong><span className="block break-words">{row.date} / {row.content}</span><span className="tabular-nums">{money(row.amount)}</span>{row.feeDifference ? <span className="block text-xs text-amber-700 dark:text-amber-300">差額 {money(row.feeDifference)} を送金手数料として資金移動に記録</span> : null}</span></button></li>)}</ul>
             {!transfer.candidates.length ? <p className="text-muted-foreground">同額・逆方向の未照合明細がありません。相手口座の明細を同期して確認してください。金額差は自動消込しません。</p> : null}
-            {counterpart ? <><p className="text-xs text-muted-foreground">両口座の残高計算には残し、通常の収入・経費集計から除外します。</p><label className="flex min-h-11 items-start gap-3 py-2"><input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-primary" checked={acknowledged} disabled={busy} onChange={(e) => setAcknowledged(e.target.checked)} /><span>自社口座間・同じ通貨の同じ資金移動と確認済み</span></label><Button className="min-h-11 w-full" disabled={busy || !acknowledged} onClick={() => run(() => confirmBankTransferAction(company, { transactionId: bank.id, transactionUpdatedAt: bank.updatedAt, counterpartId: counterpart.id, counterpartUpdatedAt: counterpart.updatedAt, acknowledged: true, ...(counterpart.feeDifference ? { fee: { amount: counterpart.feeDifference } } : {}) }))}><ArrowLeftRight className="size-4" />資金移動の照合を確定</Button></> : null}
+            {counterpart ? <><p className="text-xs text-muted-foreground">両口座の残高計算には残し、通常の収入・経費集計から除外します。</p><label className="flex min-h-11 items-start gap-3 py-2"><input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-primary" checked={acknowledged} disabled={busy} onChange={(e) => setAcknowledged(e.target.checked)} /><span>自社口座間・同じ通貨の同じ資金移動と確認済み</span></label><Button className="min-h-11 w-full" disabled={busy || !acknowledged} onClick={() => run(() => confirmBankTransferAction(company, { transactionId: bank.id, transactionUpdatedAt: bank.updatedAt, counterpartId: counterpart.id, counterpartUpdatedAt: counterpart.updatedAt, acknowledged: true, ...(counterpart.feeDifference ? { fee: { amount: counterpart.feeDifference } } : {}) }))}><OperationPending pending={company === "JAPAN" && pending}><ArrowLeftRight className="size-4" />資金移動の照合を確定</OperationPending></Button></> : null}
           </> : null}
         </TabsContent>
       </Tabs>

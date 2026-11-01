@@ -64,3 +64,19 @@ export function uxRound1Fixture(today = "2026-11-01") {
   ];
   return data;
 }
+
+// Deliberately stale request snapshots for synthetic-only conflict verification. No saved rows are changed.
+export function uxRound1FeedbackCases(data: ReturnType<typeof uxRound1Fixture>) {
+  const bank = data.bankTransactions.find((row) => row.id === "ux-01-manual")!;
+  const received = data.receivedInvoices.find((row) => row.id === "ux-received-soon")!;
+  const issued = data.issuedInvoices.find((row) => row.id === "ux-issued-overdue")!;
+  const stale = (updatedAt: string) => new Date(Date.parse(updatedAt) - 1000).toISOString();
+  return {
+    bank: { ...bank, updatedAt: stale(bank.updatedAt), memo: "合成: 競合しても保持するメモ" },
+    received: { id: received.id, fields: { expectedUpdatedAt: stale(received.updatedAt), projectId: received.projectId, vendorId: received.vendorId, issueDate: received.issueDate, dueDate: received.dueDate, subtotal: received.subtotal, taxTotal: received.taxTotal, total: received.total, memo: "合成: 競合しても保持する受領メモ" } },
+    issued: { ...issued, needsReview: Boolean(issued.needsReview), updatedAt: stale(issued.updatedAt) },
+    duplicateInvoiceNumber: issued.invoiceNumber,
+    originals: { availableMail: "ux-mail-original", missingMail: "ux-mail-missing", availableReceived: "ux-received-soon", missingReceived: "ux-received-review" },
+    uiSteps: ["2つのタブで同じ合成明細を開く。Aでメモを編集して保存プレビューを開き、Bで別のメモを保存。Aの確認して保存で競合表示と下書き保持を確認。", "発行請求書の新規作成で既存番号 SYN-OVERDUE を入力し、重複エラーと入力保持を確認。", "通信失敗はブラウザのOfflineで合成ファイルを取り込み、理由とファイル選択の保持を確認。オンラインへ戻して登録済みの内容を確認後に再試行。"],
+  };
+}
