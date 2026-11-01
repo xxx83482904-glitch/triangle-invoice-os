@@ -14,6 +14,7 @@ import { applyReceivedInvoiceFields } from "@/lib/received-invoice-edits";
 import { receivedAmountsFromForm } from "@/lib/received-invoice-review";
 import { assertReceivedPaidAllowed, recordPayment } from "@/lib/payment-records";
 import { ZodError } from "zod";
+import { reflectMailInvoice } from "@/lib/mail-invoice-reflection";
 import { applyMailSorterEdits } from "@/lib/mail-processing";
 import { unlinkMailDocumentsForInvoice } from "@/lib/mail-links";
 import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
@@ -931,99 +932,17 @@ export async function updateMailDocumentsBulkCategory(formData: FormData) {
 
 export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
   const user = await requireUser();
-  if (!canManageMailSorter(user)) {
-    throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
-  }
-
-  const mailDocumentId = value(formData, "mailDocumentId");
-  const company = mailSorterCompany;
-  const vendorId = value(formData, "vendorId");
-  const projectId = value(formData, "projectId");
-  const issueDate = value(formData, "issueDate") || now().slice(0, 10);
-  const dueDate = value(formData, "dueDate") || addDays(issueDate, 30);
-  const subtotal = 0;
-  const taxTotal = 0;
-  const total = money(formData, "total");
-  const status = receivedInvoiceStatus(value(formData, "status"));
-  const memo = optional(formData, "memo");
-  const timestamp = now();
-  const data = await readData();
-  const before = data.mailDocuments.find((item) => item.id === mailDocumentId);
-
-  await mutateData(user.id, "REFLECT_MAIL_DOCUMENT_TO_RECEIVED_INVOICE", "MailDocument", mailDocumentId, (draft) => {
-    const mailDocument = draft.mailDocuments.find(
-      (item) => item.id === mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company,
-    );
-    if (!mailDocument) throw new Error("譖ｸ鬘槭′隕九▽縺九ｊ縺ｾ縺帙ｓ");
-
-    const existingLinkedInvoice = mailDocument.relatedReceivedInvoiceId
-      ? draft.receivedInvoices.find((item) => item.id === mailDocument.relatedReceivedInvoiceId && !item.deletedAt)
-      : undefined;
-    if (existingLinkedInvoice) return { mailDocument, receivedInvoice: existingLinkedInvoice };
-
-    const vendor = draft.vendors.find(
-      (item) => item.id === vendorId && !item.deletedAt && companyFromParam(item.company) === company,
-    );
-    if (!vendor) throw new Error("謾ｯ謇募・縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ");
-
-    const project = draft.projects.find(
-      (item) => item.id === projectId && !item.deletedAt && companyFromParam(item.company) === company,
-    );
-    if (!project) throw new Error("譯井ｻｶ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ");
-
-    const invoiceId = newId();
-    const invoice: ReceivedInvoice = {
-      id: invoiceId,
-      vendorId: vendor.id,
-      projectId: project.id,
-      folderMonth: mailDocument.folderMonth,
-      receivedDate: timestamp.slice(0, 10),
-      issueDate,
-      dueDate,
-      subtotal,
-      taxTotal,
-      total,
-      status,
-      fileUrl: mailDocument.fileUrl,
-      originalFileName: mailDocument.originalFileName,
-      mimeType: mailDocument.mimeType,
-      ocrText: mailDocument.ocrText,
-      memo: memo ?? mailDocument.memo,
-      uploadedById: mailDocument.uploadedById || user.id,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-
-    if (mailDocument.category !== "INVOICE" && mailDocument.category !== "RECEIPT") {
-      mailDocument.category = "INVOICE";
-    }
-    mailDocument.relatedReceivedInvoiceId = invoiceId;
-    mailDocument.memo = memo ?? mailDocument.memo;
-    mailDocument.updatedAt = timestamp;
-
-    draft.receivedInvoices.unshift(invoice);
-    if (status === "PAID") {
-      markReceivedInvoicePaid(draft, invoice, user.id, timestamp);
-    }
-    draft.attachments.unshift({
-      id: newId(),
-      relatedType: "ReceivedInvoice",
-      relatedId: invoice.id,
-      fileUrl: mailDocument.fileUrl,
-      fileName: mailDocument.originalFileName,
-      mimeType: mailDocument.mimeType,
-      uploadedById: user.id,
-      createdAt: timestamp,
+  try {
+    const result = await mutateData(user.id, "REFLECT_MAIL_DOCUMENT_TO_RECEIVED_INVOICE", "MailDocument", value(formData, "mailDocumentId"), (draft) => {
+      const actor = draft.users.find((row) => row.id === user.id && isActiveUser(row));
+      if (!actor) throw new Error("利用者の権限が変わっています。");
+      return reflectMailInvoice(draft, actor, formData);
     });
-
-    return { mailDocument, receivedInvoice: invoice };
-  }, before);
-
-  revalidatePath("/mail-sorter");
-  revalidatePath("/received-invoices");
-  revalidatePath("/payments");
-  revalidatePath("/dashboard");
-  redirect(`/mail-sorter?company=${company}`);
+    for (const path of ["/mail-sorter", "/received-invoices", "/documents", "/dashboard", "/banking/integrity", "/banking/reconcile", "/banking/obligations"]) revalidatePath(path);
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "保存できませんでした。" };
+  }
 }
 
 export async function deleteOcrDocument(formData: FormData) {

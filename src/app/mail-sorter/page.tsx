@@ -1,3 +1,4 @@
+import { mailInvoiceDefaults } from "@/lib/mail-invoice-defaults";
 import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { isMailProcessed } from "@/lib/mail-processing";
 import { SectionExportDialog } from "@/components/app/section-export-dialog";
@@ -69,6 +70,7 @@ export default async function MailSorterPage({
         : undefined;
       return {
         category: document.category,
+        reflectDefaults: invoice ? undefined : mailInvoiceDefaults(document, vendors.map((row) => ({ value: row.id, label: row.companyName })), projects.map((row) => ({ value: row.id, label: row.name }))),
         confidence: document.confidence,
         createdAt: document.createdAt,
         duplicateOfMailDocumentId: document.duplicateOfMailDocumentId,
