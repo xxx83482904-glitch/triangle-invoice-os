@@ -303,6 +303,7 @@
   --destructive: #a23f49;
   --destructive-foreground: #ffffff;
   --rail: #f0f9ff;
+  --rail-glass: rgb(240 249 255 / 0.94);
   --tile: #dfe8f1;
   --panel: linear-gradient(170deg, #dae4ed, #d5dfe9);
   --selected: #ecf5fb;
@@ -346,6 +347,7 @@
   --destructive: #e7a3aa;
   --destructive-foreground: #2a1216;
   --rail: #191e28;
+  --rail-glass: rgb(25 30 40 / 0.94);
   --tile: #2a313d;
   --panel: linear-gradient(170deg, #1b202a, #181d26);
   --selected: #272e3a;
@@ -395,8 +397,8 @@ body { background-color: var(--page-end); background-image: var(--page); backgro
 
 /* Shell */
 .workspace-desktop-header { border-color: transparent; background: var(--rail); }
-.workspace-mobile-header { border-color: transparent; background: color-mix(in oklch, var(--rail) 92%, transparent); }
-.workspace-mobile-nav { border-color: transparent; background: color-mix(in oklch, var(--rail) 94%, transparent); box-shadow: 0 -12px 28px -18px rgb(52 72 98 / 0.4); }
+.workspace-mobile-header { border-color: transparent; background: var(--rail-glass); }
+.workspace-mobile-nav { border-color: transparent; background: var(--rail-glass); box-shadow: 0 -12px 28px -18px rgb(52 72 98 / 0.4); }
 nav[aria-label="メインメニュー"] a { border-radius: 10px; color: var(--body); font-size: 13px; }
 nav[aria-label="メインメニュー"] a:hover { background: var(--tile); color: var(--foreground); }
 nav[aria-label="メインメニュー"] a[aria-current="page"] { background: var(--tile); color: var(--foreground); font-weight: 500; }

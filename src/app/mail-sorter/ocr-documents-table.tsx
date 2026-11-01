@@ -6,6 +6,7 @@ import { useOperationError } from "@/hooks/use-operation-error";
 import { unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
 import { OperationPending, OperationError } from "@/components/app/operation-feedback";
 import { saveOcrDocumentDetails } from "./edit-actions";
+import { OnScreenPdfFrame } from "@/components/app/on-screen-pdf-frame";
 import { OriginalDocumentPreview } from "@/app/received-invoices/original-document-preview";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, AlertTriangle, CheckSquare, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, List, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Search, Trash2, UploadCloud, X } from "lucide-react";
@@ -317,7 +318,7 @@ function DocumentPreview({ compact = false, row, company }: { compact?: boolean;
       <div className="space-y-2">
         {/* スマホ向けフォールバック: iframe は md 以上のみ */}
         <div className="hidden md:block">
-          <iframe title={row.fileName} src={row.fileUrl} className={`${frameClass} w-full rounded-md border bg-muted`} />
+          <OnScreenPdfFrame title={row.fileName} src={row.fileUrl} className={`${frameClass} w-full rounded-md border bg-muted`} />
         </div>
         <div className="flex items-center justify-center rounded-md bg-muted py-10 md:hidden">
           <Button asChild variant="outline">
