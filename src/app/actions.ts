@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
+import { obligationKindInput } from "@/lib/obligation-edits";
 import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
@@ -13,10 +14,13 @@ import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
 import { applyReceivedInvoiceFields } from "@/lib/received-invoice-edits";
 import { receivedAmountsFromForm } from "@/lib/received-invoice-review";
 import { assertReceivedPaidAllowed, recordPayment } from "@/lib/payment-records";
+import { ZodError } from "zod";
+import { reflectMailInvoice } from "@/lib/mail-invoice-reflection";
+import { applyMailSorterEdits } from "@/lib/mail-processing";
 import { unlinkMailDocumentsForInvoice } from "@/lib/mail-links";
 import { documentItemsFromFormData, documentItemTotals } from "@/lib/document-items";
 import { saveClient } from "@/lib/partner-project-edits";
-import { registrationSchema, requestRegistration } from "@/lib/user-access";
+import { isActiveUser, registrationSchema, requestRegistration } from "@/lib/user-access";
 import type {
   AppData,
   IssuedInvoice,
@@ -145,29 +149,6 @@ function uniqueFormValues(formData: FormData, key: string) {
   return Array.from(new Set(formData.getAll(key).map((item) => String(item).trim()).filter(Boolean)));
 }
 
-type MailSorterBulkEdit = {
-  category?: string;
-  mailDocumentId?: string;
-  processingStatus?: string;
-  receivedInvoiceId?: string;
-};
-
-function mailSorterBulkEdits(formData: FormData): MailSorterBulkEdit[] {
-  const raw = value(formData, "changes");
-  if (!raw) return [];
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) return [];
-  return parsed
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    .map((item) => ({
-      category: typeof item.category === "string" ? item.category : undefined,
-      mailDocumentId: typeof item.mailDocumentId === "string" ? item.mailDocumentId : undefined,
-      processingStatus: typeof item.processingStatus === "string" ? item.processingStatus : undefined,
-      receivedInvoiceId: typeof item.receivedInvoiceId === "string" ? item.receivedInvoiceId : undefined,
-    }))
-    .filter((item) => item.mailDocumentId || item.receivedInvoiceId);
-}
-
 function ocrFileUrlsForTargets(data: AppData, mailDocumentIds: string[], receivedInvoiceIds: string[]) {
   const urls = new Set<string>();
   for (const mailDocument of data.mailDocuments) {
@@ -193,14 +174,6 @@ function markReceivedInvoicePaid(data: AppData, invoice: ReceivedInvoice, _userI
   const summary = assertReceivedPaidAllowed(data, invoice);
   invoice.status = "PAID";
   invoice.paidAt = summary.paidAt ?? invoice.paidAt ?? timestamp.slice(0, 10);
-  invoice.updatedAt = timestamp;
-}
-
-// Document processing is separate from payment: marking mail as processed never touches payment state.
-function setReceivedInvoiceMailProcessed(data: AppData, invoice: ReceivedInvoice | undefined, mailProcessed: boolean, _userId: string, timestamp: string) {
-  void data;
-  if (!invoice || invoice.deletedAt) return;
-  invoice.mailProcessed = mailProcessed;
   invoice.updatedAt = timestamp;
 }
 
@@ -322,10 +295,13 @@ export async function createVendor(formData: FormData) {
   assertCan(user, "manage:vendors");
   const timestamp = now();
   const company = companyFromParam(value(formData, "company"));
+  assertCompanyAccess(user, company);
+  const obligationKind = obligationKindInput.parse(value(formData, "obligationKind") || "UNSET");
   const vendor: Vendor = {
     id: newId(),
     company,
     companyName: value(formData, "companyName"),
+    ...(obligationKind === "UNSET" ? {} : { obligationKind }),
     contactName: optional(formData, "contactName"),
     email: optional(formData, "email"),
     phone: optional(formData, "phone"),
@@ -891,165 +867,40 @@ export async function updateMailDocumentCategory(formData: FormData) {
     return mailDocument;
   }, before);
 
-  revalidatePath("/mail-sorter");
+  for (const path of ["/mail-sorter", "/banking/reconcile", "/banking/integrity"]) revalidatePath(path);
+}
+
+async function saveManualMailEdits(actorId: string, edits: unknown, action: string) {
+  const result = await mutateData(actorId, action, "OcrDocument", "bulk", (draft) => {
+    const actor = draft.users.find((row) => row.id === actorId && isActiveUser(row));
+    if (!actor) throw new Error("利用者の権限が変わっています");
+    return applyMailSorterEdits(draft, actor, mailSorterCompany, edits);
+  });
+  for (const path of ["/mail-sorter", "/received-invoices", "/documents", "/dashboard", "/banking/integrity", "/banking/reconcile", "/banking/obligations"]) revalidatePath(path);
+  return result;
 }
 
 export async function updateMailDocumentProcessingStatus(formData: FormData) {
   const user = await requireUser();
-  if (!canManageMailSorter(user)) {
-    throw new Error("権限がありません");
-  }
-
-  const mailDocumentId = optional(formData, "mailDocumentId");
-  const company = mailSorterCompany;
-  const receivedInvoiceId = optional(formData, "receivedInvoiceId");
-  const mailProcessed = value(formData, "processingStatus") === "processed";
-  const timestamp = now();
-  const data = await readData();
-  const before = {
-    mailDocument: mailDocumentId ? data.mailDocuments.find((item) => item.id === mailDocumentId) : undefined,
-    receivedInvoice: receivedInvoiceId ? data.receivedInvoices.find((item) => item.id === receivedInvoiceId) : undefined,
-  };
-  const targetId = mailDocumentId ?? receivedInvoiceId ?? "unknown";
-
-  await mutateData(user.id, "UPDATE_MAIL_DOCUMENT_PROCESSING_STATUS", "OcrDocument", targetId, (draft) => {
-    const mailDocument = mailDocumentId
-      ? draft.mailDocuments.find((item) => item.id === mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company)
-      : undefined;
-
-    if (mailDocument) {
-      mailDocument.mailProcessed = mailProcessed;
-      mailDocument.updatedAt = timestamp;
-    }
-
-    const receivedInvoice = receivedInvoiceId
-      ? draft.receivedInvoices.find((item) => item.id === receivedInvoiceId && !item.deletedAt)
-      : mailDocument?.relatedReceivedInvoiceId
-        ? draft.receivedInvoices.find((item) => item.id === mailDocument.relatedReceivedInvoiceId && !item.deletedAt)
-      : undefined;
-    const project = receivedInvoice ? draft.projects.find((item) => item.id === receivedInvoice.projectId) : undefined;
-    if (!mailDocument && (!receivedInvoice || companyFromParam(project?.company) !== company)) {
-      throw new Error("書類が見つかりません");
-    }
-
-    if (receivedInvoice && companyFromParam(project?.company) === company) {
-      setReceivedInvoiceMailProcessed(draft, receivedInvoice, mailProcessed, user.id, timestamp);
-    }
-    return { mailDocument, receivedInvoice };
-  }, before);
-
-  revalidatePath("/mail-sorter");
+  await saveManualMailEdits(user.id, [{ mailDocumentId: optional(formData, "mailDocumentId"), receivedInvoiceId: optional(formData, "receivedInvoiceId"), mailUpdatedAt: optional(formData, "mailUpdatedAt"), invoiceUpdatedAt: optional(formData, "invoiceUpdatedAt"), processingStatus: value(formData, "processingStatus") }], "UPDATE_MAIL_DOCUMENT_PROCESSING_STATUS");
 }
 
 export async function updateOcrDocumentsBulkProcessingStatus(formData: FormData) {
   const user = await requireUser();
-  if (!canManageMailSorter(user)) {
-    throw new Error("権限がありません");
-  }
-
-  const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
-  const company = mailSorterCompany;
-  const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
-  const mailProcessed = value(formData, "processingStatus") === "processed";
-  if (!mailDocumentIds.length && !receivedInvoiceIds.length) throw new Error("書類を選択してください");
-
-  const timestamp = now();
-  const data = await readData();
-  const before = {
-    mailDocuments: data.mailDocuments.filter((item) => mailDocumentIds.includes(item.id)),
-    receivedInvoices: data.receivedInvoices.filter((item) => receivedInvoiceIds.includes(item.id)),
-  };
-
-  await mutateData(user.id, "UPDATE_OCR_DOCUMENTS_BULK_PROCESSING_STATUS", "OcrDocument", "bulk", (draft) => {
-    let updated = 0;
-    for (const mailDocument of draft.mailDocuments) {
-      if (!mailDocumentIds.includes(mailDocument.id) || mailDocument.deletedAt || companyFromParam(mailDocument.company) !== company) continue;
-      mailDocument.mailProcessed = mailProcessed;
-      mailDocument.updatedAt = timestamp;
-      if (mailDocument.relatedReceivedInvoiceId) {
-        const receivedInvoice = draft.receivedInvoices.find((item) => item.id === mailDocument.relatedReceivedInvoiceId && !item.deletedAt);
-        setReceivedInvoiceMailProcessed(draft, receivedInvoice, mailProcessed, user.id, timestamp);
-      }
-      updated += 1;
-    }
-
-    for (const receivedInvoice of draft.receivedInvoices) {
-      if (!receivedInvoiceIds.includes(receivedInvoice.id) || receivedInvoice.deletedAt) continue;
-      const project = draft.projects.find((item) => item.id === receivedInvoice.projectId);
-      if (companyFromParam(project?.company) !== company) continue;
-      setReceivedInvoiceMailProcessed(draft, receivedInvoice, mailProcessed, user.id, timestamp);
-      updated += 1;
-    }
-
-    if (!updated) throw new Error("更新できる書類がありません");
-    return { mailProcessed, updated };
-  }, before);
-
-  revalidatePath("/mail-sorter");
+  const processingStatus = value(formData, "processingStatus");
+  const edits = [...uniqueFormValues(formData, "mailDocumentId").map((mailDocumentId) => ({ mailDocumentId, processingStatus })), ...uniqueFormValues(formData, "receivedInvoiceId").map((receivedInvoiceId) => ({ receivedInvoiceId, processingStatus }))];
+  await saveManualMailEdits(user.id, edits, "UPDATE_OCR_DOCUMENTS_BULK_PROCESSING_STATUS");
 }
 
 export async function saveMailSorterBulkEdits(formData: FormData) {
   const user = await requireUser();
-  if (!canManageMailSorter(user)) {
-    throw new Error("権限がありません");
+  try {
+    const result = await saveManualMailEdits(user.id, JSON.parse(value(formData, "changes")), "SAVE_MAIL_SORTER_BULK_EDITS");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    const message = error instanceof ZodError ? error.issues[0]?.message || "入力内容を確認してください" : error instanceof SyntaxError ? "保存内容を読み取れません" : error instanceof Error ? error.message : "保存できませんでした";
+    return { ok: false as const, error: message };
   }
-
-  const edits = mailSorterBulkEdits(formData);
-  if (!edits.length) throw new Error("保存する変更がありません");
-  const company = mailSorterCompany;
-  const timestamp = now();
-  const mailDocumentIds = edits.map((edit) => edit.mailDocumentId).filter((id): id is string => Boolean(id));
-  const receivedInvoiceIds = edits.map((edit) => edit.receivedInvoiceId).filter((id): id is string => Boolean(id));
-  const data = await readData();
-  const before = {
-    mailDocuments: data.mailDocuments.filter((item) => mailDocumentIds.includes(item.id)),
-    receivedInvoices: data.receivedInvoices.filter((item) => receivedInvoiceIds.includes(item.id)),
-  };
-
-  await mutateData(user.id, "SAVE_MAIL_SORTER_BULK_EDITS", "OcrDocument", "bulk", (draft) => {
-    let updated = 0;
-
-    for (const edit of edits) {
-      const hasProcessingStatus = edit.processingStatus === "processed" || edit.processingStatus === "unprocessed";
-      const mailProcessed = edit.processingStatus === "processed";
-      const category = edit.category ? mailDocumentCategory(edit.category) : undefined;
-      const mailDocument = edit.mailDocumentId
-        ? draft.mailDocuments.find((item) => item.id === edit.mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company)
-        : undefined;
-      const receivedInvoice = edit.receivedInvoiceId
-        ? draft.receivedInvoices.find((item) => item.id === edit.receivedInvoiceId && !item.deletedAt)
-        : mailDocument?.relatedReceivedInvoiceId
-          ? draft.receivedInvoices.find((item) => item.id === mailDocument.relatedReceivedInvoiceId && !item.deletedAt)
-          : undefined;
-      const project = receivedInvoice ? draft.projects.find((item) => item.id === receivedInvoice.projectId) : undefined;
-      const receivedInvoiceInScope = receivedInvoice && companyFromParam(project?.company) === company ? receivedInvoice : undefined;
-
-      if (mailDocument) {
-        if (category && mailDocument.category !== category) {
-          mailDocument.category = category;
-          updated += 1;
-        }
-        if (hasProcessingStatus && mailDocument.mailProcessed !== mailProcessed) {
-          mailDocument.mailProcessed = mailProcessed;
-          updated += 1;
-        }
-        mailDocument.updatedAt = timestamp;
-      }
-
-      if (hasProcessingStatus && receivedInvoiceInScope) {
-        setReceivedInvoiceMailProcessed(draft, receivedInvoiceInScope, mailProcessed, user.id, timestamp);
-        updated += 1;
-      }
-    }
-
-    if (!updated) throw new Error("保存する変更がありません");
-    return { updated };
-  }, before);
-
-  revalidatePath("/mail-sorter");
-  revalidatePath("/received-invoices");
-  revalidatePath("/payments");
-  revalidatePath("/dashboard");
 }
 
 export async function updateMailDocumentsBulkCategory(formData: FormData) {
@@ -1080,104 +931,22 @@ export async function updateMailDocumentsBulkCategory(formData: FormData) {
     return { category, updated };
   }, before);
 
-  revalidatePath("/mail-sorter");
+  for (const path of ["/mail-sorter", "/banking/reconcile", "/banking/integrity"]) revalidatePath(path);
 }
 
 export async function reflectMailDocumentToReceivedInvoice(formData: FormData) {
   const user = await requireUser();
-  if (!canManageMailSorter(user)) {
-    throw new Error("讓ｩ髯舌′縺ゅｊ縺ｾ縺帙ｓ");
-  }
-
-  const mailDocumentId = value(formData, "mailDocumentId");
-  const company = mailSorterCompany;
-  const vendorId = value(formData, "vendorId");
-  const projectId = value(formData, "projectId");
-  const issueDate = value(formData, "issueDate") || now().slice(0, 10);
-  const dueDate = value(formData, "dueDate") || addDays(issueDate, 30);
-  const subtotal = 0;
-  const taxTotal = 0;
-  const total = money(formData, "total");
-  const status = receivedInvoiceStatus(value(formData, "status"));
-  const memo = optional(formData, "memo");
-  const timestamp = now();
-  const data = await readData();
-  const before = data.mailDocuments.find((item) => item.id === mailDocumentId);
-
-  await mutateData(user.id, "REFLECT_MAIL_DOCUMENT_TO_RECEIVED_INVOICE", "MailDocument", mailDocumentId, (draft) => {
-    const mailDocument = draft.mailDocuments.find(
-      (item) => item.id === mailDocumentId && !item.deletedAt && companyFromParam(item.company) === company,
-    );
-    if (!mailDocument) throw new Error("譖ｸ鬘槭′隕九▽縺九ｊ縺ｾ縺帙ｓ");
-
-    const existingLinkedInvoice = mailDocument.relatedReceivedInvoiceId
-      ? draft.receivedInvoices.find((item) => item.id === mailDocument.relatedReceivedInvoiceId && !item.deletedAt)
-      : undefined;
-    if (existingLinkedInvoice) return { mailDocument, receivedInvoice: existingLinkedInvoice };
-
-    const vendor = draft.vendors.find(
-      (item) => item.id === vendorId && !item.deletedAt && companyFromParam(item.company) === company,
-    );
-    if (!vendor) throw new Error("謾ｯ謇募・縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ");
-
-    const project = draft.projects.find(
-      (item) => item.id === projectId && !item.deletedAt && companyFromParam(item.company) === company,
-    );
-    if (!project) throw new Error("譯井ｻｶ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ");
-
-    const invoiceId = newId();
-    const invoice: ReceivedInvoice = {
-      id: invoiceId,
-      vendorId: vendor.id,
-      projectId: project.id,
-      folderMonth: mailDocument.folderMonth,
-      receivedDate: timestamp.slice(0, 10),
-      issueDate,
-      dueDate,
-      subtotal,
-      taxTotal,
-      total,
-      status,
-      fileUrl: mailDocument.fileUrl,
-      originalFileName: mailDocument.originalFileName,
-      mimeType: mailDocument.mimeType,
-      ocrText: mailDocument.ocrText,
-      memo: memo ?? mailDocument.memo,
-      uploadedById: mailDocument.uploadedById || user.id,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-
-    if (mailDocument.category !== "INVOICE" && mailDocument.category !== "RECEIPT") {
-      mailDocument.category = "INVOICE";
-    }
-    mailDocument.relatedReceivedInvoiceId = invoiceId;
-    mailDocument.memo = memo ?? mailDocument.memo;
-    mailDocument.updatedAt = timestamp;
-
-    draft.receivedInvoices.unshift(invoice);
-    if (status === "PAID") {
-      markReceivedInvoicePaid(draft, invoice, user.id, timestamp);
-    }
-    draft.attachments.unshift({
-      id: newId(),
-      relatedType: "ReceivedInvoice",
-      relatedId: invoice.id,
-      fileUrl: mailDocument.fileUrl,
-      fileName: mailDocument.originalFileName,
-      mimeType: mailDocument.mimeType,
-      uploadedById: user.id,
-      createdAt: timestamp,
+  try {
+    const result = await mutateData(user.id, "REFLECT_MAIL_DOCUMENT_TO_RECEIVED_INVOICE", "MailDocument", value(formData, "mailDocumentId"), (draft) => {
+      const actor = draft.users.find((row) => row.id === user.id && isActiveUser(row));
+      if (!actor) throw new Error("利用者の権限が変わっています。");
+      return reflectMailInvoice(draft, actor, formData);
     });
-
-    return { mailDocument, receivedInvoice: invoice };
-  }, before);
-
-  revalidatePath("/mail-sorter");
-  revalidatePath("/received-invoices");
-  revalidatePath("/payments");
-  revalidatePath("/dashboard");
-  redirect(`/mail-sorter?company=${company}`);
+    for (const path of ["/mail-sorter", "/received-invoices", "/documents", "/dashboard", "/banking/integrity", "/banking/reconcile", "/banking/obligations"]) revalidatePath(path);
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "保存できませんでした。" };
+  }
 }
 
 export async function deleteOcrDocument(formData: FormData) {

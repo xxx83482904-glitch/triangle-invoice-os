@@ -97,6 +97,7 @@ export type Vendor = {
   id: string;
   company?: "CHINA" | "JAPAN";
   companyName: string;
+  obligationKind?: ObligationKind;
   bankAliases?: BankPartyAlias[];
   contactName?: string;
   email?: string;
@@ -113,6 +114,20 @@ export type Vendor = {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
+};
+
+export type ObligationKind = "TAX" | "SOCIAL_INSURANCE" | "NONE";
+export type ObligationExclusion = {
+  id: string; company: "JAPAN" | "CHINA"; targetId: string;
+  snapshot: { title: string; party: string; source: "received" | "mail" | "manual"; amount?: number };
+  reason: string; createdById: string; createdAt: string; updatedAt: string;
+  restoredAt?: string; restoredById?: string; restoreReason?: string;
+};
+export type ManualObligation = {
+  id: string; company: "JAPAN" | "CHINA"; title: string; party: string; amount: number; dueDate: string; memo: string;
+  status: "OPEN" | "PAID" | "CANCELED"; paidAt?: string;
+  createdById: string; createdAt: string; updatedAt: string;
+  history: Array<{ action: "CREATE" | "PAY" | "REOPEN" | "CANCEL" | "RESTORE"; reason: string; at: string; byId: string; paymentDate?: string }>;
 };
 
 export type SelectOption = {
@@ -416,6 +431,21 @@ export type AppData = {
   invoiceNumberSettings: InvoiceNumberSetting[];
   apiTokens?: ApiToken[];
   agentRequests?: AgentRequest[];
+  obligationExclusions?: ObligationExclusion[];
+  manualObligations?: ManualObligation[];
+  payrollSettings?: PayrollSettings[];
+  integrityAcknowledgements?: IntegrityAcknowledgement[];
+};
+
+export type IntegrityAcknowledgement = {
+  id: string; company: "JAPAN" | "CHINA"; issueId: string; kind: import("@/lib/integrity-types").IntegrityKind; fingerprint: string;
+  reason: string; batchId: string; createdAt: string; createdById: string; createdByName: string; updatedAt: string;
+  revokedAt?: string; revokedById?: string; revokedByName?: string; revokeReason?: string;
+};
+
+export type PayrollSettings = {
+  id: string; company: "JAPAN" | "CHINA"; mode: "DEFAULT" | "CUSTOM"; categoryIds: string[];
+  createdById: string; updatedById: string; createdAt: string; updatedAt: string;
 };
 
 export type ProjectMoney = {

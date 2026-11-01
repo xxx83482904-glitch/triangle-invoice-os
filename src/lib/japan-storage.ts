@@ -4,7 +4,7 @@ export function assertJapanData(data: AppData) {
   if (data.appEdition === "CHINA") throw new Error("中国版の保存先は日本版では使用できません");
   const scoped = [data.projects, data.clients, data.vendors, data.selectOptions, data.mailDocuments, data.mailFolders,
     data.bankAccounts, data.bankTransactions, data.accountingCategories, data.bankRules, data.bankSyncStates,
-    data.bankReconciliations, data.bankTransfers || []];
+    data.bankReconciliations, data.bankTransfers || [], data.obligationExclusions || [], data.manualObligations || [], data.payrollSettings || [], data.integrityAcknowledgements || []];
   if (scoped.some((rows) => rows?.some((row) => row.company === "CHINA"))) {
     throw new Error("中国データの分離・移行が必要です。日本版への保存を中止しました");
   }

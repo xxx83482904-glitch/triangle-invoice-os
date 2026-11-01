@@ -7,7 +7,7 @@ import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
 import { isSelectionControl } from "@/lib/list-selection";
 import { Fragment, type CSSProperties, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, reflectMailDocumentToReceivedInvoice, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
+import { createMailFolder, deleteMailFolder, deleteOcrDocument, deleteOcrDocumentsBulk, moveOcrDocumentToMonth, saveMailSorterBulkEdits, updateMailDocumentCategory, updateOcrDocumentInline } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,7 +17,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { MailDocumentCategory, ReceivedInvoiceStatus } from "@/lib/types";
+import { isMailProcessed, type MailSorterEdit } from "@/lib/mail-processing";
 import { matchesMailSearch } from "@/lib/mail-search";
+import { MailInvoiceReflectionForm } from "./mail-invoice-reflection-form";
+import type { MailInvoiceDefaults } from "@/lib/mail-invoice-defaults";
 import { MailRelinkForm, MailUnlinkButton } from "./mail-link-controls";
 
 type Option = {
@@ -65,6 +68,8 @@ export type OcrDocumentListItem = {
   fileMissing?: boolean;
   linkCandidates?: Array<{ label: string; value: string }>;
   mailUpdatedAt?: string;
+  invoiceUpdatedAt?: string;
+  reflectDefaults?: MailInvoiceDefaults;
 };
 
 type FolderOption = {
@@ -131,12 +136,6 @@ function formatDate(value?: string) {
 function monthKey(value: string) {
   const date = new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function addDaysIso(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00`);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 function monthLabel(value: string) {
@@ -282,11 +281,7 @@ function duplicateDescription(row: OcrDocumentListItem) {
   return `${row.duplicateReason ?? "重複候補"}${title}${score}`;
 }
 
-function isProcessed(row: OcrDocumentListItem) {
-  if (typeof row.mailProcessed === "boolean") return row.mailProcessed;
-  const s = row.extracted?.status;
-  return s === "PAID" || s === "SCHEDULED" || s === "ARCHIVED";
-}
+const isProcessed = isMailProcessed;
 
 function DocumentPreview({ compact = false, row }: { compact?: boolean; row: OcrDocumentListItem }) {
   const frameClass = compact ? "h-[56vh] min-h-[360px]" : "h-[68vh] min-h-96";
@@ -356,7 +351,6 @@ function DocumentEditor({
   vendors: Option[];
 }) {
   const editFormId = `ocr-edit-${surface}-${row.id}`;
-  const reflectFormId = `ocr-reflect-${surface}-${row.id}`;
 
   return (
     <div className="space-y-4" onClick={stopEditClick}>
@@ -366,13 +360,7 @@ function DocumentEditor({
       {row.receivedInvoiceId ? <input type="hidden" form={editFormId} name="receivedInvoiceId" value={row.receivedInvoiceId} /> : null}
       <input form={editFormId} type="hidden" name="fileName" value={row.fileName} />
 
-      {row.mailDocumentId && !row.receivedInvoiceId ? (
-        <>
-          <form id={reflectFormId} action={reflectMailDocumentToReceivedInvoice} />
-          <input type="hidden" form={reflectFormId} name="company" value={company} />
-          <input type="hidden" form={reflectFormId} name="mailDocumentId" value={row.mailDocumentId} />
-        </>
-      ) : null}
+
 
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-medium">
@@ -460,62 +448,7 @@ function DocumentEditor({
             </div>
           ) : (
             <>
-            <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium">{row.linkBroken ? "受領請求書を作り直す" : "受領請求書へ反映"}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{row.linkBroken ? "以前に反映した受領請求書は削除されています。この郵便物から作り直します。" : "この郵便物を受領請求書として登録します。"}</div>
-                </div>
-                <Button
-                  type="submit"
-                  form={reflectFormId}
-                  disabled={!canEdit || !row.mailDocumentId || !vendors.length || !projects.length}
-                  size="sm"
-                  className="gap-1"
-                >
-                  <Plus className="h-4 w-4" />
-                  反映
-                </Button>
-              </div>
-              <div className={`grid gap-3 ${compact ? "" : "md:grid-cols-2"}`}>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">支払先</label>
-                  <select form={reflectFormId} name="vendorId" defaultValue={vendors[0]?.value} className={selectClass()} disabled={!canEdit || !vendors.length} required>
-                    {vendors.map((vendor) => (
-                      <option key={vendor.value} value={vendor.value}>{vendor.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">案件</label>
-                  <select form={reflectFormId} name="projectId" defaultValue={projects[0]?.value} className={selectClass()} disabled={!canEdit || !projects.length} required>
-                    {projects.map((project) => (
-                      <option key={project.value} value={project.value}>{project.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">状態</label>
-                  <select form={reflectFormId} name="status" defaultValue="REVIEWING" className={selectClass()} disabled={!canEdit}>
-                    {statusOptions.map((status) => (
-                      <option key={status.value} value={status.value}>{status.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">請求日</label>
-                  <Input form={reflectFormId} name="issueDate" type="date" defaultValue={row.createdAt.slice(0, 10)} disabled={!canEdit} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">支払期限</label>
-                  <Input form={reflectFormId} name="dueDate" type="date" defaultValue={addDaysIso(row.createdAt.slice(0, 10), 30)} disabled={!canEdit} />
-                </div>
-                <div className={`space-y-2 ${compact ? "" : "md:col-span-2"}`}>
-                  <label className="text-xs font-medium text-muted-foreground">合計</label>
-                  <Input form={reflectFormId} name="total" type="number" defaultValue={0} disabled={!canEdit} className="font-mono" />
-                </div>
-              </div>
-            </div>
+            {row.mailDocumentId ? <MailInvoiceReflectionForm key={row.id} mailDocumentId={row.mailDocumentId} mailUpdatedAt={row.mailUpdatedAt} defaults={row.reflectDefaults} vendors={vendors} projects={projects} statusOptions={statusOptions} broken={row.linkBroken} disabled={!canEdit} /> : null}
             {row.mailDocumentId ? <MailRelinkForm company={company} mailDocumentId={row.mailDocumentId} mailUpdatedAt={row.mailUpdatedAt} candidates={row.linkCandidates ?? []} targets={linkTargets} broken={row.linkBroken} brokenTargetId={row.brokenTargetId} disabled={!canEdit} /> : null}
             </>
           )}
@@ -540,6 +473,7 @@ function clamp(value: number, min: number, max: number) {
 export function OcrDocumentsTable({
   canEdit,
   canExport = false,
+  linkRequiredOnly = false,
   company,
   linkTargets = [],
   projects,
@@ -550,6 +484,7 @@ export function OcrDocumentsTable({
 }: {
   canEdit: boolean;
   canExport?: boolean;
+  linkRequiredOnly?: boolean;
   company: CompanyScope;
   folders: FolderOption[];
   linkTargets?: Option[];
@@ -582,21 +517,23 @@ export function OcrDocumentsTable({
   const [folderSenderWidth, setFolderSenderWidth] = useState(220);
   const [listPreviewWidth, setListPreviewWidth] = useState(420);
   const [pendingCategories, setPendingCategories] = useState<Partial<Record<string, MailDocumentCategory>>>({});
-  const [pendingProcessing, setPendingProcessing] = useState<Partial<Record<string, ProcessingStatusValue>>>({});
+  const [isSaving, startSaveTransition] = useTransition();
+  const saveInFlight = useRef(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const processing = pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
+      const processing = (isProcessed(row) ? "processed" : "unprocessed");
       const category = pendingCategories[row.id] ?? row.category;
       if (processingFilter !== "all" && processing !== processingFilter) return false;
       if (categoryFilter !== "all" && category !== categoryFilter) return false;
       if (duplicateFilter === "duplicates" && !isDuplicate(row)) return false;
       return matchesMailSearch(row, deferredQuery);
     });
-  }, [categoryFilter, duplicateFilter, pendingCategories, pendingProcessing, processingFilter, rows, deferredQuery]);
+  }, [categoryFilter, duplicateFilter, pendingCategories, processingFilter, rows, deferredQuery]);
   const processingCounts = useMemo(() => rows.reduce((counts, row) => {
-    counts[pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed")]++;
+    counts[(isProcessed(row) ? "processed" : "unprocessed")]++;
     return counts;
-  }, { all: rows.length, processed: 0, unprocessed: 0 }), [rows, pendingProcessing]);
+  }, { all: rows.length, processed: 0, unprocessed: 0 }), [rows]);
   const hasFilters = Boolean(query || processingFilter !== "all" || categoryFilter !== "all" || duplicateFilter !== "all");
   function resetFilters() {
     setQuery(""); setProcessingFilter("all"); setCategoryFilter("all"); setDuplicateFilter("all"); setVisibleListCount(LIST_BATCH_SIZE);
@@ -675,14 +612,15 @@ export function OcrDocumentsTable({
       .map((row) => ({
         category: pendingCategories[row.id],
         mailDocumentId: row.mailDocumentId,
-        processingStatus: pendingProcessing[row.id],
+        mailUpdatedAt: row.mailUpdatedAt,
+        invoiceUpdatedAt: row.invoiceUpdatedAt,
         receivedInvoiceId: row.receivedInvoiceId,
       }))
-      .filter((edit) => edit.category || edit.processingStatus);
-  }, [pendingCategories, pendingProcessing, rows]);
-  const pendingEditsJson = JSON.stringify(pendingEdits);
+      .filter((edit) => edit.category);
+  }, [pendingCategories, rows]);
+  const exportRows = selectedRows.length ? selectedRows : linkRequiredOnly ? rows : [];
   const exportHref = canExport ? `/api/export/ocr-documents?company=${company}${
-    selectedRows.length ? `&ids=${encodeURIComponent(selectedRows.map((row) => row.id).join(","))}` : ""
+    exportRows.length ? `&ids=${encodeURIComponent(exportRows.map((row) => row.id).join(","))}` : ""
   }` : "#";
 
   const chooseMonth = (month: string, monthRows: OcrDocumentListItem[]) => {
@@ -691,22 +629,49 @@ export function OcrDocumentsTable({
   };
 
   const processingValueForRow = (row: OcrDocumentListItem): ProcessingStatusValue =>
-    pendingProcessing[row.id] ?? (isProcessed(row) ? "processed" : "unprocessed");
+    (isProcessed(row) ? "processed" : "unprocessed");
 
   const categoryValueForRow = (row: OcrDocumentListItem) => pendingCategories[row.id] ?? row.category;
 
-  const applyProcessingDraft = (targetRows: OcrDocumentListItem[], processingStatus: ProcessingStatusValue) => {
-    const editableRows = targetRows.filter((row) => row.mailDocumentId || row.receivedInvoiceId);
-    if (!editableRows.length) return;
-    setPendingProcessing((current) => {
-      const next = { ...current };
-      for (const row of editableRows) {
-        const original = isProcessed(row) ? "processed" : "unprocessed";
-        if (processingStatus === original) delete next[row.id];
-        else next[row.id] = processingStatus;
+  const saveEdits = (edits: MailSorterEdit[], processing = false) => {
+    if (!edits.length || saveInFlight.current || !canEdit) return;
+    saveInFlight.current = true;
+    setSaveFeedback(null);
+    startSaveTransition(async () => {
+      try {
+        const form = new FormData();
+        form.set("changes", JSON.stringify(edits));
+        const result = await saveMailSorterBulkEdits(form);
+        if (!result.ok) throw new Error(result.error);
+        // Remove only the submitted category drafts after a successful save; keep newer edits.
+        if (!processing) setPendingCategories((current) => {
+          const next = { ...current };
+          for (const row of rows) {
+            const saved = edits.find((edit) => edit.mailDocumentId && edit.mailDocumentId === row.mailDocumentId);
+            if (saved?.category && next[row.id] === saved.category) delete next[row.id];
+          }
+          return next;
+        });
+        const message = processing ? "処理状態を保存しました" : "分類の変更を保存しました";
+        setSaveFeedback({ message, error: false });
+        toast({ title: message, variant: "success" });
+        // revalidatePath in the action returns fresh rows in the same response.
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "通信状況を確認して再試行してください";
+        setSaveFeedback({ message: "保存できませんでした: " + reason + (processing ? "（処理状態は保存前の表示のままです）" : "（変更内容は保持しています）"), error: true });
+        toast({ title: "保存に失敗しました", description: reason, variant: "destructive" });
+      } finally {
+        saveInFlight.current = false;
       }
-      return next;
     });
+  };
+
+  const saveProcessing = (targetRows: OcrDocumentListItem[], processingStatus: ProcessingStatusValue) => {
+    const edits = targetRows.filter((row) => row.mailDocumentId || row.receivedInvoiceId).map((row) => ({
+      mailDocumentId: row.mailDocumentId, receivedInvoiceId: row.receivedInvoiceId,
+      mailUpdatedAt: row.mailUpdatedAt, invoiceUpdatedAt: row.invoiceUpdatedAt, processingStatus,
+    }));
+    saveEdits(edits, true);
   };
 
   const applyCategoryDraft = (targetRows: OcrDocumentListItem[], category: MailDocumentCategory) => {
@@ -879,8 +844,10 @@ export function OcrDocumentsTable({
         value={value}
         className={processingStatusSelectClass(value === "processed")}
         aria-label="処理状態"
+        disabled={isSaving}
+        title="書類整理の状態です。変更すると保存します。支払状況とは独立しています"
         onClick={(event) => event.stopPropagation()}
-        onChange={(event) => applyProcessingDraft(selectedOrSingleRow(row), event.currentTarget.value as ProcessingStatusValue)}
+        onChange={(event) => saveProcessing(selectedOrSingleRow(row), event.currentTarget.value as ProcessingStatusValue)}
       >
         {processingStatusOptions.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -899,6 +866,7 @@ export function OcrDocumentsTable({
         value={value}
         className={categorySelectClass(value)}
         aria-label="分類"
+        disabled={isSaving}
         onClick={(event) => event.stopPropagation()}
         onChange={(event) => applyCategoryDraft(selectedOrSingleRow(row), event.currentTarget.value as MailDocumentCategory)}
       >
@@ -943,7 +911,7 @@ export function OcrDocumentsTable({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold">郵便物 <span className="ml-1 text-sm font-normal text-muted-foreground">{filteredRows.length} / {rows.length}件</span></h2>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {canExport ? <Button asChild size="icon" variant="outline" className="size-11 lg:size-11"><a href={exportHref} title={selectedRows.length ? `${selectedRows.length}件をCSV出力` : "全件をCSV出力"} aria-label="郵便物をCSV出力"><Download className="size-4" /></a></Button> : null}
+            {canExport ? <Button asChild size="icon" variant="outline" className="size-11 lg:size-11"><a href={exportHref} title={exportRows.length ? `${exportRows.length}件をCSV出力` : "全件をCSV出力"} aria-label="郵便物をCSV出力"><Download className="size-4" /></a></Button> : null}
             <Button type="button" className="min-h-11 lg:min-h-11" variant="outline" disabled={!canEdit} onClick={() => { setFolderError(""); setFolderCreateOpen(true); }}><FolderPlus className="size-4" />月フォルダー</Button>
             <Button type="button" className="min-h-11 lg:min-h-11" disabled={!canEdit} onClick={openDropzone}><Plus className="size-4" />郵便物を追加</Button>
           </div>
@@ -999,6 +967,8 @@ export function OcrDocumentsTable({
           {hasFilters ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
           <LoaderCircle aria-label="絞り込み中" className={`size-4 animate-spin ${isFiltering || query !== deferredQuery ? "opacity-100" : "invisible"}`} />
         </div>
+        <p className="text-xs text-muted-foreground">処理状態は書類整理のための手動設定です。変更すると保存します。支払状況とは連動しません。</p>
+        {isSaving ? <p role="status" className="text-sm">保存中…</p> : saveFeedback ? <p role={saveFeedback.error ? "alert" : "status"} className={saveFeedback.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>{saveFeedback.message}</p> : null}
         <SelectionToolbar selection={selection} />
         <div>
           {selectedRows.length || pendingEdits.length ? (
@@ -1008,15 +978,15 @@ export function OcrDocumentsTable({
               </Badge>
               {pendingEdits.length ? <Badge variant="outline">{pendingEdits.length}件の変更</Badge> : null}
               {hiddenSelectedCount ? <span className="text-xs text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}
-              <Button type="button" variant="ghost" size="icon" className="size-11 text-destructive" title="選択した郵便物を削除" aria-label="選択した郵便物を削除" disabled={!canEdit || !selectedRows.length} onClick={() => setBulkDeleteOpen(true)}><Trash2 className="size-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="size-11 text-destructive" title="選択した郵便物を削除" aria-label="選択した郵便物を削除" disabled={!canEdit || !selectedRows.length || isSaving} onClick={() => setBulkDeleteOpen(true)}><Trash2 className="size-4" /></Button>
               <select
                 aria-label="選択した書類の処理状態"
                 className="h-9 min-w-32 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                disabled={!canEdit || !selectedRows.length}
+                disabled={!canEdit || !selectedRows.length || isSaving}
                 value=""
                 onChange={(event) => {
                   const value = event.currentTarget.value as ProcessingStatusValue;
-                  if (value) applyProcessingDraft(selectedRows, value);
+                  if (value) saveProcessing(selectedRows, value);
                 }}
               >
                 <option value="">処理状態</option>
@@ -1027,7 +997,7 @@ export function OcrDocumentsTable({
               <select
                 aria-label="選択した書類の分類"
                 className="h-9 min-w-32 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                disabled={!canEdit || !selectedRows.some((row) => row.mailDocumentId)}
+                disabled={!canEdit || isSaving || !selectedRows.some((row) => row.mailDocumentId)}
                 value=""
                 onChange={(event) => {
                   const value = event.currentTarget.value as MailDocumentCategory;
@@ -1054,20 +1024,10 @@ export function OcrDocumentsTable({
                   <option key={month} value={month}>{monthLabel(month)}</option>
                 ))}
               </select>
-              <form
-                action={saveMailSorterBulkEdits}
-                className="ml-auto flex items-center gap-2"
-                onSubmit={() => {
-                  setPendingCategories({});
-                  setPendingProcessing({});
-                }}
-              >
-                <input type="hidden" name="changes" value={pendingEditsJson} readOnly />
-                <Button type="submit" size="sm" className="h-9 gap-1" disabled={!pendingEdits.length}>
-                  <Save className="h-3.5 w-3.5" />
-                  すべて保存
-                </Button>
-              </form>
+              <Button type="button" size="sm" className="ml-auto h-9 gap-1" disabled={isSaving || !pendingEdits.length} onClick={() => saveEdits(pendingEdits)}>
+                <Save className="h-3.5 w-3.5" />
+                分類を保存
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -1569,7 +1529,7 @@ export function OcrDocumentsTable({
               {/* Column 3 – Detail */}
               <section className="min-w-0 p-4">
                 {activeRow ? (
-                  <div className="space-y-4">
+                  <div key={activeRow.id} className="space-y-4">
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
                       <div className="min-w-0">
                         <div className="text-lg font-medium">{shippingSenderName(activeRow)}</div>
@@ -1602,13 +1562,7 @@ export function OcrDocumentsTable({
                     {activeRow.receivedInvoiceId ? (
                       <input type="hidden" form={`ocr-edit-${activeRow.id}`} name="receivedInvoiceId" value={activeRow.receivedInvoiceId} />
                     ) : null}
-                    {activeRow.mailDocumentId && !activeRow.receivedInvoiceId ? (
-                      <>
-                        <form id={`ocr-reflect-${activeRow.id}`} action={reflectMailDocumentToReceivedInvoice} />
-                        <input type="hidden" form={`ocr-reflect-${activeRow.id}`} name="company" value={company} />
-                        <input type="hidden" form={`ocr-reflect-${activeRow.id}`} name="mailDocumentId" value={activeRow.mailDocumentId} />
-                      </>
-                    ) : null}
+
 
                     <div className="space-y-4">
                       {isDuplicate(activeRow) ? (
@@ -1771,96 +1725,7 @@ export function OcrDocumentsTable({
                           ) : (
                             /* #26: Default values from OCR extraction when available */
                             <>
-                            <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                  <div className="text-sm font-medium">{activeRow.linkBroken ? "受領請求書を作り直す" : "受領請求書へ反映"}</div>
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    {activeRow.linkBroken ? "以前に反映した受領請求書は削除されています。この郵便物から作り直します。" : "この郵便物を受領請求書として登録します。"}
-                                  </div>
-                                </div>
-                                <Button
-                                  type="submit"
-                                  form={`ocr-reflect-${activeRow.id}`}
-                                  disabled={!canEdit || !activeRow.mailDocumentId || !vendors.length || !projects.length}
-                                  size="sm"
-                                  className="gap-1"
-                                >
-                                  <Plus className="h-4 w-4" />
-                                  反映
-                                </Button>
-                              </div>
-                              <div className="grid gap-3 md:grid-cols-2">
-                                <div className="space-y-2">
-                                  <label className="text-xs font-medium text-muted-foreground">支払先</label>
-                                  <select
-                                    form={`ocr-reflect-${activeRow.id}`}
-                                    name="vendorId"
-                                    defaultValue={vendors[0]?.value}
-                                    className={selectClass()}
-                                    disabled={!canEdit || !vendors.length}
-                                    required
-                                  >
-                                    {vendors.map((vendor) => (
-                                      <option key={vendor.value} value={vendor.value}>{vendor.label}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs font-medium text-muted-foreground">案件</label>
-                                  <select
-                                    form={`ocr-reflect-${activeRow.id}`}
-                                    name="projectId"
-                                    defaultValue={projects[0]?.value}
-                                    className={selectClass()}
-                                    disabled={!canEdit || !projects.length}
-                                    required
-                                  >
-                                    {projects.map((project) => (
-                                      <option key={project.value} value={project.value}>{project.label}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs font-medium text-muted-foreground">状態</label>
-                                  <select
-                                    form={`ocr-reflect-${activeRow.id}`}
-                                    name="status"
-                                    defaultValue="REVIEWING"
-                                    className={selectClass()}
-                                    disabled={!canEdit}
-                                  >
-                                    {statusOptions.map((status) => (
-                                      <option key={status.value} value={status.value}>{status.label}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs font-medium text-muted-foreground">請求日</label>
-                                  <Input
-                                    form={`ocr-reflect-${activeRow.id}`}
-                                    name="issueDate"
-                                    type="date"
-                                    defaultValue={activeRow.createdAt.slice(0, 10)}
-                                    disabled={!canEdit}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs font-medium text-muted-foreground">支払期限</label>
-                                  <Input
-                                    form={`ocr-reflect-${activeRow.id}`}
-                                    name="dueDate"
-                                    type="date"
-                                    defaultValue={addDaysIso(activeRow.createdAt.slice(0, 10), 30)}
-                                    disabled={!canEdit}
-                                  />
-                                </div>
-                                <div className="space-y-2 md:col-span-2">
-                                  <label className="text-xs font-medium text-muted-foreground">合計</label>
-                                  <Input form={`ocr-reflect-${activeRow.id}`} name="total" type="number" defaultValue={0} disabled={!canEdit} className="font-mono" />
-                                </div>
-                              </div>
-                            </div>
+                            {activeRow.mailDocumentId ? <MailInvoiceReflectionForm key={activeRow.id} mailDocumentId={activeRow.mailDocumentId} mailUpdatedAt={activeRow.mailUpdatedAt} defaults={activeRow.reflectDefaults} vendors={vendors} projects={projects} statusOptions={statusOptions} broken={activeRow.linkBroken} disabled={!canEdit} /> : null}
                             {activeRow.mailDocumentId ? <MailRelinkForm company={company} mailDocumentId={activeRow.mailDocumentId} mailUpdatedAt={activeRow.mailUpdatedAt} candidates={activeRow.linkCandidates ?? []} targets={linkTargets} broken={activeRow.linkBroken} brokenTargetId={activeRow.brokenTargetId} disabled={!canEdit} /> : null}
                             </>
                           )}

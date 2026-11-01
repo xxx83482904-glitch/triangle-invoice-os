@@ -1,5 +1,6 @@
 import { outstandingAmount } from "@/lib/accounting-summary";
-import { isPayableReceivedInvoice } from "@/lib/debt-groups";
+import { isMailProcessed } from "@/lib/mail-processing";
+import { receivedPayableSummary } from "@/lib/received-invoice-payables";
 import { bankAccountOverview, bankFiscalYear } from "@/lib/bank-account-overview";
 import { isBankDate } from "@/lib/banking";
 import { matchesCompany, type CompanyScope } from "@/lib/company";
@@ -28,14 +29,16 @@ export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role">,
   const vendors = new Map(data.vendors.map((row) => [row.id, row.companyName]));
   const issued = data.issuedInvoices.filter((row) => !row.deletedAt && projectById.has(row.projectId) && row.status !== "CANCELED");
   // Superseded documents of a debt group (older 請求書 behind a 再請求, 領収書) are evidence, not open debts.
-  const received = data.receivedInvoices.filter((row) => !row.deletedAt && projectById.has(row.projectId) && !["REJECTED", "ARCHIVED"].includes(row.status) && isPayableReceivedInvoice(data, row));
-  const issuedIds = new Set(issued.map((row) => row.id)), receivedIds = new Set(received.map((row) => row.id));
+  const receivedWithBalances = data.receivedInvoices.filter((row) => !row.deletedAt && projectById.has(row.projectId))
+    .map((invoice) => ({ invoice, balance: receivedPayableSummary(data, invoice) })).filter((row) => !row.balance.unpaidExclusion);
+  const received = receivedWithBalances.map((row) => row.invoice);
+  const receivedBalances = new Map(receivedWithBalances.map((row) => [row.invoice.id, row.balance]));
+  const issuedIds = new Set(issued.map((row) => row.id));
   const paid = new Map<string, number>();
   // Reconciliation-generated payments count once. Bank rows are never added to invoice payments.
   for (const payment of data.payments) {
     if (payment.deletedAt || !Number.isFinite(payment.amount)) continue;
-    const key = payment.type === "INCOME" && payment.issuedInvoiceId && issuedIds.has(payment.issuedInvoiceId) ? `issued:${payment.issuedInvoiceId}`
-      : payment.type === "EXPENSE" && payment.receivedInvoiceId && receivedIds.has(payment.receivedInvoiceId) ? `received:${payment.receivedInvoiceId}` : undefined;
+    const key = payment.type === "INCOME" && payment.issuedInvoiceId && issuedIds.has(payment.issuedInvoiceId) ? `issued:${payment.issuedInvoiceId}` : undefined;
     if (key) paid.set(key, (paid.get(key) || 0) + payment.amount);
   }
   const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
@@ -46,7 +49,7 @@ export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role">,
       const id = `${kind}:${invoice.id}`;
       const isDraft = kind === "issued" && invoice.status === "DRAFT";
       const amount = Number.isFinite(invoice.total) ? Math.max(0, invoice.total) : 0;
-      const remaining = isDraft ? 0 : outstandingAmount(amount, paid.get(id) || 0);
+      const remaining = kind === "received" ? receivedBalances.get(invoice.id)!.unpaidAmount : isDraft ? 0 : outstandingAmount(amount, paid.get(id) || 0);
       const paymentMismatch = invoice.status === "PAID" && remaining > 0;
       const reasons = [
         ...(isDraft ? ["下書き"] : []),
@@ -68,7 +71,7 @@ export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role">,
   const receivables = documents.filter((row) => row.kind === "issued" && row.remaining > 0);
   const payables = documents.filter((row) => row.kind === "received" && row.remaining > 0);
   const review = documents.filter((row) => row.reasons.length > 0);
-  const totals = (rows: DashboardDocument[]) => ({ amount: rows.reduce((sum, row) => sum + row.remaining, 0), count: rows.length,
+  const totals = (rows: DashboardDocument[]) => ({ amount: rows.reduce((sum, row) => sum + Math.round(row.remaining * 100), 0) / 100, count: rows.length,
     overdue: rows.filter((row) => row.timing === "overdue" && !row.paymentMismatch).length,
     soon: rows.filter((row) => row.timing === "soon" && !row.paymentMismatch).length });
   const banks = overview.rows.filter((row) => row.kind === "BANK" && !row.unspecified);
@@ -84,18 +87,18 @@ export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role">,
   });
   const visibleReceived = new Map(received.map((row) => [row.id, row]));
   const mailInvoiceIds = new Set<string>();
+  const pendingMailInvoiceIds = new Set<string>();
   let pendingMail = 0;
   if (company === "JAPAN") {
     for (const mail of data.mailDocuments) {
       if (mail.deletedAt || mail.company === "CHINA") continue;
       const invoice = mail.relatedReceivedInvoiceId ? visibleReceived.get(mail.relatedReceivedInvoiceId) : undefined;
       if (invoice) {
-        if (mailInvoiceIds.has(invoice.id)) continue;
         mailInvoiceIds.add(invoice.id);
-        if (!(invoice.mailProcessed ?? invoice.status === "PAID")) pendingMail++;
-      } else if (!(mail.mailProcessed ?? Boolean(mail.relatedReceivedInvoiceId))) pendingMail++;
+        if (!isMailProcessed(invoice) || !isMailProcessed(mail)) pendingMailInvoiceIds.add(invoice.id);
+      } else if (!isMailProcessed(mail)) pendingMail++;
     }
-    pendingMail += received.filter((row) => !mailInvoiceIds.has(row.id) && !(row.mailProcessed ?? row.status === "PAID")).length;
+    pendingMail += pendingMailInvoiceIds.size + received.filter((row) => !mailInvoiceIds.has(row.id) && !isMailProcessed(row)).length;
   }
   const transactions = data.bankTransactions.filter((row) => row.company === company);
   const sync = data.bankSyncStates.filter((row) => row.company === company);

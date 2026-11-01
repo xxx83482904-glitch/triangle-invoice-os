@@ -37,6 +37,28 @@ const find = (data: AppData, sourceId: string) => data.bankTransactions.find((ro
 const request = (operations: AgentBatchInput["operations"], extra: Partial<AgentBatchInput> = {}) => agentBatchSchema.parse({ operations, ...extra });
 const statusOf = (verification: ReturnType<typeof verifyAgentToken>) => verification.ok ? 200 : verification.status;
 
+test("agent payment and link operations preserve manual processing and resource reads return saved flags", () => {
+  const data = setup(), auth = authFor(data, issue(data, scopesAll).plain);
+  data.receivedInvoices[0].status = "SCHEDULED";
+  data.receivedInvoices[0].mailProcessed = false;
+  data.mailDocuments[0].mailProcessed = true;
+  const outcome = runAgentOperations(data, auth, request([
+    { op: "payment.record", expect: { updatedAt: data.receivedInvoices[0].updatedAt }, payload: { kind: "received", invoiceId: "received-1", amount: 8000, paymentDate: today } },
+    { op: "mail.unlink", target: { id: "mail-1" }, expect: { updatedAt: data.mailDocuments[0].updatedAt } },
+  ]), { today });
+  assert.equal(outcome.failed, 0); assert.equal(outcome.succeeded, 2);
+  assert.equal(data.receivedInvoices[0].status, "PAID");
+  const linked = runAgentOperations(data, auth, request([{ op: "mail.link", target: { id: "mail-1" }, expect: { updatedAt: data.mailDocuments[0].updatedAt }, payload: { receivedInvoiceId: "received-1" } }]), { today });
+  assert.equal(linked.succeeded, 1);
+  assert.equal(data.receivedInvoices[0].mailProcessed, false); assert.equal(data.mailDocuments[0].mailProcessed, true);
+  const before = structuredClone(data);
+  for (const [resource, expected] of [["received-invoices", false], ["mail-documents", true]] as const) {
+    const result = listAgentResource(data, auth, resource, {}, { today });
+    assert.equal((result.items[0] as { mailProcessed: boolean }).mailProcessed, expected);
+  }
+  assert.deepEqual(data, before);
+});
+
 test("tokens are hashed, scoped to the user's own permissions and rejected when missing, revoked, expired or orphaned", () => {
   const data = setup();
   const { plain, id } = issue(data, ["bank:read", "bank:write"]);

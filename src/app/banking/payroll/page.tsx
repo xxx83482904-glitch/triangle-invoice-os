@@ -1,12 +1,12 @@
-import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
 import { BankPayrollWorkspace } from "@/components/app/bank-payroll-workspace";
 import { getCurrentUser } from "@/lib/auth";
-import { bankFiscalYear } from "@/lib/bank-account-overview";
 import { bankToday } from "@/lib/banking";
 import { companyFromParam } from "@/lib/company";
-import { payrollSummary } from "@/lib/payroll-summary";
+import { payrollPeriod, payrollSummary, payrollYearCookieName } from "@/lib/payroll-summary";
+import { payrollSettingsView } from "@/lib/payroll-settings";
 import { can, canAccessCompany, defaultPathForRole } from "@/lib/rbac";
 import { readDataForRequest } from "@/lib/store";
 
@@ -17,8 +17,7 @@ export default async function BankPayrollPage({ searchParams }: { searchParams: 
   const params = await searchParams, company = companyFromParam(params.company);
   if (!canAccessCompany(user, company)) redirect(defaultPathForRole(user.role));
   const data = await readDataForRequest();
-  const current = bankFiscalYear(bankToday());
-  const year = /^\d{4}$/.test(params.year || "") ? Number(params.year) : current;
-  const years = [...new Set([current, ...data.bankTransactions.filter((row) => row.company === company).map((row) => bankFiscalYear(row.transactionDate))])].sort((a, b) => b - a);
-  return <AppShell><BankPayrollWorkspace company={company} summary={payrollSummary(data, company, year)} years={years} />{!years.length ? <Link className="text-sm text-primary underline" href={`/banking?company=${company}`}>口座・カード明細へ</Link> : null}</AppShell>;
+  const remembered = (await cookies()).get(payrollYearCookieName(user.id, company))?.value;
+  const period = payrollPeriod(data, company, bankToday(), params.year, remembered);
+  return <AppShell><BankPayrollWorkspace company={company} summary={payrollSummary(data, company, period.year)} years={period.years} yearSource={period.source} settings={payrollSettingsView(data, company)} mayEdit={can(user, "manage:banking")} /></AppShell>;
 }

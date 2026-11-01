@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CompanyScope } from "@/lib/company";
 import { formatDate, yen } from "@/lib/format";
 import type { ReceivedInvoiceStatus } from "@/lib/types";
+import { filterReceivedInvoices, receivedFilterLabels as filterLabels, receivedInvoiceIsOverdue as isOverdue, receivedInvoiceIsDueSoon as isDueSoon, receivedListTotals, receivedSummaryBasis, type ReceivedWorkFilter as WorkFilter } from "@/lib/received-invoice-list";
 
 type Option = {
   label: string;
@@ -46,6 +47,9 @@ export type ReceivedInvoiceWorkspaceItem = ReceivedInvoiceAmounts & {
   ocrText?: string;
   originalFileName?: string;
   paidAmount: number;
+  paymentComplete: boolean;
+  paymentOutstandingAmount: number;
+  unpaidExclusion?: string;
   payments: PaymentRecordView[];
   projectId: string;
   projectName: string;
@@ -59,20 +63,6 @@ export type ReceivedInvoiceWorkspaceItem = ReceivedInvoiceAmounts & {
   vendorName: string;
 };
 
-type WorkFilter = "all" | "unpaid" | "overdue" | "dueSoon" | "review" | "scheduled" | "paid";
-
-const filterLabels: Record<WorkFilter, string> = {
-  all: "すべて",
-  dueSoon: "期限近い",
-  overdue: "期限超過",
-  paid: "支払済み",
-  review: "確認待ち",
-  scheduled: "支払予定",
-  unpaid: "未払い",
-};
-
-const reviewStatuses = new Set<ReceivedInvoiceStatus>(["OCR_PENDING", "REVIEWING", "APPROVAL_PENDING", "REJECTED", "ON_HOLD"]);
-
 function monthKey(row: ReceivedInvoiceWorkspaceItem) {
   if (row.folderMonth) return row.folderMonth;
   return row.issueDate ? row.issueDate.slice(0, 7) : "0000-00";
@@ -84,33 +74,12 @@ function monthLabel(key: string) {
   return `${year}年${Number(month)}月`;
 }
 
-function isOverdue(row: ReceivedInvoiceWorkspaceItem, today: string) {
-  return row.unpaidAmount > 0 && Boolean(row.dueDate) && row.dueDate < today;
-}
-
-function isDueSoon(row: ReceivedInvoiceWorkspaceItem, today: string) {
-  if (row.unpaidAmount <= 0 || row.dueDate < today) return false;
-  const due = new Date(`${row.dueDate}T00:00:00`).getTime();
-  const now = new Date(`${today}T00:00:00`).getTime();
-  return due - now <= 1000 * 60 * 60 * 24 * 7;
-}
-
 function paymentTone(row: ReceivedInvoiceWorkspaceItem, today: string) {
-  if (row.unpaidAmount <= 0 || row.status === "PAID") return "border-l-emerald-500";
+  if (row.unpaidExclusion || row.total <= 0) return "border-l-muted-foreground";
+  if (row.paymentComplete) return "border-l-emerald-500";
   if (isOverdue(row, today)) return "border-l-red-500";
   if (isDueSoon(row, today)) return "border-l-amber-500";
   return "border-l-sky-500";
-}
-
-function invoiceMatchesFilter(row: ReceivedInvoiceWorkspaceItem, filter: WorkFilter, today: string) {
-  if (filter === "all") return true;
-  if (filter === "unpaid") return row.unpaidAmount > 0;
-  if (filter === "overdue") return isOverdue(row, today);
-  if (filter === "dueSoon") return isDueSoon(row, today);
-  if (filter === "review") return reviewStatuses.has(row.status);
-  if (filter === "scheduled") return row.status === "SCHEDULED";
-  if (filter === "paid") return row.unpaidAmount <= 0 || row.status === "PAID";
-  return true;
 }
 
 function SelectField({
@@ -173,16 +142,7 @@ export function ReceivedInvoicesWorkspace({
   const [saving, startSaving] = useTransition();
   const [saveResult, setSaveResult] = useState<{ id: string; message: string; error?: boolean }>();
 
-  const filteredInvoices = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return invoices.filter((invoice) => {
-      if (!invoiceMatchesFilter(invoice, filter, today)) return false;
-      if (!needle) return true;
-      return [invoice.vendorName, invoice.projectName, invoice.originalFileName, invoice.memo, invoice.ocrText]
-        .filter(Boolean)
-        .some((value) => value?.toLowerCase().includes(needle));
-    });
-  }, [filter, invoices, query, today]);
+  const filteredInvoices = useMemo(() => filterReceivedInvoices(invoices, filter, query, today), [filter, invoices, query, today]);
 
   const activeInvoice = filteredInvoices.find((invoice) => invoice.id === activeId) ?? filteredInvoices[0] ?? null;
 
@@ -195,30 +155,12 @@ export function ReceivedInvoicesWorkspace({
     return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [filteredInvoices]);
 
-  const totals = useMemo(() => {
-    return filteredInvoices.reduce(
-      (sum, invoice) => ({
-        paid: sum.paid + invoice.paidAmount,
-        total: sum.total + invoice.total,
-        unpaid: sum.unpaid + invoice.unpaidAmount,
-      }),
-      { paid: 0, total: 0, unpaid: 0 },
-    );
-  }, [filteredInvoices]);
+  const totals = useMemo(() => receivedListTotals(filteredInvoices), [filteredInvoices]);
 
   const selection = useListSelection(monthGroups.flatMap(([month, list]) => collapsedMonths.has(month) ? [] : list.map((row) => row.id)), { availableIds: invoices.map((row) => row.id) });
 
-  const counts = useMemo(() => {
-    return {
-      all: invoices.length,
-      dueSoon: invoices.filter((invoice) => isDueSoon(invoice, today)).length,
-      overdue: invoices.filter((invoice) => isOverdue(invoice, today)).length,
-      paid: invoices.filter((invoice) => invoice.unpaidAmount <= 0 || invoice.status === "PAID").length,
-      review: invoices.filter((invoice) => reviewStatuses.has(invoice.status)).length,
-      scheduled: invoices.filter((invoice) => invoice.status === "SCHEDULED").length,
-      unpaid: invoices.filter((invoice) => invoice.unpaidAmount > 0).length,
-    };
-  }, [invoices, today]);
+  const counts = useMemo(() => Object.fromEntries((Object.keys(filterLabels) as WorkFilter[])
+    .map((item) => [item, filterReceivedInvoices(invoices, item, "", today).length])) as Record<WorkFilter, number>, [invoices, today]);
 
   const toggleMonth = (month: string) => {
     setCollapsedMonths((current) => {
@@ -231,24 +173,34 @@ export function ReceivedInvoicesWorkspace({
 
   return (
     <Card variant="section">
-      <CardHeader className="gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <CardHeader className="min-w-0 gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <CardTitle>受領請求書一覧</CardTitle>
         </div>
-        {showTotals ? <div className="grid grid-cols-3 gap-1 text-xs text-muted-foreground lg:min-w-[420px]">
-          <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <div>合計</div>
-            <div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.total)}</div>
+        {showTotals ? <section aria-label="受領請求書の集計" className="w-full min-w-0 space-y-2 text-xs text-muted-foreground lg:max-w-2xl">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 break-all" role="status">
+            {receivedSummaryBasis(filter, query).map((label) => <span key={label}>{label}</span>)}
           </div>
-          <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <div>支払済</div>
-            <div className="break-all font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">{yen.format(totals.paid)}</div>
+          <div className="grid grid-cols-3 gap-1">
+            <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
+              <div>合計</div>
+              <div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.total)}</div>
+              <div className="mt-1">表示中{totals.count}件の差引支払額</div>
+            </div>
+            <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
+              <div>支払済</div>
+              <div className="break-all font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">{yen.format(totals.paid)}</div>
+              <div className="mt-1">表示中の支払記録（一部支払を含む）</div>
+            </div>
+            <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
+              <div>未払い</div>
+              <div className="break-all font-mono text-sm font-semibold text-amber-700 dark:text-amber-300">{yen.format(totals.unpaid)}</div>
+              <div className="mt-1">支払対象{totals.unpaidCount}件の残額</div>
+            </div>
           </div>
-          <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <div>未払い</div>
-            <div className="break-all font-mono text-sm font-semibold text-amber-700 dark:text-amber-300">{yen.format(Math.max(0, totals.unpaid))}</div>
-          </div>
-        </div> : null}
+          <p>未払いはアーカイブ・却下・債務グループの支払対象外を除外{totals.excludedCount ? "（表示中" + totals.excludedCount + "件）" : ""}。合計・支払済は表示中の書類と支払記録を集計します。</p>
+          <p>月の折りたたみは集計に影響しません。</p>
+        </section> : null}
       </CardHeader>
       <CardContent>
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-2">
@@ -272,6 +224,7 @@ export function ReceivedInvoicesWorkspace({
           />
         </div>
 
+        <p className="mb-3 text-xs text-muted-foreground">絞り込みボタンの件数は検索前の件数です。</p>
         <SelectionToolbar selection={selection} />
         {filteredInvoices.length ? (
           <div className="grid min-h-[720px] overflow-hidden border">
@@ -336,7 +289,7 @@ export function ReceivedInvoicesWorkspace({
                                 </span>
                               </td>
                               <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(invoice.total)}</td>
-                              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.debt.payable ? yen.format(Math.max(0, invoice.unpaidAmount)) : <span className="font-sans text-xs text-muted-foreground" title="債務グループの支払対象外">対象外</span>}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : yen.format(invoice.unpaidAmount)}</td>
                               <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                                 {canApprove ? (
                                   <form action={updateReceivedInvoiceStatus}>
@@ -347,12 +300,12 @@ export function ReceivedInvoicesWorkspace({
                                       className="h-7 max-w-[140px] rounded-full border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                       onChange={(event) => {
                                         // A status change never creates a payment; paid is reached through payment records or bank reconciliation.
-                                        if (event.currentTarget.value === "PAID" && invoice.unpaidAmount > 0) { event.currentTarget.value = invoice.status; setActiveId(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); return; }
+                                        if (event.currentTarget.value === "PAID" && invoice.paymentOutstandingAmount > 0) { event.currentTarget.value = invoice.status; setActiveId(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); return; }
                                         event.currentTarget.form?.requestSubmit();
                                       }}
                                     >
                                       {statusOptions.map((option) => (
-                                        <option key={option.value} value={option.value} disabled={option.value === "PAID" && invoice.unpaidAmount > 0 && invoice.status !== "PAID"}>{option.label}</option>
+                                        <option key={option.value} value={option.value} disabled={option.value === "PAID" && invoice.paymentOutstandingAmount > 0 && invoice.status !== "PAID"}>{option.label}</option>
                                       ))}
                                     </select>
                                   </form>
@@ -395,8 +348,8 @@ export function ReceivedInvoicesWorkspace({
                       <Badge variant={activeInvoice.total > 0 && activeInvoice.bankReconciledAmount >= activeInvoice.total ? "secondary" : "outline"}>
                         {activeInvoice.total > 0 && activeInvoice.bankReconciledAmount >= activeInvoice.total ? "銀行照合済み" : activeInvoice.bankReconciledAmount > 0 ? "銀行一部照合" : "銀行未照合"} {yen.format(activeInvoice.bankReconciledAmount)}
                       </Badge>
-                      <Badge variant={activeInvoice.unpaidAmount > 0 ? "secondary" : "outline"}>
-                        未払い {yen.format(Math.max(0, activeInvoice.unpaidAmount))}
+                      <Badge className="h-auto max-w-full whitespace-normal break-words" variant={activeInvoice.unpaidAmount > 0 ? "secondary" : "outline"}>
+                        {activeInvoice.unpaidExclusion ? "未払い集計対象外（" + activeInvoice.unpaidExclusion + "）" : "未払い " + yen.format(activeInvoice.unpaidAmount)}
                       </Badge>
                       <Badge variant="outline">請求月 {monthLabel(monthKey(activeInvoice))}</Badge>
                       {activeInvoice.debt.groupId ? <Badge variant={activeInvoice.debt.payable ? "outline" : "secondary"}>債務グループ / {debtRoles[activeInvoice.debt.role]} / {activeInvoice.debt.payable ? "支払対象" : "支払対象外"}</Badge> : null}
@@ -422,7 +375,7 @@ export function ReceivedInvoicesWorkspace({
                     </div>
                   </div>
 
-                  <PaymentRecordsPanel key={`${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.payments.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={activeInvoice} records={activeInvoice.payments} canRecord={canRecordPayments} />
+                  <PaymentRecordsPanel key={`${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.payments.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={{ ...activeInvoice, unpaidAmount: activeInvoice.debt.payable ? activeInvoice.paymentOutstandingAmount : 0 }} records={activeInvoice.payments} canRecord={canRecordPayments} />
                   <DebtGroupPanel key={`debt:${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.debt.members.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={activeInvoice} canManage={canApprove} />
 
                   <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -480,7 +433,7 @@ export function ReceivedInvoicesWorkspace({
                         </label>
                         <label className="space-y-1">
                           <span className="text-xs font-medium text-muted-foreground">状態</span>
-                          <SelectField name="status" defaultValue={activeInvoice.status} options={statusOptions} disabledValues={activeInvoice.unpaidAmount > 0 ? ["PAID"] : []} />
+                          <SelectField name="status" defaultValue={activeInvoice.status} options={statusOptions} disabledValues={activeInvoice.paymentOutstandingAmount > 0 ? ["PAID"] : []} />
                           <span className="block text-[11px] text-muted-foreground">支払済みは支払記録・銀行照合で決まります。金額の訂正は支払記録とは別に保存できます。</span>
                         </label>
                         <label className="space-y-1">

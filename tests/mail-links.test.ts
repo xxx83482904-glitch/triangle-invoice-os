@@ -25,7 +25,7 @@ test("deleting a received invoice returns its mail documents to unlinked", () =>
   data.mailDocuments.push({ ...data.mailDocuments[0], id: "mail-deleted", deletedAt: timestamp });
   assert.equal(unlinkMailDocumentsForInvoice(data, "received-1"), 1);
   const mail = data.mailDocuments[0];
-  assert.deepEqual([mail.relatedReceivedInvoiceId, mail.mailProcessed], [undefined, false]);
+  assert.deepEqual([mail.relatedReceivedInvoiceId, mail.mailProcessed], [undefined, true]);
   assert.ok(mail.updatedAt > timestamp);
   assert.equal(data.mailDocuments[1].relatedReceivedInvoiceId, "received-1");
   assert.equal(unlinkMailDocumentsForInvoice(data, "received-1"), 0);
@@ -49,7 +49,7 @@ test("candidates rank the same file, the same file name and a matching vendor; u
   assert.ok(candidates.every((row) => row.id !== "unrelated" && row.id !== "gone"));
 });
 
-test("re-linking validates permission, company, target, current link and version, then follows payment completion", () => {
+test("re-linking validates permission, company, target, current link and version, then preserves manual processing", () => {
   const data = setup(), mail = data.mailDocuments[0];
   data.receivedInvoices.push({ ...data.receivedInvoices[0], id: "received-2", status: "SCHEDULED", fileUrl: "/api/files/second.pdf" }, { ...data.receivedInvoices[0], id: "received-gone", deletedAt: timestamp });
   assert.throws(() => linkMailDocumentToReceivedInvoice(data, { id: "guest", role: "GUEST" }, "JAPAN", { mailDocumentId: mail.id, receivedInvoiceId: "received-2" }), /権限/);
@@ -61,9 +61,10 @@ test("re-linking validates permission, company, target, current link and version
   data.receivedInvoices[0].deletedAt = timestamp;
   mail.category = "OTHER";
   const result = linkMailDocumentToReceivedInvoice(data, admin, "JAPAN", { mailDocumentId: mail.id, receivedInvoiceId: "received-2", mailUpdatedAt: mail.updatedAt });
-  assert.deepEqual([result.receivedInvoiceId, result.mailProcessed, mail.relatedReceivedInvoiceId, mail.category, mail.mailProcessed], ["received-2", false, "received-2", "INVOICE", false]);
+  assert.deepEqual([result.receivedInvoiceId, result.mailProcessed, mail.relatedReceivedInvoiceId, mail.category, mail.mailProcessed], ["received-2", true, "received-2", "INVOICE", true]);
+  mail.mailProcessed = false;
   data.payments.push({ id: "pay", type: "EXPENSE", receivedInvoiceId: "received-2", amount: 8000, paymentDate: "2026-10-01", createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
-  assert.equal(linkMailDocumentToReceivedInvoice(data, admin, "JAPAN", { mailDocumentId: mail.id, receivedInvoiceId: "received-2" }).mailProcessed, true);
+  assert.equal(linkMailDocumentToReceivedInvoice(data, admin, "JAPAN", { mailDocumentId: mail.id, receivedInvoiceId: "received-2" }).mailProcessed, false);
   assert.deepEqual(unlinkMailDocument(data, admin, "JAPAN", { mailDocumentId: mail.id }), { mailDocumentId: mail.id, previousReceivedInvoiceId: "received-2" });
   assert.deepEqual([mail.relatedReceivedInvoiceId, mail.mailProcessed], [undefined, false]);
   assert.throws(() => unlinkMailDocument(data, admin, "JAPAN", { mailDocumentId: mail.id }), /未連携/);

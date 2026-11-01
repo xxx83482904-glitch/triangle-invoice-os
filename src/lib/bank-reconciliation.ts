@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mailsNeedingReceivedInvoice } from "@/lib/mail-links";
 import { assertBankAccess, bankToday, isBankDate } from "@/lib/banking";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
@@ -106,10 +107,8 @@ function updatePaymentStatus(data: AppData, kind: Kind, invoice: IssuedInvoice |
     const complete = payments.reduce((total, row) => total + cents(row.amount), 0) >= cents(item.total);
     item.status = complete ? "PAID" : item.status === "PAID" ? "SCHEDULED" : item.status;
     item.paidAt = complete ? payments.map((row) => row.paymentDate).sort().at(-1) : undefined;
-    item.mailProcessed = complete; item.updatedAt = stamp(item.updatedAt);
-    for (const mail of data.mailDocuments) if (!mail.deletedAt && mail.relatedReceivedInvoiceId === item.id && companyFromParam(mail.company) === companyFromParam(data.projects.find((row) => row.id === item.projectId)?.company)) {
-      mail.mailProcessed = complete; mail.updatedAt = stamp(mail.updatedAt);
-    }
+    // Payment changes must not overwrite manual document processing.
+    item.updatedAt = stamp(item.updatedAt);
   }
 }
 
@@ -373,13 +372,12 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const key = `${kind}:${id}`, rows = paymentsByInvoice.get(key) || [];
     rows.push(payment); paymentsByInvoice.set(key, rows);
   }
-  let unlinkedMailCount = 0;
+  const unlinkedMailCount = mailsNeedingReceivedInvoice(data, company).length;
   for (const mail of data.mailDocuments) {
     if (mail.deletedAt || companyFromParam(mail.company) !== company) continue;
     const invoice = mail.relatedReceivedInvoiceId && index.received.get(mail.relatedReceivedInvoiceId);
     const project = invoice && index.projects.get(invoice.projectId);
     if (!invoice || invoice.deletedAt || !project || project.deletedAt || companyFromParam(project.company) !== company) {
-      if (["INVOICE", "RECEIPT"].includes(mail.category)) unlinkedMailCount++;
       continue;
     }
     const rows = mailByInvoice.get(invoice.id) || []; rows.push(mail); mailByInvoice.set(invoice.id, rows);
@@ -409,8 +407,10 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const eligible = eligibleInvoice(kind, invoice) && (kind !== "received" || isPayableReceivedInvoice(data, invoice as ReceivedInvoice));
     const complete = paid >= cents(invoice.total) && invoice.total > 0;
     const stateMismatch = eligible && (kind === "received"
-      ? (invoice.status === "PAID") !== complete || Boolean((invoice as ReceivedInvoice).mailProcessed) !== complete || mail.some((row) => Boolean(row.mailProcessed) !== complete)
+      ? (invoice.status === "PAID") !== complete
       : invoicePaymentSummary({ payments }, invoice as IssuedInvoice).status !== invoice.status);
+    // Mail processing is independent of payment completion: expose the difference for information only.
+    const mailProcessingMismatch = eligible && kind === "received" && (Boolean((invoice as ReceivedInvoice).mailProcessed) !== complete || mail.some((row) => Boolean(row.mailProcessed) !== complete));
     return [{ key, kind, id: invoice.id, updatedAt: invoice.updatedAt, title: kind === "issued" ? (invoice as IssuedInvoice).invoiceNumber : (invoice as ReceivedInvoice).originalFileName || mail[0]?.title || "受領請求書",
       party: party?.companyName || "取引先未設定", partyId: party?.id || "", accountHolder: party && "accountHolder" in party && typeof party.accountHolder === "string" ? party.accountHolder : "",
       confirmedNames: [] as Array<{ accountId: string; content: string }>,
@@ -421,7 +421,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       project: project.name, total: invoice.total, date: invoice.issueDate, dueDate: invoice.dueDate,
       paid: paid / 100, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, matched: matched / 100, unmatched: Math.max(0, cents(invoice.total) - matched) / 100,
       recordedUnmatched: Math.max(0, paid - matched) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,
-      eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), reaffirmable: reaffirmableInvoice.get(key) || 0, stateMismatch,
+      eligible, needsReview: kind === "issued" && Boolean((invoice as IssuedInvoice).needsReview), conflict: conflictInvoice.has(key), reaffirmable: reaffirmableInvoice.get(key) || 0, stateMismatch, mailProcessingMismatch,
       ...withholdingInfo(kind, invoice),
       mailCount: mail.length, status: invoice.status, overdue: eligible && Boolean(invoice.dueDate) && invoice.dueDate < today && paid < cents(invoice.total),
       href: kind === "issued" ? `/issued-invoices?company=${company}&document=${encodeURIComponent(key)}` : `/received-invoices?company=${company}&document=${encodeURIComponent(invoice.id)}`,

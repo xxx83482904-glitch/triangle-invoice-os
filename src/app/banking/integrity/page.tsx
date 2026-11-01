@@ -15,7 +15,7 @@ export default async function BankIntegrityPage({ searchParams }: { searchParams
   const params = await searchParams, company = companyFromParam(params.company);
   if (!canAccessCompany(user, company)) redirect(defaultPathForRole(user.role));
   const data = await readDataForRequest();
-  const report = integrityReport(data, company, { fileExists: uploadedFileExists });
-  const view = filterIntegrityReport(report, params.kind, Number(params.page) || 1);
-  return <AppShell><BankIntegrityWorkspace key={`${company}:${view.kind}:${view.page}`} company={company} summary={summarizeIntegrity(report)} view={view} /></AppShell>;
+  const report = integrityReport(data, company, { fileExists: uploadedFileExists, includeKnown: params.known === "1" });
+  const view = filterIntegrityReport(report, params.kind, Number(params.page) || 1, 50, params.known === "1");
+  return <AppShell><BankIntegrityWorkspace key={company} company={company} mayEdit={can(user, "manage:banking")} summary={summarizeIntegrity(report)} view={view} /></AppShell>;
 }

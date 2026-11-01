@@ -1,4 +1,5 @@
 import { companyFromParam, type CompanyScope } from "@/lib/company";
+import { isMailProcessed } from "@/lib/mail-processing";
 import { can, canAccessCompany } from "@/lib/rbac";
 import { estimateStatusLabels } from "@/lib/estimate-values";
 import { invoicePaymentSummary, issuedStatusLabels } from "@/lib/invoice-status";
@@ -113,7 +114,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
   if (user.role === "MAIL_EDITOR" && company === "JAPAN") for (const i of data.receivedInvoices) {
     const project = data.projects.find((p) => p.id === i.projectId && !p.deletedAt);
     if (i.deletedAt || linkedReceived.has(i.id) || !project || companyFromParam(project.company) !== company) continue;
-    const processed = i.mailProcessed ?? i.status === "PAID";
+    const processed = isMailProcessed(i);
     rows.push({ id: `received:${i.id}`, sourceId: i.id, kind: "received", title: i.originalFileName || "受領請求書", category: "INVOICE",
       counterpart: vendors.get(i.vendorId) ?? "支払先未設定", counterpartId: `vendor:${i.vendorId}`, projectName: "", month: month(i.folderMonth || i.issueDate), date: i.issueDate,
       status: processed ? "PROCESSED" : "UNPROCESSED", statusLabel: processed ? "処理済み" : "未処理", state: processed ? "done" : "open",

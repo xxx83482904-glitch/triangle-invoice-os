@@ -35,6 +35,7 @@ export const isAgentResource = (value: string): value is AgentResource => Object
 const listSchema = z.object({
   company: z.string().optional(), start: z.string().optional(), end: z.string().optional(), updatedSince: z.string().optional(),
   account: z.string().optional(), status: z.string().optional(), side: z.enum(["INCOME", "EXPENSE"]).optional(), reviewed: z.enum(["true", "false"]).optional(),
+  includeKnown: z.enum(["0", "1"]).optional(),
   q: z.string().max(200).optional(), kind: z.string().optional(), limit: z.coerce.number().int().min(1).max(500).default(100), cursor: z.coerce.number().int().min(0).default(0),
 });
 export type AgentListParams = z.input<typeof listSchema>;
@@ -89,9 +90,9 @@ export function listAgentResource(data: AppData, auth: AgentAuth, resource: Agen
       rows = bankSyncRunViews(data, auth.user, company);
       break;
     case "integrity": {
-      const report = integrityReport(data, company, { today, fileExists: options.fileExists });
+      const report = integrityReport(data, company, { today, fileExists: options.fileExists, includeKnown: value.includeKnown === "1" });
       rows = value.kind ? report.issues.filter((issue) => issue.kind === value.kind) : report.issues;
-      extra = { counts: report.counts, severity: report.severity, truncated: report.truncated, generatedAt: report.generatedAt };
+      extra = { counts: report.counts, severity: report.severity, truncated: report.truncated, generatedAt: report.generatedAt, cardSettlements: report.cardSettlements, unresolvedTotal: report.total, knownTotal: report.knownTotal, knownCounts: report.knownCounts, knownTruncated: report.knownTruncated, totalIncludingKnown: report.totalIncludingKnown };
       break;
     }
   }

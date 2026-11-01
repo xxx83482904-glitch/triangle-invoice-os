@@ -33,11 +33,12 @@ export const activePaymentsFor = (data: AppData, kind: PaymentKind, invoiceId: s
 
 // "支払済み" is derived from payment records; the stored status is compared against them.
 export function receivedPaymentSummary(data: AppData, invoice: ReceivedInvoice) {
-  const payments = activePaymentsFor(data, "received", invoice.id);
+  const payments = activePaymentsFor(data, "received", invoice.id).filter((payment) => Number.isFinite(payment.amount));
   const paid = payments.reduce((total, payment) => total + cents(payment.amount), 0);
-  const complete = invoice.total > 0 && paid >= cents(invoice.total);
+  const total = Number.isFinite(invoice.total) ? Math.max(0, cents(invoice.total)) : 0;
+  const complete = total > 0 && paid >= total;
   return {
-    paid: paid / 100, complete, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,
+    paid: paid / 100, complete, outstanding: Math.max(0, total - paid) / 100, overpaid: Math.max(0, paid - total) / 100,
     status: (complete ? "PAID" : invoice.status === "PAID" ? "SCHEDULED" : invoice.status) as ReceivedInvoice["status"],
     statusMismatch: (invoice.status === "PAID") !== complete, paidAt: complete ? payments.map((payment) => payment.paymentDate).sort().at(-1) : undefined,
   };

@@ -225,6 +225,10 @@ const undoCollectionKeys = [
   "bankReconciliations",
   "bankTransfers",
   "bankSyncRuns",
+  "obligationExclusions",
+  "manualObligations",
+  "payrollSettings",
+  "integrityAcknowledgements",
   "attachments",
   "invoiceNumberSettings",
 ] as const;
@@ -300,7 +304,7 @@ function buildUndoPatch(before: AppDataSnapshot, after: AppData): UndoPatch {
 function isLegacySnapshot(value: unknown): value is AppDataSnapshot {
   if (!value || typeof value !== "object") return false;
   const source = value as Record<string, unknown>;
-  const optionalLegacyKeys = new Set<string>(["estimates", "bankAccounts", "bankTransactions", "accountingCategories", "bankRules", "bankSyncStates", "bankReconciliations", "bankTransfers", "bankSyncRuns", "apiTokens", "agentRequests"]);
+  const optionalLegacyKeys = new Set<string>(["estimates", "bankAccounts", "bankTransactions", "accountingCategories", "bankRules", "bankSyncStates", "bankReconciliations", "bankTransfers", "bankSyncRuns", "apiTokens", "agentRequests", "obligationExclusions", "manualObligations", "payrollSettings", "integrityAcknowledgements"]);
   return undoCollectionKeys.every((key) => (optionalLegacyKeys.has(key) && source[key] === undefined) || Array.isArray(source[key]));
 }
 
@@ -568,6 +572,11 @@ export async function writeData(data: AppData) {
 
 function snapshotData(data: AppData): AppDataSnapshot {
   const snapshot = { ...data };
+  // Optional supplemental collections need an empty before-image for their first explicit write.
+  snapshot.obligationExclusions ??= [];
+  snapshot.manualObligations ??= [];
+  snapshot.payrollSettings ??= [];
+  snapshot.integrityAcknowledgements ??= [];
   delete (snapshot as Partial<AppData>).auditLogs;
   return JSON.parse(JSON.stringify(snapshot)) as AppDataSnapshot;
 }

@@ -58,7 +58,7 @@ test("each rule flags only its own rows and leaves the data untouched", () => {
   assert.deepEqual(ids(result, "payment_mismatch"), ["payment_mismatch:received:received-1"]);
   assert.deepEqual([ids(result, "reconciliation_conflict"), ids(result, "paid_without_bank"), ids(result, "mail_link")], [[], [], []]);
   assert.equal(result.total, result.issues.length);
-  assert.deepEqual(result.severity, { ERROR: 1, WARNING: 3, INFO: 4 });
+  assert.deepEqual(result.severity, { ERROR: 1, WARNING: 3, INFO: 5 });
   assert.ok(result.issues.every((issue) => issue.action === integrityKinds[issue.kind].action && issue.links.length));
   assert.deepEqual(result.issues.map((issue) => issue.severity), [...result.issues].sort((a, b) => ["ERROR", "WARNING", "INFO"].indexOf(a.severity) - ["ERROR", "WARNING", "INFO"].indexOf(b.severity)).map((issue) => issue.severity));
   assert.equal(integrityReport(data, "CHINA", { today }).total, 0);

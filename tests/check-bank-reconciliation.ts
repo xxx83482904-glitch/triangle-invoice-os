@@ -98,13 +98,13 @@ async function main() {
   let current = await read(); assert.equal(current.receivedInvoices.find((row) => row.id === receivedId)!.status, "SCHEDULED"); assert.equal(current.mailDocuments.find((row) => row.id === mailId)!.mailProcessed, false);
   assert.match(await (await call("confirmBankReconciliationAction", ["JAPAN", expenseInput], accounting)).text(), /"success":false/);
   assert.match(await (await call("confirmBankReconciliationAction", ["JAPAN", await input("received", receivedId, expenseId, 5000)], accounting)).text(), /"success":true/);
-  current = await read(); assert.equal(current.receivedInvoices.find((row) => row.id === receivedId)!.status, "PAID"); assert.equal(current.mailDocuments.find((row) => row.id === mailId)!.mailProcessed, true);
+  current = await read(); assert.equal(current.receivedInvoices.find((row) => row.id === receivedId)!.status, "PAID"); assert.equal(current.mailDocuments.find((row) => row.id === mailId)!.mailProcessed, false);
   const link = current.bankReconciliations.find((row) => row.invoiceId === receivedId && row.amount === 5000)!;
   assert.match(await (await call("removeBankReconciliationAction", ["JAPAN", link.id, link.updatedAt], admin)).text(), /"success":true/);
   current = await read(); assert.equal(current.mailDocuments.find((row) => row.id === mailId)!.mailProcessed, false);
   const undo = new FormData(); undo.set("returnPath", "/banking/reconcile?company=JAPAN");
   await (await call("undoLastAction", [undo], admin)).text();
-  current = await read(); assert.equal(current.mailDocuments.find((row) => row.id === mailId)!.mailProcessed, true); assert.equal(current.bankReconciliations.find((row) => row.id === link.id)!.deletedAt, undefined);
+  current = await read(); assert.equal(current.mailDocuments.find((row) => row.id === mailId)!.mailProcessed, false); assert.equal(current.bankReconciliations.find((row) => row.id === link.id)!.deletedAt, undefined);
   const existingPayment = current.payments.find((row) => row.id === paymentId)!, paymentCount = current.payments.length;
   assert.match(await (await call("confirmBankReconciliationAction", ["JAPAN", await input("issued", existingId, existingBankId, 12000, { mode: "existing", paymentId, paymentUpdatedAt: existingPayment.updatedAt })], accounting)).text(), /"success":true/);
   current = await read(); assert.equal(current.payments.length, paymentCount); assert.deepEqual(current.payments.find((row) => row.id === paymentId), existingPayment);
