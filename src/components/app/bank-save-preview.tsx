@@ -35,7 +35,7 @@ export function BankSavePreviewDialog({ preview, categories, busy, onClose, onSa
         </section>)}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><Button variant="ghost" size="icon" aria-label="前の変更" title="前の変更" disabled={window.offset === 0} onClick={() => setStart(window.offset - BANK_RENDER_WINDOW)}><ArrowLeft className="size-4" /></Button><span className="text-xs">{preview.changes.length ? window.offset + 1 : 0}–{window.end} / {preview.changes.length}</span><Button variant="ghost" size="icon" aria-label="次の変更" title="次の変更" disabled={window.end >= preview.changes.length} onClick={() => setStart(window.end)}><ArrowRight className="size-4" /></Button></div>
+        <div className="flex items-center gap-2"><Button variant="outline" size="icon" aria-label="前の変更" title="前の変更" disabled={window.offset === 0} onClick={() => setStart(window.offset - BANK_RENDER_WINDOW)}><ArrowLeft className="size-4" /></Button><span className="text-xs">{preview.changes.length ? window.offset + 1 : 0}–{window.end} / {preview.changes.length}</span><Button variant="outline" size="icon" aria-label="次の変更" title="次の変更" disabled={window.end >= preview.changes.length} onClick={() => setStart(window.end)}><ArrowRight className="size-4" /></Button></div>
         <Button disabled={busy || !preview.changes.length} onClick={onSave}><Save className="size-4" />{preview.changes.length}件を保存{preview.destination ? "して移動" : ""}</Button>
       </div>
     </DialogContent>

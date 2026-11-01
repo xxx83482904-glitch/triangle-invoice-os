@@ -373,7 +373,7 @@ export function BankingWorkspace(props: Props) {
   }
   function linkButton(row: BankDisplayRow) {
     return <div className="inline-flex max-w-full flex-wrap items-center justify-end gap-0.5">
-      <Button className="bank-row-link max-w-full whitespace-normal px-1 text-xs text-muted-foreground" variant="ghost" title={`${row.content} / ${row.side === "INCOME" ? "入金を照合" : "出金を照合"}`} disabled={pending || Boolean(dirty)} onClick={() => openLinks(row)}><FileCheck2 className="size-3.5 shrink-0" />{row.linkLabel || "照合"}</Button>
+      <Button className="bank-row-link max-w-full whitespace-normal px-2 text-xs" variant="soft" size="sm" title={`${row.content} / ${row.side === "INCOME" ? "入金を照合" : "出金を照合"}`} disabled={pending || Boolean(dirty)} onClick={() => openLinks(row)}><FileCheck2 className="size-3.5 shrink-0" />{row.linkLabel || "照合"}</Button>
       <span className="inline-flex md:[&>button]:size-7 md:[&>button]:min-h-7"><BankBookkeepingDialog company={company} transaction={row} categories={categories} disabled={pending || Boolean(dirty)} onSaved={(saved) => setSavedRows((current) => ({ ...current, [saved.id]: { ...row, ...saved, predictionPending: false } }))} /></span>
       <span className="inline-flex md:[&>button]:size-7 md:[&>button]:min-h-7"><BankBulkReclassifyDialog company={company} row={row} accountName={accountMap.get(row.bankAccountId)} categories={categories} disabled={pending || Boolean(dirty) || row.sourceMissing} onApplied={() => router.refresh()} /></span>
       {row.settlementConflict ? <p className="mt-1 max-w-full basis-full break-words text-xs text-amber-700 dark:text-amber-400" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}
@@ -444,15 +444,19 @@ export function BankingWorkspace(props: Props) {
   const matchedContent = (text: string) => bankSearchHighlights(text || "摘要なし", filters.query).map((part, index) => part.matched ? <mark key={index} className="bg-yellow-200 text-black">{part.text}</mark> : part.text);
   const categoryDisabled = pending || filterDirty || categoryTargets.some((row) => Boolean(row.bookkeeping?.splits?.length));
 
-  return <div className="bank-ledger min-w-0 pb-48 md:pb-24">
-    <header className="bank-ledger-header flex flex-wrap items-center justify-between gap-3 py-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-3"><h1 className="break-words text-xl font-semibold">口座・カード明細</h1><select className={`${bankSelectClass} bank-account-filter`} aria-label="口座で絞り込み" value={filterEdits.account ?? props.selectedAccountOption} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, account: e.target.value, analysisThrough: "" }))}><option value="">すべての口座・カード</option>{props.accountOptions.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select></div>
-      <div className="flex flex-wrap gap-2">
-        <Link className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" href={`/banking/integrity?company=${company}`}><ShieldCheck className="size-4" />整合性チェック</Link>
+  return <div className="bank-ledger min-w-0 space-y-6 pb-48 md:pb-24">
+    <header className="bank-ledger-header flex flex-wrap items-center justify-between gap-4 border-b py-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-3"><h1 className="break-words text-2xl font-semibold">口座・カード明細</h1><select className={`${bankSelectClass} bank-account-filter`} aria-label="口座で絞り込み" value={filterEdits.account ?? props.selectedAccountOption} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, account: e.target.value, analysisThrough: "" }))}><option value="">すべての口座・カード</option>{props.accountOptions.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select></div>
+      <div className="flex min-w-0 flex-wrap gap-6">
+        <div className="workspace-toolbar-group" role="group" aria-label="確認・出力"><span className="workspace-group-label">確認・出力</span>
+        <Button asChild variant="soft" size="sm"><Link href={`/banking/integrity?company=${company}`}><ShieldCheck className="size-4" />整合性チェック</Link></Button>
         <SectionExportDialog scope="banking" role={props.role} disabled={pending || Boolean(dirty)} />
+        </div>
+        <div className="workspace-toolbar-group" role="group" aria-label="設定・同期"><span className="workspace-group-label">設定・同期</span>
         {props.aiSettings ? <BankAiSettings {...props.aiSettings} disabled={pending || Boolean(dirty)} /> : null}
         <Button className="min-h-11" variant="outline" disabled={pending || Boolean(dirty)} onClick={() => setSettings(true)}><Settings2 className="size-4" />科目・ルール</Button>
         <Button className="min-h-11" variant="outline" disabled={!configured || syncing || pending || Boolean(dirty)} onClick={() => setSyncOpen(true)}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}同期</Button>
+        </div>
       </div>
     </header>
     <div className="bank-workflow-line"><WorkflowNav role={props.role} compact />{!classificationPreview ? <div className="bank-ledger-totals flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" aria-label="表示条件の集計"><span>{monthName(filters.month)} / {total.toLocaleString()}件</span><span>入金 <strong className="font-medium tabular-nums text-emerald-700 dark:text-emerald-400">{money.format(summary.income)}</strong></span><span>出金 <strong className="font-medium tabular-nums text-foreground">{money.format(summary.expense)}</strong></span><span>候補の保存待ち {summary.unclassified}件</span>{summary.excluded ? <span>集計対象外 {summary.excluded}件</span> : null}</div> : null}</div>
@@ -482,10 +486,11 @@ export function BankingWorkspace(props: Props) {
       </div>
     </section></details> : null}
     <div className="bank-ledger-layout">
-      <section className="min-w-0 space-y-2">
+      <section className="min-w-0 space-y-4">
         {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><div className="min-w-0"><h2 className="text-base font-semibold">{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}</h2>{aiResult ? <p className="mt-1 break-words text-xs text-muted-foreground">候補 {aiResult.suggested}件・うち低確度の推定 {aiResult.lowConfidence}件 / {aiResult.model}</p> : null}</div><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
         {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
         {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
+        <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み</h2>
         <BankFiscalMonthTabs value={filters.month} months={months} today={bankToday()} disabled={pending} onChange={(month) => navigate({ month })} />
         <div className="bank-ledger-filters">
           <select className={bankSelectClass} aria-label="勘定科目で絞り込み" value={filterEdits.category ?? filters.category} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, category: e.target.value }))}><option value="">すべての勘定科目</option>{bankCategoryCatalog(categories.map((row) => ({ ...row, available: true }))).map((section) => <optgroup key={section.id} label={section.label}>{section.entries.map(({ category }) => <option key={category.id} value={category.id}>{category.name}</option>)}</optgroup>)}</select>
@@ -500,20 +505,25 @@ export function BankingWorkspace(props: Props) {
           <Button form="bank-filters" type="submit" className="h-11 md:h-9" variant="outline" disabled={pending}><Search className="size-4" />条件を適用</Button>
         </div>
         {filterDirty ? <div role="status" className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">検索条件は未適用<Button variant="ghost" size="icon" title="条件の変更を取り消す" aria-label="条件の変更を取り消す" disabled={pending} onClick={() => { setSearch(filters.query); setFilterEdits({ queryMode: filters.queryMode || "contains", excludeQuery: filters.excludeQuery || "" }); }}><X className="size-4" /></Button></div> : null}
+        </section>
         </>}
-        <div className="bank-ledger-toolbar flex min-w-0 flex-wrap items-center gap-2" aria-label="明細の操作">
+        <div className="bank-ledger-toolbar flex min-w-0 flex-wrap items-end gap-6 rounded-xl border bg-card p-4 shadow-sm" aria-label="明細の操作">
+          <div className="workspace-toolbar-group" role="group" aria-label="選択"><span className="workspace-group-label">選択</span>
           <div className="flex items-center text-xs md:hidden"><SelectAllCheckbox selection={selection} />表示中を選択</div>
           <Button type="button" variant="outline" disabled={pending || filterDirty || !total} onClick={selectMatching}><CheckCheck className="size-4" />検索結果を全件選択（{total.toLocaleString()}件）</Button>
-          <BankAuditDialog company={company} disabled={pending || Boolean(dirty)} />
+          </div>
+          <div className="workspace-toolbar-group" role="group" aria-label="履歴"><span className="workspace-group-label">履歴</span><BankAuditDialog company={company} disabled={pending || Boolean(dirty)} /></div>
+          <div className="workspace-toolbar-group" role="group" aria-label="分類"><span className="workspace-group-label">分類</span>
           <Button type="button" className="min-h-11 xl:hidden" variant="outline" disabled={pending} onClick={() => openCategories()}><ListTree className="size-4" />科目・確認</Button>
           <Button type="button" className="min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => { setClassifyScope(selected.size ? "selected" : "all"); setClassificationEmpty(null); setError(""); setClassifyOpen(true); }}><WandSparkles className="size-4" />自動分類</Button>
           <Button type="button" className="min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => openAi(selected.size ? "selected" : rows.length ? "page" : "all")}><Bot className="size-4" />AI分類</Button>
           <Button type="button" className="min-h-11" variant="outline" disabled={pending || Boolean(dirty) || !months.length} onClick={() => openAi(selected.size ? "selected" : rows.length ? "page" : "all", true)}><History className="size-4" />過去実績でAI再判定</Button>
+          </div>
           {selected.size ? <select className={`${bankSelectClass} bank-bulk-treatment`} aria-label="選択明細の扱いを一括変更" value="" disabled={categoryDisabled} onChange={(e) => bulk({ treatment: e.target.value as BankEdit["treatment"], reviewed: false })}><option value="" disabled>扱いを一括変更</option>{Object.entries(treatmentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select> : null}
           {filters.month || filters.account || filters.category || filters.side || filters.status || filters.query || filters.excludeQuery || filters.analysisThrough || filters.transaction ? <Button type="button" size="icon" variant="ghost" title="絞り込みを解除" aria-label="絞り込みを解除" disabled={pending} onClick={() => navigate({ month: "", account: "", category: "", side: "", status: "", q: "", queryMode: "contains", excludeQuery: "", analysisThrough: "", transaction: "" })}><X className="size-4" /></Button> : null}
         </div>
         {matchingSnapshot ? <p role="status" className="text-xs text-muted-foreground">検索結果の確定範囲 {matchingSnapshot.length}件 / 選択 {selected.size}件 / 選択解除 {matchingSnapshot.filter((id) => !selected.has(id)).length}件（対象外は自動選択しません）</p> : null}
-        <div role="region" aria-label="口座・カード明細一覧" tabIndex={0} className="bank-ledger-scroll min-w-0 max-w-full md:overflow-auto md:overscroll-contain">
+        <div role="region" aria-label="口座・カード明細一覧" tabIndex={0} className="bank-ledger-scroll min-w-0 max-w-full rounded-xl border bg-card shadow-sm md:overflow-auto md:overscroll-contain">
         <div className="hidden md:block">
           <table className="bank-ledger-table w-full min-w-[840px] table-fixed text-sm">
             <colgroup><col className="w-11" /><col className="w-[84px]" /><col /><col className="w-[104px]" /><col className="w-[160px]" /><col className="w-[104px]" /><col className="w-[116px]" /><col className="w-[88px]" /></colgroup>
@@ -524,7 +534,7 @@ export function BankingWorkspace(props: Props) {
               return <tr key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }} className={`border-b align-top ${selected.has(row.id) ? "bg-primary/10" : "hover:bg-muted/30"}`}>
                 <td>{selectionBox(row)}</td>
                 <td className="px-1 py-3"><time className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{row.transactionDate}</time></td>
-                <td className="break-words px-2 py-2"><div className="font-medium">{matchedContent(row.content)}</div><div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><span className="line-clamp-2" title={accountMap.get(row.bankAccountId)}>{accountMap.get(row.bankAccountId) || "口座未取得"}</span>{row.sourceMemo ? <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" className="bank-source-note size-6 shrink-0" title="元明細メモ" aria-label={`${row.content}の元明細メモ`}><MessageSquareText className="size-3" /></Button></PopoverTrigger><PopoverContent className="max-w-[min(320px,90vw)] break-words text-sm">{row.sourceMemo}</PopoverContent></Popover> : null}</div></td>
+                <td className="break-words px-2 py-2"><div className="font-medium">{matchedContent(row.content)}</div><div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><span className="line-clamp-2" title={accountMap.get(row.bankAccountId)}>{accountMap.get(row.bankAccountId) || "口座未取得"}</span>{row.sourceMemo ? <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" className="bank-source-note size-11 shrink-0 lg:size-7" title="元明細メモ" aria-label={`${row.content}の元明細メモ`}><MessageSquareText className="size-3" /></Button></PopoverTrigger><PopoverContent className="max-w-[min(320px,90vw)] break-words text-sm">{row.sourceMemo}</PopoverContent></Popover> : null}</div></td>
                 <td className={`px-2 py-3 text-right tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}><span className="whitespace-nowrap">{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span>{linkButton(row)}</td>
                 <td className="px-1 py-2">{controls[0]}{status(row, value)}</td><td className="px-1 py-2">{controls[1]}</td><td className="px-1 py-2">{controls[2]}</td>
                 <td className="px-1 py-3"><BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} /></td>
@@ -552,8 +562,8 @@ export function BankingWorkspace(props: Props) {
       </section>
       <aside ref={categoryRail} aria-label="勘定科目の選択" className="bank-category-rail hidden xl:flex">{reviewPanel}<div className="min-h-0 flex-1"><BankCategoryPicker categories={categories} targets={categoryTargets} disabled={categoryDisabled} onApply={applyCategory} /></div></aside>
     </div>
-    <footer className="bank-ledger-savebar" aria-label="明細の保存">
-      <div className="grid w-full min-w-0 gap-2">
+    <footer className="bank-ledger-savebar shadow-sm" aria-label="明細の保存">
+      <div className="grid w-full min-w-0 gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2">
         <div className="flex flex-wrap items-center gap-2 text-xs"><span role="status">選択 {selected.size}件 / 確認済み {reviewedCount}件 / 編集未保存 {dirty}件 / 自動候補 {candidates.length}件</span><Button variant="ghost" size="icon" className="size-9" title="選択解除" aria-label="選択解除" disabled={pending || !selected.size} onClick={selection.clear}><X className="size-4" /></Button>{pending ? <span role="status" className="flex items-center gap-1"><LoaderCircle className="size-4 animate-spin" />処理中{savedCount ? ` / ${savedCount}件保存済み` : ""}</span> : null}{saveResult ? <span role="status">保存済み {saveResult.saved}件 / 残り {saveResult.remaining}件{saveResult.uncertain ? "（結果未確認あり）" : ""}</span> : null}</div>
         <div className="flex flex-wrap gap-2">
           <Button className="min-h-11" variant="outline" disabled={pending || filterDirty || !selected.size} onClick={() => reviewSelection(true)}><CheckCheck className="size-4" />選択を確認済みに</Button>

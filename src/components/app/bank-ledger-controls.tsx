@@ -12,9 +12,9 @@ export function BankFiscalMonthTabs({ value, months, today, disabled, onChange }
   const years = [...new Set([year, bankFiscalYear(today), ...months.map(bankFiscalYear)])].sort((a, b) => b - a);
   return <nav aria-label="取引月" className="bank-fiscal-months">
     <div className="flex shrink-0 items-center gap-1">
-      <Button variant="ghost" size="icon" className="size-9" title="前の年度" aria-label="前の年度" disabled={disabled || year <= 1901} onClick={() => onChange(bankLedgerYearMonth(year - 1, months))}><ChevronLeft className="size-4" /></Button>
+      <Button variant="outline" size="icon" className="size-9" title="前の年度" aria-label="前の年度" disabled={disabled || year <= 1901} onClick={() => onChange(bankLedgerYearMonth(year - 1, months))}><ChevronLeft className="size-4" /></Button>
       <select aria-label="決算年度" className="bank-period-select" value={year} disabled={disabled} onChange={(event) => onChange(bankLedgerYearMonth(Number(event.target.value), months))}>{years.map((item) => <option key={item} value={item}>{item - 1}.09 - {item}.08</option>)}</select>
-      <Button variant="ghost" size="icon" className="size-9" title="次の年度" aria-label="次の年度" disabled={disabled || year >= Math.max(bankFiscalYear(today), ...months.map(bankFiscalYear))} onClick={() => onChange(bankLedgerYearMonth(year + 1, months))}><ChevronRight className="size-4" /></Button>
+      <Button variant="outline" size="icon" className="size-9" title="次の年度" aria-label="次の年度" disabled={disabled || year >= Math.max(bankFiscalYear(today), ...months.map(bankFiscalYear))} onClick={() => onChange(bankLedgerYearMonth(year + 1, months))}><ChevronRight className="size-4" /></Button>
     </div>
     <div className="bank-month-tabs" aria-label="月を選択">
       <button type="button" disabled={disabled} aria-pressed={!value} onClick={() => onChange("")}>全期間</button>

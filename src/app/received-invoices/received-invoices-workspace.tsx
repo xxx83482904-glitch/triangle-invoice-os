@@ -4,7 +4,7 @@ import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/com
 import { isSelectionControl } from "@/lib/list-selection";
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { updateReceivedInvoiceInline, updateReceivedInvoiceStatus } from "@/app/actions";
 import { saveReceivedInvoice } from "./actions";
@@ -173,7 +173,7 @@ export function ReceivedInvoicesWorkspace({
 
   return (
     <Card variant="section">
-      <CardHeader className="min-w-0 gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <CardHeader className="min-w-0 gap-4 lg:items-start">
         <div>
           <CardTitle>受領請求書一覧</CardTitle>
         </div>
@@ -181,7 +181,7 @@ export function ReceivedInvoicesWorkspace({
           <div className="flex flex-wrap gap-x-3 gap-y-1 break-all" role="status">
             {receivedSummaryBasis(filter, query).map((label) => <span key={label}>{label}</span>)}
           </div>
-          <div className="grid grid-cols-3 gap-1">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
               <div>合計</div>
               <div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.total)}</div>
@@ -203,7 +203,8 @@ export function ReceivedInvoicesWorkspace({
         </section> : null}
       </CardHeader>
       <CardContent>
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-2">
+        <div className="workspace-filter-panel mb-4 flex flex-wrap items-center gap-3">
+          <h2 className="w-full text-sm font-semibold">絞り込み</h2>
           {(Object.keys(filterLabels) as WorkFilter[]).map((item) => (
             <Button
               key={item}
@@ -219,7 +220,7 @@ export function ReceivedInvoicesWorkspace({
           <Input
             value={query}
             placeholder="支払先・案件・OCRを検索"
-            className="h-9 min-w-56 flex-1 md:max-w-80"
+            className="h-11 min-w-0 basis-56 flex-1 md:max-w-80 lg:h-9"
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
@@ -227,9 +228,9 @@ export function ReceivedInvoicesWorkspace({
         <p className="mb-3 text-xs text-muted-foreground">絞り込みボタンの件数は検索前の件数です。</p>
         <SelectionToolbar selection={selection} />
         {filteredInvoices.length ? (
-          <div className="grid min-h-[720px] overflow-hidden border">
+          <div className="mt-4 grid min-h-[720px] overflow-hidden rounded-xl border bg-card shadow-sm">
             <div className="max-h-[420px] min-w-0 overflow-auto">
-              <table className="w-full min-w-[980px] text-sm">
+              <table className="workspace-record-table w-full min-w-[980px] text-sm">
                 <thead className="bg-muted/50 text-xs text-muted-foreground">
                   <tr>
                     <th className="w-11 p-0"><SelectAllCheckbox selection={selection} label="表示中の受領請求書をすべて選択" /></th>
@@ -278,7 +279,7 @@ export function ReceivedInvoicesWorkspace({
                               <td className="p-0"><RowSelectionCheckbox selection={selection} id={invoice.id} label={`${invoice.vendorName} ${invoice.issueDate}を選択`} /></td>
                               <td className="max-w-[220px] truncate px-3 py-2 font-medium">{invoice.vendorName}</td>
                               <td className="max-w-[220px] truncate px-3 py-2">
-                                <Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline" onClick={(event) => event.stopPropagation()}>
+                                <Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline underline-offset-4 hover:text-primary" onClick={(event) => event.stopPropagation()}>
                                   {invoice.projectName}
                                 </Link>
                               </td>
@@ -315,9 +316,9 @@ export function ReceivedInvoicesWorkspace({
                               </td>
                               <td className="px-3 py-2">
                                 {invoice.fileUrl ? (
-                                  <a className="text-sm underline" href={invoice.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
+                                  <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
                                     表示
-                                  </a>
+                                  <ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></a></Button>
                                 ) : (
                                   "-"
                                 )}
@@ -331,10 +332,10 @@ export function ReceivedInvoicesWorkspace({
               </table>
             </div>
 
-            <aside className="min-w-0 border-t bg-background p-4">
+            <aside className="min-w-0 border-t bg-muted/20 p-5">
               {activeInvoice ? (
-                <div className="space-y-4">
-                  <div className="border-b pb-3">
+                <div className="space-y-6">
+                  <div className="workspace-detail-group"><h2 className="mb-3 text-sm font-semibold">基本情報</h2>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="line-clamp-2 text-base font-semibold">{activeInvoice.vendorName}</div>
@@ -364,6 +365,7 @@ export function ReceivedInvoicesWorkspace({
                     </div>
                   </div>
 
+                  <section className="workspace-detail-group"><h2 className="mb-3 text-sm font-semibold">金額・支払</h2>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-lg border p-3">
                       <div className="text-xs text-muted-foreground">請求日 / 支払期限</div>
@@ -376,7 +378,10 @@ export function ReceivedInvoicesWorkspace({
                   </div>
 
                   <PaymentRecordsPanel key={`${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.payments.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={{ ...activeInvoice, unpaidAmount: activeInvoice.debt.payable ? activeInvoice.paymentOutstandingAmount : 0 }} records={activeInvoice.payments} canRecord={canRecordPayments} />
+                  </section>
+                  <section className="workspace-detail-group"><h2 className="mb-3 text-sm font-semibold">連携</h2>
                   <DebtGroupPanel key={`debt:${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.debt.members.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={activeInvoice} canManage={canApprove} />
+                  </section>
 
                   <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                   <div className="min-w-0 space-y-3 lg:sticky lg:top-4">
@@ -411,18 +416,19 @@ export function ReceivedInvoicesWorkspace({
                           setSaveResult({ id: activeInvoice.id, message: "通信に失敗しました。入力内容を保持しています。再試行してください。", error: true });
                         }
                       });
-                    }} className="space-y-3">
+                    }} className="workspace-detail-group space-y-4">
                       <input type="hidden" name="company" value={company} />
                       <input type="hidden" name="receivedInvoiceId" value={activeInvoice.id} />
                       <input type="hidden" name="expectedUpdatedAt" value={activeInvoice.updatedAt} />
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium">詳細編集</div>
+                        <h2 className="text-sm font-semibold">詳細編集</h2>
                         <Button type="submit" size="sm" className="gap-1" disabled={saving}>
                           <Save className="h-4 w-4" />
                           {saving ? "保存中…" : "保存"}
                         </Button>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
+
+                  <div className="grid gap-3 sm:grid-cols-2">
                         <label className="space-y-1">
                           <span className="text-xs font-medium text-muted-foreground">請求元（発行者）</span>
                           <SelectField name="vendorId" defaultValue={activeInvoice.vendorId} options={vendors} />

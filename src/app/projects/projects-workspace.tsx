@@ -505,7 +505,7 @@ function ProjectDetailPanel({
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           {row.contractFileUrl ? (
-            <a className="inline-flex items-center gap-2 font-medium underline" href={row.contractFileUrl} target="_blank">
+            <a className="inline-flex items-center gap-2 font-medium hover:underline underline-offset-4 hover:text-primary" href={row.contractFileUrl} target="_blank">
               <FileText className="h-4 w-4" />
               {row.contractOriginalFileName || "契約書を表示"}
             </a>

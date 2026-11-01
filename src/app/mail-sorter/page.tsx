@@ -1,3 +1,5 @@
+import { ArrowUpRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { mailInvoiceDefaults } from "@/lib/mail-invoice-defaults";
 import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
@@ -172,7 +174,7 @@ export default async function MailSorterPage({
         {linkRequiredOnly ? <section aria-label="連携が必要な郵便物" className="space-y-2 rounded-lg border bg-muted/20 p-3 text-sm">
           <h2 className="font-semibold">受領請求書への連携が必要な郵便物 {rows.length}件</h2>
           <p>未処理の請求書・領収書で、有効な連携先がないものだけを表示しています。原本欠落・重複候補は確認対象に含みます。連携不要と判断したものは処理済みにすると、この一覧から外れます。</p>
-          <Link className="inline-flex min-h-11 items-center text-primary underline" href={"/mail-sorter?company=" + company}>すべての郵便物に戻る</Link>
+          <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><Link href={"/mail-sorter?company=" + company}>すべての郵便物に戻る<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></Link></Button>
         </section> : null}
         {!linkRequiredOnly && (integrity.brokenLinks || integrity.missingMailFiles) ? (
           <p role="alert" className="border-l-2 border-amber-500 pl-3 text-sm">

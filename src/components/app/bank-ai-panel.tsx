@@ -54,12 +54,12 @@ export function BankAiPanel({ company, preview, configured, model, onChooseInvoi
           <p>差額（銀行 − 請求）<br /><strong className="tabular-nums">{row.difference === null ? "算出不可" : money(row.difference)}</strong></p>
         </div>
         <ul className="space-y-2">{row.invoices.map((invoice) => <li className="flex min-w-0 flex-wrap items-center justify-between gap-2" key={invoice.key}>
-          <Link className="inline-flex min-h-11 min-w-0 items-center gap-1 break-words text-primary underline" href={invoice.href}><span className="min-w-0 break-words">{invoice.title}</span><ArrowUpRight className="size-4 shrink-0" /></Link>
+          <Link className="inline-flex min-h-11 min-w-0 items-center gap-1 break-words text-primary hover:underline underline-offset-4 hover:text-primary" href={invoice.href}><span className="min-w-0 break-words">{invoice.title}</span><ArrowUpRight className="size-4 shrink-0" /></Link>
           {onChooseInvoice ? <Button className={touch} variant="outline" onClick={() => onChooseInvoice(invoice.key)}><Link2 className="size-4" />確認して照合</Button> : null}
-        </li>)}{row.mails.map((mail) => <li key={mail.id}><Link className="inline-flex min-h-11 min-w-0 items-center gap-1 text-primary underline" href={mail.href}><span className="min-w-0 break-words">郵便物: {mail.title} {mail.linked ? "（連携あり）" : "（未連携）"}</span><ArrowUpRight className="size-4 shrink-0" /></Link></li>)}</ul>
+        </li>)}{row.mails.map((mail) => <li key={mail.id}><Link className="inline-flex min-h-11 min-w-0 items-center gap-1 text-primary hover:underline underline-offset-4 hover:text-primary" href={mail.href}><span className="min-w-0 break-words">郵便物: {mail.title} {mail.linked ? "（連携あり）" : "（未連携）"}</span><ArrowUpRight className="size-4 shrink-0" /></Link></li>)}</ul>
         <details><summary className="flex min-h-11 cursor-pointer items-center text-muted-foreground">根拠の抜粋（{row.evidence.length}件）</summary><ul className="space-y-1 border-l pl-3 text-xs">{row.evidence.map((item, n) => <li className="break-words" key={`${item.label}:${n}`}>{item.label}: {item.quote}</li>)}</ul></details>
         <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300">{row.cautions.map((text) => <li className="break-words" key={text}>{text}</li>)}</ul>
-        <Link className="inline-flex min-h-11 items-center gap-1 text-primary underline" href={row.bank.href}><Link2 className="size-4" />銀行の照合画面へ</Link>
+        <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><Link href={row.bank.href}><Link2 className="size-4" />銀行の照合画面へ</Link></Button>
       </li>)}</ul>
     </> : null}
     <Dialog open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}>
@@ -68,7 +68,7 @@ export function BankAiPanel({ company, preview, configured, model, onChooseInvoi
         <p className="text-sm">銀行 {counts.banks}件、請求書 {counts.invoices}件、郵便物 {counts.mails}件の名称・摘要・日付・金額・状態と、OCRの必要箇所の抜粋を含みます。原本ファイル・社内メモ・APIキーは分析内容に含めません。</p>
         <p className="text-xs text-muted-foreground">口座番号らしい長い数字・メールアドレス等はマスクしますが、完全な匿名化ではありません。送信内容を確認してください。会社ごとに1日50回・連続実行は15秒間隔が上限です。</p>
         <details><summary className="flex min-h-11 cursor-pointer items-center font-medium">送信データの詳細</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">{JSON.stringify(preview.payload, null, 2)}</pre></details>
-        <a className="inline-flex min-h-11 items-center gap-1 text-xs text-primary underline" href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noreferrer">OpenAIのデータ保持方針<ArrowUpRight className="size-4" /></a>
+        <a className="inline-flex min-h-11 items-center gap-1 text-xs text-primary hover:underline underline-offset-4 hover:text-primary" href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noreferrer">OpenAIのデータ保持方針<ArrowUpRight className="size-4" /></a>
         <label className="flex min-h-11 items-start gap-3 py-2 text-sm"><input className="mt-1 size-5 shrink-0 accent-primary" type="checkbox" checked={consent} disabled={pending} onChange={(e) => setConsent(e.target.checked)} /><span>このデータをOpenAI APIへ送信し、候補の提案を受け取ることに同意します。</span></label>
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
         <Button className={touch} disabled={pending || !consent} onClick={run}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}{pending ? "AIが読み比べています" : "送信して横断チェック"}</Button>
