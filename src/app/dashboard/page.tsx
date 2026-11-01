@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AppShell, PageHeader } from "@/components/app/shell";
+import { AppShell } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
 import { bankToday } from "@/lib/banking";
 import { companyFromParam } from "@/lib/company";
@@ -8,7 +8,7 @@ import { dashboardNextSteps } from "@/lib/dashboard-next-steps";
 import { uploadedFileExists } from "@/lib/files";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { readDataForRequest } from "@/lib/store";
-import { DashboardActions, DashboardWorkspace } from "./dashboard-workspace";
+import { DashboardWorkspace } from "./dashboard-workspace";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
@@ -20,7 +20,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const summary = dashboardSummary(data, user, company, bankToday(), params.year);
   const nextSteps = dashboardNextSteps(data, user, summary, uploadedFileExists);
   return <AppShell>
-    <PageHeader title="ダッシュボード" description={`${summary.today} 現在 / ${company === "JAPAN" ? "日本" : "中国"}`}><DashboardActions company={company} /></PageHeader>
-    <DashboardWorkspace key={`${company}:${summary.period.year}`} summary={summary} nextSteps={nextSteps} />
+    <DashboardWorkspace key={`${company}:${summary.period.year}`} summary={summary} nextSteps={nextSteps} companyLabel={company === "JAPAN" ? "日本" : "中国"} />
   </AppShell>;
 }
