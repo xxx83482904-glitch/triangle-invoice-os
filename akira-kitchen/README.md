@@ -22,6 +22,8 @@ Node 22.18以上で `npm install` → `npm run dev`。http://localhost:3060/akir
 
 このフォルダはSynology向けの独立した静的ソースです。リポジトリのルートで `npm run build:akira-kitchen` を実行すると、検証した配布物が `public/akira-kitchen/` に配置されます。mainへコミット・pushすると既存のDeploy Synologyワークフローが公開します。
 
-公開URL: https://trianglejp14f.synology.me/akira-kitchen/index.html
+公開URL: https://akira.kuremasato.com/
+
+Synology直接URL: https://trianglejp14f.synology.me/akira-kitchen/index.html
 
 詳細は親フォルダの `docs/akira-kitchen-synology.md` を参照。元の人物写真・資格情報・サーバー側の利用者データは含みません。以前のSites版とアルバムは別保存です。

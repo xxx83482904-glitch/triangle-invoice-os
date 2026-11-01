@@ -1,7 +1,7 @@
 {
   "app": "akira-kitchen",
   "version": "2.1.0",
-  "cache": "de6d6b216dd6957d",
+  "cache": "546f463e4e61a1de",
   "files": {
     "__next._full.txt": "4e1cd49797ad3c6675556cccdf4ee06e5676e1043e829fafad78a5d3bb07d7a0",
     "__next._tree.txt": "b9569d18f29e392df0504246c16bf0a0f54b4406ab56fde1db7acd7787c83d62",
@@ -45,6 +45,6 @@
     "index.html": "d461738f104a199ddb17ad852041b85d1f88503cf22ace55d23f42073143185f",
     "index.txt": "4e1cd49797ad3c6675556cccdf4ee06e5676e1043e829fafad78a5d3bb07d7a0",
     "manifest.webmanifest": "ce609d5d5735a90dc54ed3b2d732627e1ae19c7d9d1dab1000bb22ff60158fb9",
-    "sw.js": "2acc5e3735e0e30a0300b5d22a846858ff994db456d34ae43cedca74ed912e6d"
+    "sw.js": "0acc24e20a13a1067778bf72fb8333af64cd886b7abcc658a8b5401c36b926e3"
   }
 }

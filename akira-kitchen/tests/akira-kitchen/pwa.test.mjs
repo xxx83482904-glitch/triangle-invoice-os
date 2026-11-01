@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
+import { createServer } from "node:http";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -64,7 +65,7 @@ test("precache includes app shell, character and all chunk files", () => {
     generated.assets.sort(),
     [
       "/akira-kitchen/_next/static/chunks/app.js",
-      "/akira-kitchen/",
+      "/akira-kitchen/index.html",
       "/akira-kitchen/chef.png",
     ].sort(),
   );
@@ -82,7 +83,7 @@ test("installation caches atomically; activation removes only this apps old cach
 });
 test("offline navigation and JS respond from precache without network", async () => {
   for (const [url, mode, expected] of [
-    ["https://example.test/akira-kitchen/?x=1", "navigate", "/akira-kitchen/"],
+    ["https://example.test/akira-kitchen/?x=1", "navigate", "/akira-kitchen/index.html"],
     [
       "https://example.test/akira-kitchen/_next/static/chunks/app.js",
       "cors",
@@ -102,6 +103,7 @@ test("offline navigation and JS respond from precache without network", async ()
 test("worker ignores unrelated application routes, writes and external requests", () => {
   for (const request of [
     { url: "https://example.test/invoices", method: "GET", mode: "navigate" },
+    { url: "https://example.test/akira-kitchen-other/", method: "GET", mode: "navigate" },
     { url: "https://example.test/api/data", method: "POST" },
     { url: "https://example.test/_next/static/chunks/host.js", method: "GET" },
     { url: "https://outside.test/image.png", method: "GET" },
@@ -109,6 +111,53 @@ test("worker ignores unrelated application routes, writes and external requests"
     let handled = false;
     listeners.fetch({ request, respondWith: () => (handled = true) });
     assert.equal(handled, false);
+  }
+});
+test("offline reload returns a non-redirected response when the host redirects directories", async () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/akira-kitchen/") {
+      res.writeHead(307, { location: "/akira-kitchen/index.html" });
+      res.end();
+    } else {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(req.url);
+    }
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const redirected = await fetch(origin + "/akira-kitchen/");
+    assert.equal(redirected.redirected, true, "fixture reproduces Synology's directory redirect");
+    await redirected.text();
+    const handlers = {}, stored = new Map();
+    const cache = {
+      addAll: async (urls) => {
+        for (const url of urls) stored.set(url, await fetch(origin + url));
+      },
+      match: async (url) => stored.get(url)?.clone(),
+    };
+    vm.runInNewContext(generated.worker, {
+      URL, Response, caches: { open: async () => cache },
+      fetch: () => { throw new Error("offline"); },
+      self: { location: { origin }, addEventListener: (type, handler) => { handlers[type] = handler; } },
+    });
+    let installation;
+    handlers.install({ waitUntil: (promise) => { installation = promise; } });
+    await installation;
+    for (const path of ["/akira-kitchen/", "/akira-kitchen/index.html"]) {
+      let navigation;
+      handlers.fetch({
+        request: { url: origin + path, method: "GET", mode: "navigate", redirect: "manual" },
+        respondWith: (promise) => { navigation = promise; },
+      });
+      const response = await navigation;
+      assert.equal(response.redirected, false, "redirected responses cause browser navigation errors");
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "/akira-kitchen/index.html");
+    }
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 test("build changes invalidate the app cache", async () => {
