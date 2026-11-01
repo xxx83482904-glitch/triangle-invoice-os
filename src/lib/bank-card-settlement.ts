@@ -30,6 +30,20 @@ export function knownBankCardSettlement(data: Pick<AppData, "bankAccounts">, row
   return { provider: "アプラス" as const, reason: APLUS_SETTLEMENT_REASON };
 }
 
+// Integrity only: do not broaden the shared classifier, sync, bulk edit or reconciliation guards.
+export function integrityBankCardSettlement(data: Pick<AppData, "bankAccounts">, row: BankTransaction) {
+  const existing = knownBankCardSettlement(data, row);
+  if (existing) return { ...existing, label: APLUS_SETTLEMENT_LABEL };
+  if (row.company !== "JAPAN" || row.side !== "EXPENSE" || !Number.isFinite(row.amount) || row.amount <= 0 || row.sourceMissing || row.sourceStatus === "excluded") return;
+  const content = normalize(row.content);
+  // Exact payee, with optional transfer/debit prefix and common corporate notation. No arbitrary substrings.
+  if (!/^(?:振込|振込み|フリコミ|口座振替)?(?:株式会社|\(株\)|カ\)|\(カ\))?(?:upsider|アップサイダー)(?:株式会社|\(株\)|\(カ\))?$/.test(content)) return;
+  if (/返金|返還|返戻|取消|取り消|組戻|払戻|払い戻|手数料|refund|reversal|fee/.test(content)) return;
+  const account = data.bankAccounts.find((item) => item.id === row.bankAccountId && item.company === row.company && item.officeCode === row.officeCode);
+  if (!account || settlementAccountKind(account) !== "BANK") return;
+  return { provider: "UPSIDER" as const, label: "UPSIDERカード精算", reason: "銀行出金の納付先がUPSIDERと一致するため、整合性チェックではカード精算として相手なし振替から除外（カード利用明細との照合は未確認）" };
+}
+
 export function hasConfirmedBankLink(data: Pick<AppData, "bankReconciliations" | "bankTransfers">, row: BankTransaction) {
   return data.bankReconciliations.some((link) => !link.deletedAt && link.transactionId === row.id)
     || (data.bankTransfers || []).some((link) => !link.deletedAt && (link.outgoingId === row.id || link.incomingId === row.id));

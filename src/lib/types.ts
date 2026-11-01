@@ -434,6 +434,13 @@ export type AppData = {
   obligationExclusions?: ObligationExclusion[];
   manualObligations?: ManualObligation[];
   payrollSettings?: PayrollSettings[];
+  integrityAcknowledgements?: IntegrityAcknowledgement[];
+};
+
+export type IntegrityAcknowledgement = {
+  id: string; company: "JAPAN" | "CHINA"; issueId: string; kind: import("@/lib/integrity-types").IntegrityKind; fingerprint: string;
+  reason: string; batchId: string; createdAt: string; createdById: string; createdByName: string; updatedAt: string;
+  revokedAt?: string; revokedById?: string; revokedByName?: string; revokeReason?: string;
 };
 
 export type PayrollSettings = {

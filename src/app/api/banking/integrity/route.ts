@@ -19,6 +19,8 @@ export async function GET(request: Request) {
   if (!canAccessCompany(user, company)) return Response.json({ error: "権限がありません" }, { status: 403, headers });
   const kind = params.get("kind") || "all";
   if (kind !== "all" && !Object.hasOwn(integrityKinds, kind)) return Response.json({ error: "種類が不正です", kinds: Object.keys(integrityKinds) }, { status: 400, headers });
-  const report = integrityReport(await readData(), company, { fileExists: uploadedFileExists });
+  const includeKnown = params.get("includeKnown");
+  if (includeKnown !== null && includeKnown !== "0" && includeKnown !== "1") return Response.json({ error: "includeKnownは0または1で指定してください" }, { status: 400, headers });
+  const report = integrityReport(await readData(), company, { fileExists: uploadedFileExists, includeKnown: includeKnown === "1" });
   return Response.json(kind === "all" ? report : { ...report, issues: report.issues.filter((issue) => issue.kind === kind) }, { headers });
 }
