@@ -1,4 +1,6 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 
 import Link from "next/link";
 import { mailInvoiceLinkRequiredHref } from "@/lib/mail-links";
@@ -36,7 +38,7 @@ type Props = {
 
 function SyncStatusButton({ company, invoice }: { company: CompanyScope; invoice: ReconciliationInvoice }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
-  const [open, setOpen] = useState(false), [error, setError] = useState("");
+  const [open, setOpen] = useState(false), [error, setError] = useOperationError(company);
   function sync() {
     startTransition(async () => {
       try {
@@ -53,7 +55,7 @@ function SyncStatusButton({ company, invoice }: { company: CompanyScope; invoice
         <DialogHeader><DialogTitle>支払い記録に状態を揃えますか？</DialogTitle><DialogDescription>入金・支払いの追加や削除はせず、登録済みの金額に合わせて請求書と関連する郵便物の完了状態を更新します。</DialogDescription></DialogHeader>
         <p className="break-words text-sm">{invoice.title} / 請求額 {money(invoice.total)} / 登録済み {money(invoice.paid)}</p>
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-        <Button className={touch} disabled={pending} onClick={sync}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}状態を揃える</Button>
+        <Button className={touch} disabled={pending} onClick={sync}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}状態を揃える</OperationPending></Button>
       </DialogContent>
     </Dialog>
   </>;
@@ -65,7 +67,7 @@ export function BankReconciliationWorkspace({ company, filters, rows, selected, 
   const [query, setQuery] = useState(filters.query);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [invoiceQuery, setInvoiceQuery] = useState(""), [invoiceFilter, setInvoiceFilter] = useState("unmatched");
-  const [removing, setRemoving] = useState<Props["links"][number] | null>(null), [error, setError] = useState("");
+  const [removing, setRemoving] = useState<Props["links"][number] | null>(null), [error, setError] = useOperationError(company);
   const href = (values: Record<string, string>) => `/banking/reconcile?${new URLSearchParams({ company, view, account: filters.account, month: filters.month, status: filters.status, q: filters.query, invoice: filters.invoice, page: "1", ...values })}`;
   const navigate = (values: Record<string, string>) => startTransition(() => router.push(href(values)));
   const invoiceMap = new Map(invoices.map((row) => [row.key, row]));
@@ -115,6 +117,6 @@ export function BankReconciliationWorkspace({ company, filters, rows, selected, 
         <p className="text-xs text-amber-800 dark:text-amber-300">{[row.conflict ? (row.reaffirmable > 0 ? "照合後に金額などが変わりました。内容を確認して維持するか、解除して見直してください" : "照合後にデータ変更あり。照合を解除して見直してください") : "", row.stateMismatch ? "支払記録と請求書の支払状態が不一致" : "", row.overpaid ? `請求額より多い支払い ${money(row.overpaid)}` : "", row.overdue ? "期限超過" : "", !row.eligible ? "下書き・保留・金額などを確認後に照合" : "", row.recordedUnmatched > 0 ? `登録済みのうち銀行未照合 ${money(row.recordedUnmatched)}` : ""].filter(Boolean).join(" / ")}</p>
       </li>)}</ul>{!invoiceRows.length ? <p className="py-4 text-sm text-muted-foreground">該当する請求書はありません。</p> : null}
     </section>}
-    <Dialog open={Boolean(removing)} onOpenChange={(open) => { if (!open && !pending) setRemoving(null); }}><DialogContent showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}><DialogHeader><DialogTitle>照合を解除しますか？</DialogTitle><DialogDescription>{removing?.createdPayment ? "この照合で追加した入金・支払い記録も取り消し、請求書・郵便物の完了状態を再計算します。" : "銀行との紐づけだけを解除します。もともと登録されていた入金・支払い記録は残します。"} 銀行の原明細は変更しません。</DialogDescription></DialogHeader>{error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}<div className="flex flex-wrap gap-2"><Button className={touch} variant="outline" disabled={pending} onClick={() => setRemoving(null)}>キャンセル</Button><Button className={touch} disabled={pending} onClick={remove}><Unlink className="size-4" />照合解除</Button></div></DialogContent></Dialog>
+    <Dialog open={Boolean(removing)} onOpenChange={(open) => { if (!open && !pending) setRemoving(null); }}><DialogContent showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}><DialogHeader><DialogTitle>照合を解除しますか？</DialogTitle><DialogDescription>{removing?.createdPayment ? "この照合で追加した入金・支払い記録も取り消し、請求書・郵便物の完了状態を再計算します。" : "銀行との紐づけだけを解除します。もともと登録されていた入金・支払い記録は残します。"} 銀行の原明細は変更しません。</DialogDescription></DialogHeader>{error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}<div className="flex flex-wrap gap-2"><Button className={touch} variant="outline" disabled={pending} onClick={() => setRemoving(null)}>キャンセル</Button><Button className={touch} disabled={pending} onClick={remove}><OperationPending pending={company === "JAPAN" && pending}><Unlink className="size-4" />照合解除</OperationPending></Button></div></DialogContent></Dialog>
   </div>;
 }

@@ -1,4 +1,6 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Ban, Landmark, LoaderCircle, Pencil, Plus } from "lucide-react";
@@ -19,7 +21,7 @@ const when = (value?: string) => value ? new Date(value).toLocaleString("ja-JP",
 // Payment records of one received invoice: list, explicit manual entry, amount/date correction and cancellation with reasons.
 export function PaymentRecordsPanel({ company, invoice, records, canRecord }: { company: CompanyScope; invoice: Invoice; records: PaymentRecordView[]; canRecord: boolean }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
-  const [mode, setMode] = useState<Mode>(null), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [mode, setMode] = useState<Mode>(null), [error, setError] = useOperationError(company), [notice, setNotice] = useState("");
   const active = records.filter((row) => !row.canceled), canceled = records.filter((row) => row.canceled);
   const linkedTotal = active.reduce((sum, row) => sum + row.linkedAmount, 0);
   const overpaid = Math.max(0, invoice.paidAmount - invoice.total);
@@ -59,11 +61,11 @@ export function PaymentRecordsPanel({ company, invoice, records, canRecord }: { 
         <label className="space-y-1 text-xs"><span className="text-muted-foreground">金額</span><Input className={field} name="amount" type="number" min="1" step="1" defaultValue={row.amount} required /></label>
         <label className="space-y-1 text-xs"><span className="text-muted-foreground">支払日</span><Input className={field} name="paymentDate" type="date" defaultValue={row.paymentDate} max={todayIso()} required /></label>
         <label className="space-y-1 text-xs"><span className="text-muted-foreground">修正の理由（必須）</span><Input className={field} name="reason" placeholder="例: 原本の金額に合わせた" maxLength={500} required /></label>
-        <div className="flex items-end gap-1"><Button type="submit" size="sm" disabled={pending}>{pending ? <LoaderCircle className="size-3 animate-spin" /> : null}保存</Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setMode(null)}>戻る</Button></div>
+        <div className="flex items-end gap-1"><Button type="submit" size="sm" disabled={pending}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-3 animate-spin" /> : null}保存</OperationPending></Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setMode(null)}>戻る</Button></div>
       </form> : null}
       {mode && mode.type === "cancel" && mode.id === row.id ? <form className="grid gap-2 rounded-md bg-muted/40 p-2 sm:grid-cols-[1fr_auto]" onSubmit={(event) => { event.preventDefault(); submitCancel(row, new FormData(event.currentTarget)); }}>
         <label className="space-y-1 text-xs"><span className="text-muted-foreground">取消の理由（必須）</span><Input className={field} name="reason" placeholder="例: 実際には未払い。状態変更で自動作成された記録" maxLength={500} required /></label>
-        <div className="flex items-end gap-1"><Button type="submit" size="sm" variant="destructive" disabled={pending}>{pending ? <LoaderCircle className="size-3 animate-spin" /> : <Ban className="size-3" />}この記録を取り消す</Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setMode(null)}>戻る</Button></div>
+        <div className="flex items-end gap-1"><Button type="submit" size="sm" variant="destructive" disabled={pending}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-3 animate-spin" /> : <Ban className="size-3" />}この記録を取り消す</OperationPending></Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setMode(null)}>戻る</Button></div>
       </form> : null}
       {row.history.length ? <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">変更履歴 {row.history.length}件</summary><ul className="mt-1 space-y-1 text-muted-foreground">{row.history.map((entry, index) => <li key={index} className="break-words">{when(entry.at)} · {entry.kindLabel} · {entry.by}{entry.before && entry.after ? ` · ${yen.format(entry.before.amount)} ${formatDate(entry.before.paymentDate)} → ${yen.format(entry.after.amount)} ${formatDate(entry.after.paymentDate)}` : entry.after ? ` · ${yen.format(entry.after.amount)} ${formatDate(entry.after.paymentDate)}` : ""}{entry.reason ? ` · 理由: ${entry.reason}` : ""}</li>)}</ul></details> : <p className="text-xs text-muted-foreground">登録 {when(row.createdAt)} · {row.createdBy}</p>}
     </li>)}</ul> : <p className="text-xs text-muted-foreground">支払記録はありません。</p>}
@@ -75,7 +77,7 @@ export function PaymentRecordsPanel({ company, invoice, records, canRecord }: { 
       <label className="space-y-1 text-xs"><span className="text-muted-foreground">根拠・理由（任意）</span><Input className={field} name="reason" placeholder="例: 通帳で確認、現金払い" maxLength={500} /></label>
       <label className="space-y-1 text-xs sm:col-span-2"><span className="text-muted-foreground">メモ</span><Textarea name="memo" className="min-h-16" maxLength={1000} /></label>
       <p className="text-xs text-muted-foreground sm:col-span-2">銀行明細と一致する支払いは、ここではなく「銀行・書類照合」で照合すると銀行照合済みになります。</p>
-      <div className="flex gap-1 sm:col-span-2"><Button type="submit" size="sm" disabled={pending}>{pending ? <LoaderCircle className="size-3 animate-spin" /> : <Plus className="size-3" />}支払記録を登録</Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setMode(null)}>戻る</Button></div>
+      <div className="flex gap-1 sm:col-span-2"><Button type="submit" size="sm" disabled={pending}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-3 animate-spin" /> : <Plus className="size-3" />}支払記録を登録</OperationPending></Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setMode(null)}>戻る</Button></div>
     </form> : <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => { setError(""); setMode({ type: "record" }); }}><Plus className="size-3" />支払記録を手入力で登録</Button> : <p className="text-xs text-emerald-700 dark:text-emerald-400">全額の支払記録が登録されています。</p> : null}
   </section>;
 }

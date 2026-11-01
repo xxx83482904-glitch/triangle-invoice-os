@@ -1,4 +1,6 @@
 "use client";
+import { bankSaveFailureMessage, operationFailureToast } from "@/lib/operation-feedback";
+import { OperationError } from "@/components/app/operation-feedback";
 import { SectionExportDialog } from "@/components/app/section-export-dialog";
 
 import type { BankAccountOption } from "@/lib/bank-account-options";
@@ -7,7 +9,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectAllCheckbox } from "@/components/app/list-selection";
 import { useRouter } from "next/navigation";
-import { Bot, CheckCheck, CircleAlert, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, Pencil, RefreshCw, Save, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
+import { Bot, CheckCheck, CircleAlert, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, Pencil, RefreshCw, Save, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
 import { BankFiscalMonthTabs, BankReviewTag, BankSelectionReview } from "@/components/app/bank-ledger-controls";
 import { bankSelectionAmount, reviewBankDrafts } from "@/lib/bank-ledger";
@@ -19,6 +21,8 @@ import { loadBankDraftRowsAction, loadBankTransactionsAction, previewBankRulesAc
 import { BankAuditDialog } from "@/components/app/bank-audit-dialog";
 import { BankSyncRunsDialog } from "@/components/app/bank-sync-runs-dialog";
 import { BankBookkeepingDialog } from "@/components/app/bank-bookkeeping-dialog";
+import { availableBankSaveOption, bankSaveOptions, type BankSaveChoice } from "@/lib/bank-save-options";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BankSavePreviewDialog, type BankSavePreview } from "@/components/app/bank-save-preview";
 import { bankEditFrom, bankMatchingSelection, bankSaveChanges, bankSaveIds, patchBankDraft, removeSavedBankDrafts, type BankDrafts, type BankSaveScope } from "@/lib/bank-workspace-drafts";
 import { bankSearchHighlights } from "@/lib/bank-search-highlight";
@@ -34,6 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/hooks/use-toast";
 import { BANK_PAGE_SIZE, bankToday, treatmentLabels, type BankDisplayRow } from "@/lib/banking";
+import { BankClassificationState } from "@/components/app/bank-classification-state";
 import { BankClassificationBadge } from "@/components/app/bank-classification-badge";
 import { BankGuessReviewDialog } from "@/components/app/bank-guess-review-dialog";
 import { BankBulkReclassifyDialog } from "@/components/app/bank-bulk-reclassify-dialog";
@@ -66,6 +71,7 @@ export function BankingWorkspace(props: Props) {
   const [filterEdits, setFilterEdits] = useState<Record<string, string>>({ queryMode: filters.queryMode || "contains", excludeQuery: filters.excludeQuery || "" });
   const [savePreview, setSavePreview] = useState<BankSavePreview | null>(null);
   const [guessReview, setGuessReview] = useState<{ guesses: BankTransaction[]; others: number } | null>(null);
+  const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ saved: number; remaining: number; uncertain: boolean } | null>(null);
   const [savedRows, setSavedRows] = useState<Record<string, BankDisplayRow>>({});
   const [matchingSnapshot, setMatchingSnapshot] = useState<string[] | null>(null);
@@ -119,6 +125,8 @@ export function BankingWorkspace(props: Props) {
   const candidates = rows.filter((row) => row.predictionPending && !drafts[row.id]);
   const selectedSaveCount = bankSaveIds(rows, drafts, selected, "selected").length;
   const reviewedSaveCount = bankSaveIds(rows, drafts, selected, "reviewed").length;
+  const saveOptions = bankSaveOptions(rows, drafts, selected);
+  const defaultSaveOption = availableBankSaveOption(saveOptions);
   const hasMore = !classificationPreview && loadedPage * BANK_PAGE_SIZE < total;
   const syncWasRunning = useRef(props.busy);
   const accountMap = new Map(accounts.map((row) => [row.id, row.name]));
@@ -264,7 +272,7 @@ export function BankingWorkspace(props: Props) {
     setCategoryPickerOpen(false);
     toast({ title: `${categoryTargets.length}件を「${category.name}${child ? ` / ${child.name}` : ""}」に変更（未保存）` });
   }
-  function prepareSave(scope: BankSaveScope, destination?: string) {
+  function prepareSave(scope: BankSaveScope, destination?: string, choice?: BankSaveChoice) {
     if (pending) return;
     setError("");
     startTransition(async () => {
@@ -282,13 +290,18 @@ export function BankingWorkspace(props: Props) {
         setDrafts((current) => removeSavedBankDrafts(current, unchanged.map(editFrom)));
         setSavedRows((current) => ({ ...current, ...Object.fromEntries(unchanged.map((row) => [row.id, { ...rows.find((item) => item.id === row.id), ...row, predictionPending: false }])) }));
         if (!changes.length && destination) { setLeaveUrl(null); router.push(destination); return; }
-        setSavePreview({ scope, changes, destination, omitted: (scope === "selected" ? selected.size : ids.length) - changes.length, unselected: matchingSnapshot?.filter((id) => !selected.has(id)).length || 0 });
-      } catch (error) { setError(error instanceof Error ? error.message : "保存内容を取得できませんでした。編集内容は保持されています"); }
+        setSavePreview({ scope, choice, changes, destination, omitted: (scope === "selected" ? selected.size : ids.length) - changes.length, unselected: matchingSnapshot?.filter((id) => !selected.has(id)).length || 0 });
+      } catch (error) { const message = error instanceof Error ? error.message : "保存内容を取得できませんでした。編集内容は保持されています"; setError(message); if (company === "JAPAN") { setSaveResult({ saved: 0, remaining: bankSaveIds(rows, drafts, selected, scope).length, uncertain: false }); toast(operationFailureToast(message)); } }
     });
+  }
+  function chooseSave(value?: string) {
+    const option = availableBankSaveOption(saveOptions, value);
+    if (option) prepareSave(option.scope, undefined, option.value);
   }
   function save() {
     if (!savePreview || pending) return;
     const preview = savePreview;
+    setSaving(true);
     const edits = preview.changes.map((row) => row.after);
     loadGuard.current.invalidate(); setLoadingMore(false);
     setSavePreview(null); setError(""); setSavedCount(0); setSaveResult(null);
@@ -319,8 +332,10 @@ export function BankingWorkspace(props: Props) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "通信に失敗しました";
         setSaveResult({ saved, remaining: edits.length - saved, uncertain });
-        setError(`${saved}件保存済み。${message}。${uncertain ? "応答のないバッチは結果未確認です。再保存前に最新状態を確認してください。" : ""}残りの変更・選択は保持されています`);
-      }
+        const feedback = company === "JAPAN" ? bankSaveFailureMessage(message, saved, uncertain) : `${saved}件保存済み。${message}。${uncertain ? "応答のないバッチは結果未確認です。再保存前に最新状態を確認してください。" : ""}残りの変更・選択は保持されています`;
+        setError(feedback);
+        if (company === "JAPAN") toast(operationFailureToast(feedback));
+      } finally { setSaving(false); }
     });
   }
   function selectMatching() {
@@ -425,7 +440,7 @@ export function BankingWorkspace(props: Props) {
   }
   function status(row: BankDisplayRow, value: BankEdit) {
     const sales = row.salesSuggestion && value.treatment === "NORMAL" && (!value.categoryId || !row.salesSuggestion.acceptedIds.includes(value.categoryId)) ? row.salesSuggestion : undefined;
-    return <div className="bank-classification-state flex flex-wrap items-center gap-1"><BankClassificationBadge row={{ ...row, ...value }} />{drafts[row.id] ? <><span className="text-[11px] text-amber-700 dark:text-amber-300">編集・未保存{drafts[row.id].updatedAt !== row.updatedAt ? "（競合）" : ""}</span><Button variant="ghost" size="icon" className="size-6" title="この明細の編集を破棄" aria-label={`${row.content}の編集を破棄`} disabled={pending} onClick={() => { if (window.confirm("この明細の未保存の編集を破棄しますか？")) setDrafts((current) => { const next = { ...current }; delete next[row.id]; return next; }); }}><X className="size-3" /></Button></> : row.predictionPending ? <span className="text-[11px] text-muted-foreground">自動候補・未採用</span> : null}{sales ? <div className="bank-sales-hint flex basis-full flex-wrap items-center gap-1 text-[11px] text-emerald-800 dark:text-emerald-300" title={sales.reason}><span>請求書と照合済みの入金。{sales.categoryName ? `売上系の科目「${sales.categoryName}」を提案` : "売上系の科目を提案"}</span><Button variant="outline" size="xs" disabled={pending || filterDirty || Boolean(row.bookkeeping?.splits?.length)} aria-label={`${row.content}に${sales.categoryName ? `売上科目「${sales.categoryName}」を適用` : "売上系の科目を選ぶ"}`} onClick={() => sales.categoryId ? edit(row, { categoryId: sales.categoryId, subCategoryId: undefined, classificationReason: "発行請求書と照合済みの入金（売上科目の提案を採用・未確定）" }) : openCategories(row)}>{sales.categoryId ? "提案を採用" : "科目を選ぶ"}</Button></div> : null}</div>;
+    return <div className="bank-classification-state flex flex-wrap items-center gap-1">{company === "JAPAN" ? <div className="md:hidden"><BankClassificationState row={{ ...row, ...value }} /></div> : <BankClassificationBadge row={{ ...row, ...value }} />}{drafts[row.id] ? <><span className="text-[11px] text-amber-700 dark:text-amber-300">編集・未保存{drafts[row.id].updatedAt !== row.updatedAt ? "（競合）" : ""}</span><Button variant="ghost" size="icon" className="size-6" title="この明細の編集を破棄" aria-label={`${row.content}の編集を破棄`} disabled={pending} onClick={() => { if (window.confirm("この明細の未保存の編集を破棄しますか？")) setDrafts((current) => { const next = { ...current }; delete next[row.id]; return next; }); }}><X className="size-3" /></Button></> : row.predictionPending ? <span className="text-[11px] text-muted-foreground">自動候補・未採用</span> : null}{sales ? <div className="bank-sales-hint flex basis-full flex-wrap items-center gap-1 text-[11px] text-emerald-800 dark:text-emerald-300" title={sales.reason}><span>請求書と照合済みの入金。{sales.categoryName ? `売上系の科目「${sales.categoryName}」を提案` : "売上系の科目を提案"}</span><Button variant="outline" size="xs" disabled={pending || filterDirty || Boolean(row.bookkeeping?.splits?.length)} aria-label={`${row.content}に${sales.categoryName ? `売上科目「${sales.categoryName}」を適用` : "売上系の科目を選ぶ"}`} onClick={() => sales.categoryId ? edit(row, { categoryId: sales.categoryId, subCategoryId: undefined, classificationReason: "発行請求書と照合済みの入金（売上科目の提案を採用・未確定）" }) : openCategories(row)}>{sales.categoryId ? "提案を採用" : "科目を選ぶ"}</Button></div> : null}</div>;
   }
   function classificationReason(row: BankTransaction, value: BankEdit) {
     return value.classificationReason;
@@ -444,7 +459,7 @@ export function BankingWorkspace(props: Props) {
   const matchedContent = (text: string) => bankSearchHighlights(text || "摘要なし", filters.query).map((part, index) => part.matched ? <mark key={index} className="bg-yellow-200 text-black">{part.text}</mark> : part.text);
   const categoryDisabled = pending || filterDirty || categoryTargets.some((row) => Boolean(row.bookkeeping?.splits?.length));
 
-  return <div className="bank-ledger min-w-0 space-y-2 pb-48 md:pb-24">
+  return <div data-company={company} className="bank-ledger min-w-0 space-y-2 pb-48 md:pb-24">
     <header className="bank-ledger-header flex flex-wrap items-center justify-between gap-2 border-b py-2 lg:py-1">
       <div className="flex min-w-0 flex-wrap items-center gap-2"><h1 className="break-words text-2xl font-semibold">口座・カード明細</h1><select className={`${bankSelectClass} bank-account-filter`} aria-label="口座で絞り込み" value={filterEdits.account ?? props.selectedAccountOption} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, account: e.target.value, analysisThrough: "" }))}><option value="">すべての口座・カード</option>{props.accountOptions.map((row) => <option key={row.id} value={row.id}>{row.name}{!row.available ? "（連携終了）" : ""}</option>)}</select></div>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
@@ -476,7 +491,7 @@ export function BankingWorkspace(props: Props) {
         });
       }} />自動同期（6時間ごと）</label>
     </div>
-    {error || sync?.error ? <div role="alert" className="flex items-start gap-2 border-l-2 border-destructive bg-destructive/5 p-3 text-sm"><CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" /><span className="min-w-0 break-words">{error || sync?.error}</span>{error ? <Button size="icon" variant="ghost" className="ml-auto size-11 shrink-0" aria-label="エラーを閉じる" title="閉じる" onClick={() => setError("")}><X className="size-4" /></Button> : null}</div> : null}
+    {(error || sync?.error) && !(company === "JAPAN" && error && saveResult) ? <div role="alert" className="flex items-start gap-2 border-l-2 border-destructive bg-destructive/5 p-3 text-sm"><CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" /><span className="min-w-0 break-words">{error || sync?.error}</span>{error ? <Button size="icon" variant="ghost" className="ml-auto size-11 shrink-0" aria-label="エラーを閉じる" title="閉じる" onClick={() => setError("")}><X className="size-4" /></Button> : null}</div> : null}
     {props.selectedBalance?.kind === "BANK" && !props.selectedBalance.unspecified ? <details className="bank-balance-details border-b py-2"><summary className="cursor-pointer text-sm">計算残高 <strong className="tabular-nums">{props.selectedBalance.balanceCalculation ? money.format(props.selectedBalance.balanceCalculation.amount) : "未計算"}</strong>{props.selectedBalance.balanceCalculation && !props.selectedBalance.balanceCalculation.complete ? <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">暫定</span> : null}</summary><section aria-label="選択口座の計算残高" className="flex min-w-0 flex-wrap items-start justify-between gap-4 py-3">
       <div className="min-w-0 flex-1 basis-56"><h2 className="mb-2 break-words text-sm font-medium">{props.selectedBalance.name}</h2><BankBalanceSummary row={props.selectedBalance} /></div>
       <div className="min-w-0 space-y-2 text-xs text-muted-foreground">
@@ -527,7 +542,7 @@ export function BankingWorkspace(props: Props) {
         <div className="hidden md:block">
           <table className="bank-ledger-table w-full min-w-[840px] table-fixed text-sm">
             <colgroup><col className="w-11" /><col className="w-[84px]" /><col /><col className="w-[104px]" /><col className="w-[160px]" /><col className="w-[104px]" /><col className="w-[116px]" /><col className="w-[88px]" /></colgroup>
-            <thead className="sticky top-0 z-10 border-b bg-background text-xs text-muted-foreground"><tr><th scope="col"><SelectAllCheckbox selection={selection} /></th>{["日付", "摘要・口座", "金額", "勘定科目 / 補助", "扱い", "メモ", "確認状態"].map((title) => <th key={title} scope="col" className={`px-2 py-2 font-medium ${title === "金額" ? "text-right" : "text-left"}`}>{title}</th>)}</tr></thead>
+            <thead className="sticky top-0 z-10 border-b bg-background text-xs text-muted-foreground"><tr><th scope="col"><SelectAllCheckbox selection={selection} /></th>{["日付", "摘要・口座", "金額", "勘定科目 / 補助", "扱い", "メモ", company === "JAPAN" ? "根拠 / 状態" : "確認状態"].map((title) => <th key={title} scope="col" className={`px-2 py-2 font-medium ${title === "金額" ? "text-right" : "text-left"}`}>{title}</th>)}</tr></thead>
             <tbody>{rows.map((row) => {
               const value = drafts[row.id] || editFrom(row);
               const controls = fields(row, value);
@@ -537,7 +552,7 @@ export function BankingWorkspace(props: Props) {
                 <td className="break-words px-2 py-2"><div className="font-medium">{matchedContent(row.content)}</div><div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><span className="line-clamp-2" title={accountMap.get(row.bankAccountId)}>{accountMap.get(row.bankAccountId) || "口座未取得"}</span>{row.sourceMemo ? <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" className="bank-source-note size-11 shrink-0 lg:size-7" title="元明細メモ" aria-label={`${row.content}の元明細メモ`}><MessageSquareText className="size-3" /></Button></PopoverTrigger><PopoverContent className="max-w-[min(320px,90vw)] break-words text-sm">{row.sourceMemo}</PopoverContent></Popover> : null}</div></td>
                 <td className={`px-2 py-3 text-right tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}><span className="whitespace-nowrap">{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span>{linkButton(row)}</td>
                 <td className="px-1 py-2">{controls[0]}{status(row, value)}</td><td className="px-1 py-2">{controls[1]}</td><td className="px-1 py-2">{controls[2]}</td>
-                <td className="px-1 py-3"><BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} /></td>
+                <td className="px-1 py-3">{company === "JAPAN" ? <BankClassificationState row={{ ...row, ...value }} /> : <BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} />}</td>
               </tr>;
             })}</tbody>
           </table>
@@ -545,10 +560,10 @@ export function BankingWorkspace(props: Props) {
         <div className="divide-y md:hidden">{rows.map((row) => { const value = drafts[row.id] || editFrom(row); return <article key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 380px" }} className={`min-w-0 space-y-2 py-3 ${selected.has(row.id) ? "bg-primary/10" : ""}`}>
           <div className="flex min-w-0 items-start gap-1">{selectionBox(row)}<div className="min-w-0 flex-1"><div className="flex flex-wrap justify-between gap-1"><time className="text-xs">{row.transactionDate}</time><span className={`break-all text-sm font-medium tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></div><h3 className="mt-1 break-words text-sm font-medium">{matchedContent(row.content)}</h3><div className="break-words text-xs text-muted-foreground">{accountMap.get(row.bankAccountId)}</div>{status(row, value)}</div></div>
           {row.sourceMemo ? <div className="break-words text-xs text-muted-foreground">{row.sourceMemo}</div> : null}
-          {classificationReason(row, value) ? <div className="break-words text-xs text-muted-foreground">{classificationReason(row, value)}</div> : null}
+          {classificationReason(row, value) ? <div className="break-words text-xs text-muted-foreground">{company === "JAPAN" ? "根拠の理由: " : ""}{classificationReason(row, value)}</div> : null}
           <div className="grid min-w-0 gap-2">{fields(row, value)}</div>
           {linkButton(row)}
-          <BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} />
+          {company !== "JAPAN" ? <BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} /> : null}
         </article>; })}</div>
         {!rows.length ? <p className="border-b py-12 text-center text-sm text-muted-foreground">{!configured ? "接続待ち" : "該当する明細はありません"}</p> : null}
         <div ref={sentinel} className="flex min-h-14 flex-wrap items-center justify-center gap-3 py-3 text-sm" aria-live="polite">
@@ -562,7 +577,25 @@ export function BankingWorkspace(props: Props) {
       </section>
       <aside ref={categoryRail} aria-label="勘定科目の選択" className="bank-category-rail hidden xl:flex">{reviewPanel}<div className="min-h-0 flex-1"><BankCategoryPicker categories={categories} targets={categoryTargets} disabled={categoryDisabled} onApply={applyCategory} /></div></aside>
     </div>
-    <footer className="bank-ledger-savebar shadow-sm" aria-label="明細の保存">
+    {company === "JAPAN" ? <footer className="bank-ledger-savebar is-unified shadow-sm" aria-label="明細の保存">
+      {error && saveResult ? <div className="absolute inset-x-0 bottom-full mb-2 flex max-h-36 items-start gap-2 overflow-y-auto rounded-lg border border-destructive/40 bg-card p-3 shadow-sm"><OperationError message={error} className="min-w-0 flex-1" /><Button type="button" size="icon" variant="ghost" aria-label="保存エラーを閉じる" onClick={() => setError("")}><X className="size-4" /></Button></div> : null}
+      <div className="flex w-full min-w-0 items-center gap-2">
+        <div role="status" className="min-w-0 flex-1 text-[10px] leading-3 lg:flex lg:flex-wrap lg:gap-x-2 lg:text-xs lg:leading-4"><span className="block">選択 {selected.size}件</span><span className="block">未保存の編集 {dirty}件</span><span className="block">自動候補 {candidates.length}件</span></div>
+        <div className="hidden items-center gap-2 lg:flex">
+          <Button variant="outline" disabled={pending || filterDirty || !selected.size} onClick={() => reviewSelection(true)}><CheckCheck className="size-4" />選択を確認済みに</Button>
+          <Button variant="ghost" disabled={pending || filterDirty || !reviewedCount} onClick={() => reviewSelection(false)}>未確認に戻す</Button>
+          <Button className="xl:hidden" variant="outline" disabled={categoryDisabled} onClick={() => openCategories()}><ListTree className="size-4" />科目</Button>
+          <Button variant="ghost" size="icon" title="選択解除" aria-label="選択解除" disabled={pending || !selected.size} onClick={selection.clear}><X className="size-4" /></Button>
+        </div>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button className="shrink-0 lg:hidden" size="icon" variant="outline" aria-label="選択の操作" title="選択の操作" disabled={pending || filterDirty}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
+          <DropdownMenuItem className="min-h-11" disabled={!selected.size} onSelect={() => reviewSelection(true)}>選択を確認済みに</DropdownMenuItem>
+          <DropdownMenuItem className="min-h-11" disabled={!reviewedCount} onSelect={() => reviewSelection(false)}>未確認に戻す</DropdownMenuItem>
+          <DropdownMenuItem className="min-h-11" disabled={categoryDisabled} onSelect={() => openCategories()}>科目</DropdownMenuItem>
+          <DropdownMenuItem className="min-h-11" disabled={!selected.size} onSelect={selection.clear}>選択解除</DropdownMenuItem>
+        </DropdownMenuContent></DropdownMenu>
+        <Button className="shrink-0" disabled={pending || !defaultSaveOption} onClick={() => chooseSave()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{saving ? "保存中…" : pending ? "処理中…" : "保存…（" + (defaultSaveOption?.count || 0) + "件）"}</Button>
+      </div>
+    </footer> : <footer className="bank-ledger-savebar shadow-sm" aria-label="明細の保存">
       <div className="grid w-full min-w-0 gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2">
         <div className="flex flex-wrap items-center gap-2 text-xs"><span role="status">選択 {selected.size}件 / 確認済み {reviewedCount}件 / 編集未保存 {dirty}件 / 自動候補 {candidates.length}件</span><Button variant="ghost" size="icon" className="size-9" title="選択解除" aria-label="選択解除" disabled={pending || !selected.size} onClick={selection.clear}><X className="size-4" /></Button>{pending ? <span role="status" className="flex items-center gap-1"><LoaderCircle className="size-4 animate-spin" />処理中{savedCount ? ` / ${savedCount}件保存済み` : ""}</span> : null}{saveResult ? <span role="status">保存済み {saveResult.saved}件 / 残り {saveResult.remaining}件{saveResult.uncertain ? "（結果未確認あり）" : ""}</span> : null}</div>
         <div className="flex flex-wrap gap-2">
@@ -574,8 +607,8 @@ export function BankingWorkspace(props: Props) {
           <Button className="min-h-11" disabled={pending || !dirty} onClick={() => prepareSave("edited")}><Save className="size-4" />編集を保存 ({dirty})</Button>
         </div>
       </div>
-    </footer>
-    {savePreview ? <BankSavePreviewDialog preview={savePreview} categories={categories} busy={pending} onClose={() => setSavePreview(null)} onSave={save} /> : null}
+    </footer>}
+    {savePreview ? <BankSavePreviewDialog preview={savePreview} categories={categories} busy={pending} onClose={() => setSavePreview(null)} onSave={save} options={company === "JAPAN" && savePreview.choice ? saveOptions : undefined} onChoice={chooseSave} error={error} /> : null}
     {guessReview ? <BankGuessReviewDialog guesses={guessReview.guesses} others={guessReview.others} categories={categories} busy={pending} onClose={() => setGuessReview(null)} onConfirm={(acknowledgeGuesses) => reviewSelection(true, { acknowledgeGuesses })} /> : null}
     <Dialog open={categoryPickerOpen} onOpenChange={setCategoryPickerOpen}>
       <DialogContent aria-describedby={undefined} showCloseButton={false} className="top-0 left-auto right-0 h-dvh max-h-dvh w-full max-w-sm translate-x-0 translate-y-0 grid-rows-[auto_minmax(0,1fr)] gap-0 rounded-none p-0 sm:max-w-sm" onInteractOutside={(event) => event.preventDefault()}>

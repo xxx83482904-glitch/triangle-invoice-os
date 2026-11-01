@@ -32,6 +32,8 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate, percent, yen } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { projectAttentionPriority, projectContractSummary, projectStageLabel, projectStageOptions, projectUninvoiced } from "@/lib/project-display";
+import type { ProjectAttention } from "@/lib/project-attention";
 import type { ProjectStatus } from "@/lib/types";
 
 type Company = "CHINA" | "JAPAN";
@@ -47,7 +49,8 @@ export type ProjectWorkspaceRow = {
   clientId: string;
   clientName: string;
   company: Company;
-  contractAmount: number;
+  contractAmount: number | null;
+  attention?: ProjectAttention[];
   contractExtractedAmount?: number;
   contractExtractedBillingCount?: number;
   contractFileUrl?: string;
@@ -104,7 +107,7 @@ export function ProjectsWorkspace({
         if (clientFilter !== "all" && row.clientId !== clientFilter) return false;
         if (!matchesFilter(row, workFilter, showFinancials)) return false;
         if (!normalizedQuery) return true;
-        return [row.name, row.clientName, row.stage, row.memo, row.contractOriginalFileName]
+        return [row.name, row.clientName, projectStageLabel(row.company, row.stage), row.memo, row.contractOriginalFileName]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalizedQuery));
       })
@@ -126,12 +129,12 @@ export function ProjectsWorkspace({
         <SummaryTile icon={AlertTriangle} label="要対応" value={`${summary.needsAction}件`} tone={summary.needsAction > 0 ? "warn" : "neutral"} />
         {showFinancials ? (
           <>
-            <SummaryTile icon={ReceiptText} label="未請求" value={yen.format(summary.uninvoicedAmount)} tone={summary.uninvoicedAmount > 0 ? "warn" : "neutral"} />
+            <SummaryTile icon={ReceiptText} label="未請求" value={summary.total > 0 && summary.unsetContractCount === summary.total ? "—" : yen.format(summary.uninvoicedAmount)} tone={summary.uninvoicedAmount > 0 ? "warn" : "neutral"} note={company === "JAPAN" && summary.unsetContractCount ? "契約金額未設定 " + summary.unsetContractCount + "件を除く" : undefined} />
             <SummaryTile icon={WalletCards} label="未入金" value={yen.format(summary.unpaidIncomeAmount)} tone={summary.unpaidIncomeAmount > 0 ? "danger" : "neutral"} />
           </>
         ) : (
           <>
-            <SummaryTile icon={FileText} label="契約書なし" value={`${summary.missingContract}件`} tone={summary.missingContract > 0 ? "warn" : "neutral"} />
+            <SummaryTile icon={FileText} label="契約書なし" value={`${summary.missingContract}件`} tone={company !== "JAPAN" && summary.missingContract > 0 ? "warn" : "neutral"} />
             <SummaryTile icon={CheckCircle2} label="完了" value={`${summary.completed}件`} />
           </>
         )}
@@ -297,15 +300,16 @@ function CreateProjectForm({
         <Label>段階</Label>
         <CreatableSelect
           name="stage"
-          defaultValue={stageOptions[0]?.value ?? "制作资料"}
-          options={stageOptions}
+          defaultValue={company === "JAPAN" ? "" : stageOptions[0]?.value ?? "制作资料"}
+          placeholder={company === "JAPAN" ? "段階未設定" : undefined}
+          options={projectStageOptions(company, stageOptions, true)}
           create={{ kind: "select-option", company, group: "PROJECT_STAGE" }}
-          required
+          required={company !== "JAPAN"}
         />
       </div>
       <div className="space-y-1">
         <Label>契約金額</Label>
-        <Input name="contractAmount" type="number" min="0" step="1" required />
+        <Input name="contractAmount" type="number" min="0" step="1" required={company !== "JAPAN"} placeholder={company === "JAPAN" ? "未設定" : undefined} />
       </div>
       <div className="space-y-1">
         <Label>請求回数</Label>
@@ -345,7 +349,7 @@ function ProjectListItem({
   row: ProjectWorkspaceRow;
   showFinancials: boolean;
 }) {
-  const uninvoicedAmount = Math.max(row.contractAmount - row.invoicedAmount, 0);
+  const uninvoicedAmount = projectUninvoiced(row.contractAmount, row.invoicedAmount);
   const actionLabels = projectActionLabels(row, showFinancials);
 
   return (
@@ -373,7 +377,7 @@ function ProjectListItem({
             <StatusBadge status={row.status} />
           </div>
           <div className="mt-1 line-clamp-2 text-sm font-semibold leading-snug">{row.name}</div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">{row.clientName || "クライアント未設定"} / {row.stage || "段階未設定"}</div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">{row.clientName || "クライアント未設定"} / {projectStageLabel(row.company, row.stage) || "段階未設定"}</div>
         </div>
         <div className="shrink-0 text-right">
           <div className="text-xs text-muted-foreground">更新</div>
@@ -383,7 +387,7 @@ function ProjectListItem({
 
       {showFinancials ? (
         <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-          <MiniAmount label="未請求" value={uninvoicedAmount} hot={uninvoicedAmount > 0} />
+          <MiniAmount label="未請求" value={uninvoicedAmount} hot={(uninvoicedAmount ?? 0) > 0} />
           <MiniAmount label="未入金" value={row.unpaidIncomeAmount} hot={row.unpaidIncomeAmount > 0} />
           <MiniAmount label="請求差額（税込）" value={row.grossProfit} hot={row.grossProfit < 0} />
         </div>
@@ -395,6 +399,7 @@ function ProjectListItem({
       )}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
+        {row.company === "JAPAN" && !row.contractFileUrl ? <Badge variant="outline" className="bg-muted text-muted-foreground">契約書なし（参考）</Badge> : null}
         {actionLabels.length > 0 ? (
           actionLabels.map((label) => <ActionBadge key={label}>{label}</ActionBadge>)
         ) : (
@@ -424,7 +429,7 @@ function ProjectDetailPanel({
   stageOptions: Option[];
   statusOptions: Option[];
 }) {
-  const uninvoicedAmount = Math.max(row.contractAmount - row.invoicedAmount, 0);
+  const uninvoicedAmount = projectUninvoiced(row.contractAmount, row.invoicedAmount);
 
   return (
     <div className="sticky top-0 space-y-4 p-3 lg:max-h-[calc(100vh-96px)] lg:overflow-y-auto">
@@ -461,6 +466,7 @@ function ProjectDetailPanel({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-1.5">
+          {row.company === "JAPAN" && !row.contractFileUrl ? <Badge variant="outline" className="bg-muted text-muted-foreground">契約書なし（参考）</Badge> : null}
           {projectActionLabels(row, showFinancials).map((label) => (
             <ActionBadge key={label}>{label}</ActionBadge>
           ))}
@@ -486,7 +492,7 @@ function ProjectDetailPanel({
             <ProgressLine label="支払い" done={row.paidExpenseAmount} remaining={row.unpaidExpenseAmount} total={row.receivedInvoiceTotal} doneLabel="支払済み" remainingLabel="未払い" />
             <Separator />
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <InfoLine label="契約金額" value={yen.format(row.contractAmount)} />
+              <InfoLine label="契約金額" value={row.contractAmount === null ? "—" : yen.format(row.contractAmount)} />
               <InfoLine label="請求回数" value={`${row.billingCount}回`} />
               <InfoLine label="請求差額（税込）" value={yen.format(row.grossProfit)} strong={row.grossProfit < 0} />
               <InfoLine label="差額率" value={row.invoicedAmount > 0 ? percent(row.grossProfitRate) : "-"} strong={row.grossProfitRate < 0} />
@@ -552,7 +558,7 @@ function ProjectDetailPanel({
             <CardTitle className="text-sm">案件情報</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <InfoLine label="段階" value={row.stage || "-"} />
+            <InfoLine label="段階" value={projectStageLabel(row.company, row.stage) || "-"} />
             <InfoLine label="期間" value={`${formatDate(row.startDate)} - ${formatDate(row.endDate)}`} />
             <p className="whitespace-pre-wrap text-muted-foreground">{row.memo || "メモはありません。"}</p>
           </CardContent>
@@ -606,13 +612,13 @@ function ProjectEditForm({
         </div>
         <div className="space-y-1">
           <Label>段階</Label>
-          <CreatableSelect name="stage" defaultValue={row.stage} options={stageOptions} create={{ kind: "select-option", company, group: "PROJECT_STAGE" }} required />
+          <CreatableSelect name="stage" defaultValue={row.stage} options={projectStageOptions(company, stageOptions)} create={{ kind: "select-option", company, group: "PROJECT_STAGE" }} placeholder={company === "JAPAN" ? "段階未設定" : undefined} required={company !== "JAPAN"} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label>契約金額</Label>
-          <Input name="contractAmount" type="number" min="0" step="1" defaultValue={row.contractAmount} required />
+          <Input name="contractAmount" type="number" min="0" step="1" defaultValue={row.contractAmount ?? ""} required={company !== "JAPAN"} />
         </div>
         <div className="space-y-1">
           <Label>請求回数</Label>
@@ -649,10 +655,11 @@ function ProgressLine({
   done: number;
   doneLabel: string;
   label: string;
-  remaining: number;
+  remaining: number | null;
   remainingLabel: string;
-  total: number;
+  total: number | null;
 }) {
+  if (total === null || remaining === null) return <div className="space-y-1 text-xs"><div className="font-medium">{label}: 契約金額未設定</div><div>{doneLabel}: {yen.format(done)} / {remainingLabel}: —</div></div>;
   const donePercent = progressPercent(done, total);
   return (
     <div className="space-y-2">
@@ -678,11 +685,13 @@ function SummaryTile({
   label,
   tone = "neutral",
   value,
+  note,
 }: {
   icon: typeof FolderKanban;
   label: string;
   tone?: "neutral" | "warn" | "danger";
   value: string;
+  note?: string;
 }) {
   const toneClass =
     tone === "danger"
@@ -696,6 +705,7 @@ function SummaryTile({
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground">{label}</div>
           <div className="mt-1 break-all text-base font-semibold sm:text-lg">{value}</div>
+          {note ? <div className="mt-1 text-xs text-muted-foreground">{note}</div> : null}
         </div>
         <Icon className="h-5 w-5 shrink-0" />
       </div>
@@ -703,11 +713,11 @@ function SummaryTile({
   );
 }
 
-function MiniAmount({ hot, label, value }: { hot?: boolean; label: string; value: number }) {
+function MiniAmount({ hot, label, value }: { hot?: boolean; label: string; value: number | null }) {
   return (
     <div className={cn("min-w-0 rounded-lg border px-2 py-1.5", hot ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" : "bg-muted/30")}>
       <div className="truncate text-[11px] text-muted-foreground">{label}</div>
-      <div className="truncate font-mono font-medium">{yen.format(value)}</div>
+      <div className="truncate font-mono font-medium">{value === null ? "—" : yen.format(value)}</div>
     </div>
   );
 }
@@ -738,9 +748,10 @@ function CompanyBadge({ company }: { company: Company }) {
 }
 
 function projectActionLabels(row: ProjectWorkspaceRow, showFinancials: boolean) {
+  if (row.company === "JAPAN") return (row.attention || []).filter((item) => showFinancials || !item.financial).map((item) => item.label + " " + item.count + "件");
   const labels: string[] = [];
   if (!row.contractFileUrl) labels.push("契約書なし");
-  if (showFinancials && Math.max(row.contractAmount - row.invoicedAmount, 0) > 0) labels.push("未請求");
+  if (showFinancials && (projectUninvoiced(row.contractAmount, row.invoicedAmount) ?? 0) > 0) labels.push("未請求");
   if (showFinancials && row.unpaidIncomeAmount > 0) labels.push("未入金");
   if (showFinancials && row.unpaidExpenseAmount > 0) labels.push("未払い");
   if (row.status === "WAITING") labels.push("待機中");
@@ -748,14 +759,15 @@ function projectActionLabels(row: ProjectWorkspaceRow, showFinancials: boolean) 
 }
 
 function projectPriority(row: ProjectWorkspaceRow, showFinancials: boolean) {
+  if (row.company === "JAPAN") return projectAttentionPriority(row.attention || [], showFinancials);
   return projectActionLabels(row, showFinancials).length;
 }
 
 function matchesFilter(row: ProjectWorkspaceRow, filter: WorkFilter, showFinancials: boolean) {
-  const uninvoicedAmount = Math.max(row.contractAmount - row.invoicedAmount, 0);
+  const uninvoicedAmount = projectUninvoiced(row.contractAmount, row.invoicedAmount);
   if (filter === "all") return true;
   if (filter === "needsAction") return projectPriority(row, showFinancials) > 0;
-  if (filter === "uninvoiced") return showFinancials && uninvoicedAmount > 0;
+  if (filter === "uninvoiced") return showFinancials && (uninvoicedAmount ?? 0) > 0;
   if (filter === "unpaidIncome") return showFinancials && row.unpaidIncomeAmount > 0;
   if (filter === "unpaidExpense") return showFinancials && row.unpaidExpenseAmount > 0;
   if (filter === "missingContract") return !row.contractFileUrl;
@@ -787,12 +799,12 @@ function countForFilter(rows: ProjectWorkspaceRow[], filter: WorkFilter, showFin
 }
 
 function buildSummary(rows: ProjectWorkspaceRow[], showFinancials: boolean) {
-  return rows.reduce(
+  return { ...rows.reduce(
     (summary, row) => {
-      const uninvoicedAmount = Math.max(row.contractAmount - row.invoicedAmount, 0);
+      const uninvoicedAmount = projectUninvoiced(row.contractAmount, row.invoicedAmount);
       summary.total += 1;
       summary.needsAction += projectPriority(row, showFinancials) > 0 ? 1 : 0;
-      summary.uninvoicedAmount += uninvoicedAmount;
+      summary.uninvoicedAmount += uninvoicedAmount ?? 0;
       summary.unpaidIncomeAmount += row.unpaidIncomeAmount;
       summary.missingContract += row.contractFileUrl ? 0 : 1;
       summary.completed += row.status === "COMPLETED" ? 1 : 0;
@@ -806,7 +818,7 @@ function buildSummary(rows: ProjectWorkspaceRow[], showFinancials: boolean) {
       uninvoicedAmount: 0,
       unpaidIncomeAmount: 0,
     },
-  );
+  ), ...projectContractSummary(rows) };
 }
 
 function progressPercent(done: number, total: number) {

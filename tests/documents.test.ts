@@ -167,7 +167,7 @@ test("new explicit project names create separate projects for an existing client
   const data = fixture(); data.projects = [data.projects[0]];
   const first = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("New shop"));
   assert.equal(first.projectCreated, true); assert.equal(first.project.clientId, "client");
-  assert.equal(first.project.contractAmount, 0); assert.equal(first.project.managerId, manager.id);
+  assert.equal(first.project.contractAmount, undefined); assert.equal(first.project.managerId, manager.id);
   assert.deepEqual(first.project.memberIds, [manager.id]);
   const second = resolveIssuedImportProject(data, manager, "JAPAN", "", hints("New shop"));
   assert.equal(second.projectCreated, false); assert.equal(first.project.id, second.project.id);

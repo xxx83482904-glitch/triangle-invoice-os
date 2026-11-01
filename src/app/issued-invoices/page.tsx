@@ -7,7 +7,7 @@ import { CreatableSelect } from "@/components/app/creatable-select";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { DocumentsWorkspace } from "@/components/app/documents-workspace";
 import { InvoiceDropzone } from "@/components/app/invoice-dropzone";
-import { InvoiceCreateDialog, InvoiceCreateSubmit } from "@/components/app/invoice-create-dialog";
+import { InvoiceCreateDialog, InvoiceCreateForm, InvoiceCreateSubmit, InvoiceCreatedNotice } from "@/components/app/invoice-create-dialog";
 import { DocumentItemsEditor } from "@/components/app/document-items-editor";
 import { InvoiceProjectFields } from "@/components/app/editable-project-select";
 import { BillingProjectCleanup } from "@/components/app/billing-project-cleanup";
@@ -59,8 +59,8 @@ export default async function IssuedInvoicesPage({
         <BillingProjectCleanup company={company} groups={billingProjectGroups(data, user, company)} />
         {can(user, "view:documents") ? <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button> : null}
         {user && can(user, "manage:issuedInvoices") ? (
-          <InvoiceCreateDialog key={params.created || "new"}>
-              <form action={createIssuedInvoice} className="space-y-4">
+          <InvoiceCreateDialog company={company} key={params.created || "new"}>
+              <InvoiceCreateForm company={company} action={createIssuedInvoice}>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2"><Label htmlFor="new-invoice-number">請求書番号</Label><Input id="new-invoice-number" name="invoiceNumber" defaultValue={defaultNumber} required /></div>
                   <div className="space-y-2">
@@ -84,12 +84,12 @@ export default async function IssuedInvoicesPage({
                 <div className="space-y-2"><Label htmlFor="new-notes">備考</Label><Textarea id="new-notes" name="notes" /></div>
                 <div className="space-y-2"><Label htmlFor="new-internal-memo">社内メモ</Label><Textarea id="new-internal-memo" name="internalMemo" /></div>
                 <InvoiceCreateSubmit />
-              </form>
+              </InvoiceCreateForm>
           </InvoiceCreateDialog>
         ) : null}
       </PageHeader>
       <div className="space-y-6">
-        {params.created && documents.some((row) => row.sourceId === params.created) ? <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">請求書を作成しました</p> : null}
+        {params.created && documents.some((row) => row.sourceId === params.created) ? company === "JAPAN" ? <InvoiceCreatedNotice id={params.created} /> : <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">請求書を作成しました</p> : null}
         {can(user, "manage:issuedInvoices") ? <InvoiceDropzone key={`drop:${company}`} company={company} kind="issued" compact projects={projects.map((p) => ({ value: p.id, label: p.name }))} /> : null}
         <DocumentsWorkspace key={`${company}:${params.document || params.created || ""}`} company={company} rows={documents} issuedOnly showIssuedSummary={can(user, "view:reports")} initialId={params.document || (params.created ? `issued:${params.created}` : undefined)} canExport={can(user, "export:csv") || can(user, "export:issuedInvoices")} projects={projects.map((p) => ({ value: p.id, label: p.name, clientId: p.clientId, clientName: clients.find((c) => c.id === p.clientId)?.companyName }))} />
       </div>

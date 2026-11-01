@@ -7,7 +7,11 @@ import Link from "next/link";
 import { ArrowUpRight, ChevronDown, ChevronRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { updateReceivedInvoiceInline, updateReceivedInvoiceStatus } from "@/app/actions";
-import { saveReceivedInvoice } from "./actions";
+import { useFeedbackForm } from "@/hooks/use-feedback-form";
+import { OperationError, OperationPending } from "@/components/app/operation-feedback";
+import { toast } from "@/hooks/use-toast";
+import { operationFailureToast } from "@/lib/operation-feedback";
+import { saveReceivedInvoiceStatus, saveReceivedInvoice } from "./actions";
 import { OriginalDocumentPreview } from "./original-document-preview";
 import { PaymentRecordsPanel } from "./payment-records-panel";
 import { DebtGroupPanel } from "./debt-group-panel";
@@ -39,6 +43,7 @@ export type ReceivedInvoiceWorkspaceItem = ReceivedInvoiceAmounts & {
   bankReconciledAmount: number;
   dueDate: string;
   fileUrl?: string;
+  sourceMissing?: boolean;
   folderMonth?: string;
   id: string;
   issueDate: string;
@@ -140,6 +145,7 @@ export function ReceivedInvoicesWorkspace({
   const [filter, setFilter] = useState<WorkFilter>(initialId ? "all" : "unpaid");
   const [query, setQuery] = useState("");
   const [saving, startSaving] = useTransition();
+  const statusSave = useFeedbackForm(company, saveReceivedInvoiceStatus, "状態を保存しました");
   const [saveResult, setSaveResult] = useState<{ id: string; message: string; error?: boolean }>();
 
   const filteredInvoices = useMemo(() => filterReceivedInvoices(invoices, filter, query, today), [filter, invoices, query, today]);
@@ -293,15 +299,16 @@ export function ReceivedInvoicesWorkspace({
                               <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : yen.format(invoice.unpaidAmount)}</td>
                               <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                                 {canApprove ? (
-                                  <form action={updateReceivedInvoiceStatus}>
+                                  <form id={`received-status-${invoice.id}`} action={updateReceivedInvoiceStatus} onSubmit={statusSave.onSubmit}>
                                     <input type="hidden" name="receivedInvoiceId" value={invoice.id} />
                                     <select
                                       name="status"
+                                      disabled={company === "JAPAN" && (statusSave.pending || saving)}
                                       defaultValue={invoice.status}
                                       className="h-7 max-w-[140px] rounded-full border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                       onChange={(event) => {
                                         // A status change never creates a payment; paid is reached through payment records or bank reconciliation.
-                                        if (event.currentTarget.value === "PAID" && invoice.paymentOutstandingAmount > 0) { event.currentTarget.value = invoice.status; setActiveId(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); return; }
+                                        if (event.currentTarget.value === "PAID" && invoice.paymentOutstandingAmount > 0) { event.currentTarget.value = invoice.status; setActiveId(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); if (company === "JAPAN") toast(operationFailureToast(paidGuardMessage)); return; }
                                         event.currentTarget.form?.requestSubmit();
                                       }}
                                     >
@@ -309,6 +316,8 @@ export function ReceivedInvoicesWorkspace({
                                         <option key={option.value} value={option.value} disabled={option.value === "PAID" && invoice.paymentOutstandingAmount > 0 && invoice.status !== "PAID"}>{option.label}</option>
                                       ))}
                                     </select>
+                                    {company === "JAPAN" && statusSave.pendingFormId === `received-status-${invoice.id}` ? <span role="status" className="flex items-center gap-1 text-xs"><OperationPending pending>保存</OperationPending></span> : null}
+                                    <OperationError message={statusSave.feedback?.formId === `received-status-${invoice.id}` && statusSave.feedback.error ? statusSave.feedback.message : undefined} />
                                   </form>
                                 ) : (
                                   <StatusBadge kind="received" status={invoice.status} />
@@ -389,7 +398,7 @@ export function ReceivedInvoicesWorkspace({
                       {activeInvoice.mimeType?.startsWith("image/") ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                       プレビュー
                     </div>
-                    <OriginalDocumentPreview key={`${activeInvoice.id}:${activeInvoice.fileUrl}`} fileUrl={activeInvoice.fileUrl} mimeType={activeInvoice.mimeType} fileName={activeInvoice.originalFileName ?? activeInvoice.vendorName} />
+                    <OriginalDocumentPreview company={company} sourceMissing={activeInvoice.sourceMissing} key={`${activeInvoice.id}:${activeInvoice.fileUrl}`} fileUrl={activeInvoice.fileUrl} mimeType={activeInvoice.mimeType} fileName={activeInvoice.originalFileName ?? activeInvoice.vendorName} />
                   </div>
 
                   <div className="min-w-0 space-y-4">
@@ -406,14 +415,17 @@ export function ReceivedInvoicesWorkspace({
                   {canEdit ? (
                     <form key={`${activeInvoice.id}:${activeInvoice.updatedAt}`} action={updateReceivedInvoiceInline} onSubmit={(event) => {
                       event.preventDefault();
+                      if (company === "JAPAN" && (saving || statusSave.pending)) return;
                       const form = new FormData(event.currentTarget);
-                      if (form.get("status") === "PAID" && Number(form.get("total")) > activeInvoice.paidAmount) { setSaveResult({ id: activeInvoice.id, message: paidGuardMessage, error: true }); return; }
+                      if (form.get("status") === "PAID" && Number(form.get("total")) > activeInvoice.paidAmount) { setSaveResult({ id: activeInvoice.id, message: paidGuardMessage, error: true }); if (company === "JAPAN") toast(operationFailureToast(paidGuardMessage)); return; }
                       startSaving(async () => {
                         try {
                           const result = await saveReceivedInvoice(form);
                           setSaveResult({ id: activeInvoice.id, message: result.ok ? "保存しました。" : result.error, error: !result.ok });
+                          if (company === "JAPAN") toast(result.ok ? { title: "保存しました。", variant: "success" } : operationFailureToast(result.error));
                         } catch {
                           setSaveResult({ id: activeInvoice.id, message: "通信に失敗しました。入力内容を保持しています。再試行してください。", error: true });
+                          if (company === "JAPAN") toast(operationFailureToast("通信に失敗しました。入力内容を保持しています。再試行してください。"));
                         }
                       });
                     }} className="workspace-detail-group space-y-4">
@@ -423,8 +435,7 @@ export function ReceivedInvoicesWorkspace({
                       <div className="flex items-center justify-between gap-3">
                         <h2 className="text-sm font-semibold">詳細編集</h2>
                         <Button type="submit" size="sm" className="gap-1" disabled={saving}>
-                          <Save className="h-4 w-4" />
-                          {saving ? "保存中…" : "保存"}
+                          <OperationPending pending={company === "JAPAN" && saving}><Save className="h-4 w-4" />{saving ? "保存中…" : "保存"}</OperationPending>
                         </Button>
                       </div>
 

@@ -206,7 +206,7 @@ function ensureReviewProject(data: AppData, company: "CHINA" | "JAPAN", timestam
     memberIds: ["usr-admin"],
     status: "WAITING",
     stage: "確認待ち",
-    contractAmount: 0,
+    contractAmount: company === "JAPAN" ? undefined : 0,
     billingCount: 1,
     memo: "OCRで案件を特定できなかった受領請求書の仮案件です。",
     sortOrder: data.projects.filter((projectItem) => projectItem.company === company).length + 1,

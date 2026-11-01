@@ -1,4 +1,6 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, ShieldCheck } from "lucide-react";
@@ -15,7 +17,7 @@ type Target = { kind: "link"; link: ReconciliationOverview["links"][number]; tit
 // "内容を確認して照合を維持": re-records the evidence of a flagged link without touching payments or document statuses.
 export function BankReconciliationReaffirm({ company, target, disabled = false }: { company: CompanyScope; target: Target; disabled?: boolean }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
-  const [open, setOpen] = useState(false), [error, setError] = useState("");
+  const [open, setOpen] = useState(false), [error, setError] = useOperationError(company);
   const count = target.kind === "link" ? 1 : target.invoice.reaffirmable;
   function run() {
     startTransition(async () => {
@@ -39,7 +41,7 @@ export function BankReconciliationReaffirm({ company, target, disabled = false }
             : <><p className="break-words">{target.invoice.title} / {target.invoice.party} / 請求額 {money(target.invoice.total)}</p><p className="text-xs text-muted-foreground">要再確認の照合 {count}件をまとめて維持します。1件でも維持できない場合は何も変更しません。</p></>}
         </div>
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
-        <Button type="button" className="min-h-11" disabled={pending} onClick={run}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}照合を維持</Button>
+        <Button type="button" className="min-h-11" disabled={pending} onClick={run}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}照合を維持</OperationPending></Button>
       </DialogContent>
     </Dialog>
   </>;
