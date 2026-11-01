@@ -14,6 +14,12 @@ async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "triangle-integrity-known-preview-"));
   await mkdir(path.join(root, "uploads"));
   const data = integrityKnownFixture(), passwordHash = hashSync("local-banking-test-only", 10);
+  // Exercise the two bank-kana descriptions without changing the preview's row counts or login accounts.
+  for (const [id, content] of [["settlement-1", "振込 カ)アツプサイダ-"], ["settlement-4", "振込1 カ)アツプサイダ-"]]) {
+    const row = data.bankTransactions.find((item) => item.id === id);
+    if (!row) throw new Error("Synthetic settlement row is missing");
+    row.content = content;
+  }
   data.users = ([
     ["admin", "admin", "合成検証管理者", "ADMIN"], ["accounting", "accounting", "合成経理", "ACCOUNTING"],
     ["mail-editor", "mail_editor", "合成郵便担当者", "MAIL_EDITOR"], ["manager", "chief", "合成主任", "CHIEF_DESIGNER"],

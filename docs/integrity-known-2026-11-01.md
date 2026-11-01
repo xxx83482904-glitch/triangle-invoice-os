@@ -104,3 +104,28 @@ HTTP確認は `tests/check-integrity-known.ts`。隔離buildの中で明示し�
 - [docs/agent-api-2026-10-31.md](../docs/agent-api-2026-10-31.md)
 
 提案コミット: `feat(integrity): track known findings and recognize UPSIDER settlements without reclassification`
+
+## P0-6b 追補: UPSIDERの銀行カナ表記
+
+対象: `codex/p0-6b-upsider-bank-kana`（基点7fb984e）。以下の本番情報はClaudeからの読み取り報告による。Codexは本番を参照していない。
+
+| 本番で残った摘要（content） | 件数 |
+|---|---:|
+| `振込 カ)アツプサイダ-` | 7 |
+| `振込1 カ)アツプサイダ-` | 5 |
+
+原因は、NFKC後も大きい「ツ」やASCIIのハイフンは「ッ」「ー」にならず、従来の完全一致に当たらなかったこと。接頭辞の数字も許していなかった。修正前の合成テストで認識失敗を再現した。
+
+- `integrityBankCardSettlement` の正規表現だけを拡張。カナの名前は `ア[ッツ]プサイダ` と末尾の長音0〜1文字、英字は従来どおり `upsider`。長音はNFKC後の `ー`、`-`、`‐`、`‒`、`–`、`—`、`―`、`−` に限定する。入力の `‑` は `‐`、`－` は `-`、`ｰ` は `ー` にNFKC変換される。
+- `振込`・`振込み`・`フリコミ` の直後だけ数字0〜2桁を許可。全角数字は既存のNFKCで半角化する。`口座振替` は数字なし。名前の後の数字、数字3桁、長音2文字、別会社名の接尾辞は許可しない。
+- 接頭辞・既存の法人表記を除いた名前の完全一致を維持。返金・取消・手数料等の除外語、日本の正の出金、同会社・同事業者の銀行口座、sourceMissing・連携元excludedの除外条件は維持する。
+- 共通の `knownBankCardSettlement`・`settlementAccountKind` と同期・一括変更・AI分類・照合のガードは変更しない。追加の銀行カナ表記でも、既存の表示/保護・同期が分類・確度・確認状態を変えないことをテストする。
+- 本番で残る `振込 カ)アプラス` 2件は、従来の共通判定（口座振替APアプラス）の範囲を広げる根拠がないため今回の対象外。`振込 カ)トライアングルドツトジエ-ピ-` 系23件も会社間の資金移動であり、カード精算にする根拠がないため対象外のまま。
+- 本番相当の合成37件では、UPSIDER12件だけが `cardSettlements` に加算され、`transfer_half` は25件になる。既存の資金移動照合も含め、レポート評価前後の全データ一致を検証する。
+- `prepare-integrity-known-preview.ts` の `settlement-1` と `settlement-4` を本番と同じ2表記に変更。行数は増やさず、初期8件/既知0件、アプラス1件/UPSIDER4件の表示基準と標準合成ユーザーを維持する。
+
+変更ファイルは `src/lib/bank-card-settlement.ts`、`tests/integrity-upsider.test.ts`、`tests/prepare-integrity-known-preview.ts`、本ドキュメントの4件。郵便フラグの移行スクリプトと既存データには触れない。Git操作・production build・standalone・画面確認・デプロイはClaude担当。
+
+P0-6b検証結果: 全654テスト成功（3件追加、既存2件を銀行カナにも拡張）、失敗・スキップ0。全lint・隔離コピーのtsc --noEmit成功。既存の検証用os.userInfo回避preloadを使用。画面確認用DATA_DIRは `%TEMP%/triangle-integrity-known-preview-pWxy0t`（UPLOAD_DIRは配下のuploads）。銀行カナ2行を含め、初期8件/既知0件/UPSIDER4件をJSONで確認した。production build・standalone・画面確認はCodexでは未実施（Claude担当）。
+
+提案コミット: `fix(integrity): recognize UPSIDER bank-kana transfer descriptions`
