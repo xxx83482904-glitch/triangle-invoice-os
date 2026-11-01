@@ -129,3 +129,5 @@ HTTP確認は `tests/check-integrity-known.ts`。隔離buildの中で明示し�
 P0-6b検証結果: 全654テスト成功（3件追加、既存2件を銀行カナにも拡張）、失敗・スキップ0。全lint・隔離コピーのtsc --noEmit成功。既存の検証用os.userInfo回避preloadを使用。画面確認用DATA_DIRは `%TEMP%/triangle-integrity-known-preview-pWxy0t`（UPLOAD_DIRは配下のuploads）。銀行カナ2行を含め、初期8件/既知0件/UPSIDER4件をJSONで確認した。production build・standalone・画面確認はCodexでは未実施（Claude担当）。
 
 提案コミット: `fix(integrity): recognize UPSIDER bank-kana transfer descriptions`
+
+本番での確認（2026-11-01 14:40 JST、`aad2675` デプロイ後、Claudeが読み取りのみで確認）: 除外されたのは出金の `振込 カ)アツプサイダ-` 7件で、UPSIDERカード精算は7件と表示された。`振込1 カ)アツプサイダ-` 5件は入金（+712円〜+199,871円、2024-08〜2025-08）だった。上の合成テストの「12件除外」は依頼時の前提（12件すべて出金）に基づくもので、本番の入金5件は従来どおり除外の対象外のため指摘に残る（入金側を広げない方針どおり）。`transfer_half` は37件から30件になった。
