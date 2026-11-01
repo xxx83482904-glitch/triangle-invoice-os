@@ -1,3 +1,4 @@
+import { projectCreationValues } from "@/lib/project-display";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppData, ApiTokenScope, AgentRequest, Payment, Project, ReceivedInvoice, IssuedInvoice, Vendor } from "@/lib/types";
@@ -81,7 +82,7 @@ export function listAgentResource(data: AppData, auth: AgentAuth, resource: Agen
       rows = data.vendors.filter((row) => !row.deletedAt && partnerMatchesCompany(row, company) && since(row) && matches(row.companyName, row.accountHolder));
       break;
     case "projects":
-      rows = data.projects.filter((row) => projects.has(row.id) && since(row) && (!value.status || row.status === value.status) && matches(row.name));
+      rows = data.projects.filter((row) => projects.has(row.id) && since(row) && (!value.status || row.status === value.status) && matches(row.name)).map((row) => company === "JAPAN" ? { ...row, contractAmount: row.contractAmount ?? null } : row);
       break;
     case "categories":
       rows = data.accountingCategories.filter((row) => row.company === company && row.available && !row.deletedAt && since(row) && matches(row.name, row.group));
@@ -172,7 +173,7 @@ const receivedUpdateSchema = z.object({ projectId: reference.optional(), vendorI
 const vendorSchema = z.object({ companyName: z.string().trim().min(1).max(200), contactName: z.string().trim().max(200).optional(), email: z.string().trim().max(200).optional(), phone: z.string().trim().max(50).optional(), address: z.string().trim().max(500).optional(),
   invoiceRegistrationNumber: z.string().trim().max(50).optional(), bankName: z.string().trim().max(100).optional(), branchName: z.string().trim().max(100).optional(), accountType: z.string().trim().max(50).optional(), accountNumber: z.string().trim().max(50).optional(), accountHolder: z.string().trim().max(200).optional(), memo: z.string().trim().max(2000).optional() });
 const projectSchema = z.object({ name: z.string().trim().min(1).max(200), clientId: reference.optional(), managerId: reference.optional(), memberIds: z.array(reference).max(50).optional(), status: z.enum(["PLANNING", "IN_PROGRESS", "WAITING", "COMPLETED", "ARCHIVED"]).default("IN_PROGRESS"),
-  stage: z.string().trim().max(100).optional(), contractAmount: z.number().min(0).default(0), billingCount: z.number().int().min(1).max(12).optional(), startDate: z.string().optional(), endDate: z.string().optional(), memo: z.string().trim().max(2000).optional() });
+  stage: z.string().trim().max(100).optional(), contractAmount: z.number().min(0).optional(), billingCount: z.number().int().min(1).max(12).optional(), startDate: z.string().optional(), endDate: z.string().optional(), memo: z.string().trim().max(2000).optional() });
 
 function expectUpdatedAt(record: { updatedAt: string }, operation: Operation, label: string) {
   if (operation.expect.updatedAt && operation.expect.updatedAt !== record.updatedAt) throw new AgentError(409, `${label}が更新されています（expect.updatedAt が一致しません）`);
@@ -299,8 +300,7 @@ function applyOperation(data: AppData, auth: AgentAuth, company: CompanyScope, o
       const managerId = payload.managerId || actor.id;
       if (!data.users.some((row) => row.id === managerId && !row.deletedAt)) throw new AgentError(404, "担当者が見つかりません");
       const timestamp = new Date().toISOString();
-      const project: Project = { id: randomUUID(), name: payload.name, clientId: client.id, company, managerId, memberIds: [...new Set([managerId, ...(payload.memberIds || [])])], status: payload.status, stage: payload.stage || "制作资料",
-        contractAmount: payload.contractAmount, billingCount: payload.billingCount || 1, startDate: payload.startDate, endDate: payload.endDate, memo: payload.memo, sortOrder: nextSortOrder(data.projects, company), createdAt: timestamp, updatedAt: timestamp };
+      const project: Project = { id: randomUUID(), name: payload.name, clientId: client.id, company, managerId, memberIds: [...new Set([managerId, ...(payload.memberIds || [])])], status: payload.status, ...projectCreationValues(company, payload), billingCount: payload.billingCount || 1, startDate: payload.startDate, endDate: payload.endDate, memo: payload.memo, sortOrder: nextSortOrder(data.projects, company), createdAt: timestamp, updatedAt: timestamp };
       data.projects.unshift(project);
       return { targetId: project.id, result: { id: project.id, name: project.name } };
     }

@@ -1,5 +1,7 @@
 "use server";
 
+import { projectCreationValues } from "@/lib/project-display";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
@@ -340,8 +342,7 @@ export async function createProject(formData: FormData) {
     managerId,
     memberIds: Array.from(new Set([managerId, ...members].filter(Boolean))),
     status: value(formData, "status") as Project["status"],
-    stage: value(formData, "stage") || "制作资料",
-    contractAmount: money(formData, "contractAmount"),
+    ...projectCreationValues(company, { stage: value(formData, "stage"), contractAmount: value(formData, "contractAmount") ? money(formData, "contractAmount") : undefined }),
     billingCount: Math.max(1, Math.min(12, Number(value(formData, "billingCount")) || 1)),
     startDate: optional(formData, "startDate"),
     endDate: optional(formData, "endDate"),
@@ -391,7 +392,7 @@ export async function updateProjectInline(formData: FormData) {
         : project.stage === "待拍摄"
           ? "WAITING"
           : "PLANNING";
-    project.contractAmount = money(formData, "contractAmount");
+    project.contractAmount = project.company === "JAPAN" && !value(formData, "contractAmount") ? undefined : money(formData, "contractAmount");
     project.billingCount = Math.max(1, Math.min(12, Number(value(formData, "billingCount")) || 1));
     project.startDate = optional(formData, "startDate");
     project.endDate = optional(formData, "endDate");

@@ -1,4 +1,5 @@
 import "server-only";
+import { projectContractValue } from "@/lib/project-display";
 import { createHash } from "node:crypto";
 import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { outstandingAmount } from "@/lib/accounting-summary";
@@ -658,7 +659,7 @@ export function projectMoney(data: AppData, projectId: string): ProjectMoney {
   const projectItem = data.projects.find((item) => item.id === projectId);
   const issued = data.issuedInvoices.filter((item) => isBillableIssuedInvoice(item) && item.projectId === projectId);
   const received = active(data.receivedInvoices).filter((item) => item.projectId === projectId);
-  const contractAmount = projectItem?.contractAmount ?? 0;
+  const contractAmount = projectContractValue(projectItem);
   const invoicedAmount = issued.reduce((sum, invoice) => sum + invoice.total, 0);
   const paidIncomeAmount = issued.reduce((sum, invoice) => sum + paidForIssued(data, invoice.id), 0);
   const receivedInvoiceTotal = received.reduce((sum, invoice) => sum + invoice.total, 0);

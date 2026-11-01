@@ -11,7 +11,7 @@ const accessKey = (p: Project) => JSON.stringify([p.managerId, [...p.memberIds].
 
 function canRetire(data: AppData, p: Project) {
   return p.memo === "発行請求書OCRから自動作成。案件名・請求先・契約情報要確認。" && p.status === "PLANNING" &&
-    p.contractAmount === 0 && (p.billingCount || 1) === 1 && !p.stage && !p.startDate && !p.endDate &&
+    (p.contractAmount === 0 || (p.company === "JAPAN" && p.contractAmount === undefined)) && (p.billingCount || 1) === 1 && !p.stage && !p.startDate && !p.endDate &&
     !Object.entries(p).some(([key, value]) => key.startsWith("contract") && key !== "contractAmount" && value) &&
     !data.receivedInvoices.some((i) => i.projectId === p.id) && !data.attachments.some((a) => a.relatedId === p.id);
 }
