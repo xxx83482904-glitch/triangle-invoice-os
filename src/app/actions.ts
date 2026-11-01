@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
+import { obligationKindInput } from "@/lib/obligation-edits";
 import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
@@ -294,10 +295,13 @@ export async function createVendor(formData: FormData) {
   assertCan(user, "manage:vendors");
   const timestamp = now();
   const company = companyFromParam(value(formData, "company"));
+  assertCompanyAccess(user, company);
+  const obligationKind = obligationKindInput.parse(value(formData, "obligationKind") || "UNSET");
   const vendor: Vendor = {
     id: newId(),
     company,
     companyName: value(formData, "companyName"),
+    ...(obligationKind === "UNSET" ? {} : { obligationKind }),
     contactName: optional(formData, "contactName"),
     email: optional(formData, "email"),
     phone: optional(formData, "phone"),

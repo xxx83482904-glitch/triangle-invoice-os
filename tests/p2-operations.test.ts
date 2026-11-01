@@ -74,11 +74,12 @@ test("tax and insurance obligations come from matching received invoices and mai
   const base = data.receivedInvoices[0];
   Object.assign(base, { status: "SCHEDULED", mailProcessed: false, originalFileName: "源泉所得税_納付書.pdf", total: 30000, dueDate: "2026-10-01", issueDate: "2026-09-20" });
   data.mailDocuments[0].mailProcessed = false;
-  data.vendors.push({ ...data.vendors[0], id: "pension", companyName: "日本年金機構" });
+  data.vendors.push({ ...data.vendors[0], id: "pension", companyName: "合成日本年金機構" }, { ...data.vendors[0], id: "tax", companyName: "合成税務署" });
+  base.vendorId = "tax";
   data.receivedInvoices.push(
     { ...base, id: "pension", vendorId: "pension", originalFileName: "保険料納入告知書.pdf", total: 120000, dueDate: "2026-10-15", status: "SCHEDULED" },
     { ...base, id: "paid-tax", originalFileName: "消費税_中間納付.pdf", total: 50000, dueDate: "2026-09-30", status: "PAID", paidAt: "2026-09-28" },
-    { ...base, id: "plain", originalFileName: "制作費.pdf", total: 8000 },
+    { ...base, id: "plain", vendorId: "vendor", originalFileName: "制作費.pdf", total: 8000 },
   );
   data.payments.push({ id: "p1", type: "EXPENSE", receivedInvoiceId: "paid-tax", amount: 50000, paymentDate: "2026-09-28", source: "MANUAL", createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
   data.mailDocuments.push({ ...data.mailDocuments[0], id: "mail-tax", title: "法人税の納付のお知らせ", senderName: "麹町税務署", category: "NOTICE", relatedReceivedInvoiceId: undefined, mailProcessed: false, folderMonth: "2026-10" });

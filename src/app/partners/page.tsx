@@ -4,6 +4,8 @@ import { createSelectOption, createVendor, moveClientOption, moveSelectOption, m
 import { ClientEditButton, ClientForm } from "@/components/app/client-editor";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { ClientDeleteButton } from "@/components/app/client-delete-button";
+import { VendorObligationEditor } from "@/components/app/vendor-obligation-editor";
+import { obligationKindLabels } from "@/lib/obligation-classification";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +33,7 @@ export default async function PartnersPage({
   const billingOnly = user.role === "BILLING_EDITOR";
   const data = await readData();
   const mayEdit = Boolean(user && can(user, "manage:clients"));
+  const mayEditVendors = can(user, "manage:vendors");
   const clients = data.clients
     .filter((client) => !client.deletedAt && partnerMatchesCompany(client, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.companyName.localeCompare(b.companyName, "ja"));
@@ -41,7 +44,7 @@ export default async function PartnersPage({
   return (
     <AppShell>
       <PageHeader title={billingOnly ? "請求先・請求書設定" : "取引先・プルダウン管理"} />
-      <Tabs defaultValue="clients">
+      <Tabs defaultValue={params.tab === "vendors" && !billingOnly ? "vendors" : "clients"}>
         <TabsList>
           <TabsTrigger value="clients">クライアント</TabsTrigger>
           {!billingOnly ? <TabsTrigger value="vendors">支払先</TabsTrigger> : null}
@@ -71,13 +74,15 @@ export default async function PartnersPage({
           <Card variant="section">
             <CardHeader><CardTitle>支払先</CardTitle></CardHeader>
             <CardContent>
-              <SelectableRecordsTable key={`vendors-${company}`} headers={["順番", "会社名", "担当者", "メール", "銀行"]} rows={vendors.map((vendor, index) => ({ id: vendor.id, label: vendor.companyName, cells: [
-                <MoveButtons key="order" action={moveVendorOption} id={vendor.id} disabled={!mayEdit} first={index === 0} last={index === vendors.length - 1} />,
+              <p className="mb-3 text-xs text-muted-foreground">税金・社会保険の一覧はこの区分を優先します。「未設定」だけ支払先名から推定します。</p>
+              <SelectableRecordsTable key={`vendors-${company}`} headers={["順番", "会社名", "担当者", "メール", "銀行", "税金・社会保険の区分"]} rows={vendors.map((vendor, index) => ({ id: vendor.id, label: vendor.companyName, cells: [
+                <MoveButtons key="order" action={moveVendorOption} id={vendor.id} disabled={!mayEditVendors} first={index === 0} last={index === vendors.length - 1} />,
                 <span key="name" className="font-medium">{vendor.companyName}</span>, vendor.contactName, vendor.email, `${vendor.bankName || ""} ${vendor.branchName || ""}`,
+                mayEditVendors ? <VendorObligationEditor key="obligation" company={company} vendor={{ id: vendor.id, companyName: vendor.companyName, obligationKind: vendor.obligationKind, updatedAt: vendor.updatedAt }} /> : obligationKindLabels[vendor.obligationKind || "UNSET"],
               ] }))} />
             </CardContent>
           </Card>
-          {mayEdit ? (
+          {mayEditVendors ? (
             <Card variant="section">
               <CardHeader><CardTitle>支払先追加</CardTitle></CardHeader>
               <CardContent><VendorForm company={company} /></CardContent>
@@ -162,6 +167,7 @@ function VendorForm({ company }: { company: CompanyScope }) {
     <form action={createVendor} className="space-y-3">
       <input type="hidden" name="company" value={company} />
       <InputBlock name="companyName" label="会社名" required />
+      <div className="space-y-2"><Label htmlFor="new-vendor-obligation">税金・社会保険の区分</Label><select id="new-vendor-obligation" name="obligationKind" defaultValue="UNSET" className="h-11 w-full rounded-md border bg-background px-2 text-sm">{Object.entries(obligationKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
       <InputBlock name="contactName" label="担当者名" />
       <InputBlock name="email" label="メールアドレス" type="email" />
       <InputBlock name="phone" label="電話番号" />
