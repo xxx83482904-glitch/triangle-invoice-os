@@ -1,0 +1,76 @@
+{
+  "assets": [
+    {
+      "name": "illustration-chef-taste-v2.png",
+      "prompt": "Use case: identity-preserve\nAsset type: Transparent PNG bust character animation asset for the children's cooking app あきらくんと おりょうり.\nInput images: Image 1 is the EDIT TARGET existing approved chef character, already isolated. Image 2 is STYLE and IDENTITY reference approved screen 02, do not reproduce any UI.\nPrimary request: Edit only the mouth and arms/hands of the boy in Image 1 to add a quiet 'mogu mogu' chewing pose: both hands hold a small triangular rice ball near his mouth, mouth gently closed in a pleased chewing smile. Remove the wooden spoon. This is the SAME boy, not a redesigned character.\nInvariants: Preserve the exact head shape, narrow eye shape and proportions, eyebrows, nose, ears, skin tone, black straight fringe and hair texture, hat shape, white chef shirt, yellow apron and green leaf mark. Preserve the original medium and painterly-flat picture book rendering. Do not enlarge or round the eyes; do not change the age. Keep the head at the same angle.\nComposition: Complete bust with full hat and both hands, similar proportions and framing to Image 1. One character only, centered, at least 1024px height, generous tiny transparent margin, no clipping.\nBackdrop: actual fully transparent alpha background; preserve transparency.\nAvoid: text, symbols, UI, panels, background scenery, ground shadows, checkerboard painted into image, new face, extra fingers, photographs, 3D rendering.",
+      "tool": "built-in image_gen",
+      "source": "C:/Users/kure/.codex/generated_images/01a1957d-36aa-72d2-b990-16b4a233f854/exec-dc73f5c2-6673-404b-9f41-d43d4f313851.png",
+      "reference": [
+        "akira-kitchen/public/akira-kitchen/illustration-chef.png",
+        "outputs/akira-ui-audit-2026-11-01/references/02_bento_menu.png"
+      ],
+      "inspection": "Same narrow eyes, black fringe, hat and leaf apron retained; only mouth/arms/rice change. Genuine RGBA checked; asset accepted."
+    },
+    {
+      "name": "illustration-ingredient-egg-v2.png",
+      "prompt": "Use case: illustration-story\nAsset type: One separate transparent ingredient illustration for a preschool cooking game, screen12 cake batter.\nReference image: Approved screen02 is for illustration STYLE ONLY. Match its clean soft picture-book food illustrations in the bottom row: confident shape, gentle painted texture, warm colors, restrained shading. Do not reproduce UI.\nSubject: ONE whole hen egg, uncracked, pale warm ivory shell, simple recognizable egg silhouette, very slight warm shading. No face, no plate, no nest, no decoration.\nComposition: One egg centered, vertical slightly tilted natural orientation, occupying about 80% of a square canvas at least 768x768. Transparent space on all sides; edges never clipped. It will be used at ~168x164 CSSpx.\nBackdrop: actual transparent alpha. Keep the background completely empty.\nAvoid: photorealism, 3D, text, emoji appearance, outlines unlike reference, labels, multiple eggs, shadows outside object, gradients behind object, visible checkerboard.",
+      "tool": "built-in image_gen",
+      "source": "C:/Users/kure/.codex/generated_images/01a1957d-36aa-72d2-b990-16b4a233f854/exec-525d830c-b937-44c5-9d58-6af6ce4acbe2.png",
+      "reference": [
+        "outputs/akira-ui-audit-2026-11-01/references/02_bento_menu.png"
+      ],
+      "inspection": "One ivory egg, no text/face, soft painted style consistent with source foods; accepted."
+    },
+    {
+      "name": "illustration-ingredient-flour-v2.png",
+      "prompt": "Use case: illustration-story\nAsset type: Single separate transparent cooking ingredient illustration for preschool app screen12.\nReference: approved screen02 supplied is STYLE reference ONLY. Match the bottom-row food illustrations: clear confident silhouettes, friendly picture-book painted texture, bright pastel/warm colors, restrained gentle shading. Do not reproduce the screen.\nSubject: ONE shallow pale blue ceramic ingredient bowl filled high with a visible soft white mound of WHEAT FLOUR. The flour should rise above the rim with uneven powdery peaks so a small child can tell it is flour rather than an empty bowl or liquid. A small wooden scoop rests partly in the flour, handle visible toward upper right. No extra ingredients.\nComposition: View from slightly above at a three-quarter angle, centered on square canvas at least 768x768; bowl and scoop fully visible, use 80% of canvas, enough margins not clipped. Intended display ~168x164 CSSpx.\nBackdrop: actual transparent alpha background.\nAvoid: text, labels, food faces, emoji style, photo, 3D, realistic metal, UI, panels, table, shadows outside object, visible checkerboard.",
+      "tool": "built-in image_gen",
+      "source": "C:/Users/kure/.codex/generated_images/01a1957d-36aa-72d2-b990-16b4a233f854/exec-0ee160ed-9f75-445d-8133-3d87e866c8e6.png",
+      "reference": [
+        "outputs/akira-ui-audit-2026-11-01/references/02_bento_menu.png"
+      ],
+      "inspection": "Pale blue bowl visibly filled with a powdery flour mound and wooden scoop. No text, all edges visible, consistent picture-book texture; accepted."
+    },
+    {
+      "name": "illustration-ingredient-milk-v2.png",
+      "prompt": "Use case: illustration-story\nAsset type: Single separate transparent cooking ingredient illustration for preschool app screen12 cake batter.\nReference: approved screen02 is STYLE reference ONLY. Match its bottom-row food illustrations: clear friendly silhouettes, soft picture-book painted texture, bright pastel colors, restrained shading, cheerful warmth. Do not reproduce UI.\nSubject: ONE small clear glass pouring jug about three-quarters full of opaque white milk, wide rounded jug with small spout pointing upper left and round handle on right. Pale blue outline/tint shows glass clearly against light backgrounds. Milk is clearly visible with a soft flat top surface, no measurement text and no numbers.\nComposition: Single centered object, slight three-quarter top-down view, square canvas at least 768x768, ~80% coverage, full handle and spout visible, tiny margins no clipping. Intended display ~168x164 CSSpx.\nBackdrop: actual transparent alpha background, nothing behind the jug.\nAvoid: labels, writing, cow decorations, faces, multiple objects, photorealism, emoji, 3D, overcomplex highlights, UI, table, shadows outside object, visible checkerboard.",
+      "tool": "built-in image_gen",
+      "source": "C:/Users/kure/.codex/generated_images/01a1957d-36aa-72d2-b990-16b4a233f854/exec-82fa32f9-9d7e-4b1e-8cda-5433165169c5.png",
+      "reference": [
+        "outputs/akira-ui-audit-2026-11-01/references/02_bento_menu.png"
+      ],
+      "inspection": "One pale blue glass jug filled with visible white milk, spout/handle intact, no text, transparent alpha; accepted."
+    },
+    {
+      "name": "illustration-chef-celebrate-v2.png",
+      "prompt": "Use case: identity-preserve\nAsset type: Transparent PNG character completion pose, preschool cooking app.\nInput images: Image1 is EDIT TARGET: existing approved02 Akira chef character. Image2 is its approved screen02 art reference, not a new design.\nPrimary request: Change ONLY the boy's arms and hands from holding spoon/waving into a happy completion celebration: both empty hands raised beside the head, palms visible, natural five fingers each. Remove the wooden spoon. The face must remain exactly the original cheerful expression with visible teeth, narrow eyes, same head angle.\nInvariants: KEEP the same head shape, eye size/shape/position, cheeks, fringe, black hair texture, ears/nose, skin tone, original open smiling mouth with teeth, white chef hat, white shirt, yellow apron and green leaf mark. Do not redraw him as another character; do not enlarge eyes. Maintain original soft painterly picture-book style and proportions.\nComposition: One bust character only, entire hat/arms/hands/apron in frame. Slightly wider portrait allowed for hands. At least 1024px high. All edges complete with small transparent margin.\nBackground: genuine fully transparent alpha. No scenery, text, confetti, stars, UI, shadows or decorative props.\nAvoid: changed face, changed costume, cartoon giant round eyes, extra fingers, text, checkerboard baked into image, photorealism, 3D.",
+      "tool": "built-in image_gen",
+      "source": "C:/Users/kure/.codex/generated_images/01a1957d-36aa-72d2-b990-16b4a233f854/exec-8ca98caa-c78d-4b24-82cb-4565fe71a3e4.png",
+      "reference": [
+        "akira-kitchen/public/akira-kitchen/illustration-chef.png",
+        "outputs/akira-ui-audit-2026-11-01/references/02_bento_menu.png"
+      ],
+      "inspection": "Original face, narrow eyes, fringe, hat, leaf apron and toothy smile retained. Empty hands raised, five fingers each; accepted."
+    },
+    {
+      "name": "illustration-carrot-star-v2.png",
+      "prompt": "Use case: precise-object-edit\nAsset type: One transparent carrot cutout ingredient for preschool bento cooking game.\nInput image: EDIT/STYLE target is the bottom-right flower-shaped carrot slice in the supplied food sheet. Other five foods are style context only.\nPrimary request: Make a variant of ONLY that carrot slice, changing its outer contour from five-petal flower to a simple five-point STAR with gently rounded points. Keep its warm bright orange face, darker orange shallow thickness on lower edge, small golden highlight upper left, subtle painterly texture and softly brighter core. No face or decorative markings.\nComposition: One isolated thick carrot star, same slightly top-down almost frontal angle as source carrot, centered in square canvas at least768x768 with10%transparent margin. All five star points complete. The top point faces upward.\nInvariants: Same orange colors, edge thickness, lighting and picture-book rendering as originalflowercarrot. Not candy or yellowstar. Do not copy the sheet background or glow.\nBackground: genuine transparent alpha. No plate, shadows, scenery, UI, text, frame, other foods.\nAvoid: glossy plastic, photo,3D, blackoutline,emoji, fake checkerboard, any backgroundcolor.",
+      "tool": "built-in image_gen",
+      "source": "C:/Users/kure/.codex/generated_images/01a1957d-36aa-72d2-b990-16b4a233f854/exec-15aeb2da-d8ea-4e6f-bfd3-820293343024.png",
+      "reference": [
+        "akira-kitchen/public/akira-kitchen/illustration-bento-foods.png"
+      ],
+      "inspection": "Rounded five-point orange carrot star, matching flower-carrot texture/highlight and shallow thickness; no face/text, accepted."
+    },
+    {
+      "name": "illustration-carrot-heart-v2.png",
+      "prompt": "Use case: precise-object-edit\nAsset type: One transparent heart-shaped carrot cutout ingredient for preschool bento cooking game.\nInput image: EDIT/STYLE target is bottom-right flower-shaped carrot slice in supplied food sheet; otherfoods are stylecontext only.\nPrimary request: Make a variant of ONLY that carrot slice, changing outer contour from flower to a recognizable HEART, two rounded upper lobes and one gently rounded lower point. Keep warm bright orange face, darker orange shallow thickness on lower edge, small golden highlight upperleft, subtle painterly texture and softly brighter core. No face or decorations.\nComposition: One isolated thick carrot heart, same slightly topdown almostfrontal angle as source, centered in squarecanvas at least768x768 with10%transparent margin. Wholeheart complete, lowerpoint downward.\nInvariants: Same orange colors, shallow thickness, lighting and picture-book rendering as original flowercarrot. Not candy; not red orpink. Do not copy sheetbackground or glow.\nBackdrop: genuine transparentalpha, no background or outside shadows. No plate, scenery, UI, text, frame, otherfoods.\nAvoid: glossyplastic,photo,3D,blackoutline,emoji,visiblecheckerboard.",
+      "tool": "built-in image_gen",
+      "source": "C:/Users/kure/.codex/generated_images/01a1957d-36aa-72d2-b990-16b4a233f854/exec-f6357c5d-f06c-4be0-a3cc-a2326cfb3f14.png",
+      "reference": [
+        "akira-kitchen/public/akira-kitchen/illustration-bento-foods.png"
+      ],
+      "inspection": "Orange carrot heart, matching flower-carrot texture/highlight and shallow thickness, complete silhouette, no face/text; accepted."
+    }
+  ]
+}

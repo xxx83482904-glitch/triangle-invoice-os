@@ -6,7 +6,7 @@ import { bundle, project } from "./bundle.mjs";
 const runtimeErrors = [];
 // Only the app's local PNG assets are available to this offline test harness.
 globalThis.fetch = async (url) => {
-  assert.match(String(url), /^\/akira-kitchen\/illustration-[a-z-]+\.png$/);
+  assert.match(String(url), /^\/akira-kitchen\/illustration-[a-z0-9-]+\.png$/);
   return new Response(await readFile(project + "public" + url), {
     headers: { "content-type": "image/png" },
   });
@@ -163,6 +163,16 @@ const click = async (el) => {
     el.dispatchEvent(new w.MouseEvent("click", { bubbles: true, detail: 0 })),
   );
 };
+const saveFromUI = async () => {
+  await click(button("ほぞんする"));
+  // Image embedding and IndexedDB have variable latency. Wait for the UI's
+  // completed state inside act instead of assuming a fixed 150 ms is enough.
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await settle(100);
+    if (buttons().some((b) => norm(b.textContent) === "ほぞんしたよ" && b.disabled)) return;
+  }
+  assert.fail("save did not finish");
+};
 const pointer = async (el, type, x = 200, y = 150, id = 1) =>
   act(async () =>
     el.dispatchEvent(
@@ -200,11 +210,17 @@ check("home is composed from DOM controls and supplied character", () => {
   assert.equal(screen(), 1);
   assert.ok(
     document.querySelector(
-      'image[href="/akira-kitchen/illustration-chef.png"]',
+      'img[src="/akira-kitchen/illustration-chef-home-v2.png"]',
     ),
   );
   assert.equal(document.querySelectorAll("img.full-img").length, 0);
 });
+await tap(button("おとを けす"));
+await act(async () => button("おとを つける").dispatchEvent(new w.MouseEvent("click", { bubbles: true, detail: 1 })));
+check("a touch button commits on release and ignores its duplicate compatibility click", () => {
+  assert.equal(button("おとを つける").getAttribute("aria-pressed"), "false");
+});
+await click(button("おとを つける"));
 await click(button("おべんとう"));
 assert.equal(screen(), 2);
 await click(button("おにぎり"));
@@ -305,7 +321,7 @@ await settle();
 check("cancelled pointer does not add or lose food", () =>
   assert.deepEqual(recipe(), beforeCancel),
 );
-await click(button("↩ はずす"));
+await click(button("はずす"));
 await settle();
 assert.equal(recipe().items.length, 4);
 await click(button("もどす"));
@@ -334,8 +350,7 @@ check("tasting consumes display food without changing saved original", () => {
 });
 await click(button("アルバムへ"));
 assert.equal(screen(), 10);
-await click(button("ほぞんする"));
-await settle();
+await saveFromUI();
 let saved = await storage.listArtworks();
 check("IndexedDB stores image, date, choices and all coordinates", () => {
   assert.equal(saved.length, 1);
@@ -373,7 +388,7 @@ await next();
 await cook("bake");
 await next();
 assert.equal(screen(), 14);
-await click(button("🖌 クリーム"));
+await click(button("ぬる"));
 const board = document.querySelector('[aria-label="ケーキの かざりだい"]');
 await pointer(board, "pointerdown", 280, 180);
 await pointer(board, "pointermove", 340, 200);
@@ -393,7 +408,7 @@ let topping = document.querySelector("[data-piece]");
 await pointer(topping, "pointerdown", 200, 200);
 await pointer(topping, "pointermove", 300, 150);
 await pointer(topping, "pointerup", 300, 150);
-await click(button("↩ はずす"));
+await click(button("はずす"));
 await click(button("もどす"));
 await settle();
 check("cake toppings add, move, delete and undo independently of cream", () => {
@@ -403,8 +418,7 @@ check("cake toppings add, move, delete and undo independently of cream", () => {
 });
 await click(button("できた！"));
 assert.equal(screen(), 15);
-await click(button("ほぞんする"));
-await settle();
+await saveFromUI();
 assert.equal((await storage.listArtworks()).length, 2);
 check("cake and bento coexist in persistent album");
 const originalCake = (await storage.listArtworks()).find(
@@ -425,8 +439,7 @@ assert.deepEqual(
   originalCake.recipe,
 );
 await click(button("できた！"));
-await click(button("ほぞんする"));
-await settle();
+await saveFromUI();
 assert.equal((await storage.listArtworks()).length, 3);
 await click(button("アルバム"));
 await click(button("もどる"));

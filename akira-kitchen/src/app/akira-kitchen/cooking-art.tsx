@@ -1,5 +1,5 @@
 import { SHAPES } from "./prototype-shapes";
-import { illustratedFood, illustratedBase } from "./illustration-assets";
+import { illustratedFood, illustratedBase, illustratedVariant, riceSmile } from "./illustration-assets";
 import type { Food, Piece, Recipe, Point } from "./cooking-model";
 const COLORS: Record<string, string> = {
   ume: "#ef6b89",
@@ -22,7 +22,9 @@ const dots = (color: string) =>
     (_, i) =>
       `<ellipse cx="${55 + ((i * 37) % 91)}" cy="${65 + ((i * 29) % 73)}" rx="3" ry="5" fill="${color}" transform="rotate(${i * 31} ${55 + ((i * 37) % 91)} ${65 + ((i * 29) % 73)})"/>`,
   ).join("");
-export function foodMarkup(food: string, variant = ""): string {
+export function foodMarkup(food: string, variant = "", smiling = true): string {
+  const variantArt = illustratedVariant(food, variant);
+  if (variantArt) return variantArt + (food === "onigiri" && smiling ? riceSmile() : "");
   const illustration = illustratedFood(food);
   if (
     illustration &&
@@ -73,17 +75,19 @@ export function FoodArt({
   food,
   variant = "",
   className,
+  smiling = true,
 }: {
   food: string;
   variant?: string;
   className?: string;
+  smiling?: boolean;
 }) {
   return (
     <svg
       className={className}
       viewBox="0 0 200 200"
       aria-hidden="true"
-      dangerouslySetInnerHTML={{ __html: foodMarkup(food, variant) }}
+      dangerouslySetInnerHTML={{ __html: foodMarkup(food, variant, smiling) }}
     />
   );
 }
@@ -122,14 +126,17 @@ export function dishSVG(recipe: Recipe): string {
 export function DishArt({
   recipe,
   className,
+  stretch = false,
 }: {
   recipe: Recipe;
   className?: string;
+  stretch?: boolean;
 }) {
   return (
     <svg
       className={className}
       viewBox="0 0 800 500"
+      preserveAspectRatio={stretch ? "none" : "xMidYMid meet"}
       role="img"
       aria-label={
         recipe.mode === "bento" ? "じぶんの おべんとう" : "じぶんの ケーキ"

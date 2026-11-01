@@ -1,0 +1,155 @@
+{
+  "prompt": "Use case: background-extraction.\nAsset type: transparent character sprite for a Japanese preschool cooking app.\nEdit target: the attached approved screenshot 03_onigiri.png, specifically the boy at the left-center holding rice in both hands. Extract THIS EXACT ILLUSTRATED CHARACTER only, including entire white chef hat, dark black-brown fringe, face, ears, hair, neck, white shirt, arms, hands, the white rice ball held between both hands, and yellow apron with green leaf mark.\nDo not redesign him. Preserve the original illustration's face outline, small curved black eyes with same tiny highlights, eyebrow shape, nose, wide open smiling mouth with the same narrow white upper tooth line, skin color, black fringe silhouette and shine, head tilt, clothes, proportions, and holding-rice pose. Preserve the flat softly shaded storybook style of this specific approved screenshot, do not substitute any other version of the boy.\nOnly remove the kitchen background, table, bowl of rice, plates, arrows, speech bubbles, decorative motion marks, text, cards, and all interface elements. The rice in his hands must remain. Complete the bust lower edge neatly where originally occluded by the table, with no legs. Full hat and both elbows must be contained.\nComposition: portrait or near-square cutout centered with modest transparent padding, character fills most canvas. Match approximately a 500 by 560 design-pixel display slot, output at least 1000 pixels tall.\nBackground: true transparent alpha, no white rectangular backdrop, no checkerboard pattern, no drop shadow, no text or extra objects.",
+  "source": "outputs/akira-ui-audit-2026-11-01/references/03_onigiri.png",
+  "output": "akira-kitchen/public/akira-kitchen/illustration-chef-squeeze-v2.png",
+  "generator": "built-in image_gen",
+  "intent": "background-extraction",
+  "createdAt": "2026-11-01T05:03:38.677Z",
+  "width": 1185,
+  "height": 1327,
+  "transparent": true,
+  "inspection": "Compared approved screen03 and generated bust. Same head tilt, fringe, small curved eyes, open smile, shirt, yellow leaf apron, both hands holding rice. Background/UI removed. Raster copy only, no editing or recoloring.",
+  "additionalAssets": [
+    {
+      "name": "rice-tub",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-tub-v2.png",
+      "width": 1536,
+      "height": 1024,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        254
+      ],
+      "prompt": "原本03の左下にある木のおひつを、ゲーム用の独立したイラスト素材として抽出してください。おひつ、ご飯、木のしゃもじだけを切り抜きます。画面の左端で隠れている木の輪郭だけを補完し、それ以外の色・形・木目・お米の粒は原本の絵のままです。背景は完全透明のPNG。茶色の光、ぼかし、発光、影、接地影、グラデーションの背景は絶対に入れないでください。木のおひつの物理的な輪郭のすぐ外側は alpha=0 の透明にしてください。切り抜きシールのように明瞭な外周。おひつの内部としゃもじとご飯は不透明。黒い背景や白い背景、人物、台、UI、文字、吹き出し、枠はありません。1個だけを中央に、約3:2の横長の素材。",
+      "previousPrompts": [
+        "Use case: background-extraction. Edit target: approved screenshot 03_onigiri.png. Extract only the wooden rice tub at the lower left, including the fluffy white cooked rice and its wooden rice paddle. Keep the EXACT screenshot's warm honey-colored wood grain, pale bands, open oval top, slight frontal top-down view, rice grain texture, paddle angle, soft flat storybook illustration style and proportions. Complete the left/bottom edges that are cut by the source frame, so the full tub is intact. Output one independent object centered, suitable for a 420×280 slot with at least 1000px long edge. Remove the character, hands, table, text, UI, and other food. True transparent alpha background, no shadow or checkerboard, no labels, no changes to the tub design.",
+        "Use case: background-extraction. Edit this image only by removing ALL the brown/golden glow and soft halo surrounding the rice tub. Keep the rice tub, rice and paddle themselves unchanged. Deliver a professional crisp transparent PNG cutout: opaque object interiors, clean anti-aliased outline, fully transparent pixels immediately outside the physical wood/paddle/rice outline. There must be NO ambient glow, NO cast shadow, NO colored haze, NO background plane or gradient anywhere. Same object composition and dimensions."
+      ],
+      "inspection": "Physical wooden tub and paddle match original03. Apparent surrounding glow in tool preview checked via pixel alpha: all sampled outside pixels are alpha0. Interior pixels252–254. No postprocessing."
+    },
+    {
+      "name": "rice-triangle",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-triangle-v2.png",
+      "prompt": "Use case: illustration-story. Reference image: approved screen03, especially its softly textured cooked rice and onigiri in the bottom row. Make ONE round ball of plain cooked white rice, BEFORE shaping into a triangle, as a game sprite. Use the exact rice colors and small irregular grain marks in that reference; soft warm white with tiny cream shadows, fluffy rounded outline, gently flattened bottom, rounded almost spherical form. No nori, no filling, no garnish, no facial features, no plate, no hands, no chef. Center the single rice ball on a square transparent canvas at 1024×1024, fill about 80% of the canvas with modest empty transparent margins. Physically opaque rice with clean edge and fully transparent surrounding background. Do NOT draw ground, cast shadow, glow, gradients, lettering, tile, border, or background.",
+      "inspection": "Prompt requested round ball, output was rounded triangle. Accepted specifically for triangle state, with cream rice grains, no face or nori, transparent background. Separate round state will be generated.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ],
+      "status": "superseded by rice-triangle-v3; retained for provenance"
+    },
+    {
+      "name": "rice-round",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-round-v2.png",
+      "prompt": "Use case: precise-object-edit. Edit target: attached plain cooked-rice triangle. Change ONLY the outer shape from a triangle to a ROUND BALL with a circular silhouette like a soft snowball. Top must be a broad curve, not a triangular peak; left and right should be convex round, with width roughly equal to height. Keep exactly the same warm-white rice grains and cream grain shadows, scale and illustration style. This is the BEFORE-shaping cooking stage; clearly round so children see it turn into a triangle later. Single centered rice ball, 1024×1024 square canvas, no face, no nori, no filling, no hand, no plate. True transparent alpha background, clean cutout, no cast shadow or glow.",
+      "inspection": "Soft rounded rice mound with curved lower edge, unlike flatter-bottom triangle state; matches rice texture. No nori, face, plate or background.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "rice-nori",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-nori-v2.png",
+      "prompt": "Use case: background-extraction. Edit target: approved screenshot03. Extract ONLY the plain NORI onigiri shown in the FIRST bottom-row card at far left. Keep its exact softly rounded triangular white rice shape, cream rice-grain flecks, and the single rectangular dark green-black nori strip wrapping the LOWER FRONT. No face (no eyes, mouth or blush). Preserve the reference's soft flat illustrated style and proportions. Single onigiri centered on a square 1024px transparent canvas, fill about 80%, fully visible. Remove all card background, border, blue tint, highlight marks, label, table and other objects. True transparent alpha, no background plane, no shadow, no text. This is a usable food sprite, not a screenshot or a sheet.",
+      "inspection": "Approved bottom-row nori preserved: plain rice, dark rectangle lower front, no face.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "rice-ume",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-ume-v2.png",
+      "prompt": "Use case: background-extraction. Edit target: approved screenshot03, SECOND card in the bottom row labeled うめ. Extract ONLY its ume mixed-rice onigiri: softly rounded triangle of pale pink-white cooked rice with small raspberry-pink chopped ume flecks evenly scattered through the rice. Preserve its exact cute soft storybook texture, grain marks, gentle shape and pink tint. NO nori, NO face, no eyes/mouth/blush, no single red plum on top; this is mixed rice matching the reference. Single object centered on square transparent canvas at least1024px, approx80% canvas. Remove card, label, background, plate, other food, all UI. True transparent alpha surrounding the clean cutout, no shadow, no glow.",
+      "inspection": "Pale pink mixed-rice triangle with distributed small ume flecks. No nori or face, no plate.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "rice-wakame",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-wakame-v2.png",
+      "prompt": "Use case: background-extraction. Edit target: approved screenshot03, THIRD card in the bottom row labeled わかめ. Extract ONLY its wakame mixed-rice onigiri: softly rounded triangle of warm white cooked rice with small irregular dark-green and fresh-green wakame flecks scattered throughout. Keep its exact gently textured rice grains, soft flat storybook painting style, shape and proportions. NO rectangular nori wrapping; only small green bits mixed INTO rice. No face, no eyes, no mouth, no plate. Single centered onigiri, square transparent canvas at least1024px, about80% frame. Remove card, border, label, all UI and background. Genuine transparent alpha with clean outline, no shadow or glow.",
+      "inspection": "White rice with scattered green wakame pieces. No nori strip or face, clean silhouette.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "rice-salmon",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-salmon-v2.png",
+      "prompt": "Use case: background-extraction. Edit target: approved screenshot03, FOURTH card in bottom row labeled さけ. Extract ONLY its salmon mixed-rice onigiri. Soft rounded triangle of warm white rice with scattered small orange and peach cooked-salmon flakes distributed throughout, including near edges. Match source's grain texture, orange fleck sizes, soft flat storybook style and proportions. No nori wrap, no face, no eyes or mouth, no plate. One object centered, square transparent canvas at least1024px, about80% frame. Remove label, card border, tint, table, other food and all interface. True transparent alpha background with clean outline, no cast shadow or glow.",
+      "inspection": "Orange and peach salmon flakes distributed through warm-white rice. Original03 rounded triangle shape, no nori or face.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "rice-yukari",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-yukari-v2.png",
+      "prompt": "Use case: background-extraction. Edit target: approved screenshot03, FIFTH card in bottom row labeled ゆかり. Extract ONLY its yukari mixed-rice onigiri. A softly rounded triangular mound of white rice tinted just faintly pink-lilac with many small irregular deep purple, burgundy, and muted mauve shiso flecks distributed across the rice. Match original card's specific illustration texture, small rice grains, proportions and gentle shape. No nori strip, no face, no eyes/mouth, no plate. Single centered sprite, square transparent canvas at least1024px, roughly80% frame. Remove card, border, all text, other food and background. True transparent alpha cutout, no cast shadow or glow.",
+      "inspection": "Purple/burgundy shiso flecks in faint pink-lilac rice; rounded triangular silhouette. No nori or face.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "rice-sesame",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-sesame-v2.png",
+      "prompt": "Use case: background-extraction. Edit target: approved screenshot03, SIXTH far-right bottom-row card, sesame rice. Extract ONLY its sesame mixed-rice onigiri and complete any part occluded by the pink next button. A soft rounded triangle of warm-white cooked rice, scattered small oval BLACK, toasted TAN/BROWN and pale WHITE sesame seeds distributed across it. Keep the original screenshot's soft rice grain texture, subtle cream shadows, cute storybook illustration, scale and triangular proportions. No nori strip, no face, no eyes/mouth, no plate. Center one onigiri on square transparent canvas at least1024px, roughly80% frame. Remove card, label, all UI, button, background and other objects. True transparent alpha clean cutout, no cast shadow or glow.",
+      "inspection": "Black, white and toasted tan oval sesame seeds distributed through warm-white rice. No nori or face. Entire triangle visible.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "rice-triangle-v3",
+      "path": "akira-kitchen/public/akira-kitchen/illustration-rice-triangle-v3.png",
+      "source": "akira-kitchen/public/akira-kitchen/illustration-rice-nori-v2.png",
+      "prompt": "Use case: precise-object-edit. Edit target: this exact nori onigiri cutout. Change ONLY the dark seaweed rectangle: remove the seaweed and fill that rectangular area seamlessly with the same white cooked rice and small cream-colored rice grain texture that surrounds it.\nPRESERVE the outer silhouette EXACTLY: this must remain an unmistakable triangle with ONE apex at the top center, TWO sloping sides descending diagonally to rounded bottom corners, and a FLAT horizontal bottom. Keep the existing contour, triangular width-to-height proportions and rice texture. Do NOT round it into a sphere, oval, dome, or snowball. Do NOT change the crop, canvas, or angle.\nOne plain triangular rice ball without seaweed, without facial features, without garnish, plate, hands or text. True transparent alpha background, same clean cutout. This image is the shaped-triangle stage of a preschool cooking game, shown between a ROUND ball and a finished NORI rice ball, so the clearly triangular outline is essential.",
+      "generator": "built-in image_gen",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ],
+      "status": "selected final triangle state",
+      "inspection": "Preserves nori asset silhouette with one top apex, two sloped sides, rounded lower corners and flat bottom. Seaweed replaced with rice, no face, no added objects. More clearly triangular than v2 and distinct from round state.",
+      "createdAt": "2026-11-01T05:18:16.436Z"
+    }
+  ],
+  "additionalCreatedAt": "2026-11-01T05:14:57.287Z",
+  "generationNotes": "One built-in ImageGen call per individual requested asset. All PNGs copied without raster editing. Tub preview initially appeared haloed; sampled outside pixels have alpha0 so the visible RGB is not rendered in the app. Two intermediate tub retries retained only in generated_images; final third copy selected."
+}

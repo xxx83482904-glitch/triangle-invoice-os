@@ -24,6 +24,18 @@ export function illustratedFood(food: string): string | null {
   return `<svg width="200" height="200" viewBox="${x} ${y} ${width} ${height}" overflow="hidden"><image href="${ROOT}${sheet}.png" width="1536" height="1024"/></svg>`;
 }
 
+export function illustratedVariant(food: string, variant: string): string | null {
+  if (food === "onigiri" && ["nori", "ume", "wakame", "salmon", "yukari", "sesame"].includes(variant))
+    return `<image href="${ROOT}rice-${variant}-v2.png" width="200" height="200"/>`;
+  if (food === "carrot" && ["star", "heart"].includes(variant))
+    return `<image href="${ROOT}carrot-${variant}-v2.png" width="200" height="200"/>`;
+  return null;
+}
+
+export function riceSmile(): string {
+  return `<svg x="50" y="85" width="100" height="38" viewBox="100 210 1570 540"><image href="${ROOT}rice-smile-v2.png" width="1774" height="887"/></svg>`;
+}
+
 export function illustratedBase(mode: string, flavor: string): string {
   if (mode === "bento")
     return `<svg x="20" y="15" width="760" height="470" viewBox="78 186 1381 649" preserveAspectRatio="none"><image href="${ROOT}bento-box.png" width="1536" height="1024"/></svg>`;
@@ -62,7 +74,7 @@ export async function embedIllustrations(
   const tags = [
     ...new Set(
       svg.match(
-        /<image href="\/akira-kitchen\/illustration-[a-z-]+\.png"[^>]*\/>/g,
+        /<image href="\/akira-kitchen\/illustration-[a-z0-9-]+\.png"[^>]*\/>/g,
       ) ?? [],
     ),
   ];

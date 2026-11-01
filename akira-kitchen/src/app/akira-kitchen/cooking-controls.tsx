@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState, type PointerEvent, type CSSProperties } from "react";
+import { Hand, Paintbrush, Undo2, ChevronRight, Check } from "lucide-react";
 import { FoodArt, DishBase } from "./cooking-art";
 import {
   addPiece,
@@ -18,27 +19,26 @@ import s from "./kitchen.module.css";
 export function Chef({
   celebrate = false,
   small = false,
+  pose = "wave",
+  reaction = "やったね！",
 }: {
   celebrate?: boolean;
   small?: boolean;
+  pose?: "wave" | "squeeze" | "taste";
+  reaction?: string;
 }) {
+  const asset = small ? "chef-home-v2" : pose === "squeeze" ? "chef-squeeze-v2" : pose === "taste" ? "chef-taste-v2" : celebrate ? "chef-celebrate-v2" : "chef";
   return (
     <div
       className={`${s.chef} ${small ? s.smallChef : ""} ${celebrate ? s.happy : ""}`}
     >
-      <svg
-        viewBox="0 0 1183 1330"
-        role="img"
-        aria-label="あきらくん"
+      <img
+        src={`/akira-kitchen/illustration-${asset}.png`}
+        alt="あきらくん"
+        draggable={false}
         className={s.chefPicture}
-      >
-        <image
-          href="/akira-kitchen/illustration-chef.png"
-          width="1183"
-          height="1330"
-        />
-      </svg>
-      {celebrate && <span className={s.chefReaction}>おいしい！</span>}
+      />
+      {celebrate && <span className={s.chefReaction}>{reaction}</span>}
     </div>
   );
 }
@@ -49,17 +49,35 @@ export function HandHint({
 }) {
   return (
     <div className={`${s.handHint} ${s[motion]}`} aria-hidden="true">
-      <svg viewBox="0 0 100 110">
-        <path
-          d="M37 60V18C37 7 53 7 53 18V48C58 38 69 40 69 51C79 43 90 51 85 63L75 91Q65 110 43 96L19 70C9 58 19 48 29 56L37 64"
-          fill="#fff9e8"
-          stroke="#0d2867"
-          strokeWidth="5"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <Hand fill="#fff9e8" stroke="#0d2867" strokeWidth={2.5} />
     </div>
   );
+}
+
+export function IngredientArt({ ingredient }: { ingredient: "egg" | "flour" | "milk" }) {
+  return <img className={s.ingredientArt} src={`/akira-kitchen/illustration-ingredient-${ingredient}-v2.png`} alt="" draggable={false} />;
+}
+
+export function RiceProgress({ value }: { value: number }) {
+  return <ol className={s.riceProgress} aria-label="おにぎりの つくりかた">
+    {[["round", "にぎる"], ["triangle", "さんかく"], ["nori", "できあがり"]].map(([asset, title], i) => <li key={asset} aria-current={Math.min(2, Math.floor(value)) === i ? "step" : undefined}>
+      <b>{value > i ? <Check /> : i + 1}</b>
+      <img src={`/akira-kitchen/illustration-rice-${asset}-${asset === "triangle" ? "v3" : "v2"}.png`} alt="" draggable={false} />
+      <span>{title}</span>{i < 2 && <ChevronRight className={s.riceStepArrow} />}
+    </li>)}
+  </ol>;
+}
+
+export function processCue(process: Process, value: number) {
+  const cues: Record<Process, string[]> = {
+    rice: ["とってみよう", "ぎゅっ ぎゅっ！", "さんかくに！"],
+    egg: ["ぱかっ！", "ぐるぐる！", "とろ〜り！", "くるっと！", "もういちど！"],
+    chicken: ["まぜまぜ！", "ころころ！", "ぽん！", "こんがり！"],
+    broccoli: ["ぽん！", "すくおう！"], carrot: ["えらぼう！", "ぽん！"],
+    tomato: ["えらぼう！", "ぽん！"], batter: ["ぱかっ！", "さらさら！", "とろ〜り！", "ぐるぐる！", "なめらか！"],
+    bake: ["とろ〜り！", "いれよう！", "ふっくら！"], cream: ["ぬりぬり！"],
+  };
+  return cues[process][Math.min(cues[process].length - 1, Math.floor(value))];
 }
 export function ProgressDots({ value, max }: { value: number; max: number }) {
   return (
@@ -91,6 +109,8 @@ function ProcessArt({
   const phase = Math.min(Math.floor(value), STAGES[process].length - 1),
     complete = value >= STAGES[process].length,
     f = complete ? 1 : value % 1;
+  const batterColor = recipe.cake === "chocolate" ? "#97613e" : recipe.cake === "strawberry" ? "#efb6bd" : "#f8db95";
+  const bakedColor = recipe.cake === "chocolate" ? "#805237" : recipe.cake === "strawberry" ? "#de9a9a" : "#e8b553";
   const bowl = (fill: string) => (
     <>
       <ellipse cx="260" cy="266" rx="207" ry="70" fill="#b8e7f5" />
@@ -135,21 +155,7 @@ function ProcessArt({
           <>
             <ellipse cx="260" cy="340" rx="208" ry="38" fill="#d0effa" />
             {phase === 0 ? (
-              <>
-                <path d="M75 202H445L418 320Q260 376 102 320Z" fill="#d5a36b" />
-                <ellipse cx="260" cy="200" rx="185" ry="68" fill="#fff9ee" />
-                {Array.from({ length: 22 }, (_, i) => (
-                  <ellipse
-                    key={i}
-                    cx={125 + ((i * 43) % 270)}
-                    cy={177 + ((i * 19) % 53)}
-                    rx="12"
-                    ry="5"
-                    fill="white"
-                    transform={`rotate(${i * 20} ${125 + ((i * 43) % 270)} ${177 + ((i * 19) % 53)})`}
-                  />
-                ))}
-              </>
+              <image href="/akira-kitchen/illustration-rice-tub-v2.png" width="520" height="350" />
             ) : (
               <g
                 style={{
@@ -157,23 +163,7 @@ function ProcessArt({
                   transform: `scale(${1 - f * 0.11},${1 + f * 0.07})`,
                 }}
               >
-                <path
-                  d={
-                    phase === 1
-                      ? "M260 83C430 80 445 320 263 326C60 320 80 80 260 83"
-                      : "M260 48C235 43 94 264 120 305C140 350 399 350 414 305C436 258 290 45 260 48"
-                  }
-                  fill="white"
-                  stroke="#e8e7df"
-                  strokeWidth="8"
-                />
-                <path
-                  d="M226 257Q236 247 246 257M280 257Q290 247 300 257"
-                  fill="none"
-                  stroke="#0d2867"
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                />
+                <image href={`/akira-kitchen/illustration-rice-${phase === 1 ? "round-v2" : "triangle-v3"}.png`} x="95" y="30" width="330" height="315" />
               </g>
             )}
           </>
@@ -366,7 +356,7 @@ function ProcessArt({
               ? "#fff9ed"
               : value < 3
                 ? "#ffe3a3"
-                : colorHex(
+                : recipe.cake !== "vanilla" ? batterColor : colorHex(
                     248,
                     218 + Math.min(25, (value - 3) * 12),
                     155 + Math.min(30, (value - 3) * 15),
@@ -380,15 +370,7 @@ function ProcessArt({
                 strokeWidth="45"
                 strokeLinecap="round"
               />
-              <text
-                x="260"
-                y="65"
-                textAnchor="middle"
-                fontSize="55"
-                fill="#0d2867"
-              >
-                {["🥚", "🥣", "🥛"][phase]}
-              </text>
+              <image href={`/akira-kitchen/illustration-ingredient-${["egg", "flour", "milk"][phase]}-v2.png`} x="192" y="0" width="136" height="125" />
             </>
           ) : (
             swirl
@@ -407,10 +389,10 @@ function ProcessArt({
                 rx="35"
                 fill="#97c9e0"
               />
-              <ellipse cx="260" cy="180" rx="165" ry="50" fill="#f8db95" />
+              <ellipse cx="260" cy="180" rx="165" ry="50" fill={batterColor} />
               <path
                 d={`M260 30V${100 + f * 110}`}
-                stroke="#f5d58c"
+                stroke={batterColor}
                 strokeWidth="40"
                 strokeLinecap="round"
               />
@@ -455,8 +437,8 @@ function ProcessArt({
               />
               <path
                 d={`M130 270V${phase === 1 ? 245 : 240 - f * 65}Q260 ${phase === 1 ? 215 : 195 - f * 80} 390 ${phase === 1 ? 245 : 240 - f * 65}V270Z`}
-                fill={complete ? "#e8b553" : "#f6cc76"}
-                stroke="#dba34b"
+                fill={complete ? bakedColor : batterColor}
+                stroke={bakedColor}
                 strokeWidth="7"
               />
             </>
@@ -577,7 +559,7 @@ export function CookingGesture({
           motion={
             process === "rice"
               ? "squeeze"
-              : process === "bake"
+              : (process === "bake" && value < 2) || (process === "egg" && value >= 2) || (process === "chicken" && value >= 2) || process === "broccoli" || process === "tomato"
                 ? "drag"
                 : "circle"
           }
@@ -834,7 +816,7 @@ export function Arrangement({
               onClick={() => onPaintChange(!paint)}
               className={s.smallButton}
             >
-              🖌 クリーム
+              <Paintbrush /> ぬる
             </button>
           )}
           {selected && (
@@ -850,7 +832,7 @@ export function Arrangement({
               }}
               className={s.smallButton}
             >
-              ↩ はずす
+              <Undo2 /> はずす
             </button>
           )}
         </div>
@@ -861,6 +843,7 @@ export function Arrangement({
             key={food}
             type="button"
             className={s.foodTile}
+            data-food-drag={food}
             aria-label={`${label(food)}を のせる`}
             {...props(food)}
           >

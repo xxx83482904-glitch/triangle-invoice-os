@@ -1,0 +1,126 @@
+{
+  "base": "http://127.0.0.1:3061/akira-kitchen/index.html",
+  "browser": "156.0.8078.79",
+  "viewport": {
+    "width": 1024,
+    "height": 768
+  },
+  "physicalIPadSafari": false,
+  "checks": [
+    {
+      "name": "touch gesture completes rice",
+      "before": 1,
+      "after": 3
+    },
+    {
+      "name": "touch gesture completes egg",
+      "before": 1,
+      "after": 5
+    },
+    {
+      "name": "touch gesture completes chicken",
+      "before": 0,
+      "after": 4
+    },
+    {
+      "name": "touch gesture completes broccoli",
+      "before": 0,
+      "after": 2
+    },
+    {
+      "name": "touch gesture completes carrot",
+      "before": 0,
+      "after": 2
+    },
+    {
+      "name": "touch gesture completes tomato",
+      "before": 0,
+      "after": 2
+    },
+    {
+      "name": "duplicate placement snaps apart"
+    },
+    {
+      "name": "bento image and recipe persist after reload"
+    },
+    {
+      "name": "undo is immediately touchable without closing the notice"
+    },
+    {
+      "name": "touch gesture completes batter",
+      "before": 0,
+      "after": 5
+    },
+    {
+      "name": "touch gesture completes bake",
+      "before": 0,
+      "after": 3
+    },
+    {
+      "name": "cake paint and touch placement persist independently"
+    },
+    {
+      "name": "both works survive reload with actual artwork"
+    },
+    {
+      "name": "sound, music and volume persist after reload"
+    },
+    {
+      "name": "offline reload includes local font and new illustrations"
+    },
+    {
+      "name": "all 17 screens captured at 1024x768; no page errors"
+    }
+  ],
+  "screenshots": [
+    "01.png",
+    "02.png",
+    "03.png",
+    "03-finished.png",
+    "04.png",
+    "05.png",
+    "06.png",
+    "07.png",
+    "08.png",
+    "09.png",
+    "10.png",
+    "16-bento.png",
+    "16-restore-visible.png",
+    "11.png",
+    "12.png",
+    "13.png",
+    "13-baked.png",
+    "14.png",
+    "15.png",
+    "16.png",
+    "17.png",
+    "03-offline.png"
+  ],
+  "metrics": [
+    {
+      "text": " アルバム",
+      "font": "\"Akira Rounded\", \"Hiragino Maru Gothic ProN\", \"Hiragino Kaku Gothic ProN\", \"Yu Gothic\", Meiryo, system-ui, sans-serif",
+      "px": 37.48066464631454,
+      "height": 74.9613037109375
+    },
+    {
+      "text": " もどす",
+      "font": "\"Akira Rounded\", \"Hiragino Maru Gothic ProN\", \"Hiragino Kaku Gothic ProN\", \"Yu Gothic\", Meiryo, system-ui, sans-serif",
+      "px": 24.751380920410156,
+      "height": 58.342559814453125
+    },
+    {
+      "text": " ぬる",
+      "font": "\"Akira Rounded\", \"Hiragino Maru Gothic ProN\", \"Hiragino Kaku Gothic ProN\", \"Yu Gothic\", Meiryo, system-ui, sans-serif",
+      "px": 24.751384061925553,
+      "height": 58.34254455566406
+    },
+    {
+      "text": " ホームへ",
+      "font": "\"Akira Rounded\", \"Hiragino Maru Gothic ProN\", \"Hiragino Kaku Gothic ProN\", \"Yu Gothic\", Meiryo, system-ui, sans-serif",
+      "px": 30.408841653303668,
+      "height": 63.64642333984375
+    }
+  ],
+  "runtimeErrors": []
+}

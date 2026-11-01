@@ -1,0 +1,81 @@
+{
+  "date": "2026-11-01",
+  "tool": "built-in image_gen",
+  "intent": "Extract independent assets from approved originals; preserve source visual identity",
+  "outputDirectory": "akira-kitchen/public/akira-kitchen/",
+  "referenceDirectory": "outputs/akira-ui-audit-2026-11-01/references/",
+  "assets": [
+    {
+      "name": "illustration-home-bento-v2.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "source": "01_home.png",
+      "prompt": "Use case: background-extraction. Asset type: isolated bento illustration from an APPROVED Japanese preschool cooking app. Image 1 is the edit target, the approved whole screen. Extract ONLY the abundant red bento box and ALL its food from the large left card; carefully preserve the exact original drawing, composition, texture, highlights, vibrant colors, food count and camera angle. Keep the front happy white triangular rice ball with black nori, eyes, pink cheeks and smiling mouth, back-left fried chicken, back-right rolled yellow omelette, green lettuce border, broccoli, red tomato, orange flower carrot. Show complete red box with a minimally completed lower rim where the green button had occluded it. No redesign. No new foods. No text, button, card, green background, cloud, sparkles, character, logo or shadow outside the object. True transparent alpha background. Landscape framing around 3:2 with small transparent margins, full object centered, not cropped. This asset will fit a 640x350 UI illustration slot.",
+      "generatedPath": "C:/Users/kure/.codex/generated_images/01a1957c-ed27-71b2-8264-f8a6d7047f9a/exec-265e9947-7fe6-47a2-9892-9fa242b19482.png",
+      "review": "Abundant original food arrangement and face maintained. Transparent alpha sampling verified; some RGB outside alpha can look like a glow in tools that ignore transparency."
+    },
+    {
+      "name": "illustration-home-cake-v2.png",
+      "size": [
+        1695,
+        928
+      ],
+      "mode": "RGBA",
+      "source": "01_home.png",
+      "prompt": "Use case: background-extraction. Asset type: isolated cake illustration from an APPROVED Japanese preschool cooking app. Image 1 is the edit target. Extract ONLY the strawberry sponge cake and complete blue plate from the large right card of the approved screen. Preserve the exact existing drawing's camera angle, yellow two-layer sponge, white cream filling, strawberry slices visible around the side, whipped cream dollops on top, three whole red strawberries, two blueberries, small sprinkles, tiny green leaves, volume, highlights, painterly texture and vivid colors. The bottom blue plate is minimally completed where the pink button occluded it. Do NOT redesign or simplify the cake. Keep all cake and plate inside the image with small transparent margins. No card, text, button, pink background, clouds, decorative sparkles, character or other objects. True transparent alpha background with no visible backdrop, no drop shadow. Landscape framing around 3:2, intended 640x350 UI illustration slot.",
+      "generatedPath": "C:/Users/kure/.codex/generated_images/01a1957c-ed27-71b2-8264-f8a6d7047f9a/exec-17e64602-9152-4dca-99c8-df7da020c7b5.png",
+      "review": "Original three strawberry/two blueberry topping composition and blue plate preserved; full plate edge completed."
+    },
+    {
+      "name": "illustration-chef-home-v2.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "source": "01_home.png",
+      "prompt": "Use case: background-extraction / identity-preserve. Asset type: transparent character cutout for an approved Japanese preschool cooking app HOME SCREEN. Image 1 is the edit target. Extract ONLY the small waving chef boy at the UPPER LEFT of the provided approved screen, with his original existing face and pose exactly preserved. It is imperative to preserve THIS specific cartoon boy: black slightly tousled fringe, closed crescent smiling eyes, eyebrows, rosy cheeks, open smile with the same teeth/tongue, face shape and proportions, white chef hat, white short sleeve shirt, yellow apron with a brown BEAR face emblem (not a leaf). Keep the same tilted head and raised waving hand. Show the same upper-body bust ending just below the bear emblem; complete minimal hidden edge behind cloud, keep hat and fingertips entirely inside canvas. Do not replace his face with the other app chef, do not make eyes open or round, do not change clothing, pose, drawing style or age. Remove ALL background/clouds/text/buttons/food/yellow excitement marks. Pure transparent alpha background, no cast shadow. Single character only, around square canvas, tightly framed with a small clean transparent margin. Preserve approved drawing faithfully rather than redesigning.",
+      "generatedPath": "C:/Users/kure/.codex/generated_images/01a1957c-ed27-71b2-8264-f8a6d7047f9a/exec-bfa42f57-c2b6-4aef-a8ef-d43928401ff2.png",
+      "review": "Approved01 character closed eyes/tilt/waving pose/bear apron preserved. Face not unified to02 chef."
+    },
+    {
+      "name": "illustration-home-backdrop-v2.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "source": "01_home.png",
+      "prompt": "Use case: precise-object-edit / background-extraction. Asset type: full background layer for the approved Japanese preschool cooking app home screen. Image 1 is the edit target. Remove all foreground content and preserve/reconstruct ONLY the background: bright softly painted sky blue at top, soft white clouds at left/right, white cloud bank across middle, soft pale green bushes at lower sides, and warm cream/yellow curved ground/path in the lower area. Match the original colors, watercolor texture and positions of the visible original background. Remove ALL characters, lettering, logo cloud shape, icons, cards, food, button shapes, yellow emphasis marks, album, and any UI. Fill where removed with a natural continuation of the original simple background. The result should be a very simple clean scene behind interactive overlays, unobtrusive bright blue upper approximately 30%, white/cream main center and lower ground. No added flowers, objects, scenery, gradients, effects or text. Exact landscape4:3 composition corresponding to1448×1086px design. Opaque complete background, no transparency.",
+      "generatedPath": "C:/Users/kure/.codex/generated_images/01a1957c-ed27-71b2-8264-f8a6d7047f9a/exec-21c30834-9527-4f80-8517-081117a19045.png",
+      "review": "Opaque4:3 background, all UI and foreground objects removed."
+    },
+    {
+      "name": "illustration-title-cloud-v2.png",
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "source": "03_onigiri.png",
+      "prompt": "Use case: background-extraction / precise-object-edit. Asset type: blank white cloud-shaped title panel on transparent background for approved preschool app. Image1 is the edit target. Extract the WHITE CLOUD SILHOUETTE behind the title at the upper right only. Remove every letter of the Japanese title and fill with clean opaque white inside the silhouette. Preserve the organic scalloped edges and puffy simple shape of the source title panel, softly round natural lobes. No lettering, no symbols, no outlines, no gradients, no shadow, no visible texture, no sky, no kitchen, no character, no food, no icons. Single white opaque cloud with true transparent alpha surrounding it. Make its overall shape a horizontally wide three-to-one title panel, gently proportioned from this exact silhouette, to sit behind two lines of editable large UI text. Small transparent margin on all sides, silhouette nearly fills canvas. Flat white fill. Do not output a full UI screen.",
+      "generatedPath": "C:/Users/kure/.codex/generated_images/01a1957c-ed27-71b2-8264-f8a6d7047f9a/exec-17fe8c1d-c4a0-4bdf-81a4-61d7fbe0e196.png",
+      "review": "Blank white scalloped title silhouette. Actual output2:1, closer to original03 panel than requested3:1; parent to use according to title slot. Transparent alpha verified."
+    },
+    {
+      "name": "illustration-rice-smile-v2.png",
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "source": "akira-kitchen/public/akira-kitchen/illustration-bento-foods.png",
+      "prompt": "Use case: precise-object-edit / background-extraction. Asset type: transparent smiling face overlay for a rice ball in an approved preschool cooking app. Image 1 is the edit target. Extract ONLY the face from the rice ball at the upper left of image1: two small black oval eyes each with a small white circular highlight, one thick curved black U-shaped smiling mouth with round ends, and two pale pink round cheeks. Preserve these EXACT feature shapes, relative positions and relative scale from the source rice ball. A single set of facial features. Remove EVERYTHING ELSE including all rice, rice grains, nori, rice ball silhouette, foods, shadows, background. The spaces between and around the five features must be truly transparent alpha, not white. Do not add eyebrows, nose, eyelashes, teeth, tongue or extra marks. Center the features in a wide landscape canvas, approximately2:1, with very little transparent padding so the face itself fills the frame. This will be composited over a textured rice illustration in SVG; no opaque rice/background is permitted. Keep the original black and delicate pink colors and gentle texture. No text.",
+      "generatedPath": "C:/Users/kure/.codex/generated_images/01a1957c-ed27-71b2-8264-f8a6d7047f9a/exec-ebdd4339-a8d1-4e18-9c63-b207552c3185.png",
+      "review": "Only original two black eyes with highlights, curved mouth and pink cheeks. Transparent space between features verified. Opaque content bounds x120 y226 width1535 height503; optional SVG viewBox around x100 y210 width1570 height540 avoids excess empty margin without raster editing."
+    }
+  ]
+}

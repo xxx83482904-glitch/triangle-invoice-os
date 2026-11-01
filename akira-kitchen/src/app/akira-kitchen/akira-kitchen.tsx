@@ -18,12 +18,16 @@ import {
   RotateCcw,
   X,
   Trash2,
+  Plus,
 } from "lucide-react";
 import {
   Arrangement,
   Chef,
   CookingGesture,
   ProgressDots,
+  processCue,
+  IngredientArt,
+  RiceProgress,
 } from "./cooking-controls";
 import { DishArt, FoodArt, sampleRecipe } from "./cooking-art";
 import {
@@ -206,6 +210,11 @@ export function AkiraKitchen() {
     current = useRef({ recipe, screen, settings }),
     [scale, setScale] = useState(1),
     [canUndo, setCanUndo] = useState(false);
+  // Some touch browsers suppress the compatibility click following a captured
+  // cooking gesture. Commit ordinary button taps on pointer-up, and ignore only
+  // the duplicate compatibility click. Cooking/drag buttons own their pointers.
+  const touchButton = useRef<{ element: HTMLButtonElement; pointer: number; x: number; y: number } | null>(null);
+  const ignoreTouchClickUntil = useRef(0);
   useEffect(() => {
     current.current = { recipe, screen, settings };
   }, [recipe, screen, settings]);
@@ -436,7 +445,7 @@ export function AkiraKitchen() {
             className={`${s.homeCard} ${s.homeBento}`}
             onClick={() => start("bento")}
           >
-            <DishArt recipe={sampleRecipe("bento", START_RECIPE)} />
+            <img src="/akira-kitchen/illustration-home-bento-v2.png" alt="" draggable={false} />
             <span>
               おべんとう <ArrowRight />
             </span>
@@ -445,7 +454,7 @@ export function AkiraKitchen() {
             className={`${s.homeCard} ${s.homeCake}`}
             onClick={() => start("cake")}
           >
-            <DishArt recipe={sampleRecipe("cake", START_RECIPE)} />
+            <img src="/akira-kitchen/illustration-home-cake-v2.png" alt="" draggable={false} />
             <span>
               ケーキ <ArrowRight />
             </span>
@@ -467,7 +476,7 @@ export function AkiraKitchen() {
     content = (
       <>
         <div className={s.menuDish}>
-          <DishArt recipe={recipe} />
+          <DishArt recipe={recipe} stretch />
           <Action onClick={() => go(7)} color="green">
             つめよう <ArrowRight />
           </Action>
@@ -496,7 +505,7 @@ export function AkiraKitchen() {
     content = (
       <>
         <div
-          className={`${s.taskCard} ${screen === 4 || screen === 12 ? s.yellowCard : screen === 6 ? s.greenCard : s.pinkCard}`}
+          className={`${s.taskCard} ${screen === 3 ? `${s.riceCard} ${recipe.progress.rice < 1 ? s.ricePickup : ""}` : screen === 4 || screen === 12 ? s.yellowCard : screen === 6 ? s.greenCard : s.pinkCard}`}
         >
           <CookingGesture
             key={process}
@@ -507,26 +516,14 @@ export function AkiraKitchen() {
           />
           <div className={s.taskSide}>
             <p>
-              {complete
-                ? "できたね！"
-                : screen === 3
-                  ? "ぎゅっ ぎゅっ！"
-                  : screen === 4
-                    ? "くるくる！"
-                    : screen === 5
-                      ? "ころころ！"
-                      : screen === 6
-                        ? "ぽん！"
-                        : screen === 12
-                          ? "ぐるぐる！"
-                          : "ふっくら！"}
+              {complete ? "できたね！" : processCue(process, recipe.progress[process])}
             </p>
             <ProgressDots
               value={recipe.progress[process]}
               max={STAGES[process].length}
             />
             <Action onClick={next}>
-              {complete ? "つぎへ" : "あとで つづける"} <ArrowRight />
+              {complete ? "つぎへ" : "あとで"} <ArrowRight />
             </Action>
             {complete && screen >= 3 && screen <= 6 && (
               <button className={s.menuReturn} onClick={() => go(2)}>
@@ -535,6 +532,8 @@ export function AkiraKitchen() {
             )}
           </div>
         </div>
+        {screen === 3 && <RiceProgress value={recipe.progress.rice} />}
+        {screen === 3 && recipe.progress.rice >= 1 && <img className={s.riceTub} src="/akira-kitchen/illustration-rice-tub-v2.png" alt="" draggable={false} />}
         {screen === 3 && (
           <div className={s.foodRow}>
             {RICE.map(([value, text]) => (
@@ -544,7 +543,7 @@ export function AkiraKitchen() {
                 aria-pressed={recipe.rice === value}
                 onClick={() => choose("rice", value)}
               >
-                <FoodArt food="onigiri" variant={value} />
+                <FoodArt food="onigiri" variant={value} smiling={false} />
                 <span>{text}</span>
               </button>
             ))}
@@ -626,19 +625,17 @@ export function AkiraKitchen() {
                   play("pour");
                 }}
               >
-                <span className={s.ingredientSymbol}>
-                  {["🥚", "🥣", "🥛"][i]}
-                </span>
+                <IngredientArt ingredient={(["egg", "flour", "milk"] as const)[i]} />
                 <span>{name}</span>
               </button>
             ))}
-            <div className={s.mixingHint}>ゆびで ぐるぐる！</div>
+            <div className={s.mixingHint}><span>ゆびで</span><span>ぐるぐる！</span></div>
           </div>
         )}
         {screen === 13 && (
           <div className={s.bakeFooter}>
             <FoodArt food="star" />
-            <p>{complete ? "ふっくら やけたよ！" : "オーブンを タップ！"}</p>
+            <p>{complete ? "ふっくら やけたよ！" : STAGES.bake[Math.floor(recipe.progress.bake)]}</p>
           </div>
         )}
       </>
@@ -841,7 +838,7 @@ export function AkiraKitchen() {
   else if (screen === 16)
     content = (
       <>
-        <div className={s.albumGrid}>
+        <div className={`${s.albumGrid} ${deleted || notice ? s.albumFeedbackSpace : ""}`}>
           {works.map((work) => (
             <button
               key={work.id}
@@ -857,6 +854,12 @@ export function AkiraKitchen() {
               </time>
             </button>
           ))}
+          {works.length > 0 && (
+            <button className={`${s.albumTile} ${s.makeAgainTile}`} onClick={() => go(1)}>
+              <Plus aria-hidden="true" />
+              <span>また つくる</span>
+            </button>
+          )}
           {works.length === 0 && (
             <div className={s.emptyAlbum}>
               <Album />
@@ -871,11 +874,6 @@ export function AkiraKitchen() {
             </div>
           )}
         </div>
-        {deleted && (
-          <button className={s.undoDelete} onClick={() => void restore()}>
-            <RotateCcw /> けした さくひんを もどす
-          </button>
-        )}
       </>
     );
   else
@@ -939,12 +937,37 @@ export function AkiraKitchen() {
   return (
     <main
       className={s.app}
-      onPointerDownCapture={() => audio.current?.unlock()}
+      onPointerDownCapture={(event) => {
+        audio.current?.unlock();
+        if (event.pointerType !== "touch" || touchButton.current) return;
+        const button = (event.target as Element).closest<HTMLButtonElement>("button");
+        if (!button || button.disabled || button.matches("[data-process], [data-piece], [data-food-drag]")) return;
+        touchButton.current = { element: button, pointer: event.pointerId, x: event.clientX, y: event.clientY };
+      }}
+      onPointerUpCapture={(event) => {
+        const tap = touchButton.current;
+        if (!tap || tap.pointer !== event.pointerId) return;
+        touchButton.current = null;
+        const rect = tap.element.getBoundingClientRect();
+        if (!tap.element.isConnected || tap.element.disabled || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 24 || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+        ignoreTouchClickUntil.current = Date.now() + 700;
+        event.preventDefault();
+        tap.element.click();
+      }}
+      onPointerCancelCapture={(event) => {
+        if (touchButton.current?.pointer === event.pointerId) touchButton.current = null;
+      }}
+      onClickCapture={(event) => {
+        if (event.detail > 0 && Date.now() < ignoreTouchClickUntil.current && (event.nativeEvent as PointerEvent).pointerType !== "mouse") {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onKeyDownCapture={() => audio.current?.unlock()}
     >
       <div className={s.viewport} ref={viewport}>
         <div
-          className={`${s.stage} ${screen === 1 ? s.homeStage : screen >= 16 ? s.simpleStage : ""} ${screen === 7 || screen === 14 ? s.arrangementStage : ""}`}
+          className={`${s.stage} ${screen === 1 ? s.homeStage : screen >= 16 ? s.simpleStage : ""} ${screen === 3 ? s.riceStage : ""} ${screen === 7 || screen === 14 ? s.arrangementStage : ""}`}
           style={{ transform: `scale(${scale})` }}
           data-screen={screen}
           aria-busy={!ready}
@@ -958,6 +981,9 @@ export function AkiraKitchen() {
               </div>
               {screen < 16 && (
                 <Chef
+                  key={screen === 9 ? `taste-${eaten.length}` : screen}
+                  pose={screen === 3 ? "squeeze" : screen === 9 && eaten.length > 0 ? "taste" : "wave"}
+                  reaction={screen === 9 ? "おいしい！" : "やったね！"}
                   celebrate={
                     screen === 8 ||
                     screen === 15 ||
@@ -997,9 +1023,14 @@ export function AkiraKitchen() {
             {settings.sound ? <Volume2 /> : <VolumeX />}
           </button>
           {content}
-          {notice && (
+          {(notice || (screen === 16 && deleted)) && (
             <div className={s.notice} role="status">
-              {notice}
+              <span>{notice || "けした さくひんを もどせるよ"}</span>
+              {screen === 16 && deleted && (
+                <button className={s.noticeUndo} aria-label="けした さくひんを もどす" onClick={() => void restore()}>
+                  <RotateCcw /> もどす
+                </button>
+              )}
               <button
                 aria-label="おしらせを とじる"
                 onClick={() => setNotice("")}

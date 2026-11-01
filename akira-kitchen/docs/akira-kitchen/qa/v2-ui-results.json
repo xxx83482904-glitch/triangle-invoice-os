@@ -1,8 +1,9 @@
 {
   "environment": "JSDOM + fake-indexeddb + synthetic Pointer Events; not iPad Safari",
-  "passed": 24,
+  "passed": 25,
   "checks": [
     "home is composed from DOM controls and supplied character",
+    "a touch button commits on release and ignores its duplicate compatibility click",
     "rice is taken, squeezed through three stages and flavor retained",
     "freehand circular motion advances mixing and updates the spoon",
     "egg cracks, mixes, pours, rolls twice and completes",

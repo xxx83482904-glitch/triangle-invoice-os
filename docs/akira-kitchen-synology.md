@@ -28,9 +28,9 @@ npm run build:akira-kitchen
 
 `node scripts/check-akira-kitchen-assets.mjs` は、公開ファイルのSHA-256、JS/CSSの専用パス、全オフラインアセット、マニフェスト、既存ルートの維持を検証します。`release.json` から公開後のファイルとの一致を確認できます。
 
-17画面・調理・自由配置・IndexedDBアルバム・音設定を実装。アプリの自動テストは44件。実機iPad/Safariのタッチ、ホーム画面追加、機内モードでの再起動は別途確認が必要です。
+17画面・調理・自由配置・IndexedDBアルバム・音設定を実装。2.2ではアプリの自動テスト45件と、Chromiumの1024×768タッチ操作による全17画面・保存・復元・オフライン再起動を確認。実機iPad/Safariのタッチ、ホーム画面追加、機内モードでの再起動は別途確認が必要です。
 
-`node scripts/verify-akira-domain.mjs` は独自ドメインのHTTPS・入口の転送・全43ファイルのSHA-256・Service Workerヘッダー・料理以外のルートの404・既存サービスの正常応答を確認し、`docs/akira-kitchen-domain-verification.json` に結果を保存します。
+`node scripts/verify-akira-domain.mjs` は独自ドメインのHTTPS・入口の転送・release.jsonに記録された全ファイルのSHA-256・Service Workerヘッダー・料理以外のルートの404・既存サービスの正常応答を確認し、`docs/akira-kitchen-domain-verification.json` に結果を保存します。2.2の配布対象は69ファイル、オフラインキャッシュ対象は63ファイルです。
 
 Service Workerは転送のない `/akira-kitchen/index.html` を直接キャッシュします。ディレクトリURLの転送後レスポンスをナビゲーションへ再利用するとブラウザが再読み込みを拒否するためです。実際のHTTP転送を使う回帰テストで検証しています。以前のキャッシュを保持している場合は、開いているアプリをすべて閉じてから開き直すと更新版へ切り替わります。
 

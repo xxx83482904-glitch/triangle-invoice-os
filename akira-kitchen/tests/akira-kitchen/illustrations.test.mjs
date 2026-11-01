@@ -30,9 +30,9 @@ test("saved illustrations are embedded once per atlas with no external image dep
     reads++;
     return localImage(url);
   });
-  assert.equal(reads, 2);
-  assert.equal((svg.match(/data:image\/png;base64,/g) ?? []).length, 2);
-  assert.equal((svg.match(/<use /g) ?? []).length, 31);
+  assert.equal(reads, 4);
+  assert.equal((svg.match(/data:image\/png;base64,/g) ?? []).length, 4);
+  assert.equal((svg.match(/<use /g) ?? []).length, 41);
   assert.equal(svg.includes('href="/akira-kitchen/'), false);
 });
 
