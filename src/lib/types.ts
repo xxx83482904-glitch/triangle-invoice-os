@@ -433,6 +433,12 @@ export type AppData = {
   agentRequests?: AgentRequest[];
   obligationExclusions?: ObligationExclusion[];
   manualObligations?: ManualObligation[];
+  payrollSettings?: PayrollSettings[];
+};
+
+export type PayrollSettings = {
+  id: string; company: "JAPAN" | "CHINA"; mode: "DEFAULT" | "CUSTOM"; categoryIds: string[];
+  createdById: string; updatedById: string; createdAt: string; updatedAt: string;
 };
 
 export type ProjectMoney = {
