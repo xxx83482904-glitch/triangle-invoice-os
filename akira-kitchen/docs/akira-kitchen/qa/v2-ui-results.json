@@ -1,0 +1,31 @@
+{
+  "environment": "JSDOM + fake-indexeddb + synthetic Pointer Events; not iPad Safari",
+  "passed": 24,
+  "checks": [
+    "home is composed from DOM controls and supplied character",
+    "rice is taken, squeezed through three stages and flavor retained",
+    "freehand circular motion advances mixing and updates the spoon",
+    "egg cracks, mixes, pours, rolls twice and completes",
+    "chicken seasoning, rolling, pot and browning complete",
+    "vegetables cook independently with selected carrot shape",
+    "pantry food follows pointer and places at chosen coordinates",
+    "duplicate foods and selected flavors are reflected in the dish",
+    "existing food can be repositioned freely",
+    "cancelled pointer does not add or lose food",
+    "remove and undo restore exact arrangement",
+    "completion renders actual selected arrangement",
+    "tasting consumes display food without changing saved original",
+    "IndexedDB stores image, date, choices and all coordinates",
+    "album reopens actual stored artwork in accessible dialog",
+    "deletion is persisted and undo restores the image and recipe",
+    "cream strokes follow touch and persist as one stroke",
+    "cake toppings add, move, delete and undo independently of cream",
+    "cake and bento coexist in persistent album",
+    "editing a saved work forks its id and keeps the original artwork",
+    "sound-off prevents new audio oscillators",
+    "reload restores settings, draft and IndexedDB album",
+    "all 17 screens render without runtime exceptions",
+    "failed album write gives retry feedback and leaves save enabled"
+  ],
+  "runtimeErrors": []
+}

@@ -1,0 +1,8 @@
+node_modules/
+.next/
+out/
+.sites-runtime/
+next-env.d.ts
+*.tsbuildinfo
+.env*
+*.log

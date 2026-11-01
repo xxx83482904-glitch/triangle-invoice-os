@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "postbuild": "node scripts/copy-standalone-assets.mjs",
     "build:design-fees": "npm --prefix design-fee-calculator run build && node scripts/copy-design-fee-assets.mjs",
+    "build:akira-kitchen": "npm --prefix akira-kitchen run build && node scripts/copy-akira-kitchen-assets.mjs && node scripts/check-akira-kitchen-assets.mjs",
     "start": "node .next/standalone/server.js",
     "lint": "eslint",
     "test:documents": "node --conditions=react-server --import tsx --test tests/documents.test.ts",

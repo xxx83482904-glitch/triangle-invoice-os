@@ -3,15 +3,24 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
-    return ["/design-fee-calculator", "/design-fee-calculator/index.html"].map((source) => ({
+    return [
+      "/design-fee-calculator", "/design-fee-calculator/index.html",
+      "/akira-kitchen", "/akira-kitchen/index.html",
+      "/akira-kitchen/sw.js", "/akira-kitchen/manifest.webmanifest",
+      "/akira-kitchen/release.json",
+    ].map((source) => ({
       source,
       headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
     }));
   },
   async redirects() {
-    return [{ source: "/design-fee-calculator", destination: "/design-fee-calculator/index.html", permanent: false }];
+    return [
+      { source: "/design-fee-calculator", destination: "/design-fee-calculator/index.html", permanent: false },
+      { source: "/akira-kitchen", destination: "/akira-kitchen/index.html", permanent: false },
+    ];
   },
   serverExternalPackages: ["pdfkit", "pdf-parse", "@napi-rs/canvas", "tesseract.js"],
+  outputFileTracingExcludes: { "/*": ["./akira-kitchen/**/*"] },
   outputFileTracingIncludes: {
     "/api/section-export": ["./public/fonts/BIZUDMincho-Regular.ttf"],
     "/api/estimates/*/pdf": ["./public/fonts/BIZUDMincho-Regular.ttf"],

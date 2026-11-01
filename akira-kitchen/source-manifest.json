@@ -1,0 +1,18 @@
+{
+  "source": "src/app/akira-kitchen",
+  "files": {
+    "akira-kitchen.tsx": "a69957916c6e676beb6d34573201be0bf676bfc5fe8e2a95d7702aa215efc15f",
+    "cooking-art.tsx": "488da939dc2a58a52e1413a3f5f5e4769588c9fc6c599831d625a368dcb49b56",
+    "cooking-audio.ts": "462580568f40ef3372897791024af16b0224426547ddc87bc9769cc29d4b9e25",
+    "cooking-controls.tsx": "000d13ed39d783c4622f8ff27b249ded9f60aa2e1944201dfc88c2ec28f99fe9",
+    "cooking-model.ts": "5cafa9310ba1db8237290de566315d31a08879daaaa86554402c06452723c092",
+    "cooking-storage.ts": "b135f3c015336e504dd8cac965ad465de6331bfca91766167b51a70189275862",
+    "food-art.tsx": "3c17c448d40dd3570632aeef1a9767d3aaa6c1e2ec53563e11e680a4be2f9f19",
+    "illustration-assets.ts": "accdbec5e5ae3e9b8bf2b06a9c423d907341378a837e35a01b12c19fa5ccf606",
+    "kitchen.module.css": "22249233b290f3c9f223860c1a9298ce2cb13c87d06cb52d3c70dcc3069f2385",
+    "model.ts": "359e24655a4eb8d9cf84c890799236da2c78b613964228ccb15b7fe89f909fca",
+    "page.tsx": "8de0c69f2174553857bb7b6d6ce6eb22c87074e9aa0d7459c3221a5836fc1477",
+    "prototype-shapes.ts": "bf7081e7b8de139f5f0d6cb65ff3f2d888513552a2ef677ed749023d454a49a0",
+    "storage.ts": "6121f3fae2062710945178c985c323f70bd8a91bb7fa83ac1e832208d2a2e035"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "tool": "built-in image_gen",
+  "date": "2026-11-01",
+  "basis": "Official UI screens 01–03; screenshot 02 controls character identity.",
+  "assets": [
+    {
+      "key": "chef",
+      "prompt": "Use case: background-extraction. Asset type: transparent character sprite for the existing Japanese preschool cooking app. Image 1 is the official approved UI and edit target. Extract ONLY the exact boy chef on the left, holding the wooden spoon and waving. Keep his facial identity, black straight fringe, slightly narrow eyes, natural open smiling mouth with visible upper teeth, proportions, expression, pose, white chef hat, white shirt, yellow apron and green leaf exactly as shown. This is a faithful extraction, NOT a character redesign. Complete the small bottom edge of the apron that meets the countertop into a natural clean waist-up cutout. Preserve both hands and spoon, full hat, soft painterly children's picture-book texture. Remove ALL kitchen background, table, UI, text, cards, food, white speech clouds, yellow emphasis marks. True transparent background. Character alone centered, fills about 90% height, with comfortable clear margin all around, portrait composition. Do not change the face to round cartoon eyes, do not add objects or text."
+    },
+    {
+      "key": "bento-foods",
+      "prompt": "Use case: illustration-story. Asset type: one transparent sprite atlas for a children's cooking game, matching Image 1 official UI exactly. Reproduce the SIX food illustrations from the six bottom selection cards as independent illustrated sprites, without their card backgrounds or labels. Arrange in a strict 3 columns by 2 rows grid of equal square cells on a landscape 3:2 canvas. Each sprite centered in its own cell with at least 12% transparent padding and no sprite crossing cell boundaries. Reading order: top left the smiling triangular white onigiri with black nori rectangle and pink cheeks; top center golden yellow sliced rolled Japanese omelet showing spiral layers; top right cluster of three golden crispy karaage pieces; bottom left green broccoli floret; bottom center round red cherry tomato with green calyx; bottom right orange five-petal flower-shaped carrot slice. Match the official reference's food forms, colors, soft textured flat picture-book illustration and subtle highlights. The six food items are the only visible content. Genuine transparent background; no plate, no cards, no lettering, no labels, no grid lines, no shadows outside the food. Bright appetizing large simple forms suitable for ages 3–6. Do not add a face to anything except the onigiri."
+    },
+    {
+      "key": "bento-box",
+      "prompt": "Use case: background-extraction. Asset type: transparent empty bento box layer for a cooking app. Image 1 is the official approved UI and edit target. Extract ONLY the large bright red EMPTY lunchbox in the middle-right of this image. Keep its exact rounded rectangular shape, viewing angle, 3-compartment divider arrangement, red colors, subtle painterly highlight and interior shading. This is the same bento box, not a redesign. Remove all kitchen background, table, character, labels, cards, and UI. Do not add any food. True transparent background. Landscape composition tightly framing the entire box with 7% transparent padding around it. No external cast shadow. Crisp usable game asset."
+    },
+    {
+      "key": "cake-base",
+      "refs": [
+        "C:/Users/kure/Desktop/triangle-invoice-os-main/docs/akira-kitchen/design-source/original/akira_app_ui/assets/01_home.png",
+        "C:/Users/kure/Desktop/triangle-invoice-os-main/docs/akira-kitchen/design-source/original/akira_app_ui/assets/02_bento_menu.png"
+      ],
+      "prompt": "Use case: illustration-story. Asset type: transparent cake base game layer. Image 1 is approved home UI cake and Image 2 is the approved illustration style. Make ONE undecorated round vanilla sponge cake on a simple blue oval plate in exactly the same warm textured children's picture-book illustration style as the references. Slightly elevated front view, entire circular top ellipse visible. Two golden yellow sponge layers, white cream sandwich between layers, just three strawberry cross sections visible on the front cream band like Image 1. The top must be plain bare light golden sponge with no cream or toppings so the child can paint cream and decorate it interactively. Keep the top a simple unobstructed ellipse centered horizontally. The top ellipse spans about x=12% to88%, y=15% to71% of a landscape8:5 canvas; cake side down to90%, blue plate down to97%. Transparent background everywhere outside cake and plate, no ambient glow, no vignette, no backdrop, no cast shadow, no letters, no character. Soft textured flat illustration, bold vivid appetizing colors, subtle highlights matching official UI, not photorealistic."
+    },
+    {
+      "key": "cake-toppings",
+      "refs": [
+        "C:/Users/kure/Desktop/triangle-invoice-os-main/docs/akira-kitchen/design-source/original/akira_app_ui/assets/01_home.png",
+        "C:/Users/kure/Desktop/triangle-invoice-os-main/docs/akira-kitchen/design-source/original/akira_app_ui/assets/02_bento_menu.png"
+      ],
+      "prompt": "Use case: illustration-story. Asset type: ONE transparent game sprite atlas. Match the illustrated food in the official reference images. Strict 3 columns × 2 rows equal square cells in a landscape3:2 canvas. One centered small food sprite per cell, with generous 15% transparent padding within each cell. Reading order top left: one ripe red strawberry with green leaves; top center: one small dark chocolate bar of four squares; top right: two round banana slices; bottom left: two blue blueberries with blossom crowns; bottom center: a single piped white cream dollop; bottom right: a small compact handful of pink yellow blue green sugar sprinkles. Use same children's picture-book textured illustration style, beautiful bright colors and soft subtle highlights as approved UI. True alpha transparency outside each item; NO shadows, NO colored glow, NO gradients outside the object silhouettes, NO vignette, NO background, NO plate, NO grid borders, NO text, NO faces. Each object fully isolated, do not touch other cells."
+    },
+    {
+      "key": "kitchen-background",
+      "refs": [
+        "C:/Users/kure/Desktop/triangle-invoice-os-main/docs/akira-kitchen/design-source/original/akira_app_ui/assets/02_bento_menu.png"
+      ],
+      "transparent": false,
+      "prompt": "Use case: precise-object-edit. Asset type: background layer for the exact official Japanese children's cooking UI. Image 1 is edit target. Remove the child chef, white speech cloud with all lettering, the two round top corner UI buttons, the empty red bento box and ALL six selection cards and labels at the bottom. Retain and seamlessly fill the original warm illustrated kitchen behind them: blue sky through wooden-framed windows, pale warm cream walls, discreet potted green plants on the sides, a few jars and wooden cooking spoons, and the wide golden wooden worktop across the bottom 44% of the canvas. Keep the exact original perspective, gentle painterly flat children's picture-book style and palette. No people, no faces, no food, no text, no UI shapes. The middle and bottom worktop must be spacious, clean and unobstructed so real independent UI controls can be placed over it. Landscape4:3 composition matching original1448×1086 design. This is background restoration only, do not redesign the kitchen."
+    }
+  ]
+}

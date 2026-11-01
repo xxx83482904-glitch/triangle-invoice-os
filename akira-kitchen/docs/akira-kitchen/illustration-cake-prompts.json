@@ -1,0 +1,14 @@
+{
+  "tool": "built-in image_gen",
+  "date": "2026-11-01",
+  "assets": [
+    {
+      "key": "cake-chocolate",
+      "prompt": "Use case: precise-object-edit. Asset type: variant of the same transparent cake base game sprite. Edit ONLY the color and texture of the TWO SPONGE LAYERS in this reference to chocolate brown cocoa sponge. Preserve exact canvas size1586×992, the exact size and position of the cake, elliptical top, side silhouette, cream band, THREE red strawberry cross sections, blue plate, camera angle, gentle children's picture-book style. Top stays bare sponge so children can add cream and fruit. Do not move, enlarge, recrop or redesign any element. The white cream band, red fruit slices, and blue plate must retain their original colors. Real alpha transparency outside the cake and plate, no glow, no backdrop, no text. Change only sponge flavor; everything else invariant."
+    },
+    {
+      "key": "cake-strawberry",
+      "prompt": "Use case: precise-object-edit. Asset type: variant of the same transparent cake base game sprite. Edit ONLY the color and texture of the TWO SPONGE LAYERS in this reference to pale pink strawberry sponge. Preserve exact canvas size1586×992, the exact size and position of the cake, elliptical top, side silhouette, cream band, THREE red strawberry cross sections, blue plate, camera angle, gentle children's picture-book style. Top stays bare sponge so children can add cream and fruit. Do not move, enlarge, recrop or redesign any element. The white cream band, red fruit slices, and blue plate must retain their original colors. Real alpha transparency outside the cake and plate, no glow, no backdrop, no text. Change only sponge flavor; everything else invariant."
+    }
+  ]
+}
