@@ -18,7 +18,8 @@ import { receivedStatusLabels, visibleProjects } from "@/lib/documents";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
-import { paymentRecordsFor, receivedPaymentSummary } from "@/lib/payment-records";
+import { paymentRecordsFor } from "@/lib/payment-records";
+import { receivedPayableSummary } from "@/lib/received-invoice-payables";
 import { debtGroupView } from "@/lib/debt-groups";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
 import { ReceivedAmountFields } from "./received-amount-fields";
@@ -63,7 +64,7 @@ export default async function ReceivedInvoicesPage({
     .map<ReceivedInvoiceWorkspaceItem>((invoice) => {
       const vendor = vendors.find((item) => item.id === invoice.vendorId);
       const project = projects.find((item) => item.id === invoice.projectId);
-      const summary = receivedPaymentSummary(data, invoice);
+      const summary = receivedPayableSummary(data, invoice);
       const debt = debtGroupView(data, company, invoice);
       const amounts: ReceivedInvoiceAmounts = invoice;
       const linkedMail = data.mailDocuments.find((m) => !m.deletedAt && m.relatedReceivedInvoiceId === invoice.id);
@@ -85,6 +86,9 @@ export default async function ReceivedInvoicesPage({
         ocrText: invoice.ocrText || linkedMail?.ocrText,
         originalFileName: invoice.originalFileName || linkedMail?.originalFileName,
         paidAmount: summary.paid,
+        paymentComplete: summary.complete,
+        paymentOutstandingAmount: summary.outstanding,
+        unpaidExclusion: summary.unpaidExclusion,
         payments: paymentRecordsFor(data, company, "received", invoice.id),
         projectId: invoice.projectId,
         projectName: project?.name ?? "案件未設定",
@@ -93,7 +97,7 @@ export default async function ReceivedInvoicesPage({
         subtotal: invoice.subtotal,
         taxTotal: invoice.taxTotal,
         total: invoice.total,
-        unpaidAmount: debt.payable ? summary.outstanding : 0,
+        unpaidAmount: summary.unpaidAmount,
         vendorId: invoice.vendorId,
         vendorName: vendor?.companyName ?? "支払先未設定",
       };
