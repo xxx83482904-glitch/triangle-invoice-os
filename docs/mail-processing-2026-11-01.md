@@ -1,6 +1,6 @@
 # P0-2 郵便物の処理状態を手動の書類整理状態にする
 
-対象ブランチ: `codex/p0-2-mail-processed-save`。P0-1 の上に積み上げる。Git の commit / push / PR と画面操作の確認は Claude が担当する。本番データの補正・移行は不要で、実行していない。
+対象ブランチ: `codex/p0-2-mail-processed-save`。P0-1 の上に積み上げる。Git の commit / push / PR と画面操作の確認は Claude が担当する。本番データの補正・移行は実行していない。旧データの表示を維持する任意の補完については末尾の追補を参照。
 
 ## 原因と再現
 
@@ -74,3 +74,36 @@ tests/prepare-mail-processing-preview.ts (追加)
 tests/check-mail-processing.ts (追加)
 docs/mail-processing-2026-11-01.md (追加)
 ```
+
+### P0-2 追補: 未設定の処理フラグに旧表示値を補完する移行の準備
+
+P0-2 本体は Claude が全526テスト・lint・tscを再検証し、実クリックによる即時保存・成功通知・再読込後の保持・監査と、PC1280 / タブレット820 / スマホ375 × ライト・ダークで横はみ出しなしを確認。commit `551216a` を同ブランチへpush済み。
+
+以前の「移行不要」は業務処理を独立させる修正についての判断。未設定の古いフラグが未処理と見える変化を避けたい場合に備え、`scripts/migrations/mail-processed-legacy-flags.mjs` を追加した。**今回は作成と合成テストのみ。CLIを一度も起動せず、実データのドライラン・適用・復元はいずれも未実施。適用はユーザー承認後にClaudeが別作業で行う。**
+
+- 対象は `mailProcessed` が欠損または `undefined` の生存中の日本の郵便物・受領請求書。既存のtrue/falseや、nullなど明示的な別値は上書きしない。
+- 受領請求書は生存中の日本の案件に属するものだけ。案件が削除済み・存在しない・別会社なら除外する。郵便物・案件のcompany未設定は既存の扱いに合わせ日本とする。データ全体の `appEdition` がJAPANでない場合は拒否する。
+- 受領請求書の提案値は `status === "PAID"`。支払記録の有無・金額では判定しない。郵便物は `Boolean(relatedReceivedInvoiceId)`。参照切れや削除された請求書のIDが残っていてもtrueとし、指定された旧ルールをそのまま使う。リンク修復や支払状態の訂正は行わない。
+- 件数（種別別・true/false別）、対象ID、適用前のupdatedAt、提案値、根拠を表示する。氏名・金額・原本・認証情報はレポートに含めない。既定はデータ・バックアップとも変更しないドライラン。
+- `--json` は標準出力をJSONにする。`--out` は同じ候補一覧を新しいJSONファイルに出力する。既存ファイルの上書きは拒否する。必要なら `--apply --plan <report.json>` で承認対象の一覧を読み込み、ドライラン後の更新も検出する。`--plan` がない場合は、その実行で抽出した一覧を直前再読込したデータと照合する。
+- `--apply` は全対象のupdatedAt・未設定状態・会社・削除状態・提案値を再検証した後、`backups/<日時>-mail-processed-legacy-flags-<識別子>.json` に元ファイルをそのまま保存する。フラグと対象updatedAt、移行監査ログのみ更新し、一時ファイルから置換する。途中で1件でも対象が変化していたら全件中止する。updatedAtが未設定・不正な候補は表示されるが適用は拒否する。
+- 置換直前にもファイル全体を再比較し、他の行だけの更新も上書きしない。アプリの排他はプロセス内キューなので、この外部CLIとは共有されない。適用・復元は書き込みのない保守時間帯に行う。スクリプトがサーバーを停止することはない。
+- `--restore <backup>` は現ファイルを別途バックアップしてから、指定した日本版バックアップをファイル全体として復元する。復元時にも直前の変更を検出する。個別行のUndoではないので、移行後に行われた変更も戻る。`--restore` と `--apply` の同時指定は拒否する。
+- 支払状態・支払記録・照合・銀行明細・科目・確度・確認状態は補完対象外。新しい候補抽出で再実行すると補完済みの行は対象外になり、0件ならバックアップ・監査追加も行わない。古いplanの再適用は競合として拒否する。
+
+以下は承認後の担当者向けの使用例であり、今回実行したコマンドではない。
+
+```powershell
+# 確認用一覧（データを変更しない。report.jsonは未作成のパスを指定）
+node scripts/migrations/mail-processed-legacy-flags.mjs --data "<app-data.json>" --out "<report.json>" --json
+# 承認後・書き込み停止中に、確認済みの一覧を適用
+node scripts/migrations/mail-processed-legacy-flags.mjs --data "<app-data.json>" --apply --plan "<report.json>"
+# 必要な場合のみ、現ファイルを退避して全体復元
+node scripts/migrations/mail-processed-legacy-flags.mjs --data "<app-data.json>" --restore "<backup.json>"
+```
+
+テストは `tests/mail-processed-legacy-flags.test.ts`。モジュールの関数をimportし、メモリー上の合成データと擬似ファイルI/Oのみで選定・提案・更新日時競合・全件原子性・バックアップ・復元・I/O失敗・ドライラン無変更を検証する。CLIプロセスの起動も実ファイルへの移行も行わない。Nextアプリの変更はなく、今回のbuild・standalone・画面確認は対象外。
+
+追補の検証結果（2026-11-01 09:05 JST）: 追加19件を含む全545テスト成功、全lint成功（警告0）、隔離コピーのtsc成功。検証用preloadは前項と同じ。変更は移行スクリプト・テストの追加と本ドキュメントの更新の3ファイル。移行CLIの実ファイルI/O・本番候補件数は未確認。commit/pushはClaude担当、P0-8には進まない。
+
+追補の提案コミット: `feat(migrations): prepare legacy mail processing flag backfill`
