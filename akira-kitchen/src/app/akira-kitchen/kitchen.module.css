@@ -586,33 +586,8 @@
 .pressed {
   scale: 0.98;
 }
-.completed .processArt {
-  animation: foodFly 0.55s ease-in-out forwards;
-}
 .completed .progress {
   visibility: hidden;
-}
-.finishSlot {
-  position: absolute;
-  left: 600px;
-  top: 730px;
-  width: 400px;
-  height: 180px;
-  border-radius: 35px;
-  background: white;
-  border: 6px solid #32b66c;
-  pointer-events: none;
-}
-.finishSlot > svg {
-  position: absolute;
-  right: -18px;
-  top: -20px;
-  width: 65px;
-  height: 65px;
-  background: #32b66c;
-  border-radius: 50%;
-  color: white;
-  padding: 10px;
 }
 .completed {
   height: 560px;
@@ -719,23 +694,6 @@
   background: white;
   border-radius: 30px;
 }
-.silhouettes {
-  position: absolute;
-  inset: 80px 130px 150px;
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  gap: 40px;
-}
-.silhouettes svg {
-  width: 150px;
-  height: 160px;
-  opacity: 0.36;
-  filter: brightness(0) invert(1);
-  outline: 4px dashed #fff5d1;
-  outline-offset: 8px;
-  border-radius: 24px;
-}
 .menuTiles {
   left: 110px;
   right: 110px;
@@ -750,12 +708,6 @@
 .menuTiles .foodTile > svg {
   width: 118px;
   height: 115px;
-}
-.unmade {
-  background: #bed9ed;
-}
-.unmade > svg {
-  filter: brightness(0) invert(1);
 }
 .foodTile .entryHand {
   left: 75px;
@@ -1529,21 +1481,10 @@
     transform: scale(1.12) translateY(-15px);
   }
   80% {
-    transform: scale(0.8) translateY(30px);
+    transform: scale(0.98) translateY(4px);
   }
   100% {
     transform: scale(1);
-  }
-}
-@keyframes foodFly {
-  0% {
-    transform: scale(1);
-  }
-  25% {
-    transform: scale(1.1) translateY(-20px);
-  }
-  100% {
-    transform: translateY(280px) scale(0.4);
   }
 }
 @keyframes launch {
@@ -1599,6 +1540,79 @@
     transform: rotate(90deg);
   }
 }
+/* 3.1: geometry is in the fixed 1448 x 1086 stage, before viewport scaling. */
+.arrangementStage:before { background: #fff9ea66; }
+.screenTitle { top: 18px; height: 96px; left: 160px; right: 160px; font-size: 47px; }
+.round { width: 120px; height: 120px; }
+.back,.speaker { top: 12px; }
+.round svg { width: 62px; height: 62px; }
+.homeStage > .smallChef { left: 24px; top: 8px; width: 200px; height: 200px; }
+.homeHeading { left: 340px; right: 340px; top: 0; }
+.titleCloud { left: calc(50% - 300px); width: 600px; height: 210px; }
+.homeHeading p { font-size: 43px; padding: 17px 15px 0; }
+.brandName { font-size: 57px; }
+.brandCooking { font-size: 80px; }
+.homeHeading h1 { position: absolute; top: 225px; left: -100px; right: -100px; font-size: 59px; letter-spacing: 0; }
+.homeChoices { left: 28px; right: 28px; top: 304px; gap: 28px; }
+.homeCard { height: 590px; border-width: 7px !important; border-radius: 50px; padding: 7px; }
+.homeCard > .homeFood { width: 100%; height: 450px; flex: none; }
+.homeCard > span:not(.entryHand) { min-height: 112px; width: 100%; font-size: 55px; border-radius: 43px; }
+.albumHome { left: 444px; width: 560px; bottom: 25px; }
+.chefWindow,.stage[data-screen="2"] .chefWindow { left: 8px; top: 120px; bottom: auto; width: 170px; height: 170px; border: 0; background: none; }
+.chefWindow .chefPicture { object-fit: contain; border-radius: 0; }
+.chefReaction { left: 0; top: 145px; bottom: auto; width: 170px; font-size: 22px; padding: 8px 5px; border-width: 3px; }
+.missionBubble { left: 300px; top: 130px; width: 800px; height: 90px; min-height: 90px; padding: 4px 16px; gap: 16px; font-size: 32px; }
+.missionBubble > span { min-width: 0; }
+.missionBubble > svg { width: 70px; height: 70px; }
+.missionBubble small { margin-left: 12px; font-size: 28px; }
+.themeIcon { min-width: 65px; font-size: 38px; }
+.steps { top: 136px; right: 170px; gap: 10px; }
+.steps li { height: 80px; }
+.steps + .missionBubble { top: 130px; left: 245px; width: 645px; height: 90px; min-height: 90px; font-size: 28px; }
+.workArea,.completed { left: 164px; top: 250px; width: 1120px; height: 665px; }
+.gestureArea,.completed .gestureArea { height: 630px; }
+.completed .processArt { animation: foodFinish 550ms ease-out; }
+.processArt { overflow: visible; }
+.foodRow { left: 245px; right: 80px; gap: 16px; }
+.stage[data-screen="3"] .foodRow,.stage[data-screen="4"] .foodRow,.stage[data-screen="5"] .foodRow,.stage[data-screen="6"] .foodRow { bottom: 22px; height: 142px; }
+.foodTile { min-width: 142px; max-width: 170px; height: 142px; }
+.foodTile > svg { width: 100px; height: 96px; }
+.foodTile > span:not(.entryHand) { font-size: 23px; }
+.cookingSkip { right: 14px; bottom: 175px; min-height: 100px; }
+.menuDish,.boardWrap,.finishedDish,.tasteDish,.cakeMenuDish { left: 112px; top: 237px; width: 1224px; height: auto; }
+.stage[data-kind="cake"] :is(.boardWrap,.finishedDish,.tasteDish),.cakeMenuDish { top: 228px; }
+.board { position: absolute; inset: 0; width: 100%; height: 100%; }
+.menuDish > svg,.finishedDish > svg,.cakeMenuDish > svg { width: 100%; height: 100%; position: absolute; inset: 0; }
+.menuPrompt { top: 142px; left: 424px; width: 600px; font-size: 34px; text-align: center; }
+.menuTiles { position: absolute; inset: 7% 8% 9%; display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(2,1fr); gap: 4px 30px; }
+.menuTiles .menuFood { width: 100%; min-width: 100px; max-width: none; height: 100%; padding: 0; background: none; border: 0 !important; }
+.menuTiles .menuFood > svg:not(.readyBadge) { width: 190px; height: 178px; opacity: 1; filter: none; }
+.menuFood > span:not(.entryHand) { background: #fffdf5; border-radius: 22px; font-size: 29px; padding: 3px 18px; }
+.menuFood .readyBadge { right: 44px; top: 4px; }
+.menuFood .entryHand { left: 55%; top: 35%; }
+.shelf { right: 6px; top: 214px; width: 104px; min-height: 0; padding: 0; gap: 10px; background: #fffdf3ee; border-radius: 24px; }
+.shelfTile { width: 104px; height: 144px; padding: 2px; border-width: 3px !important; border-radius: 20px; }
+.shelfTile > svg { width: 88px; height: 88px; flex: none; }
+.shelfTile > span { font-size: 18px; line-height: 20px; min-height: 40px; max-width: 96px; text-align: center; overflow-wrap: anywhere; }
+.countBadge { right: -1px; top: -5px; font-size: 20px; border-width: 2px; padding: 2px 5px; }
+.shelfPages { flex-direction: column; flex-wrap: nowrap; gap: 10px; margin-top: 0; }
+.shelfPages button { width: 104px; height: 104px; }
+.shelfPages button svg { width: 65px; height: 65px; }
+.shelfPages button:first-child,.shelfPages button:nth-child(2) { margin: 0; }
+.shelfPages span { bottom: -34px; font-size: 23px; }
+.boardTools { right: 0; bottom: -78px; gap: 12px; }
+.smallButton { width: 104px; height: 104px; }
+.stage[data-kind="cake"] .boardTools { right: 0; bottom: -100px; }
+.coverage { left: 300px; right: 300px; bottom: -46px; height: 28px; }
+.flavors { left: 334px; right: 334px; top: 122px; gap: 20px; }
+.flavor { width: 245px; height: 100px; padding: 4px 10px; font-size: 30px; }
+.flavor img { width: 100px; height: 80px; }
+.flavor > svg { width: 36px; height: 36px; top: -7px; right: -6px; }
+.ingredientCount { left: 480px; right: 480px; gap: 35px; }
+.stage[data-screen="12"] .ingredientCount { bottom: 22px; }
+.close { width: 100px; height: 100px; }
+.resume .action { min-height: 120px; }
+.resumeRestart,.parentButton,.delete { min-height: 100px; }
 @media (prefers-reduced-motion: reduce) {
   .app *,
   .app *:before,

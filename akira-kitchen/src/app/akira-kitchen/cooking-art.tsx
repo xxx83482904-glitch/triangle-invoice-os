@@ -1,6 +1,8 @@
 import { SHAPES } from "./prototype-shapes";
 import { illustratedFood, illustratedBase, illustratedVariant, riceSmile } from "./illustration-assets";
 import type { Food, Piece, Recipe, Point } from "./cooking-model";
+import { useId } from "react";
+import { boxString, dishBox, dishPoint, foodBox, pieceSize } from "./art-layout";
 const COLORS: Record<string, string> = {
   ume: "#ef6b89",
   wakame: "#278c51",
@@ -76,16 +78,18 @@ export function FoodArt({
   variant = "",
   className,
   smiling = true,
+  cropped = false,
 }: {
   food: string;
   variant?: string;
   className?: string;
   smiling?: boolean;
+  cropped?: boolean;
 }) {
   return (
     <svg
       className={className}
-      viewBox="0 0 200 200"
+      viewBox={cropped ? boxString(foodBox(food, variant)) : "0 0 200 200"}
       aria-hidden="true"
       dangerouslySetInnerHTML={{ __html: foodMarkup(food, variant, smiling) }}
     />
@@ -94,9 +98,9 @@ export function FoodArt({
 export function baseMarkup(recipe: Recipe): string {
   return illustratedBase(recipe.mode, recipe.cake);
 }
-function icingMarkup(strokes: Point[][]): string {
+function icingMarkup(strokes: Point[][], clipId = "icing-surface"): string {
   return (
-    '<defs><clipPath id="icing-surface"><ellipse cx="400" cy="155" rx="282" ry="97"/></clipPath></defs><g clip-path="url(#icing-surface)">' +
+    `<defs><clipPath id="${clipId}" clipPathUnits="userSpaceOnUse"><ellipse cx="400" cy="155" rx="282" ry="97"/></clipPath></defs><g clip-path="url(#${clipId})">` +
     strokes
       .map((s) =>
         s.length === 1
@@ -110,18 +114,19 @@ function icingMarkup(strokes: Point[][]): string {
   );
 }
 export function pieceMarkup(piece: Piece, mode: string): string {
-  const size = mode === "bento" ? 155 : 98;
-  return `<g transform="translate(${piece.x * 8 - size / 2} ${piece.y * 5 - size / 2}) rotate(${piece.rotation} ${size / 2} ${size / 2}) scale(${size / 200})">${foodMarkup(piece.food, piece.variant)}</g>`;
+  const size = pieceSize(mode), point = dishPoint({ mode: mode === "bento" ? "bento" : "cake" }, piece);
+  return `<g transform="translate(${point.x - size / 2} ${point.y - size / 2}) rotate(${piece.rotation} ${size / 2} ${size / 2}) scale(${size / 200})">${foodMarkup(piece.food, piece.variant)}</g>`;
 }
-export function dishInner(recipe: Recipe): string {
+export function dishInner(recipe: Recipe, clipId = "icing-surface"): string {
   return (
     baseMarkup(recipe) +
-    icingMarkup(recipe.strokes) +
+    (recipe.mode === "cake" ? icingMarkup(recipe.strokes, clipId) : "") +
     recipe.items.map((p) => pieceMarkup(p, recipe.mode)).join("")
   );
 }
 export function dishSVG(recipe: Recipe): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 800 500"><rect width="800" height="500" rx="40" fill="#fff9eb"/>${dishInner(recipe)}</svg>`;
+  const b = dishBox(recipe);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="${Math.round(1200 * b.height / b.width)}" viewBox="${boxString(b)}"><rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" fill="#fff9eb"/>${dishInner(recipe)}</svg>`;
 }
 export function DishArt({
   recipe,
@@ -132,26 +137,30 @@ export function DishArt({
   className?: string;
   stretch?: boolean;
 }) {
+  const clipId = "icing-" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
   return (
     <svg
       className={className}
-      viewBox="0 0 800 500"
+      viewBox={boxString(dishBox(recipe))}
+      data-dish={recipe.mode}
       preserveAspectRatio={stretch ? "none" : "xMidYMid meet"}
       role="img"
       aria-label={
         recipe.mode === "bento" ? "じぶんの おべんとう" : "じぶんの ケーキ"
       }
-      dangerouslySetInnerHTML={{ __html: dishInner(recipe) }}
+      dangerouslySetInnerHTML={{ __html: dishInner(recipe, clipId) }}
     />
   );
 }
 export function DishBase({ recipe }: { recipe: Recipe }) {
+  const clipId = "icing-" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
   return (
     <svg
-      viewBox="0 0 800 500"
+      viewBox={boxString(dishBox(recipe))}
+      data-dish={recipe.mode}
       aria-hidden="true"
       dangerouslySetInnerHTML={{
-        __html: baseMarkup(recipe) + icingMarkup(recipe.strokes),
+        __html: baseMarkup(recipe) + (recipe.mode === "cake" ? icingMarkup(recipe.strokes, clipId) : ""),
       }}
     />
   );

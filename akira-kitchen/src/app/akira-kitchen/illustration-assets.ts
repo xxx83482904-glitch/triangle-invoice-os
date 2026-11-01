@@ -1,13 +1,14 @@
 import manifest from "./media-manifest.json";
+import { cakeAsset, dishBox, mediaGeometry } from "./art-layout";
 const assets = manifest as Record<string, { src: string }>;
-const img = (name: string, width = 200, height = 200) =>
+const img = (name: string, width = 200, height = 200, fullSize = false) =>
   '<image href="' +
-  (assets[name]?.src ?? "") +
+  ((fullSize ? mediaGeometry[name]?.src : assets[name]?.src) ?? "") +
   '" width="' +
   width +
   '" height="' +
   height +
-  '"/>';
+  '"' + (fullSize ? ' preserveAspectRatio="none"' : '') + '/>';
 export function illustratedFood(food: string): string | null {
   return assets[food] ? img(food) : null;
 }
@@ -32,18 +33,8 @@ export function riceSmile(): string {
 }
 export function illustratedBase(mode: string, flavor: string): string {
   if (mode === "bento")
-    return (
-      '<svg x="20" y="15" width="760" height="470" viewBox="0 0 1448 680" preserveAspectRatio="none">' +
-      img("bento-box", 1448, 680) +
-      "</svg>"
-    );
-  return img(
-    flavor === "chocolate" || flavor === "strawberry"
-      ? "cake-" + flavor
-      : "cake-base",
-    800,
-    500,
-  );
+    return img("bento-box", 800, dishBox({ mode: "bento", cake: flavor }).height, true);
+  return img(cakeAsset({ cake: flavor }), 800, 500, true);
 }
 const imageCache = new Map<string, Promise<string>>();
 async function imageData(url: string): Promise<string> {

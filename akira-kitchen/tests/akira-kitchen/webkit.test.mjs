@@ -9,7 +9,7 @@ const context=await browser.newContext({viewport:{width:1024,height:768},hasTouc
 const page=await context.newPage(),checks=[],errors=[];
 page.on("pageerror",e=>errors.push(e.message));page.on("console",m=>{if(m.type()==="error")errors.push(m.text());});
 page.setDefaultTimeout(8000);
-const output=path.resolve(fileURLToPath(new URL("../../docs/akira-kitchen/qa/browser-v3/",import.meta.url)));await mkdir(output,{recursive:true});
+const output=path.resolve(process.env.AKIRA_QA_OUTPUT || fileURLToPath(new URL("../../docs/akira-kitchen/qa/browser-v3/",import.meta.url)));await mkdir(output,{recursive:true});
 const tap=async name=>{await page.getByRole("button",{name,exact:true}).tap();await page.waitForTimeout(300);};
 const screen=async n=>page.locator('[data-screen="'+n+'"][aria-busy="false"]').waitFor();
 const cook=async p=>{const el=page.locator('[data-process="'+p+'"]');for(let i=0;i<16&&await el.getAttribute("aria-label")!=="できた！";i++){await el.tap();await page.waitForTimeout(90);}assert.equal(await el.getAttribute("aria-label"),"できた！");};

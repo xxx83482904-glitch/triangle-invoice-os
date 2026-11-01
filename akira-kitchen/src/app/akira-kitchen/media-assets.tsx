@@ -1,5 +1,14 @@
 import manifest from "./media-manifest.json";
 import type { ImgHTMLAttributes } from "react";
+import { boxString, croppedMediaBox, mediaGeometry } from "./art-layout";
+
+/** Existing high-resolution art, framed by its painted alpha bounds. */
+export function CroppedArt({ name, className }: { name: string; className?: string }) {
+  const a = mediaGeometry[name];
+  return <svg className={className} viewBox={boxString(croppedMediaBox(name))} aria-hidden="true" data-cropped-art={name}>
+    <image href={a.src} width={a.width} height={a.height} />
+  </svg>;
+}
 
 const assets = manifest as Record<
   string,
