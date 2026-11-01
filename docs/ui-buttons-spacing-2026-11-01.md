@@ -175,3 +175,46 @@ style(ui): clarify navigation, actions, and workspace groups
 - [src/components/ui/table.tsx](../src/components/ui/table.tsx)
 - [src/components/ui/tabs.tsx](../src/components/ui/tabs.tsx)
 - [docs/ui-buttons-spacing-2026-11-01.md](ui-buttons-spacing-2026-11-01.md)
+
+## 第1弾の画面確認後の修正
+
+対象は `codex/ui-buttons-spacing` の第1弾取り込み後（ローカルコミット `cb71321`）。Claudeの合成データによる1280×900・820・375px、ライト／ダークの比較で判明した密度・整列を修正する。機能・権限・業務文言・URL・フォーム送信内容は変更しない。以下は今回の差分で、上の第1弾の変更一覧とは分けて扱う。
+
+### 修正内容
+
+- **口座明細**: ヘッダーの「確認・出力」「設定・同期」と表上部の「選択／履歴／分類」を `sr-only` にし、既存の `role="group"`・`aria-label` を維持。グループ間は縦線と12pxの余白で分け、操作列の独立カード・見出し用の高さをなくす。PCのヘッダー・操作ボタンは36px、lg未満のタッチ領域は44pxを維持する。口座明細だけセクション間を8px、絞り込み・操作列・表の間を4pxに詰める。明細行・固定保存バーは変更しない。
+- **口座明細の絞り込み**: 内側12px、小さい1行見出し、月タブと入力段の間4px。全期間ボタンを年度移動の隣へ置き、月タブを12個にする（ボタンの順序、選択値・処理は同じ）。375pxでは月の44pxタッチ領域を保ちながら段数を減らす。除外検索語と適用ボタンを同じ行にする。表示中の選択と検索結果の全件選択も同じ行に配置し、長いボタン文言は折り返せるようにする。
+- **ダッシュボード**: 指標4枚を共通の縦flex・上寄せに統一。書類確認だけ中央に寄る状態を解消する。
+- **郵便・受領・発行などの選択バー**: 共通SelectionToolbarを高さ約48px（44pxのチェック領域＋上下1px＋罫線）の帯にする。表側の余白は4px。追加操作は右端の同じグループにまとめる。狭い幅や長い選択件数では折り返しを許し、44pxの操作領域を縮めない。
+- **受領請求書の二重線**: 非compactの共通InvoiceDropzoneを上下罫線から下罫線だけにする。PageHeaderの下線を残す。同じ取込欄を使う発行請求書等にも同じ見た目を適用し、取込機能は変更しない。
+- **整合性**: 「種類ごとの一括操作」の1枚のカードにまとめ、種類名と既存のボタンを区切り線のある行で並べる。確認ダイアログ・件数・対象・監査の処理は同じ。
+- **発行請求書**: 集計4項目を受領と同じ枠・背景・12px/8px余白の小カードにする。既存の2列／md以上4列を維持。ReviewStatusTagに折り返し禁止を追加し、原本確認列を112px、日付列を144pxにする。表見出しも折り返し禁止にする。
+
+### 横断点検
+
+- 操作列に独立したグループ見出しを付けていた `workspace-group-label` は口座明細の5か所のみ。今回すべて視覚的に隠す。他画面のフィルター見出し、基本情報・金額・連携などの詳細見出しは情報区分として残す。照合・受領等の既に確認済みのグループ構成は維持する。
+- 共通Badge／StatusBadgeとTableHeadは既に折り返し禁止。ReviewStatusTagを補い、発行・受領・郵便の `workspace-record-table` にも短い見出しの折り返し禁止を適用する。案件名・取引先名などの長い本文は今までどおり折り返す。狭い画面での表内部スクロールは維持する。
+- BankFiscalMonthTabsの利用箇所は口座明細のみ。同期・分類・照合・選択・検索のハンドラー、読み書きする値は変更しない。React Best Practicesに沿って余分なstate・effectは追加していない。
+
+### 検証と未確認
+
+- 全654テスト成功（失敗・skip 0）、全lint成功、隔離コピーのtsc成功。見た目だけのため新しい挙動テストは追加しない。
+- Tailwind/PostCSSのCSS単体コンパイル成功、警告なし。新しいボタンのfocus・disabled表示を含めたスタイル生成を確認。production buildではない。
+- ASTでURL・イベント処理・form/action/name/type/value・制約・disabled・JSX spread・aria/role/titleを比較し、一致。既存テキストの削除なし。追加文言は指定された「種類ごとの一括操作」の見出しのみ。CRLFを維持。
+- Git書き込み・build・standalone・画面撮影・デプロイは実施していない。ユーザーの未コミットファイル、本番data/uploads/.env、移行スクリプトは変更しない。
+- **未確認／Claudeへの引き継ぎ**: 同じ合成データ・条件で1280×900の表見出し上端480px以下、375pxの最初の明細上端1,250px以下を実測する。座標目標はコード上の余白調整のみでは達成を断定していない。820pxも含めライト／ダークで、ヘッダーの1行配置、月タブ・選択バーの折り返し、4指標の上寄せ、受領の線1本、整合性一括カード、発行の確認バッジ・日付見出し、横はみ出しを確認する。
+
+### 今回の変更ファイル（10件）
+
+- [src/app/globals.css](../src/app/globals.css)
+- [src/app/dashboard/dashboard-workspace.tsx](../src/app/dashboard/dashboard-workspace.tsx)
+- [src/components/app/banking-workspace.tsx](../src/components/app/banking-workspace.tsx)
+- [src/components/app/bank-ledger-controls.tsx](../src/components/app/bank-ledger-controls.tsx)
+- [src/components/app/list-selection.tsx](../src/components/app/list-selection.tsx)
+- [src/components/app/invoice-dropzone.tsx](../src/components/app/invoice-dropzone.tsx)
+- [src/components/app/bank-integrity-workspace.tsx](../src/components/app/bank-integrity-workspace.tsx)
+- [src/components/app/documents-workspace.tsx](../src/components/app/documents-workspace.tsx)
+- [src/components/app/review-status-tag.tsx](../src/components/app/review-status-tag.tsx)
+- [docs/ui-buttons-spacing-2026-11-01.md](ui-buttons-spacing-2026-11-01.md)
+
+提案コミットメッセージ: `style(ui): compact ledger controls and align list layouts`

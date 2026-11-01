@@ -56,7 +56,7 @@ export function InvoiceDropzone({ company, kind, projects = [], compact = false 
     } finally { busy.current = false; setProgress(null); }
   }
 
-  return <section aria-label={label + "取込"} className={compact ? "space-y-2" : "space-y-3 border-y py-4"}>
+  return <section aria-label={label + "取込"} className={compact ? "space-y-2" : "space-y-3 border-b py-4"}>
     {compact ? <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">OCR取込</h2><Button variant="ghost" className="min-h-11" disabled={Boolean(progress)} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}><Settings2 className="size-4" />{projectId ? "取込先を指定中" : "取込設定"}</Button></div> : null}
     {!compact || settingsOpen ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <h2 className="shrink-0 font-semibold">{label}を取り込む</h2>

@@ -280,11 +280,11 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     <div className="min-w-0 space-y-4">
     {issuedOnly ? <>
       <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{recordMonthLabel(month)}</h2><span role="status" className="text-sm text-muted-foreground">{filtered.length} / {rows.length}件</span>{changes ? <span className="text-xs text-amber-700 dark:text-amber-300">未保存 {changes}件</span> : null}</div>
-      {showIssuedSummary ? <dl aria-label="保存済み請求書の集計" className="grid grid-cols-2 gap-x-3 gap-y-2 border-b pb-3 text-sm md:grid-cols-4">
-        <div className="min-w-0"><dt className="text-xs text-muted-foreground">請求額（下書き・取消除く）</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.total)}</dd></div>
-        <div className="min-w-0"><dt className="text-xs text-muted-foreground">入金済み</dt><dd className="break-all font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{number.format(summary.paid)}</dd></div>
-        <div className="min-w-0"><dt className="text-xs text-muted-foreground">未入金</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.outstanding)}</dd></div>
-        <div><dt className="text-xs text-muted-foreground">OCR要確認</dt><dd className="font-semibold text-amber-700 dark:text-amber-400">{summary.review}件</dd></div>
+      {showIssuedSummary ? <dl aria-label="保存済み請求書の集計" className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">請求額（下書き・取消除く）</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.total)}</dd></div>
+        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">入金済み</dt><dd className="break-all font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{number.format(summary.paid)}</dd></div>
+        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">未入金</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.outstanding)}</dd></div>
+        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">OCR要確認</dt><dd className="font-semibold text-amber-700 dark:text-amber-400">{summary.review}件</dd></div>
       </dl> : null}
       <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み</h2>
       <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -320,8 +320,8 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     </div>
     </section>}
     <SelectionToolbar selection={selection}>
-      {issuedOnly && canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="ml-auto size-11" onClick={exportCsv}><Download className="size-4" /></Button> : null}
-      {issuedOnly && rows.some((row) => row.editable) ? <Button className="ml-auto min-h-11" disabled={!changes || saving || deleting} onClick={() => save()}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{changes ? ` (${changes})` : ""}</Button> : null}
+      {issuedOnly && canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="size-11" onClick={exportCsv}><Download className="size-4" /></Button> : null}
+      {issuedOnly && rows.some((row) => row.editable) ? <Button className="min-h-11" disabled={!changes || saving || deleting} onClick={() => save()}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{changes ? ` (${changes})` : ""}</Button> : null}
     </SelectionToolbar>
     {selectedRows.length ? <div aria-label="選択した書類の一括操作" className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 shadow-sm [&_button]:min-h-11">
       <span className="mr-auto text-sm font-medium">{selectedRows.length}件選択{hiddenSelectedCount ? <span className="ml-2 text-xs font-normal text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}</span>
@@ -362,7 +362,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
           <table className={`workspace-record-table hidden w-full table-fixed text-left text-sm md:table ${issuedOnly ? "min-w-[960px]" : "min-w-[680px]"}`}>
             <thead className="sticky top-0 z-10 bg-background text-xs text-muted-foreground"><tr>
               <th className="w-11 p-0"><SelectAllCheckbox selection={selection} label="表示中の書類をすべて選択" /></th>
-              <th className="w-[28%] p-2">案件名 / 書類</th><th className="w-[21%] p-2">取引先</th><th className="w-28 p-2">{issuedOnly ? "発行日 / 入金期限" : "日付"}</th><th className={issuedOnly ? "w-36 p-2 text-right" : "w-24 p-2 text-right"}>{issuedOnly ? "請求・入金" : "金額"}</th><th className="w-40 p-2">状態</th>{issuedOnly ? <th className="w-20 p-2 text-center">原本確認</th> : null}<th className="w-11"><span className="sr-only">操作</span></th>
+              <th className="w-[28%] p-2">案件名 / 書類</th><th className="w-[21%] p-2">取引先</th><th className="w-36 whitespace-nowrap p-2">{issuedOnly ? "発行日 / 入金期限" : "日付"}</th><th className={issuedOnly ? "w-36 p-2 text-right" : "w-24 p-2 text-right"}>{issuedOnly ? "請求・入金" : "金額"}</th><th className="w-40 p-2">状態</th>{issuedOnly ? <th className="w-28 min-w-28 whitespace-nowrap p-2 text-center">原本確認</th> : null}<th className="w-11"><span className="sr-only">操作</span></th>
             </tr></thead>
             <tbody>{groups.map(([m, list]) => <Fragment key={m}>
               {grouped ? <tr className="border-t bg-muted/60"><td colSpan={issuedOnly ? 8 : 7} className="p-0"><button className="sticky left-0 flex min-h-11 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button></td></tr> : null}

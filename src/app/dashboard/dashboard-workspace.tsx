@@ -38,7 +38,7 @@ export function DashboardWorkspace({ summary: s }: { summary: DashboardSummary }
     if (scroll) { workRef.current?.scrollIntoView({ block: "start" }); workRef.current?.focus({ preventScroll: true }); }
   };
   const workTotal = s.review.length;
-  const statClass = "group min-w-0 space-y-3 rounded-xl border bg-card p-5 text-left shadow-sm transition hover:border-primary/50 hover:shadow-md focus-visible:outline-2 focus-visible:outline-ring";
+  const statClass = "group flex min-w-0 flex-col items-stretch justify-start gap-3 rounded-xl border bg-card p-5 text-left shadow-sm transition hover:border-primary/50 hover:shadow-md focus-visible:outline-2 focus-visible:outline-ring";
   return <>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_0.8fr]">
       <Link href={accountsHref} prefetch={false} className={statClass}>
