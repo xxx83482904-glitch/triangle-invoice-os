@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { admin, fixture, timestamp } from "./document-fixture";
 import { projectAttention } from "../src/lib/project-attention";
-import { projectAttentionPriority, projectContractSummary, projectContractValue, projectCreationValues, projectStageLabel, projectStageOptions, projectUninvoiced } from "../src/lib/project-display";
+import { projectAttentionPriority, projectContractSummary, projectNeedsAction, projectContractValue, projectCreationValues, projectStageLabel, projectStageOptions, projectUninvoiced } from "../src/lib/project-display";
 import { projectMoney } from "../src/lib/store";
 import { resolveIssuedImportProject } from "../src/lib/issued-import-project";
 import { billingProjectGroups } from "../src/lib/billing-project-cleanup";
@@ -110,6 +110,25 @@ test("project attention ranks actual overdue items above multiple upcoming items
   const overdue = projectAttention(data, data.projects[0], today);
   assert.equal(projectAttentionPriority(overdue, true), 30);
   assert.equal(projectAttentionPriority(overdue, false), 0);
+});
+
+test("要対応 counts deadlines, and document review alone only for people who cannot see money", () => {
+  const { data } = setup();
+  data.issuedInvoices = [issued({ id: "draft", status: "DRAFT", needsReview: true, dueDate: "" })];
+  data.receivedInvoices = [];
+  const review = projectAttention(data, data.projects[0], today);
+  assert.deepEqual(review.map((row) => row.kind), ["documentReview"]);
+  assert.equal(projectNeedsAction(review, true), false);
+  assert.equal(projectNeedsAction(review, false), true);
+  data.receivedInvoices = [received({ dueDate: "2026-11-03" })];
+  const soon = projectAttention(data, data.projects[0], today);
+  assert.equal(projectNeedsAction(soon, true), true);
+  data.issuedInvoices = [];
+  data.receivedInvoices = [received()];
+  const overdue = projectAttention(data, data.projects[0], today);
+  assert.equal(projectNeedsAction(overdue, true), true);
+  assert.equal(projectNeedsAction(overdue, false), false);
+  assert.equal(projectNeedsAction([], true), false);
 });
 
 test("Japan project creation leaves absent amount and stage unset, preserving explicit zero and stage", () => {

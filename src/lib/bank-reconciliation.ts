@@ -448,6 +448,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     names.push({ accountId: entry.accountId, content: entry.content }); namesByParty.set(key, names);
   }
   for (const invoice of invoices) invoice.confirmedNames = namesByParty.get(`${invoice.kind}:${invoice.partyId}`) || [];
+  const categoryNames = new Map(data.accountingCategories.map((row) => [row.id, row.name]));
   const banks = data.bankTransactions.filter((row) => row.company === company).map((row) => {
     const allocated = (linkedBank.get(row.id) || 0) / 100, sourceIssue = bankIssue(data, company, row, today, index);
     const account = index.accounts.get(row.bankAccountId);
@@ -460,7 +461,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const transferCounterpart = counterpart?.company === company ? { id: counterpart.id, date: counterpart.transactionDate, content: counterpart.content, amount: counterpart.amount, account: index.accounts.get(counterpart.bankAccountId)?.name || "" } : undefined;
     const settlement = bankCardSettlementDetail(data, row);
     return { id: row.id, updatedAt: row.updatedAt, accountId: row.bankAccountId, date: row.transactionDate, side: row.side, content: row.content, amount: row.amount,
-      invoiceRequirement: row.bookkeeping?.invoiceRequirement || "UNDECIDED", transferCounterpart, settlement,
+      invoiceRequirement: row.bookkeeping?.invoiceRequirement || "UNDECIDED", categoryName: categoryNames.get(row.categoryId || ""), transferCounterpart, settlement,
       remaining: Math.max(0, cents(row.amount) - cents(allocated)) / 100, allocated, issue, conflict: conflictBank.has(row.id),
       state: conflictBank.has(row.id) ? "conflict" : matched ? "matched" : row.treatment === "NORMAL" && !row.sourceMissing && row.bookkeeping?.invoiceRequirement === "NOT_REQUIRED" ? "not_required" : issue ? "excluded" : "unmatched" };
   });

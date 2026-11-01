@@ -5,6 +5,7 @@ import { uxRound1Fixture } from "./ux-round1-fixture";
 import { dashboardSummary } from "../src/lib/dashboard";
 import { dashboardWorkRows } from "../src/lib/dashboard-work";
 import { dashboardNextSteps } from "../src/lib/dashboard-next-steps";
+import { isReconcileTodo, RECONCILE_TODO_STATUS } from "../src/lib/bank-reconcile-todo";
 import { bankFilters, selectBankTransactions } from "../src/lib/banking";
 import { bankReconciliationOverview } from "../src/lib/bank-reconciliation";
 import { integrityReport } from "../src/lib/integrity";
@@ -40,8 +41,8 @@ test("dashboard bank links match the existing destination filters, including mis
   assert.equal(step.count, selectBankTransactions(data, "JAPAN", bankFilters(params)).total);
   const match = steps.find((s) => s.id === "bank-unmatched")!;
   assert.ok("href" in match.target);
-  const state = new URL(match.target.href, "http://synthetic.invalid").searchParams.get("status");
-  assert.equal(match.count, bankReconciliationOverview(data, "JAPAN", today).banks.filter((r) => r.state === state).length);
+  assert.equal(new URL(match.target.href, "http://synthetic.invalid").searchParams.get("status"), RECONCILE_TODO_STATUS);
+  assert.equal(match.count, bankReconciliationOverview(data, "JAPAN", today).banks.filter((r) => isReconcileTodo(r, today)).length);
 });
 
 test("mail and integrity steps explicitly explain their broader destination counts", () => {

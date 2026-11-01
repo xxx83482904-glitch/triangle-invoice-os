@@ -26,7 +26,7 @@ async function main() {
   await writeFile(path.join(root, "ux-feedback-cases.json"), JSON.stringify(uxRound1FeedbackCases(data), null, 2));
   console.log(root);
   console.log("ux-feedback-cases.json: 合成の古い更新日時・重複番号・原本あり/なしと、2タブ競合・通信失敗の画面確認手順。既存データは変更しません。");
-  console.log("/projects?company=JAPAN: 合成04・05・06・09・10だけ要対応。01は参考、02は金額未設定、03は0円。原本はux-original.pdfのみ存在します。");
+  console.log("/projects?company=JAPAN: 合成04・05・09・10だけ要対応。06は書類確認待ち。01は参考、02は金額未設定、03は0円。原本はux-original.pdfのみ存在します。");
   console.log("/dashboard?company=JAPAN: 次にやること全9行。書類の開くで同じ件数に絞り込み、口座明細・照合へも確認できます。");
   console.log("/banking?company=JAPAN: 合成12明細。01のメモ編集→02を確認済み→03を選択すると各保存対象を確認できます。");
 }
