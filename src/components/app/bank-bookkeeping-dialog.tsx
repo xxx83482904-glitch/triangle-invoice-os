@@ -3,6 +3,8 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, LoaderCircle, Plus, Save, Trash2 } from "lucide-react";
+import { bankClassificationPresentation } from "@/lib/bank-classification-presentation";
+import { BankClassificationState } from "@/components/app/bank-classification-state";
 import { loadBankBookkeepingAction, saveBankBookkeepingAction } from "@/app/banking/bookkeeping-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +54,7 @@ export function BankBookkeepingDialog({ company, transaction, categories, disabl
     <DialogTrigger asChild><Button type="button" size="icon" variant="ghost" className="size-11 shrink-0" disabled={disabled} title="記帳詳細" aria-label={`${transaction.content || "明細"}の記帳詳細`}><ClipboardList className="size-4" /></Button></DialogTrigger>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" showCloseButton={!loading && !saving} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => { if (loading || saving || dirty) event.preventDefault(); }}>
       <DialogHeader><DialogTitle>記帳詳細</DialogTitle><DialogDescription className="break-words pr-6">{transaction.transactionDate} / {transaction.content || "摘要なし"}</DialogDescription></DialogHeader>
+      {company === "JAPAN" && detail ? <section className="space-y-2 rounded-lg border bg-muted/30 p-3" aria-label="分類の根拠と状態"><h3 className="text-sm font-semibold">分類の根拠と状態</h3><BankClassificationState row={detail.transaction} /><p className="whitespace-pre-wrap break-words text-sm">根拠の理由: {bankClassificationPresentation(detail.transaction).reason}</p></section> : null}
       {loading ? <p role="status" className="flex items-center gap-2 py-6"><LoaderCircle className="size-4 animate-spin" />読み込み中...</p> : null}
       {error ? <div className="space-y-2"><p role="alert" className="break-words text-destructive">{error}</p><Button type="button" variant="outline" onClick={load} disabled={loading}>再読み込み</Button></div> : null}
       {detail ? <BookkeepingEditor key={`${detail.transaction.id}:${detail.transaction.updatedAt}`} company={company} detail={detail} categories={categories} onDirty={() => setDirty(true)} onBusy={setSaving} onSaved={(row) => { setDirty(false); setOpen(false); router.refresh(); onSaved?.(row); }} /> : null}

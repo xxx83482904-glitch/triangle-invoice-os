@@ -342,3 +342,6 @@
     min-width: 20px;
   }
 }
+
+/* Japan UX: one 44px action row; retain the existing China save bar. */
+.bank-ledger-savebar.is-unified { min-height: 60px; padding-block: 8px; }

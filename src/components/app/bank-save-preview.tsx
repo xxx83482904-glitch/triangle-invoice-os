@@ -1,24 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, LoaderCircle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AccountingCategory } from "@/lib/banking-types";
 import { bankRenderWindow, BANK_RENDER_WINDOW, type BankSaveChange, type BankSaveScope } from "@/lib/bank-workspace-drafts";
 
+import type { BankSaveChoice, BankSaveOption } from "@/lib/bank-save-options";
+
 export const bankSaveScopeLabels = { selected: "選択した明細", reviewed: "確認済みの編集", edited: "手動編集した明細" };
-export type BankSavePreview = { scope: BankSaveScope; changes: BankSaveChange[]; omitted: number; unselected: number; destination?: string };
+export type BankSavePreview = { scope: BankSaveScope; choice?: BankSaveChoice; changes: BankSaveChange[]; omitted: number; unselected: number; destination?: string };
 const treatment = { NORMAL: "通常", EXCLUDED: "対象外", TRANSFER: "振替・カード精算" };
 
-export function BankSavePreviewDialog({ preview, categories, busy, onClose, onSave }: { preview: BankSavePreview; categories: AccountingCategory[]; busy: boolean; onClose: () => void; onSave: () => void }) {
+export function BankSavePreviewDialog({ preview, categories, busy, onClose, onSave, options, onChoice, error }: { preview: BankSavePreview; categories: AccountingCategory[]; busy: boolean; onClose: () => void; onSave: () => void; options?: BankSaveOption[]; onChoice?: (value: string) => void; error?: string }) {
   const [start, setStart] = useState(0);
   const window = bankRenderWindow(preview.changes, start);
   const categoryName = (id?: string) => categories.find((row) => row.id === id)?.name || (id ? `不明な科目 (${id})` : "未分類");
   const counterparties = new Set(preview.changes.map(({ before }) => before.content));
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" showCloseButton={!busy} onInteractOutside={(event) => event.preventDefault()}>
-      <DialogHeader><DialogTitle>保存内容の確認</DialogTitle><DialogDescription>{bankSaveScopeLabels[preview.scope]}: {preview.changes.length}件 / 自動候補の採用 {preview.changes.filter((row) => row.prediction).length}件</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>保存内容の確認</DialogTitle><DialogDescription>{options?.find((option) => option.value === preview.choice)?.label || bankSaveScopeLabels[preview.scope]}: {preview.changes.length}件 / 自動候補の採用 {preview.changes.filter((row) => row.prediction).length}件</DialogDescription></DialogHeader>
+      {options ? <div className="space-y-2">
+        <label className="grid gap-1 text-sm">保存の対象<select aria-label="保存の対象" className="min-h-11 w-full rounded-md border bg-background px-3 lg:min-h-9" value={preview.choice} disabled={busy} onChange={(event) => { setStart(0); onChoice?.(event.target.value); }}>
+          {options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}（{option.count}件）</option>)}
+        </select></label>
+        <p className="text-xs text-muted-foreground">自動候補は「選択中の明細」を選んだ場合だけ含みます。「すべての編集」と「編集した明細」は、確認操作を含む未保存の編集が対象です。</p>
+        {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
+      </div> : null}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm"><span>摘要 {counterparties.size}種類</span><span>選択解除 {preview.unselected}件</span><span>変更なし {preview.omitted}件</span><span>保留 {preview.changes.filter((row) => row.before.bookkeeping?.hold).length}件</span><span>科目分割 {preview.changes.filter((row) => row.before.bookkeeping?.splits?.length).length}件</span><span>対象外のまま保存 {preview.changes.filter((row) => row.after.treatment === "EXCLUDED").length}件</span><span>対象外から変更 {preview.changes.filter((row) => row.before.treatment === "EXCLUDED" && row.after.treatment !== "EXCLUDED").length}件</span><span>推測を内容確認のうえ確定 {preview.changes.filter((row) => row.after.reviewed && row.after.acknowledgeGuess).length}件</span></div>
       <div className="max-h-[48dvh] overflow-auto divide-y border-y">
         {window.rows.map(({ before, after, prediction }) => <section key={before.id} className="space-y-1 py-3 text-sm">
@@ -36,7 +45,7 @@ export function BankSavePreviewDialog({ preview, categories, busy, onClose, onSa
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><Button variant="outline" size="icon" aria-label="前の変更" title="前の変更" disabled={window.offset === 0} onClick={() => setStart(window.offset - BANK_RENDER_WINDOW)}><ArrowLeft className="size-4" /></Button><span className="text-xs">{preview.changes.length ? window.offset + 1 : 0}–{window.end} / {preview.changes.length}</span><Button variant="outline" size="icon" aria-label="次の変更" title="次の変更" disabled={window.end >= preview.changes.length} onClick={() => setStart(window.end)}><ArrowRight className="size-4" /></Button></div>
-        <Button disabled={busy || !preview.changes.length} onClick={onSave}><Save className="size-4" />{preview.changes.length}件を保存{preview.destination ? "して移動" : ""}</Button>
+        <Button disabled={busy || !preview.changes.length || Boolean(options && error)} onClick={onSave}>{options && busy ? <><LoaderCircle className="size-4 animate-spin" />確認中…</> : <><Save className="size-4" />{preview.changes.length}件を保存{preview.destination ? "して移動" : ""}</>}</Button>
       </div>
     </DialogContent>
   </Dialog>;
