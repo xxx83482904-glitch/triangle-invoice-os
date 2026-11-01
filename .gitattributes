@@ -1,0 +1,2 @@
+# Keep the verified static export byte-for-byte identical on Windows and Synology.
+public/akira-kitchen/** -text
