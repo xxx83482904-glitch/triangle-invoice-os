@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, FileUp, LoaderCircle, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
 import type { CompanyScope } from "@/lib/company";
 
 type Result = { fileName: string; id?: string; error?: string; duplicate?: boolean; warnings?: string[]; projectId?: string; projectName?: string; projectCreated?: boolean; projectMatch?: string };
@@ -18,7 +20,8 @@ export function InvoiceDropzone({ company, kind, projects = [], compact = false 
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [results, setResults] = useState<Result[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useOperationError(company);
+  const [retryFiles, setRetryFiles] = useState<File[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const label = kind === "issued" ? "発行請求書" : "受領請求書";
 
@@ -28,6 +31,7 @@ export function InvoiceDropzone({ company, kind, projects = [], compact = false 
     if (!selected.length) return;
     if (selected.length > 20) { setError("1回に20件まで選択できます"); return; }
     busy.current = true;
+    if (company === "JAPAN") setRetryFiles(selected);
     setError("");
     setResults([]);
     const imported: Result[] = [];
@@ -52,7 +56,12 @@ export function InvoiceDropzone({ company, kind, projects = [], compact = false 
       }
       router.refresh();
       const count = imported.filter((r) => !r.error).length;
-      toast({ title: count + "件取込、" + (imported.length - count) + "件要確認", variant: count ? "success" : "destructive" });
+      if (company === "JAPAN") {
+        const retained = unconfirmedUploadFiles(selected, imported);
+        setRetryFiles(retained);
+        if (!retained.length && input.current) input.current.value = "";
+        toast(uploadFeedback(imported, retained.length));
+      } else toast({ title: count + "件取込、" + (imported.length - count) + "件要確認", variant: count ? "success" : "destructive" });
     } finally { busy.current = false; setProgress(null); }
   }
 
@@ -75,9 +84,10 @@ export function InvoiceDropzone({ company, kind, projects = [], compact = false 
       <span className="min-w-0 break-words">{progress ? "OCR取込中 " + progress.current + " / " + progress.total : "ファイルをドロップ / 選択"}</span>
       <span className="text-xs text-muted-foreground">PDF・JPEG・PNG / 10MB</span>
     </button>
-    <input ref={input} type="file" aria-label={label + "アップロード"} accept="application/pdf,image/jpeg,image/png" multiple hidden disabled={Boolean(progress)} onChange={(e) => { if (e.target.files) void upload(e.target.files); e.target.value = ""; }} />
+    <input ref={input} type="file" aria-label={label + "アップロード"} accept="application/pdf,image/jpeg,image/png" multiple hidden disabled={Boolean(progress)} onChange={(e) => { if (e.target.files) void upload(e.target.files); if (company !== "JAPAN") e.target.value = ""; }} />
     {progress ? <progress className="h-1 w-full accent-primary" value={progress.current - 1} max={progress.total} aria-label="取込進捗" /> : null}
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+    {company === "JAPAN" && retryFiles.length && !progress ? <div className="space-y-2 text-xs"><p className="text-muted-foreground">選択{retryFiles.length}件を保持しています。登録済みの内容を確認してから再試行してください。</p><Button type="button" variant="outline" size="sm" onClick={() => void upload(retryFiles)}>保持したファイルを再試行（{retryFiles.length}件）</Button></div> : null}
     {results.length ? <div className="max-h-48 space-y-2 overflow-auto" aria-live="polite">
       <div className="flex items-center justify-between"><span className="text-xs text-muted-foreground">取込結果 {results.length}件</span><Button size="icon" variant="ghost" aria-label="取込結果を閉じる" title="取込結果を閉じる" disabled={Boolean(progress)} onClick={() => setResults([])}><X className="size-4" /></Button></div>
       {results.map((r, i) => <div key={r.fileName + i} className="flex items-start gap-2 text-sm">

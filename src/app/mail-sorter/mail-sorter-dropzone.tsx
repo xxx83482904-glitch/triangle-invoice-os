@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
+import { operationFailureToast, unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
 import type { CompanyScope } from "@/lib/company";
 import { yen } from "@/lib/format";
 import type { MailDocumentCategory } from "@/lib/types";
@@ -52,50 +53,69 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
   const [isPending, startTransition] = useTransition();
   const [results, setResults] = useState<SortResult[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [retryFiles, setRetryFiles] = useState<File[]>([]);
+  const inFlight = useRef(false);
 
   const upload = (files: FileList | File[]) => {
+    if (company === "JAPAN" && inFlight.current) return;
     const selected = Array.from(files);
     if (!selected.length) return;
+    if (company === "JAPAN") { inFlight.current = true; setRetryFiles(selected); }
     setError("");
     setProgress({ done: 0, total: selected.length });
 
     startTransition(async () => {
-      const formData = new FormData();
-      formData.append("company", company);
-      for (const file of selected) formData.append("files", file);
+      try {
+        const formData = new FormData();
+        formData.append("company", company);
+        for (const file of selected) formData.append("files", file);
 
-      const response = await fetch("/api/uploads/mail-sorter", {
-        method: "POST",
-        body: formData,
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(body.error ?? "郵便物の仕分けに失敗しました");
-        setProgress(null);
-        toast({ title: "アップロード失敗", description: body.error ?? "郵便物の仕分けに失敗しました", variant: "destructive" });
-        return;
-      }
+        const response = await fetch("/api/uploads/mail-sorter", {
+          method: "POST",
+          body: formData,
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          setError(body.error ?? "郵便物の仕分けに失敗しました");
+          setProgress(null);
+          toast({ title: "アップロード失敗", description: body.error ?? "郵便物の仕分けに失敗しました", variant: "destructive" });
+          return;
+        }
 
-      const newResults: SortResult[] = body.results ?? [];
-      setResults(newResults);
-      setProgress({ done: selected.length, total: selected.length });
-      router.refresh();
+        const newResults: SortResult[] = body.results ?? [];
+        setResults(newResults);
+        setProgress({ done: selected.length, total: selected.length });
+        router.refresh();
 
-      const errorCount = newResults.filter((r) => r.error).length;
-      const duplicateCount = newResults.filter((r) => r.duplicate).length;
-      const okCount = newResults.length - errorCount;
-      if (errorCount > 0) {
-        toast({ title: `${okCount}件完了、${errorCount}件エラー`, variant: "default" });
-      } else if (duplicateCount > 0) {
-        toast({ title: `${okCount}件完了、${duplicateCount}件が重複候補です`, variant: "default" });
-      } else {
-        toast({ title: `${okCount}件の郵便物を仕分けしました`, variant: "success" });
-      }
+        const errorCount = newResults.filter((r) => r.error).length;
+        const duplicateCount = newResults.filter((r) => r.duplicate).length;
+        const okCount = newResults.length - errorCount;
+        const retained = unconfirmedUploadFiles(selected, newResults);
+        if (company === "JAPAN") {
+          setRetryFiles(retained);
+          if (!retained.length && inputRef.current) inputRef.current.value = "";
+        }
+        if (company === "JAPAN" && (errorCount || retained.length)) {
+          const feedback = uploadFeedback(newResults, retained.length);
+          setError([feedback.title, feedback.description].filter(Boolean).join("。"));
+          toast(feedback);
+        } else if (errorCount > 0) {
+          toast({ title: `${okCount}件完了、${errorCount}件エラー`, variant: "default" });
+        } else if (duplicateCount > 0) {
+          toast({ title: `${okCount}件完了、${duplicateCount}件が重複候補です`, variant: company === "JAPAN" ? "success" : "default" });
+        } else {
+          toast({ title: `${okCount}件の郵便物を仕分けしました`, variant: "success" });
+        }
 
-      // #10: Auto scroll to results after upload
-      setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }, 100);
+        // #10: Auto scroll to results after upload
+        setTimeout(() => {
+          resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 100);
+      } catch (error) {
+        if (company !== "JAPAN") throw error;
+        const message = "通信に失敗し、取込結果を確認できませんでした。ファイルの選択を保持しています。登録済みの内容を確認してから再試行してください。";
+        setError(message); setProgress(null); toast(operationFailureToast(message));
+      } finally { inFlight.current = false; }
     });
   };
 
@@ -106,7 +126,7 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
           className={`flex min-h-28 cursor-pointer flex-col justify-center gap-4 rounded-md border border-dashed p-4 transition md:flex-row md:items-center md:justify-between ${
             dragging ? "border-primary bg-muted" : "border-border bg-background"
           }`}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => { if (company !== "JAPAN" || !inFlight.current) inputRef.current?.click(); }}
           onDragEnter={(event) => {
             event.preventDefault();
             setDragging(true);
@@ -162,7 +182,7 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
             multiple
             onChange={(event) => {
               if (event.target.files) upload(event.target.files);
-              event.target.value = "";
+              if (company !== "JAPAN") event.target.value = "";
             }}
           />
         </div>
@@ -172,6 +192,11 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
+
+        {company === "JAPAN" && retryFiles.length > 0 && !isPending ? <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <p className="text-muted-foreground">選択{retryFiles.length}件を保持しています。登録済みの内容を確認してから再試行してください。</p>
+          <Button type="button" size="sm" variant="outline" onClick={() => upload(retryFiles)}>保持したファイルを再試行（{retryFiles.length}件）</Button>
+        </div> : null}
 
         {results.length ? (
           <div ref={resultsRef} className="mt-3 grid gap-2 lg:grid-cols-2">

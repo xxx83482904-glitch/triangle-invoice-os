@@ -78,7 +78,7 @@ export function resolveIssuedImportProject(
   if (reusable.length === 1) return { project: reusable[0], projectCreated: false, projectMatch: "name" as const, warnings: warnings.slice(1) };
   const project: Project = {
     id, company, name, clientId: client.id, managerId: user.id, memberIds: [user.id],
-    status: "PLANNING", contractAmount: 0, billingCount: 1,
+    status: "PLANNING", contractAmount: company === "JAPAN" ? undefined : 0, billingCount: 1,
     memo: "発行請求書OCRから自動作成。案件名・請求先・契約情報要確認。",
     createdAt: timestamp, updatedAt: timestamp,
   };

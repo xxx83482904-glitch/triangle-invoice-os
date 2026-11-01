@@ -1,3 +1,5 @@
+import { projectAttention } from "@/lib/project-attention";
+import { bankToday } from "@/lib/banking";
 import { ProjectsWorkspace, type ProjectWorkspaceRow } from "@/app/projects/projects-workspace";
 import { redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -27,6 +29,7 @@ export default async function ProjectsPage({
   const canEdit = Boolean(user && can(user, "manage:projects"));
   const showFinancials = Boolean(user && can(user, "view:dashboard"));
 
+  const today = bankToday();
   const rows: ProjectWorkspaceRow[] = projects
     .filter((project) => matchesCompany(project, company))
     .map((project, index) => {
@@ -40,6 +43,7 @@ export default async function ProjectsPage({
         clientName: data.clients.find((client) => client.id === project.clientId)?.companyName ?? "",
         stage: project.stage ?? "",
         status: project.status,
+        attention: company === "JAPAN" ? projectAttention(data, project, today).filter((item) => showFinancials || !item.financial) : undefined,
         contractAmount: money.contractAmount,
         billingCount: project.billingCount ?? 1,
         contractFileUrl: project.contractFileUrl,

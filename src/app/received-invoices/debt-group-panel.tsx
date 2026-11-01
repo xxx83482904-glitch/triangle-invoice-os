@@ -1,4 +1,6 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -18,7 +20,7 @@ const roleOptions = Object.entries(debtRoles) as Array<[DebtRole, string]>;
 // 請求書 → 再請求 → 督促 → 領収書 of one debt are bundled here. Only the latest payable document is paid or reconciled.
 export function DebtGroupPanel({ company, invoice, canManage }: { company: CompanyScope; invoice: { id: string; updatedAt: string; issueDate: string; total: number; debt: DebtGroupView }; canManage: boolean }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
+  const [error, setError] = useOperationError(company);
   const [role, setRole] = useState<DebtRole>(invoice.debt.role);
   const [current, setCurrent] = useState(invoice.debt.statementCurrentAmount?.toString() ?? "");
   const [carried, setCarried] = useState(invoice.debt.statementCarriedOver?.toString() ?? "");
@@ -39,8 +41,8 @@ export function DebtGroupPanel({ company, invoice, canManage }: { company: Compa
     </li>)}</ul> : null}
     {canManage && debt.groupId ? <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
       <label className="grid min-w-0 gap-1 text-xs">この書類の役割<select className={selectClass} value={role} disabled={pending} onChange={(e) => setRole(e.target.value as DebtRole)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <Button className="h-11" variant="outline" disabled={pending} onClick={() => run(() => updateDebtRoleAction(company, { invoiceId: invoice.id, expectedUpdatedAt: invoice.updatedAt, role, statementCurrentAmount: role === "STATEMENT" && current ? Number(current) : undefined, statementCarriedOver: role === "STATEMENT" && carried ? Number(carried) : undefined }), "役割を保存しました")}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}役割を保存</Button>
-      <Button className="h-11" variant="ghost" disabled={pending} onClick={() => run(() => removeFromDebtGroupAction(company, { invoiceId: invoice.id, expectedUpdatedAt: invoice.updatedAt }), "グループから外しました")}><Link2Off className="size-4" />グループから外す</Button>
+      <Button className="h-11" variant="outline" disabled={pending} onClick={() => run(() => updateDebtRoleAction(company, { invoiceId: invoice.id, expectedUpdatedAt: invoice.updatedAt, role, statementCurrentAmount: role === "STATEMENT" && current ? Number(current) : undefined, statementCarriedOver: role === "STATEMENT" && carried ? Number(carried) : undefined }), "役割を保存しました")}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}役割を保存</OperationPending></Button>
+      <Button className="h-11" variant="ghost" disabled={pending} onClick={() => run(() => removeFromDebtGroupAction(company, { invoiceId: invoice.id, expectedUpdatedAt: invoice.updatedAt }), "グループから外しました")}><OperationPending pending={company === "JAPAN" && pending}><Link2Off className="size-4" />グループから外す</OperationPending></Button>
       {role === "STATEMENT" ? <div className="grid gap-2 sm:col-span-3 sm:grid-cols-2"><label className="grid gap-1 text-xs">今回御買上額<Input className="h-11" type="number" min="0" step="1" value={current} disabled={pending} onChange={(e) => setCurrent(e.target.value)} /></label><label className="grid gap-1 text-xs">繰越（前回請求残）<Input className="h-11" type="number" min="0" step="1" value={carried} disabled={pending} onChange={(e) => setCarried(e.target.value)} /></label>{current && Number(current) !== invoice.total ? <p className="text-xs text-amber-700 dark:text-amber-300 sm:col-span-2">差引支払額 {yen.format(invoice.total)} が今回御買上額と違います。金額の編集で差引支払額を今回御買上額に合わせてください。</p> : null}</div> : null}
     </div> : null}
     {canManage && debt.candidates.length ? <div className="space-y-2">
@@ -50,7 +52,7 @@ export function DebtGroupPanel({ company, invoice, canManage }: { company: Compa
         {picked[candidate.id] ? <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" aria-label="追加する書類の役割" value={picked[candidate.id]} disabled={pending} onChange={(e) => setPicked((state) => ({ ...state, [candidate.id]: e.target.value as DebtRole }))}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : null}
       </li>)}</ul>
       <div className="flex flex-wrap items-end gap-2">{!debt.groupId ? <label className="grid min-w-0 flex-1 gap-1 text-xs">この書類の役割<select className={selectClass} value={role} disabled={pending} onChange={(e) => setRole(e.target.value as DebtRole)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
-        <Button className="h-11" disabled={pending || !selected.length} onClick={() => run(() => assignDebtGroupAction(company, { invoiceIds: [invoice.id, ...selected], roles: { [invoice.id]: role, ...Object.fromEntries(selected.map((id) => [id, picked[id]!])) }, groupId: debt.groupId }), `${selected.length + (debt.groupId ? 0 : 1)}枚を束ねました`)}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Layers className="size-4" />}{debt.groupId ? "選んだ書類を追加" : "選んだ書類と束ねる"} ({selected.length})</Button></div>
+        <Button className="h-11" disabled={pending || !selected.length} onClick={() => run(() => assignDebtGroupAction(company, { invoiceIds: [invoice.id, ...selected], roles: { [invoice.id]: role, ...Object.fromEntries(selected.map((id) => [id, picked[id]!])) }, groupId: debt.groupId }), `${selected.length + (debt.groupId ? 0 : 1)}枚を束ねました`)}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Layers className="size-4" />}{debt.groupId ? "選んだ書類を追加" : "選んだ書類と束ねる"} ({selected.length})</OperationPending></Button></div>
     </div> : null}
     {!debt.groupId && !debt.candidates.length ? <p className="text-xs text-muted-foreground">束ねる候補はありません（同じ支払先で半年以内、同じ金額か再請求・督促・領収の語を含む書類を探しています）。</p> : null}
     {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}

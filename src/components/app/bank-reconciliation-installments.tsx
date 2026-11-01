@@ -1,4 +1,6 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 
 import { useState, useTransition } from "react";
 import { CalendarDays, LoaderCircle, Plus, Save, Trash2 } from "lucide-react";
@@ -11,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 
 export function BankReconciliationInstallments({ company, invoice }: { company: CompanyScope; invoice: ReconciliationInvoice }) {
   const [rows, setRows] = useState(() => invoice.installmentSchedule.map((row) => ({ ...row, amount: String(row.amount) })));
-  const [pending, startTransition] = useTransition(), [error, setError] = useState("");
+  const [pending, startTransition] = useTransition(), [error, setError] = useOperationError(company);
   const [dirty, setDirty] = useState(false);
   const total = rows.reduce((sum, row) => sum + Math.round(Number(row.amount) * 100), 0) / 100;
   const valid = Number.isFinite(total) && total <= invoice.total && rows.every((row) => row.dueDate && Number(row.amount) > 0 && Math.abs(Number(row.amount) * 100 - Math.round(Number(row.amount) * 100)) < 0.001);
@@ -32,7 +34,7 @@ export function BankReconciliationInstallments({ company, invoice }: { company: 
       <Button className="size-11" size="icon" variant="ghost" title="予定を削除" aria-label={`予定${index + 1}を削除`} disabled={pending} onClick={() => { setRows(rows.filter((item) => item.id !== row.id)); setDirty(true); }}><Trash2 className="size-4" /></Button>
       <Input className="col-span-3 min-h-11" aria-label={`予定${index + 1}のメモ`} placeholder="予定メモ" value={row.note || ""} maxLength={500} disabled={pending} onChange={(e) => { setRows(rows.map((item) => item.id === row.id ? { ...item, note: e.target.value } : item)); setDirty(true); }} />
     </div>)}</div>
-    <div className="flex flex-wrap items-center gap-3 py-2"><Button variant="outline" className="min-h-11" disabled={pending || rows.length >= 100} onClick={() => { setRows([...rows, { id: crypto.randomUUID(), dueDate: invoice.dueDate || "", amount: String(Math.max(0, invoice.total - (Number.isFinite(total) ? total : 0))) }]); setDirty(true); }}><Plus className="size-4" />予定を追加</Button><span className="inline-flex items-center gap-1 text-xs"><CalendarDays className="size-4" />予定合計 {Number.isFinite(total) ? total.toLocaleString("ja-JP") : "-"} / 請求額 {invoice.total.toLocaleString("ja-JP")}</span><Button className="min-h-11" disabled={pending || !dirty || !valid} onClick={save}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}予定を保存</Button></div>
+    <div className="flex flex-wrap items-center gap-3 py-2"><Button variant="outline" className="min-h-11" disabled={pending || rows.length >= 100} onClick={() => { setRows([...rows, { id: crypto.randomUUID(), dueDate: invoice.dueDate || "", amount: String(Math.max(0, invoice.total - (Number.isFinite(total) ? total : 0))) }]); setDirty(true); }}><Plus className="size-4" />予定を追加</Button><span className="inline-flex items-center gap-1 text-xs"><CalendarDays className="size-4" />予定合計 {Number.isFinite(total) ? total.toLocaleString("ja-JP") : "-"} / 請求額 {invoice.total.toLocaleString("ja-JP")}</span><Button className="min-h-11" disabled={pending || !dirty || !valid} onClick={save}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}予定を保存</OperationPending></Button></div>
     {total > invoice.total ? <p role="alert" className="text-xs text-destructive">予定合計が請求額を超えています。</p> : null}{error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
   </details>;
 }

@@ -1,8 +1,13 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 
+import { toast } from "@/hooks/use-toast";
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, LoaderCircle, Plus, Save, Trash2 } from "lucide-react";
+import { bankClassificationPresentation } from "@/lib/bank-classification-presentation";
+import { BankClassificationState } from "@/components/app/bank-classification-state";
 import { loadBankBookkeepingAction, saveBankBookkeepingAction } from "@/app/banking/bookkeeping-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +33,7 @@ export function BankBookkeepingDialog({ company, transaction, categories, disabl
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<BankBookkeepingDetail | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useOperationError(company);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, startTransition] = useTransition();
@@ -52,6 +57,7 @@ export function BankBookkeepingDialog({ company, transaction, categories, disabl
     <DialogTrigger asChild><Button type="button" size="icon" variant="ghost" className="size-11 shrink-0" disabled={disabled} title="記帳詳細" aria-label={`${transaction.content || "明細"}の記帳詳細`}><ClipboardList className="size-4" /></Button></DialogTrigger>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" showCloseButton={!loading && !saving} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => { if (loading || saving || dirty) event.preventDefault(); }}>
       <DialogHeader><DialogTitle>記帳詳細</DialogTitle><DialogDescription className="break-words pr-6">{transaction.transactionDate} / {transaction.content || "摘要なし"}</DialogDescription></DialogHeader>
+      {company === "JAPAN" && detail ? <section className="space-y-2 rounded-lg border bg-muted/30 p-3" aria-label="分類の根拠と状態"><h3 className="text-sm font-semibold">分類の根拠と状態</h3><BankClassificationState row={detail.transaction} /><p className="whitespace-pre-wrap break-words text-sm">根拠の理由: {bankClassificationPresentation(detail.transaction).reason}</p></section> : null}
       {loading ? <p role="status" className="flex items-center gap-2 py-6"><LoaderCircle className="size-4 animate-spin" />読み込み中...</p> : null}
       {error ? <div className="space-y-2"><p role="alert" className="break-words text-destructive">{error}</p><Button type="button" variant="outline" onClick={load} disabled={loading}>再読み込み</Button></div> : null}
       {detail ? <BookkeepingEditor key={`${detail.transaction.id}:${detail.transaction.updatedAt}`} company={company} detail={detail} categories={categories} onDirty={() => setDirty(true)} onBusy={setSaving} onSaved={(row) => { setDirty(false); setOpen(false); router.refresh(); onSaved?.(row); }} /> : null}
@@ -87,7 +93,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
     invoiceRequirement: row.bookkeeping?.invoiceRequirement || "UNDECIDED", memo: row.memo, reviewed: row.reviewed,
   }));
   const [splitMode, setSplitMode] = useState(Boolean(draft.splits.length));
-  const [error, setError] = useState("");
+  const [error, setError] = useOperationError(company);
   const [busy, startTransition] = useTransition();
   const locked = Boolean(detail.lockedReason);
   const available = categories.filter((category) => category.company === company && category.available && !category.deletedAt && (!category.officeCode || category.officeCode === row.officeCode));
@@ -108,6 +114,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
       try {
         const result = await saveBankBookkeepingAction(company, draft);
         if (!result.success) throw new Error(result.error);
+        if (company === "JAPAN") toast({ title: "記帳詳細を保存しました", variant: "success" });
         onSaved(result.transaction);
       } catch (cause) { setError(cause instanceof Error ? cause.message : "保存結果を確認できません。再度保存する前に詳細を開き直してください"); }
       finally { onBusy(false); }
@@ -149,6 +156,6 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
       </li>)}</ul></> : <p className="text-xs text-muted-foreground">一致する重複候補はありません</p>}
     </section>
     {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
-    <div className="flex justify-end border-t pt-3"><Button type="submit" className="min-h-11" disabled={locked || busy || Boolean(validation.issue) || holdInvalid || reviewInvalid}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{busy ? "保存中..." : "詳細を保存"}</Button></div>
+    <div className="flex justify-end border-t pt-3"><Button type="submit" className="min-h-11" disabled={locked || busy || Boolean(validation.issue) || holdInvalid || reviewInvalid}><OperationPending pending={company === "JAPAN" && busy}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{busy ? "保存中..." : "詳細を保存"}</OperationPending></Button></div>
   </form>;
 }

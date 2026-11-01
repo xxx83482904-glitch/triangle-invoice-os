@@ -151,7 +151,7 @@ export type Project = {
   memberIds: string[];
   status: ProjectStatus;
   stage?: string;
-  contractAmount: number;
+  contractAmount?: number;
   billingCount?: number;
   contractFileUrl?: string;
   contractOriginalFileName?: string;
@@ -449,7 +449,7 @@ export type PayrollSettings = {
 };
 
 export type ProjectMoney = {
-  contractAmount: number;
+  contractAmount: number | null;
   invoicedAmount: number;
   paidIncomeAmount: number;
   unpaidIncomeAmount: number;

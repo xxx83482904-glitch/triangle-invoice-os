@@ -12,6 +12,9 @@ import type { BulkReclassifyPreview } from "@/lib/bank-bulk-reclassify";
 import type { AccountingCategory, BankTransaction } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
 import { toast } from "@/hooks/use-toast";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
+import { operationErrorMessage } from "@/lib/operation-feedback";
 
 const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
 
@@ -22,7 +25,9 @@ export function BankBulkReclassifyDialog({ company, row, accountName, categories
   const [open, setOpen] = useState(false), [pending, startTransition] = useTransition();
   const [sameSide, setSameSide] = useState(true), [sameAccount, setSameAccount] = useState(false), [includeReviewed, setIncludeReviewed] = useState(true);
   const [categoryId, setCategoryId] = useState(""), [subCategoryId, setSubCategoryId] = useState(""), [reason, setReason] = useState("");
-  const [preview, setPreview] = useState<BulkReclassifyPreview | null>(null), [error, setError] = useState("");
+  const [applying, setApplying] = useState(false);
+  const [preview, setPreview] = useState<BulkReclassifyPreview | null>(null);
+  const [error, setError] = useOperationError(company);
   const parents = categories.filter((item) => !item.parentId && item.available && !item.deletedAt && item.company === company && (!item.officeCode || item.officeCode === row.officeCode)).sort((a, b) => a.name.localeCompare(b.name, "ja"));
   const children = categories.filter((item) => item.parentId === categoryId && item.available && !item.deletedAt);
   const sections = [...new Set(parents.map((item) => bankCategorySection(item.group).label))];
@@ -30,20 +35,31 @@ export function BankBulkReclassifyDialog({ company, row, accountName, categories
     if (!open) return;
     let cancelled = false;
     startTransition(async () => {
-      const result = await previewBulkReclassifyAction(company, { content: row.content, side: sameSide ? row.side : undefined, bankAccountId: sameAccount ? row.bankAccountId : undefined, includeReviewed });
-      if (cancelled) return;
-      if (!result.success) { setError(result.error); setPreview(null); return; }
-      setError(""); setPreview(result.preview);
+      try {
+        const result = await previewBulkReclassifyAction(company, { content: row.content, side: sameSide ? row.side : undefined, bankAccountId: sameAccount ? row.bankAccountId : undefined, includeReviewed });
+        if (cancelled) return;
+        if (!result.success) { setError(result.error); setPreview(null); return; }
+        setError(""); setPreview(result.preview);
+      } catch (error) {
+        if (company !== "JAPAN") throw error;
+        if (!cancelled) { setError(operationErrorMessage(undefined)); setPreview(null); }
+      }
     });
     return () => { cancelled = true; };
-  }, [open, sameSide, sameAccount, includeReviewed, company, row.content, row.side, row.bankAccountId]);
+  }, [open, sameSide, sameAccount, includeReviewed, company, row.content, row.side, row.bankAccountId, setError]);
   function apply() {
-    if (!preview || !categoryId || !reason.trim()) return;
+    if (!preview || !categoryId || !reason.trim() || (company === "JAPAN" && pending)) return;
+    if (company === "JAPAN") setApplying(true);
     startTransition(async () => {
-      const result = await applyBulkReclassifyAction(company, { content: row.content, side: sameSide ? row.side : undefined, bankAccountId: sameAccount ? row.bankAccountId : undefined, includeReviewed, categoryId, subCategoryId: subCategoryId || undefined, reason: reason.trim(), expectedCount: preview.matched });
-      if (!result.success) { setError(result.error); return; }
-      toast({ title: `${result.changed}件の科目を変更しました（確認済み ${result.reviewed}件を含む）`, variant: "success" });
-      setOpen(false); setPreview(null); setReason(""); onApplied();
+      try {
+        const result = await applyBulkReclassifyAction(company, { content: row.content, side: sameSide ? row.side : undefined, bankAccountId: sameAccount ? row.bankAccountId : undefined, includeReviewed, categoryId, subCategoryId: subCategoryId || undefined, reason: reason.trim(), expectedCount: preview.matched });
+        if (!result.success) { setError(result.error); return; }
+        toast({ title: `${result.changed}件の科目を変更しました（確認済み ${result.reviewed}件を含む）`, variant: "success" });
+        setOpen(false); setPreview(null); setReason(""); onApplied();
+      } catch (error) {
+        if (company !== "JAPAN") throw error;
+        setError(operationErrorMessage(undefined));
+      } finally { if (company === "JAPAN") setApplying(false); }
     });
   }
   return <>
@@ -68,7 +84,7 @@ export function BankBulkReclassifyDialog({ company, row, accountName, categories
         </div>
         <label className="grid gap-1 text-xs">変更の理由（履歴に残ります）<Input className="h-11" value={reason} maxLength={500} disabled={pending} placeholder="例: 取引先の科目を外注費へ統一" onChange={(e) => setReason(e.target.value)} /></label>
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
-        <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" className="min-h-11" disabled={pending} onClick={() => setOpen(false)}>キャンセル</Button><Button className="min-h-11" disabled={pending || !preview?.matched || !categoryId || !reason.trim()} onClick={apply}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Layers className="size-4" />}{preview?.matched || 0}件を変更</Button></div>
+        <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" className="min-h-11" disabled={pending} onClick={() => setOpen(false)}>キャンセル</Button><Button className="min-h-11" disabled={pending || !preview?.matched || !categoryId || !reason.trim()} onClick={apply}><OperationPending pending={company === "JAPAN" && pending} label={applying ? "保存中…" : "対象を確認中…"}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Layers className="size-4" />}{preview?.matched || 0}件を変更</OperationPending></Button></div>
       </DialogContent>
     </Dialog>
   </>;

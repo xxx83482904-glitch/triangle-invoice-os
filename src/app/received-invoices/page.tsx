@@ -22,9 +22,11 @@ import { paymentRecordsFor } from "@/lib/payment-records";
 import { receivedPayableSummary } from "@/lib/received-invoice-payables";
 import { debtGroupView } from "@/lib/debt-groups";
 import { ReceivedInvoiceDropzone } from "./received-invoice-dropzone";
+import { ReceivedInvoiceCreateForm, ReceivedInvoiceCreateSubmit } from "./received-invoice-create-form";
 import { ReceivedAmountFields } from "./received-amount-fields";
 import { reconciliationIssue } from "@/lib/bank-reconciliation";
 import type { ReceivedInvoiceAmounts } from "@/lib/received-invoice-review";
+import { uploadedFileExists } from "@/lib/files";
 import { ReceivedInvoicesWorkspace, type ReceivedInvoiceWorkspaceItem } from "./received-invoices-workspace";
 
 export default async function ReceivedInvoicesPage({
@@ -78,6 +80,7 @@ export default async function ReceivedInvoicesPage({
         bankReconciledAmount: (data.bankReconciliations ?? []).filter((link) => !link.deletedAt && link.company === company && link.invoiceKind === "received" && link.invoiceId === invoice.id && !reconciliationIssue(data, link)).reduce((sum, link) => sum + link.amount, 0),
         dueDate: invoice.dueDate,
         fileUrl: invoice.fileUrl || linkedMail?.fileUrl,
+        sourceMissing: company === "JAPAN" ? uploadedFileExists(invoice.fileUrl || linkedMail?.fileUrl) === false : undefined,
         folderMonth: invoice.folderMonth,
         id: invoice.id,
         issueDate: invoice.issueDate,
@@ -133,7 +136,7 @@ export default async function ReceivedInvoicesPage({
               <CardTitle>手入力で登録</CardTitle>
             </CardHeader>
             <CardContent>
-              <form action="/api/uploads/received-invoices" method="post" encType="multipart/form-data" className="space-y-4">
+              <ReceivedInvoiceCreateForm company={company}>
                 <input type="hidden" name="company" value={company} />
                 <div className="space-y-2">
                   <Label>ファイル <span className="text-destructive">*</span></Label>
@@ -179,9 +182,9 @@ export default async function ReceivedInvoicesPage({
                   <Label>メモ</Label>
                   <Textarea name="memo" />
                 </div>
-                <Button className="w-full" type="submit">登録</Button>
+                <ReceivedInvoiceCreateSubmit />
                 <p className="text-xs text-muted-foreground"><span className="text-destructive">*</span> は必須項目です。</p>
-              </form>
+              </ReceivedInvoiceCreateForm>
             </CardContent>
           </Card>
         ) : null}

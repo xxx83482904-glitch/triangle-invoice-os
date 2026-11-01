@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, FileSearch, FolderKanban, Landmark, Mail, RefreshCw } from "lucide-react";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, FileSearch, FolderKanban, Landmark, RefreshCw } from "lucide-react";
 import { BankBalanceSummary } from "@/components/app/bank-balance-summary";
 import { recordSelectClass } from "@/components/app/record-list-controls";
 import { Button } from "@/components/ui/button";
 import type { DashboardDocument, DashboardSummary } from "@/lib/dashboard";
 import { yen } from "@/lib/format";
+import { dashboardWorkRows, type DashboardNextStep, type DashboardWorkView } from "@/lib/dashboard-work";
 
 const monthLabel = (month: string) => `${month.slice(0, 4)}年${Number(month.slice(5))}月`;
 const timingLabels = { overdue: "期限超過", soon: "7日以内", later: "期限待ち", undated: "期限未設定" };
-type WorkView = "income" | "expense" | "review";
+type WorkView = DashboardWorkView;
 
 export function DashboardActions({ company }: { company: DashboardSummary["company"] }) {
   const router = useRouter();
@@ -23,7 +24,7 @@ export function DashboardActions({ company }: { company: DashboardSummary["compa
   </>;
 }
 
-export function DashboardWorkspace({ summary: s }: { summary: DashboardSummary }) {
+export function DashboardWorkspace({ summary: s, nextSteps = [] }: { summary: DashboardSummary; nextSteps?: DashboardNextStep[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [view, setView] = useState<WorkView>("income");
@@ -32,14 +33,19 @@ export function DashboardWorkspace({ summary: s }: { summary: DashboardSummary }
   const workRef = useRef<HTMLElement>(null);
   const query = `company=${s.company}`;
   const accountsHref = `/banking/accounts?${query}`;
-  const workRows = (view === "income" ? s.receivables : view === "expense" ? s.payables : s.review).filter((row) => view === "review" || timing === "all" || row.timing === timing && !row.paymentMismatch);
-  const openWork = (value: WorkView, scroll = false) => {
-    setView(value); setTiming("all"); setLimit(8);
+  const workRows = dashboardWorkRows(s, view, timing);
+  const openWork = (value: WorkView, scroll = false, nextTiming = "all") => {
+    setView(value); setTiming(nextTiming); setLimit(8);
     if (scroll) { workRef.current?.scrollIntoView({ block: "start" }); workRef.current?.focus({ preventScroll: true }); }
   };
   const workTotal = s.review.length;
   const statClass = "group flex min-w-0 flex-col items-stretch justify-start gap-3 rounded-xl border bg-card p-5 text-left shadow-sm transition hover:border-primary/50 hover:shadow-md focus-visible:outline-2 focus-visible:outline-ring";
   return <>
+    {s.company === "JAPAN" ? <section aria-labelledby="dashboard-next-title" className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+      <h2 id="dashboard-next-title" className="font-semibold">次にやること</h2>
+      <p className="mt-1 text-xs text-muted-foreground">期限と確認事項から急ぐ順に表示しています。書類は下の「対応する書類」に絞って表示します。</p>
+      <div className="mt-3 divide-y">{nextSteps.length ? nextSteps.map((step) => <NextStepRow key={step.id} step={step} openWork={openWork} />) : <p className="py-3 text-sm text-muted-foreground">今すぐ対応が必要なものはありません</p>}</div>
+    </section> : null}
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_0.8fr]">
       <Link href={accountsHref} prefetch={false} className={statClass}>
         <span className="flex items-center gap-2 text-sm text-muted-foreground"><Landmark className="size-4" />銀行の計算残高<span aria-hidden="true" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary group-hover:bg-primary/15"><ArrowRight className="size-4" /></span></span>
@@ -91,10 +97,9 @@ export function DashboardWorkspace({ summary: s }: { summary: DashboardSummary }
     </div>
 
     <section aria-labelledby="dashboard-tasks-title" className="mb-6 rounded-xl border bg-card p-5 shadow-sm">
-      <h2 id="dashboard-tasks-title" className="mb-3 font-semibold">確認待ち・連携状況</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <QueueLink icon={Landmark} label="未確認の口座明細" count={s.banking.unreviewed} href={`/banking?${query}&status=unreviewed`} />
-        {s.company === "JAPAN" ? <QueueLink icon={Mail} label="未処理の郵便物" count={s.pendingMail} href={`/mail-sorter?${query}`} /> : null}
+      <h2 id="dashboard-tasks-title" className="mb-3 font-semibold">{s.company === "JAPAN" ? "案件・口座連携" : "確認待ち・連携状況"}</h2>
+      <div className={s.company === "JAPAN" ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2 xl:grid-cols-4"}>
+        {s.company !== "JAPAN" ? <QueueLink icon={Landmark} label="未確認の口座明細" count={s.banking.unreviewed} href={`/banking?${query}&status=unreviewed`} /> : null}
         <QueueLink icon={FolderKanban} label="進行中の案件" count={s.projectCount} href={`/projects?${query}`} />
         <Link href={`/banking?${query}`} prefetch={false} className="flex min-h-14 items-center justify-between gap-2 rounded-lg border bg-primary/10 px-3 py-2 text-sm text-primary hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-ring"><span>{s.banking.syncing ? "口座明細を同期中" : s.banking.syncErrors ? `同期エラー ${s.banking.syncErrors}件` : "口座連携"}</span><ArrowRight className="size-4 shrink-0" /></Link>
       </div>
@@ -103,6 +108,19 @@ export function DashboardWorkspace({ summary: s }: { summary: DashboardSummary }
 
     <MonthlyOverview summary={s} pending={pending} changeYear={(year) => startTransition(() => router.push(`/dashboard?${query}&year=${year}`, { scroll: false }))} />
   </>;
+}
+
+function NextStepRow({ step, openWork }: { step: DashboardNextStep; openWork: (view: WorkView, scroll: boolean, timing: string) => void }) {
+  const target = step.target;
+  return <div className="flex min-w-0 items-start gap-3 py-3">
+    <div className="min-w-0 flex-1 space-y-1">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"><span className="font-medium">{step.label}</span><span className="tabular-nums">{step.count}件{step.amount !== undefined ? ` / ${yen.format(step.amount)}` : ""}</span></div>
+      <p className="text-xs text-muted-foreground">{step.reason}</p>
+      {step.caveat ? <p className="text-xs text-muted-foreground">{step.caveat}</p> : null}
+    </div>
+    {"href" in target ? <Button asChild variant="soft" size="sm"><Link href={target.href} prefetch={false} aria-label={`${step.label}を開く`}>開く<ArrowRight className="size-4" /></Link></Button>
+      : <Button variant="soft" size="sm" aria-label={`${step.label}を開く`} onClick={() => openWork(target.view, true, target.timing)}>開く<ArrowRight className="size-4" /></Button>}
+  </div>;
 }
 
 function WorkRow({ row, review }: { row: DashboardDocument; review: boolean }) {

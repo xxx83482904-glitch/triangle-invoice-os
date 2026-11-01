@@ -1,3 +1,11 @@
+// A broken invoice link is not evidence that its original file is missing.
+export function originalSourceState(fileUrl?: string, sourceMissing = false, responseStatus?: number) {
+  if (!fileUrl?.trim()) return { missing: true, reason: "原本の登録先がありません。" };
+  if (sourceMissing) return { missing: true, reason: "登録された参照先に原本ファイルがありません。再アップロード後に画面を更新してください。" };
+  if (responseStatus === 404 || responseStatus === 410) return { missing: true, reason: `原本の参照先が見つかりません（HTTP ${responseStatus}）。登録先を確認してください。` };
+  return { missing: false, reason: "" };
+}
+
 export async function originalPreviewBlob(response: Response, mimeType?: string) {
   if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "原本へのアクセス権限を確認してください。" : `原本を取得できませんでした (HTTP ${response.status})。`);
   const blob = await response.blob();

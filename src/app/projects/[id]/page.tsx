@@ -52,7 +52,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           ].map(([label, value]) => (
             <Card variant="section" key={label as string}>
               <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
-              <CardContent className="text-xl font-semibold">{yen.format(value as number)}</CardContent>
+              <CardContent className="text-xl font-semibold">{value === null ? "—" : yen.format(value as number)}</CardContent>
             </Card>
           ))}
           <Card variant="section">

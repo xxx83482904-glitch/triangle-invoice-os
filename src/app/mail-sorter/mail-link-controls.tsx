@@ -1,4 +1,6 @@
 "use client";
+import { useOperationError } from "@/hooks/use-operation-error";
+import { OperationPending } from "@/components/app/operation-feedback";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Link2Off, LoaderCircle } from "lucide-react";
@@ -15,7 +17,7 @@ export function MailRelinkForm({ company, mailDocumentId, mailUpdatedAt, candida
   company: CompanyScope; mailDocumentId: string; mailUpdatedAt?: string; candidates: Option[]; targets: Option[]; broken?: boolean; brokenTargetId?: string; disabled?: boolean;
 }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
-  const [value, setValue] = useState(candidates[0]?.value || ""), [error, setError] = useState("");
+  const [value, setValue] = useState(candidates[0]?.value || ""), [error, setError] = useOperationError(company);
   const candidateIds = new Set(candidates.map((row) => row.value));
   function link() {
     if (!value) { setError("再連携する受領請求書を選択してください"); return; }
@@ -37,13 +39,13 @@ export function MailRelinkForm({ company, mailDocumentId, mailUpdatedAt, candida
       <optgroup label="すべての受領請求書">{targets.filter((row) => !candidateIds.has(row.value)).map((row) => <option key={row.value} value={row.value}>{row.label}</option>)}</optgroup>
     </select>
     {error ? <p role="alert" className="break-words text-xs text-destructive">{error}</p> : null}
-    <Button type="button" size="sm" variant="outline" disabled={disabled || pending || !value} onClick={link}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}この受領請求書へ連携</Button>
+    <Button type="button" size="sm" variant="outline" disabled={disabled || pending || !value} onClick={link}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}この受領請求書へ連携</OperationPending></Button>
   </div>;
 }
 
 export function MailUnlinkButton({ company, mailDocumentId, mailUpdatedAt, disabled = false }: { company: CompanyScope; mailDocumentId: string; mailUpdatedAt?: string; disabled?: boolean }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
-  const [confirm, setConfirm] = useState(false), [error, setError] = useState("");
+  const [confirm, setConfirm] = useState(false), [error, setError] = useOperationError(company);
   function unlink() {
     setError("");
     startTransition(async () => {
@@ -56,7 +58,7 @@ export function MailUnlinkButton({ company, mailDocumentId, mailUpdatedAt, disab
   }
   return <div className="space-y-1" onClick={(event) => event.stopPropagation()}>
     {confirm
-      ? <div className="flex flex-wrap items-center gap-2 text-xs"><span>受領請求書との連携を解除して未連携に戻します。受領請求書自体は削除しません。</span><Button type="button" size="sm" variant="destructive" disabled={pending} onClick={unlink}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2Off className="size-4" />}解除する</Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setConfirm(false)}>キャンセル</Button></div>
+      ? <div className="flex flex-wrap items-center gap-2 text-xs"><span>受領請求書との連携を解除して未連携に戻します。受領請求書自体は削除しません。</span><Button type="button" size="sm" variant="destructive" disabled={pending} onClick={unlink}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2Off className="size-4" />}解除する</OperationPending></Button><Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setConfirm(false)}>キャンセル</Button></div>
       : <Button type="button" size="sm" variant="ghost" className="text-muted-foreground" disabled={disabled || pending} onClick={() => setConfirm(true)}><Link2Off className="size-4" />連携を解除（未連携に戻す）</Button>}
     {error ? <p role="alert" className="break-words text-xs text-destructive">{error}</p> : null}
   </div>;
