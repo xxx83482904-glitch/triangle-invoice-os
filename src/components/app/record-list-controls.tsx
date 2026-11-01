@@ -3,7 +3,7 @@
 import { LoaderCircle, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export const recordSelectClass = "h-11 w-full min-w-0 max-w-full rounded-md border bg-background px-2 text-sm";
+export const recordSelectClass = "h-11 w-full min-w-0 max-w-full rounded-lg border bg-background px-3 text-sm lg:h-9";
 export const recordMonthLabel = (month: string) => !month || month === "all" ? "すべての月" : month === "undated" ? "日付未設定" : `${month.slice(0, 4)}年${Number(month.slice(5, 7))}月`;
 
 export function RecordMonthNavigation({ label, months, value, disabled, onChange }: {

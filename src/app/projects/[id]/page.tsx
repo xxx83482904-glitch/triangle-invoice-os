@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -77,7 +78,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardContent>
               <Table>
                 <TableHeader><TableRow><TableHead>請求元</TableHead><TableHead>請求日</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>支払済み</TableHead><TableHead>状態</TableHead><TableHead>ファイル</TableHead></TableRow></TableHeader>
-                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="received" status={invoice.status} /></TableCell><TableCell>{invoice.fileUrl ? <a className="text-sm underline" href={invoice.fileUrl} target="_blank">表示</a> : "-"}</TableCell></TableRow>)}</TableBody>
+                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="received" status={invoice.status} /></TableCell><TableCell>{invoice.fileUrl ? <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank">表示<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></a></Button> : "-"}</TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
           </Card> : null}
@@ -92,9 +93,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <span className="text-muted-foreground">契約書</span>
                 <span>
                   {project.contractFileUrl ? (
-                    <a className="underline" href={project.contractFileUrl} target="_blank">
+                    <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={project.contractFileUrl} target="_blank">
                       表示
-                    </a>
+                    <ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></a></Button>
                   ) : (
                     "-"
                   )}

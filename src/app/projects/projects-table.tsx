@@ -178,7 +178,7 @@ function ProjectIdentity({ row }: { row: ProjectListRow }) {
   return (
     <div className="min-w-0">
       <div className="text-xs font-medium text-muted-foreground">No. {row.index}</div>
-      <Link href={`/projects/${row.id}`} prefetch={false} className="block truncate text-xs font-medium hover:underline">
+      <Link href={`/projects/${row.id}`} prefetch={false} className="block truncate text-xs font-medium hover:underline underline-offset-4 hover:text-primary">
         {row.name}
       </Link>
     </div>
@@ -269,10 +269,10 @@ function ContractUpload({ canEdit, row }: { canEdit: boolean; row: ProjectListRo
   return (
     <div className="space-y-1">
       {row.contractFileUrl ? (
-        <a className="inline-flex items-center gap-1 text-xs font-medium underline" href={row.contractFileUrl} target="_blank">
+        <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={row.contractFileUrl} target="_blank">
           <FileText className="h-3.5 w-3.5" />
           契約書
-        </a>
+        </a></Button>
       ) : (
         <div className="text-xs text-muted-foreground">未登録</div>
       )}

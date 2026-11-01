@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export const bankSelectClass = "h-11 w-full min-w-0 max-w-full rounded-md border bg-background px-2 text-sm text-foreground disabled:opacity-50";
+export const bankSelectClass = "h-11 w-full min-w-0 max-w-full rounded-lg border bg-background px-3 text-sm lg:h-9 text-foreground disabled:opacity-50";
 
 export function BankCategoryFields({ categories, categoryId = "", subCategoryId = "", onChange, disabled = false, label = "", allowUnclassified = true }: {
   categories: AccountingCategory[]; categoryId?: string; subCategoryId?: string;
@@ -59,7 +59,7 @@ export function BankingSettings({ company, accounts, categories, rules, open, on
     <DialogContent aria-describedby={undefined} showCloseButton={!pending} className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>勘定科目・自動分類ルール</DialogTitle></DialogHeader>
       <Tabs value={tab} onValueChange={(value) => { setTab(value as typeof tab); setError(""); }}>
-      <TabsList aria-label="明細設定" variant="line" className="min-h-11 max-w-full border-b">
+      <TabsList aria-label="明細設定" variant="line" className="min-h-11 max-w-full">
         <TabsTrigger value="categories" disabled={pending} className="min-h-11">勘定科目</TabsTrigger>
         <TabsTrigger value="rules" disabled={pending} className="min-h-11">自動分類ルール</TabsTrigger>
       </TabsList>
