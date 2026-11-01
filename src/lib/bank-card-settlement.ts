@@ -37,7 +37,8 @@ export function integrityBankCardSettlement(data: Pick<AppData, "bankAccounts">,
   if (row.company !== "JAPAN" || row.side !== "EXPENSE" || !Number.isFinite(row.amount) || row.amount <= 0 || row.sourceMissing || row.sourceStatus === "excluded") return;
   const content = normalize(row.content);
   // Exact payee, with optional transfer/debit prefix and common corporate notation. No arbitrary substrings.
-  if (!/^(?:振込|振込み|フリコミ|口座振替)?(?:株式会社|\(株\)|カ\)|\(カ\))?(?:upsider|アップサイダー)(?:株式会社|\(株\)|\(カ\))?$/.test(content)) return;
+  // Bank kana uses ツ for ッ and may shorten or omit the final long vowel; only transfer prefixes allow 0–2 digits.
+  if (!/^(?:(?:振込み?|フリコミ)[0-9]{0,2}|口座振替)?(?:株式会社|\(株\)|カ\)|\(カ\))?(?:upsider|ア[ッツ]プサイダ[ー‐‒–—―−-]?)(?:株式会社|\(株\)|\(カ\))?$/.test(content)) return;
   if (/返金|返還|返戻|取消|取り消|組戻|払戻|払い戻|手数料|refund|reversal|fee/.test(content)) return;
   const account = data.bankAccounts.find((item) => item.id === row.bankAccountId && item.company === row.company && item.officeCode === row.officeCode);
   if (!account || settlementAccountKind(account) !== "BANK") return;
