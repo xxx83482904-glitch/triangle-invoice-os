@@ -503,8 +503,8 @@ export function BankingWorkspace(props: Props) {
     <div className="bank-ledger-layout">
       <section className="min-w-0 space-y-1">
         {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><div className="min-w-0"><h2 className="text-base font-semibold">{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}</h2>{aiResult ? <p className="mt-1 break-words text-xs text-muted-foreground">候補 {aiResult.suggested}件・うち低確度の推定 {aiResult.lowConfidence}件 / {aiResult.model}</p> : null}</div><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
-        {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
-        {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
+        {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-selected p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
+        {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-selected p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
         <section className="workspace-filter-panel space-y-1 p-3"><h2 className="text-xs font-semibold">絞り込み</h2>
         <BankFiscalMonthTabs value={filters.month} months={months} today={bankToday()} disabled={pending} onChange={(month) => navigate({ month })} />
         <div className="bank-ledger-filters">
@@ -546,7 +546,7 @@ export function BankingWorkspace(props: Props) {
             <tbody>{rows.map((row) => {
               const value = drafts[row.id] || editFrom(row);
               const controls = fields(row, value);
-              return <tr key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }} className={`border-b align-top ${selected.has(row.id) ? "bg-primary/10" : "hover:bg-muted/30"}`}>
+              return <tr key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }} className={`border-b align-top ${selected.has(row.id) ? "bg-selected" : "hover:bg-muted/30"}`}>
                 <td>{selectionBox(row)}</td>
                 <td className="px-1 py-3"><time className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{row.transactionDate}</time></td>
                 <td className="break-words px-2 py-2"><div className="font-medium">{matchedContent(row.content)}</div><div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><span className="line-clamp-2" title={accountMap.get(row.bankAccountId)}>{accountMap.get(row.bankAccountId) || "口座未取得"}</span>{row.sourceMemo ? <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" className="bank-source-note size-11 shrink-0 lg:size-7" title="元明細メモ" aria-label={`${row.content}の元明細メモ`}><MessageSquareText className="size-3" /></Button></PopoverTrigger><PopoverContent className="max-w-[min(320px,90vw)] break-words text-sm">{row.sourceMemo}</PopoverContent></Popover> : null}</div></td>
@@ -557,7 +557,7 @@ export function BankingWorkspace(props: Props) {
             })}</tbody>
           </table>
         </div>
-        <div className="divide-y md:hidden">{rows.map((row) => { const value = drafts[row.id] || editFrom(row); return <article key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 380px" }} className={`min-w-0 space-y-2 py-3 ${selected.has(row.id) ? "bg-primary/10" : ""}`}>
+        <div className="divide-y md:hidden">{rows.map((row) => { const value = drafts[row.id] || editFrom(row); return <article key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 380px" }} className={`min-w-0 space-y-2 py-3 ${selected.has(row.id) ? "bg-selected" : ""}`}>
           <div className="flex min-w-0 items-start gap-1">{selectionBox(row)}<div className="min-w-0 flex-1"><div className="flex flex-wrap justify-between gap-1"><time className="text-xs">{row.transactionDate}</time><span className={`break-all text-sm font-medium tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></div><h3 className="mt-1 break-words text-sm font-medium">{matchedContent(row.content)}</h3><div className="break-words text-xs text-muted-foreground">{accountMap.get(row.bankAccountId)}</div>{status(row, value)}</div></div>
           {row.sourceMemo ? <div className="break-words text-xs text-muted-foreground">{row.sourceMemo}</div> : null}
           {classificationReason(row, value) ? <div className="break-words text-xs text-muted-foreground">{company === "JAPAN" ? "根拠の理由: " : ""}{classificationReason(row, value)}</div> : null}
@@ -596,7 +596,7 @@ export function BankingWorkspace(props: Props) {
         <Button className="shrink-0" disabled={pending || !defaultSaveOption} onClick={() => chooseSave()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{saving ? "保存中…" : pending ? "処理中…" : "保存…（" + (defaultSaveOption?.count || 0) + "件）"}</Button>
       </div>
     </footer> : <footer className="bank-ledger-savebar shadow-sm" aria-label="明細の保存">
-      <div className="grid w-full min-w-0 gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2">
+      <div className="grid w-full min-w-0 gap-2 rounded-xl border border-primary/20 bg-selected p-2">
         <div className="flex flex-wrap items-center gap-2 text-xs"><span role="status">選択 {selected.size}件 / 確認済み {reviewedCount}件 / 編集未保存 {dirty}件 / 自動候補 {candidates.length}件</span><Button variant="ghost" size="icon" className="size-9" title="選択解除" aria-label="選択解除" disabled={pending || !selected.size} onClick={selection.clear}><X className="size-4" /></Button>{pending ? <span role="status" className="flex items-center gap-1"><LoaderCircle className="size-4 animate-spin" />処理中{savedCount ? ` / ${savedCount}件保存済み` : ""}</span> : null}{saveResult ? <span role="status">保存済み {saveResult.saved}件 / 残り {saveResult.remaining}件{saveResult.uncertain ? "（結果未確認あり）" : ""}</span> : null}</div>
         <div className="flex flex-wrap gap-2">
           <Button className="min-h-11" variant="outline" disabled={pending || filterDirty || !selected.size} onClick={() => reviewSelection(true)}><CheckCheck className="size-4" />選択を確認済みに</Button>

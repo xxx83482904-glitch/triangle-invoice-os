@@ -1,7 +1,5 @@
 "use client";
 
-import "@fontsource-variable/inter/wght.css";
-import "@fontsource-variable/noto-sans-jp/wght.css";
 import "./dashboard.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -57,8 +55,8 @@ export function DashboardWorkspace({ summary: s, nextSteps = [], companyLabel }:
 
     <div className="dash-kpis">
       <CashCard summary={s} href={accountsHref} />
-      <MoneyCard icon={ArrowDownLeft} label="未入金" total={s.incoming} rows={s.receivables} pressed={view === "income"} onOpen={() => openWork("income", true)} />
-      <MoneyCard icon={ArrowUpRight} label="未払い" total={s.outgoing} rows={s.payables} pressed={view === "expense"} onOpen={() => openWork("expense", true)} />
+      <MoneyCard flow="in" icon={ArrowDownLeft} label="未入金" total={s.incoming} rows={s.receivables} pressed={view === "income"} onOpen={() => openWork("income", true)} />
+      <MoneyCard flow="out" icon={ArrowUpRight} label="未払い" total={s.outgoing} rows={s.payables} pressed={view === "expense"} onOpen={() => openWork("expense", true)} />
       <ReviewCard rows={s.review} pressed={view === "review"} onOpen={() => openWork("review", true)} />
     </div>
 
@@ -124,10 +122,10 @@ function CashCard({ summary: s, href }: { summary: DashboardSummary; href: strin
   </Link>;
 }
 
-function MoneyCard({ icon: Icon, label, total, rows, pressed, onOpen }: { icon: LucideIcon; label: string; total: DashboardSummary["incoming"]; rows: DashboardDocument[]; pressed: boolean; onOpen: () => void }) {
+function MoneyCard({ flow, icon: Icon, label, total, rows, pressed, onOpen }: { flow: "in" | "out"; icon: LucideIcon; label: string; total: DashboardSummary["incoming"]; rows: DashboardDocument[]; pressed: boolean; onOpen: () => void }) {
   const breakdown = dashboardTimingBreakdown(rows);
   const anyAmount = breakdown.some((row) => row.amount > 0);
-  return <button type="button" className="dash-raised dash-kpi" aria-pressed={pressed} onClick={onOpen}>
+  return <button type="button" className="dash-raised dash-kpi" data-flow={flow} aria-pressed={pressed} onClick={onOpen}>
     <span className="dash-kpi-label"><Icon /><span>{label}</span><span className="dash-count" title={`全期間 ${total.count}件`}>{total.count}</span><ChevronRight aria-hidden="true" className="dash-chevron" /></span>
     <span className="dash-kpi-value">{money(total.amount)}</span>
     <span aria-hidden="true" className="dash-bar">{breakdown.map((row) => <span key={row.key} className="dash-tone" data-tone={row.key} style={{ flexGrow: anyAmount ? row.amount : row.count }} />)}</span>
@@ -137,10 +135,10 @@ function MoneyCard({ icon: Icon, label, total, rows, pressed, onOpen }: { icon: 
 
 function ReviewCard({ rows, pressed, onOpen }: { rows: DashboardDocument[]; pressed: boolean; onOpen: () => void }) {
   const breakdown = dashboardReviewBreakdown(rows);
-  return <button type="button" className="dash-raised dash-kpi" aria-pressed={pressed} onClick={onOpen}>
+  return <button type="button" className="dash-raised dash-kpi" data-flow="review" aria-pressed={pressed} onClick={onOpen}>
     <span className="dash-kpi-label"><FileSearch /><span>書類確認</span><ChevronRight aria-hidden="true" className="dash-chevron" /></span>
     <span className="dash-kpi-value">{rows.length}<small>件</small></span>
-    <span aria-hidden="true" className="dash-bar">{breakdown.map((row, index) => <span key={row.reason} style={{ flexGrow: row.count, opacity: Math.max(0.35, 1 - index * 0.25) }} />)}</span>
+    <span aria-hidden="true" className="dash-bar">{breakdown.map((row, index) => <span key={row.reason} style={{ flexGrow: row.count, background: "var(--tone-violet-bar)", opacity: Math.max(0.35, 1 - index * 0.25) }} />)}</span>
     <span className="dash-legend">{breakdown.length ? breakdown.slice(0, 2).map((row) => <span key={row.reason}>{row.reason} <b>{row.count}</b></span>) : <span>下書き・入力不足・支払記録</span>}</span>
   </button>;
 }
@@ -179,7 +177,7 @@ function WorkRow({ row, review }: { row: DashboardDocument; review: boolean }) {
   const tag = review ? row.reasons[0] : label;
   const extras = review ? row.reasons.slice(1).join("・") : "";
   return <Link href={row.href} prefetch={false} className="dash-doc" title={`${row.project} / ${row.partner} / ${row.title}`}>
-    <span className="dash-tag" data-tone={tone} title={review ? row.reasons.join("・") : label}>{tag}</span>
+    <span className="dash-tag" data-tone={review ? "review" : tone} title={review ? row.reasons.join("・") : label}>{tag}</span>
     <span className="min-w-0">
       <span className="dash-doc-title">{row.project}</span>
       <span className="dash-doc-sub">{row.partner} / {row.title}{extras ? ` / ${extras}` : ""}</span>
@@ -251,8 +249,8 @@ function MonthlyOverview({ summary: s, pending, changeYear }: { summary: Dashboa
       </div>
       <div className="dash-raised dash-side" aria-live="polite">
         <p className="dash-side-month">{Number(month.slice(5))}月<small>{month.slice(0, 4)}年</small></p>
-        <p className="dash-side-row"><span>{leftLabel}</span><b>{money(selectedLeft)}</b></p>
-        <p className="dash-side-row"><span>{rightLabel}</span><b>{money(selectedRight)}</b></p>
+        <p className="dash-side-row" data-flow="in"><span>{leftLabel}</span><b>{money(selectedLeft)}</b></p>
+        <p className="dash-side-row" data-flow="out"><span>{rightLabel}</span><b>{money(selectedRight)}</b></p>
         <p className="dash-side-row" data-net=""><span>差額</span><b>{money(selectedLeft - selectedRight)}</b></p>
         {mode === "bank" ? <p className="dash-side-note" data-warn={selected.covered ? undefined : ""}>{selected.count}件 / {selected.covered ? "取得範囲確認済み" : s.accounts.length ? "取得範囲未確認" : "銀行口座未登録"}</p> : null}
       </div>

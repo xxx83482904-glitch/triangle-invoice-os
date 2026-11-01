@@ -31,7 +31,7 @@ export async function AppShell({ children, banking = false }: { children: React.
         </div>
       </header>
       <div>
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
+        <header className="workspace-mobile-header sticky top-0 z-20 flex h-14 items-center justify-between border-b px-4 backdrop-blur lg:hidden">
           <ScopedBrandLink compact role={user.role} />
           <div className="flex min-w-0 items-center gap-2">
             <MobileCompanySwitch role={user.role} />
@@ -46,7 +46,7 @@ export async function AppShell({ children, banking = false }: { children: React.
           </div>
         </header>
         <main id="main-content" tabIndex={-1} className={`workspace-main mx-auto w-full px-3 py-3 pb-28 outline-none lg:px-8 lg:py-6 ${banking ? "banking-main" : ""}`}>{!banking ? <WorkflowNav role={user.role} compact /> : null}{children}</main>
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+        <div className="workspace-mobile-nav fixed inset-x-0 bottom-0 z-30 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
           <MobileAppNav role={user.role} />
         </div>
       </div>
@@ -64,10 +64,10 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="workspace-page-header mb-6 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b py-4">
+    <div className="workspace-page-header flex min-w-0 flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="break-words text-2xl font-semibold tracking-normal">{title}</h1>
-        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+        <h1 className="break-words text-[20px] font-medium">{title}</h1>
+        {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
       </div>
       {children ? (
         <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2 md:max-w-[60%]">

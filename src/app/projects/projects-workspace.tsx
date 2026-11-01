@@ -358,7 +358,7 @@ function ProjectListItem({
       role="button"
       className={cn(
         "block w-full border-b px-3 py-3 text-left transition-colors hover:bg-muted/60",
-        selection.selected.has(row.id) ? "bg-primary/10" : active ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : "bg-background",
+        selection.selected.has(row.id) ? "bg-selected" : active ? "bg-selected ring-1 ring-inset ring-primary/30" : "bg-background",
       )}
       onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) onSelect(); }}
       onKeyDown={(event) => {

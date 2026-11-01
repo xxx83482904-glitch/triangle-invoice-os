@@ -54,7 +54,7 @@ export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds
       </select></label>
       <Button className="min-h-11" variant="outline" disabled={pending} onClick={() => prepare()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Search className="size-4" />}対象データを確認</Button>
       {preview ? <>
-        <div role="status" className="space-y-1 border-l-2 border-primary bg-primary/5 p-3 text-sm">
+        <div role="status" className="space-y-1 border-l-2 border-primary bg-selected p-3 text-sm">
           <p className="font-medium">AI判定対象 {preview.total.toLocaleString()}件 / 今回 {count ? first + 1 : 0}〜{first + count}件</p>
           <p className="text-xs text-muted-foreground">対象範囲 {preview.scoped.toLocaleString()}件・対象外 {preview.protected.toLocaleString()}件・ルール候補 {preview.ruleCandidates.toLocaleString()}件</p>
           {history ? <p className="text-xs text-muted-foreground">参照する過去実績 {preview.payload.history?.length || 0}件{!preview.payload.history?.length ? "・確認済み実績なし" : ""}</p> : null}

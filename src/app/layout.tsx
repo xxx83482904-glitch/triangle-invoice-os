@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Toaster } from "@/components/app/toaster";
 import { ThemeProvider, themeInitScript } from "@/components/app/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import "@fontsource-variable/inter/wght.css";
+import "@fontsource-variable/noto-sans-jp/wght.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
