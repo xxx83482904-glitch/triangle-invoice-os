@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction, type MouseEvent, type KeyboardEvent } from "react";
-import { isCardPress, isSelectionControl, isSelectionGesture, selectListItem, selectListScope, type SelectionGesture, type SelectionState } from "@/lib/list-selection";
+import { isCardPress, isSelectionControl, isSelectionGesture, pressSelects, selectListItem, selectListScope, type SelectionGesture, type SelectionState } from "@/lib/list-selection";
 
-export function useListSelection(ids: string[], { availableIds = ids, disabled = false }: { availableIds?: string[]; disabled?: boolean } = {}) {
+export function useListSelection(ids: string[], { availableIds = ids, disabled = false, pickMode = true }: { availableIds?: string[]; disabled?: boolean; pickMode?: boolean } = {}) {
   const [state, setState] = useState<SelectionState>({ selected: new Set(), anchor: null });
   const available = new Set(availableIds);
   const selected = new Set([...state.selected].filter((id) => available.has(id)));
   const count = ids.filter((id) => selected.has(id)).length;
+  const picking = pressSelects(pickMode, selected.size);
   const setSelected: Dispatch<SetStateAction<Set<string>>> = (value) => setState((current) => ({ selected: typeof value === "function" ? value(new Set([...current.selected].filter((id) => available.has(id)))) : value, anchor: null }));
   const choose = (id: string, gesture: SelectionGesture = {}) => {
     if (disabled) return;
@@ -16,7 +17,7 @@ export function useListSelection(ids: string[], { availableIds = ids, disabled =
   const rowProps = (id: string) => ({
     "data-selection-id": id,
     "data-selected": selected.has(id) ? "true" : "false",
-    tabIndex: 0,
+    tabIndex: picking ? 0 : undefined,
     onMouseDownCapture: (event: MouseEvent<HTMLElement>) => {
       if (event.button === 0 && isSelectionGesture(event) && !isSelectionControl(event.target, event.currentTarget)) event.preventDefault();
     },
@@ -24,14 +25,14 @@ export function useListSelection(ids: string[], { availableIds = ids, disabled =
       if (event.button !== 0 || isSelectionControl(event.target, event.currentTarget)) return;
       if (isSelectionGesture(event)) { event.preventDefault(); event.stopPropagation(); choose(id, event); return; }
       // Dragging across text to copy it is not a press on the card.
-      if (isCardPress(event.target, event.currentTarget) && !window.getSelection()?.toString()) choose(id);
+      if (picking && isCardPress(event.target, event.currentTarget) && !window.getSelection()?.toString()) choose(id);
     },
     onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => {
       if (event.target !== event.currentTarget || (event.key !== " " && !(event.key === "Enter" && isSelectionGesture(event)))) return;
       event.preventDefault(); event.stopPropagation(); if (!event.repeat) choose(id, event);
     },
   });
-  return { selected, setSelected, choose, rowProps, disabled,
+  return { selected, setSelected, choose, rowProps, disabled, picking,
     allSelected: ids.length > 0 && count === ids.length,
     someSelected: count > 0 && count < ids.length,
     hiddenCount: selected.size - count,

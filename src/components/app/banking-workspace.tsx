@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectAllButton } from "@/components/app/list-selection";
 import { OptionTabs } from "@/components/app/option-tabs";
+import { FilterPanel } from "@/components/app/filter-panel";
 import { useRouter } from "next/navigation";
 import { Bot, CheckCheck, CircleAlert, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, Pencil, RefreshCw, Save, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
@@ -507,27 +508,21 @@ export function BankingWorkspace(props: Props) {
         {classificationPreview ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2"><div className="min-w-0"><h2 className="text-base font-semibold">{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}</h2>{aiResult ? <p className="mt-1 break-words text-xs text-muted-foreground">候補 {aiResult.suggested}件・うち低確度の推定 {aiResult.lowConfidence}件 / {aiResult.model}</p> : null}</div><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
         {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-selected p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
         {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-selected p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
-        <section className="workspace-filter-panel space-y-1 p-3"><h2 className="text-xs font-semibold">絞り込み</h2>
         <MonthTabs label="取引月" value={filters.month} months={months} today={bankToday()} disabled={pending} onChange={(month) => navigate({ month })} />
-        <div className="bank-ledger-filters">
-          <select className={bankSelectClass} aria-label="勘定科目で絞り込み" value={filterEdits.category ?? filters.category} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, category: e.target.value }))}><option value="">すべての勘定科目</option>{bankCategoryCatalog(categories.map((row) => ({ ...row, available: true }))).map((section) => <optgroup key={section.id} label={section.label}>{section.entries.map(({ category }) => <option key={category.id} value={category.id}>{category.name}</option>)}</optgroup>)}</select>
-          
-          
-          
-        <form id="bank-filters" className="bank-ledger-search flex min-w-0 gap-1" onSubmit={(e) => { e.preventDefault(); navigate({ q: search }); }}><Input className="h-11 min-w-0 flex-1" aria-label="摘要・メモを検索" placeholder="摘要・メモを検索" value={search} maxLength={200} disabled={pending} onChange={(e) => setSearch(e.target.value)} /><Button type="submit" variant="ghost" size="icon" className="size-11 shrink-0" aria-label="絞り込みを適用" title="絞り込みを適用" disabled={pending}><Search className="size-4" /></Button></form>
-        </div>
-        <div className="option-tabs-row">
-          <OptionTabs label="入出金で絞り込み" caption="入出金" value={filters.side} disabled={pending} options={[["", "すべて"], ["INCOME", "入金・返金"], ["EXPENSE", "出金・利用"]]} onChange={(side) => navigate({ side })} />
+        <FilterPanel activeCount={Number(Boolean(filterEdits.category ?? filters.category)) + Number(Boolean(filters.status)) + Number(Boolean(filterEdits.excludeQuery)) + Number(filterEdits.queryMode !== "contains")} primary={<>
+          <form id="bank-filters" className="filter-panel-search flex gap-1" onSubmit={(e) => { e.preventDefault(); navigate({ q: search }); }}><Input className="h-11 min-w-0 flex-1" aria-label="摘要・メモを検索" placeholder="摘要・メモを検索" value={search} maxLength={200} disabled={pending} onChange={(e) => setSearch(e.target.value)} /><Button type="submit" variant="ghost" size="icon" className="size-11 shrink-0 lg:size-9" aria-label="絞り込みを適用" title="絞り込みを適用" disabled={pending}><Search className="size-4" /></Button></form>
+          <OptionTabs label="入出金で絞り込み" value={filters.side} disabled={pending} options={[["", "すべて"], ["INCOME", "入金・返金"], ["EXPENSE", "出金・利用"]]} onChange={(side) => navigate({ side })} />
+        </>}>
+          <select className={`${bankSelectClass} lg:w-60`} aria-label="勘定科目で絞り込み" value={filterEdits.category ?? filters.category} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, category: e.target.value }))}><option value="">すべての勘定科目</option>{bankCategoryCatalog(categories.map((row) => ({ ...row, available: true }))).map((section) => <optgroup key={section.id} label={section.label}>{section.entries.map(({ category }) => <option key={category.id} value={category.id}>{category.name}</option>)}</optgroup>)}</select>
           <OptionTabs label="並び順" caption="並び順" value={filters.sort} disabled={pending} options={[["date-desc", "取引日が新しい順"], ["date-asc", "取引日が古い順"], ["amount-desc", "金額が大きい順"], ["amount-asc", "金額が小さい順"]]} onChange={(sort) => navigate({ sort })} />
           <OptionTabs label="確認状態で絞り込み" caption="状態" value={filters.status} disabled={pending} options={[["", "すべて"], ["unclassified", "候補の保存待ち"], ["unreviewed", "未確認"], ["reviewed", "確認済み"], ["held", "保留"], ["no-invoice", "請求書不要"], ["transfer", "振替・カード精算"], ["excluded", "対象外"], ["missing", "元明細なし"]]} onChange={(status) => navigate({ status })} />
-        </div>
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto]">
-          <div className="col-span-2 md:col-span-1"><OptionTabs label="検索の一致条件" value={filterEdits.queryMode} disabled={pending} options={[["contains", "部分一致"], ["exact", "摘要の完全一致"]]} onChange={(queryMode) => setFilterEdits((current) => ({ ...current, queryMode }))} /></div>
-          <Input form="bank-filters" className="h-11 min-w-0 md:h-9" aria-label="除外する検索語" placeholder="除外する語（カンマ区切り）" maxLength={500} value={filterEdits.excludeQuery} disabled={pending} onChange={(event) => setFilterEdits((current) => ({ ...current, excludeQuery: event.target.value }))} />
-          <Button form="bank-filters" type="submit" className="h-11 md:h-9" variant="outline" disabled={pending}><Search className="size-4" />条件を適用</Button>
-        </div>
+          <div className="grid min-w-0 flex-1 basis-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto]">
+            <div className="col-span-2 md:col-span-1"><OptionTabs label="検索の一致条件" value={filterEdits.queryMode} disabled={pending} options={[["contains", "部分一致"], ["exact", "摘要の完全一致"]]} onChange={(queryMode) => setFilterEdits((current) => ({ ...current, queryMode }))} /></div>
+            <Input form="bank-filters" className="h-11 min-w-0 md:h-9" aria-label="除外する検索語" placeholder="除外する語（カンマ区切り）" maxLength={500} value={filterEdits.excludeQuery} disabled={pending} onChange={(event) => setFilterEdits((current) => ({ ...current, excludeQuery: event.target.value }))} />
+            <Button form="bank-filters" type="submit" className="h-11 md:h-9" variant="outline" disabled={pending}><Search className="size-4" />条件を適用</Button>
+          </div>
+        </FilterPanel>
         {filterDirty ? <div role="status" className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">検索条件は未適用<Button variant="ghost" size="icon" title="条件の変更を取り消す" aria-label="条件の変更を取り消す" disabled={pending} onClick={() => { setSearch(filters.query); setFilterEdits({ queryMode: filters.queryMode || "contains", excludeQuery: filters.excludeQuery || "" }); }}><X className="size-4" /></Button></div> : null}
-        </section>
         </>}
         <div className="bank-ledger-toolbar flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2" aria-label="明細の操作">
           <div className="workspace-toolbar-group bank-toolbar-group basis-full md:basis-auto" role="group" aria-label="選択"><span className="sr-only">選択</span>
@@ -564,12 +559,17 @@ export function BankingWorkspace(props: Props) {
             })}</tbody>
           </table>
         </div>
-        <div className="space-y-2 lg:hidden">{rows.map((row) => { const value = drafts[row.id] || editFrom(row); return <article key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 380px" }} className="record-card min-w-0 space-y-2 p-2">
-          <div className="flex min-w-0 items-start gap-1">{selectionBox(row)}<div className="min-w-0 flex-1"><div className="flex flex-wrap justify-between gap-1"><time className="text-xs">{row.transactionDate}</time><span className={`break-all text-sm font-medium tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></div><h3 className="mt-1 break-words text-sm font-medium">{matchedContent(row.content)}</h3><div className="break-words text-xs text-muted-foreground">{accountMap.get(row.bankAccountId)}</div>{status(row, value)}</div></div>
-          {row.sourceMemo ? <div className="break-words text-xs text-muted-foreground">{row.sourceMemo}</div> : null}
-          {classificationReason(row, value) ? <div className="break-words text-xs text-muted-foreground">{company === "JAPAN" ? "根拠の理由: " : ""}{classificationReason(row, value)}</div> : null}
-          <div className="grid min-w-0 gap-2">{fields(row, value)}</div>
-          {linkButton(row)}
+        <div className="space-y-2 md:grid md:grid-cols-2 md:items-start md:gap-2 md:space-y-0 lg:hidden">{rows.map((row) => { const value = drafts[row.id] || editFrom(row); const category = categoryMap.get(value.categoryId || ""); return <article key={row.id} {...selection.rowProps(row.id)} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 130px" }} className="record-card record-card-compact min-w-0 p-2">
+          <div className="flex min-w-0 items-start gap-1">{selectionBox(row)}<div className="min-w-0 flex-1"><div className="flex flex-wrap justify-between gap-1"><time className="text-xs tabular-nums text-muted-foreground">{row.transactionDate}</time><span className={`break-all text-sm font-medium tabular-nums ${row.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{row.side === "INCOME" ? "+" : "-"}{money.format(row.amount)}</span></div><h3 className="break-words text-sm font-medium">{matchedContent(row.content)}</h3><div className="truncate text-xs text-muted-foreground">{accountMap.get(row.bankAccountId)}</div>{status(row, value)}</div></div>
+          <details className="mt-1 min-w-0 border-t">
+            <summary className="flex min-h-9 cursor-pointer items-center gap-1 text-xs"><Pencil className="size-3 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{row.bookkeeping?.splits?.length ? `分割 ${row.bookkeeping.splits.length}科目` : category?.name || "科目未設定"}{value.treatment !== "NORMAL" ? ` · ${treatmentLabels[value.treatment]}` : ""}{value.memo ? " · メモあり" : ""}</span></summary>
+            <div className="grid min-w-0 gap-2 pb-1">
+              {row.sourceMemo ? <div className="break-words text-xs text-muted-foreground">{row.sourceMemo}</div> : null}
+              {classificationReason(row, value) ? <div className="break-words text-xs text-muted-foreground">{company === "JAPAN" ? "根拠の理由: " : ""}{classificationReason(row, value)}</div> : null}
+              {fields(row, value)}
+              {linkButton(row)}
+            </div>
+          </details>
           {company !== "JAPAN" ? <BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} /> : null}
         </article>; })}</div>
         {!rows.length ? <p className="border-b py-12 text-center text-sm text-muted-foreground">{!configured ? "接続待ち" : "該当する明細はありません"}</p> : null}

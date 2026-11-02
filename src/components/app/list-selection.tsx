@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ListSelection } from "@/hooks/use-list-selection";
+import { isOpenPress } from "@/lib/list-selection";
+
+// For a list with nothing to do with several items at once: pressing the card opens it. The title stays the keyboard stop.
+export function cardPressProps(onOpen: () => void) {
+  return {
+    "data-card-press": "",
+    onClick: (event: MouseEvent<HTMLElement>) => { if (isOpenPress(event.target, event.currentTarget, window.getSelection()?.toString())) onOpen(); },
+  };
+}
 
 // The whole card selects. This tick only shows the state and keeps it readable for screen readers.
 export function RowSelectionCheckbox({ selection, id, label }: { selection: ListSelection; id: string; label: string }) {

@@ -26,11 +26,21 @@ export function isSelectionGesture(event: SelectionGesture) {
 // Form controls and real links retain their normal behavior. Preview buttons opt in.
 export function isSelectionControl(target: EventTarget | null, root: EventTarget | null) {
   if (!(target instanceof Element)) return true;
-  const control = target.closest('input, select, textarea, button, a, label, [role="button"], [role="checkbox"], [role="combobox"], [role="menuitem"], [contenteditable]:not([contenteditable="false"])');
+  const control = target.closest('details, input, select, textarea, button, a, label, [role="button"], [role="checkbox"], [role="combobox"], [role="menuitem"], [contenteditable]:not([contenteditable="false"])');
   return Boolean(control && control !== root && !control.hasAttribute("data-selection-open"));
 }
 
 // A plain press on a card selects it. Controls keep their action, and the title opens the item without selecting it.
 export function isCardPress(target: EventTarget | null, root: EventTarget | null) {
   return !isSelectionControl(target, root) && !(target as Element).closest("[data-selection-open]");
+}
+
+// A press opens the item unless it landed on a control or ended a text drag.
+export function isOpenPress(target: EventTarget | null, root: EventTarget | null, selectedText = "") {
+  return !isSelectionControl(target, root) && !selectedText;
+}
+
+// While nothing is selected, a list in review mode leaves presses to open the item.
+export function pressSelects(pickMode: boolean, selectedCount: number) {
+  return pickMode || selectedCount > 0;
 }

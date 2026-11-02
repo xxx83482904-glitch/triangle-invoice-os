@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RowSelectionCheckbox, SelectionActionBar, SelectionToolbar } from "@/components/app/list-selection";
 import { OptionTabs } from "@/components/app/option-tabs";
+import { FilterPanel } from "@/components/app/filter-panel";
 import { MonthTabs } from "@/components/app/month-tabs";
 import { RecordSaveBar } from "@/components/app/record-list-controls";
 import type { ProjectBasicOption } from "@/components/app/editable-project-select";
@@ -164,18 +165,15 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
       <Button asChild variant="outline" className="min-h-11"><Link prefetch={false} href={`/issued-invoices?company=${company}`}><FileText className="size-4" />発行請求書</Link></Button>
       {canEdit ? <Button disabled={busy} className="min-h-11" onClick={() => guarded(() => onEdit("new"))}><Plus className="size-4" />見積書を作成</Button> : null}
     </div>
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-1 basis-56"><Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="見積書を検索" placeholder="番号・取引先・案件で検索" className="h-11 pl-9 lg:h-11 lg:pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} /></div>
+    <FilterPanel activeCount={Number(client !== "all") + Number(status !== "all")} onReset={hasFilters ? resetFilters : undefined} primary={<>
+      <div className="filter-panel-search relative"><Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="見積書を検索" placeholder="番号・取引先・案件で検索" className="h-11 pl-9 lg:pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} /></div>
+    </>}>
       <select aria-label="取引先で絞り込み" className={selectClass} value={client} onChange={(event) => { setClient(event.target.value); setLimit(50); }}><option value="all">すべてのクライアント</option>{counterparts.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
       <OptionTabs label="見積書の並び順" caption="並び順" value={sort} options={[["client", "クライアントごと"], ["date-desc", "日付が新しい順"], ["date-asc", "日付が古い順"], ["amount-desc", "金額が大きい順"], ["project", "案件ごと"]]} onChange={(value) => { setSort(value); setLimit(50); }} />
-    </div>
-    <div className="flex flex-wrap items-center gap-2">
       <OptionTabs label="見積書の状態" caption="状態" value={status} options={[["all", "すべて"], ...Object.entries(estimateStatusLabels)]} onChange={(value) => { setStatus(value); setLimit(50); }} />
-      <span role="status" className="text-xs text-muted-foreground">{filtered.length} / {rows.length}件</span>
-      {hasFilters ? <Button className="min-h-11" variant="ghost" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
-    </div>
+    </FilterPanel>
     <MonthTabs label="見積月" months={months} value={month === "all" ? "" : month} disabled={busy} onChange={(value) => { setMonth(value || "all"); setLimit(50); }} />
-    <SelectionToolbar selection={selection} />
+    <SelectionToolbar selection={selection}><span role="status" className="text-xs text-muted-foreground">{filtered.length} / {rows.length}件</span></SelectionToolbar>
     {selected.length ? <SelectionActionBar label="選択した見積書の一括操作">
       <span className="mr-auto text-sm">{selected.length}件選択{selection.hiddenCount ? `（表示外 ${selection.hiddenCount}件を含む）` : ""}</span>
       {editableSelected.length ? <select aria-label="選択した見積書の状態を一括変更" className={selectClass} disabled={busy} value="" onChange={(event) => {
@@ -197,14 +195,14 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
               const e = estimateMap.get(row.sourceId); if (!e) return null;
               const edit = edits[e.id];
               return <EstimateActions key={e.id} label={e.estimateNumber} actions={actions(e)} disabled={busy}>
-                <div {...selection.rowProps(e.id)} data-estimate-id={e.id} data-active={activeId === e.id ? "" : undefined} className={`record-card my-2 grid grid-cols-[44px_minmax(0,1fr)_44px] items-start gap-2 py-3 text-sm ${gridClass}`}>
+                <div {...selection.rowProps(e.id)} data-estimate-id={e.id} data-active={activeId === e.id ? "" : undefined} className={`record-card record-card-compact my-2 grid grid-cols-[28px_minmax(0,1fr)_auto_44px] items-start gap-x-1 gap-y-0.5 p-2 text-sm md:gap-2 md:px-0 md:py-3 ${gridClass}`}>
                   <RowSelectionCheckbox selection={selection} id={e.id} label={`${e.estimateNumber}を選択`} />
-                  <div className="min-w-0">{projectControl(e)}<button data-selection-open className="min-h-11 w-full break-words text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary" onClick={() => onOpen(e.id)}>{e.estimateNumber}<span className="block">発行見積書{edit ? " · 未保存" : ""}</span></button>{row.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {row.billingLabel}</span> : null}</div>
-                  <span className="col-start-2 break-words md:col-start-auto md:pt-3">{counterpart(e)}</span>
-                  <span className="col-start-2 text-xs tabular-nums md:col-start-auto md:pt-3">{edit?.issueDate || e.issueDate}<span className="block text-muted-foreground">{edit?.validUntil || e.validUntil}</span></span>
-                  <span className="col-start-2 break-words tabular-nums md:col-start-auto md:pt-3 md:text-right">{money.format(e.total)}</span>
-                  <div className="col-start-2 min-w-0 md:col-start-auto">{statusControl(e)}</div>
-                  <div className="col-start-3 row-start-1 md:col-start-auto md:row-start-auto"><EstimateActions label={e.estimateNumber} actions={actions(e)} disabled={busy} /></div>
+                  <div className="col-span-2 min-w-0 md:col-span-1">{projectControl(e)}<button data-selection-open className="record-card-open w-full break-words text-left text-xs text-muted-foreground md:min-h-11" onClick={() => onOpen(e.id)}>{e.estimateNumber}<span className="md:block"><span className="md:hidden"> · </span>発行見積書{edit ? " · 未保存" : ""}</span><span className="md:hidden"> · {counterpart(e)}</span></button>{row.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {row.billingLabel}</span> : null}</div>
+                  <span className="hidden break-words md:block md:pt-3">{counterpart(e)}</span>
+                  <span className="col-span-2 col-start-2 text-xs tabular-nums text-muted-foreground md:col-span-1 md:col-start-auto md:pt-3 md:text-foreground">{edit?.issueDate || e.issueDate}<span className="md:block md:text-muted-foreground"><span className="md:hidden"> 〜 </span>{edit?.validUntil || e.validUntil}</span></span>
+                  <div className="col-start-2 row-start-3 min-w-0 md:col-start-auto md:row-start-auto md:order-1">{statusControl(e)}</div>
+                  <span className="col-start-3 row-start-3 self-center break-words text-right font-medium tabular-nums md:col-start-auto md:row-start-auto md:pt-3 md:font-normal">{money.format(e.total)}</span>
+                  <div className="col-start-4 row-start-1 md:col-start-auto md:row-start-auto md:order-2"><EstimateActions label={e.estimateNumber} actions={actions(e)} disabled={busy} /></div>
                 </div>
               </EstimateActions>;
             }) : null}

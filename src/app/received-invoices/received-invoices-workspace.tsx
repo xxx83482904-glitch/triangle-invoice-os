@@ -1,8 +1,7 @@
 "use client";
 import { statusToneClass } from "@/lib/status-tone";
-import { useListSelection } from "@/hooks/use-list-selection";
-import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
-import { isSelectionControl } from "@/lib/list-selection";
+import { cardPressProps } from "@/components/app/list-selection";
+import { RecordDetail } from "@/components/app/record-detail";
 
 import Link from "next/link";
 import { ArrowUpRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
@@ -143,7 +142,8 @@ export function ReceivedInvoicesWorkspace({
   vendors: Option[];
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [activeId, setActiveId] = useState(initialId ?? invoices[0]?.id ?? "");
+  const [activeId, setActiveId] = useState(initialId ?? "");
+  const [detailOpen, setDetailOpen] = useState(Boolean(initialId));
   const [listMonth, setListMonth] = useState("");
   const [filter, setFilter] = useState<WorkFilter>(initialId ? "all" : "unpaid");
   const [query, setQuery] = useState("");
@@ -156,7 +156,7 @@ export function ReceivedInvoicesWorkspace({
   const months = useMemo(() => invoices.map((invoice) => monthKey(invoice)), [invoices]);
   const monthCounts = useMemo(() => countByMonth(matchingInvoices.map((invoice) => monthKey(invoice))), [matchingInvoices]);
 
-  const activeInvoice = filteredInvoices.find((invoice) => invoice.id === activeId) ?? filteredInvoices[0] ?? null;
+  const activeInvoice = filteredInvoices.find((invoice) => invoice.id === activeId) ?? null;
 
   const monthGroups = useMemo(() => {
     const grouped = new Map<string, ReceivedInvoiceWorkspaceItem[]>();
@@ -169,7 +169,12 @@ export function ReceivedInvoicesWorkspace({
 
   const totals = useMemo(() => receivedListTotals(filteredInvoices), [filteredInvoices]);
 
-  const selection = useListSelection(monthGroups.flatMap(([, list]) => list.map((row) => row.id)), { availableIds: invoices.map((row) => row.id) });
+  const listedInvoices = monthGroups.flatMap(([, list]) => list);
+  const openInvoice = (id: string) => { setActiveId(id); setDetailOpen(true); };
+  const stepFrom = (step: number) => {
+    const next = activeInvoice ? listedInvoices[listedInvoices.findIndex((invoice) => invoice.id === activeInvoice.id) + step] : undefined;
+    return next ? () => setActiveId(next.id) : undefined;
+  };
 
   const counts = useMemo(() => Object.fromEntries((Object.keys(filterLabels) as WorkFilter[])
     .map((item) => [item, filterReceivedInvoices(invoices, item, "", today).length])) as Record<WorkFilter, number>, [invoices, today]);
@@ -184,29 +189,28 @@ export function ReceivedInvoicesWorkspace({
           <div className="flex flex-wrap gap-x-3 gap-y-1 break-all" role="status">
             {receivedSummaryBasis(filter, query, listMonth ? monthLabel(listMonth) : undefined).map((label) => <span key={label}>{label}</span>)}
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
               <div>合計</div>
               <div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.total)}</div>
-              <div className="mt-1">表示中{totals.count}件の差引支払額</div>
+              <div className="mt-1 hidden sm:block">表示中{totals.count}件の差引支払額</div>
             </div>
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
               <div>支払済</div>
               <div className="break-all font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">{yen.format(totals.paid)}</div>
-              <div className="mt-1">表示中の支払記録（一部支払を含む）</div>
+              <div className="mt-1 hidden sm:block">表示中の支払記録（一部支払を含む）</div>
             </div>
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
               <div>未払い</div>
               <div className="break-all font-mono text-sm font-semibold text-amber-700 dark:text-amber-300">{yen.format(totals.unpaid)}</div>
-              <div className="mt-1">支払対象{totals.unpaidCount}件の残額</div>
+              <div className="mt-1 hidden sm:block">支払対象{totals.unpaidCount}件の残額</div>
             </div>
           </div>
           <p>未払いはアーカイブ・却下・債務グループの支払対象外を除外{totals.excludedCount ? "（表示中" + totals.excludedCount + "件）" : ""}。合計・支払済は表示中の書類と支払記録を集計します。</p>
         </section> : null}
       </CardHeader>
       <CardContent>
-        <div className="workspace-filter-panel mb-4 flex flex-wrap items-center gap-3">
-          <h2 className="w-full text-sm font-semibold">絞り込み</h2>
+        <section aria-label="絞り込み" className="workspace-filter-panel mb-3 flex flex-wrap items-center gap-2 p-3">
           {(Object.keys(filterLabels) as WorkFilter[]).map((item) => (
             <Button
               key={item}
@@ -225,18 +229,16 @@ export function ReceivedInvoicesWorkspace({
             className="h-11 min-w-0 basis-56 flex-1 md:max-w-80 lg:h-9"
             onChange={(event) => setQuery(event.target.value)}
           />
-        </div>
+        </section>
 
         <p className="mb-3 text-xs text-muted-foreground">絞り込みボタンの件数は月と検索で絞る前の件数です。</p>
         <div className="mb-3"><MonthTabs label="請求月" value={listMonth} months={months} counts={monthCounts} undatedLabel="日付なし" onChange={setListMonth} /></div>
-        <SelectionToolbar selection={selection} />
         {filteredInvoices.length ? (
-          <div className="mt-4 grid gap-4">
-            <div className="min-w-0 lg:max-h-[60dvh] lg:overflow-auto">
+          <div className="mt-3">
+            <div className="min-w-0">
               <table className="record-cards record-cards-stack workspace-record-table w-full text-sm">
                 <thead className="text-xs text-muted-foreground">
                   <tr>
-                    <th className="w-11 p-0"><span className="sr-only">選択</span></th>
                     <th className="px-3 py-2 text-left">請求元</th>
                     <th className="px-3 py-2 text-left">案件</th>
                     <th className="px-3 py-2 text-left">請求日</th>
@@ -253,7 +255,7 @@ export function ReceivedInvoicesWorkspace({
                     return (
                       <tbody key={month}>
                         <tr className="record-section-row">
-                          <td colSpan={9} className="px-3 py-2">
+                          <td colSpan={8} className="px-3 py-2">
                             <div className="flex w-full items-center justify-between gap-3">
                               <span className="min-w-0 text-sm font-medium">{monthLabel(month)}</span>
                               <span className="shrink-0 text-xs text-muted-foreground">
@@ -263,31 +265,29 @@ export function ReceivedInvoicesWorkspace({
                           </td>
                         </tr>
                         {monthInvoices.map((invoice) => {
-                          const active = activeInvoice?.id === invoice.id;
+                          const active = activeId === invoice.id;
                           return (
                             <tr
                               key={invoice.id}
-                              {...selection.rowProps(invoice.id)}
+                              {...cardPressProps(() => openInvoice(invoice.id))}
                               data-active={active ? "" : undefined}
                               className={paymentTone(invoice, today)}
-                              onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) setActiveId(invoice.id); }}
                             >
-                              <td className="record-card-tick p-0"><RowSelectionCheckbox selection={selection} id={invoice.id} label={`${invoice.vendorName} ${invoice.issueDate}を選択`} /></td>
-                              <td className="record-card-title max-w-[220px] truncate px-3 py-2 font-medium"><button type="button" data-selection-open className="record-card-open" title="選択せずに開く">{invoice.vendorName}</button></td>
-                              <td data-label="案件" className="max-w-[220px] truncate px-3 py-2">
+                              <td className="record-card-title max-w-[220px] truncate px-3 py-2 font-medium"><button type="button" data-selection-open className="record-card-open" title="開く">{invoice.vendorName}</button></td>
+                              <td data-card-line="" className="max-w-[220px] truncate px-3 py-2">
                                 <Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline underline-offset-4 hover:text-primary" onClick={(event) => event.stopPropagation()}>
                                   {invoice.projectName}
                                 </Link>
                               </td>
-                              <td data-label="請求日" className="whitespace-nowrap px-3 py-2">{formatDate(invoice.issueDate)}</td>
+                              <td data-card-hide="" className="whitespace-nowrap px-3 py-2">{formatDate(invoice.issueDate)}</td>
                               <td data-label="支払期限" className="whitespace-nowrap px-3 py-2">
                                 <span className={isOverdue(invoice, today) ? "font-medium text-red-700" : isDueSoon(invoice, today) ? "font-medium text-amber-700" : ""}>
                                   {formatDate(invoice.dueDate)}
                                 </span>
                               </td>
-                              <td data-label="差引支払額" className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(invoice.total)}</td>
-                              <td data-label="未払い" className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : yen.format(invoice.unpaidAmount)}</td>
-                              <td data-label="状態" className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                              <td data-label="差引" data-card-sub="" data-card-hide={invoice.total === invoice.unpaidAmount ? "" : undefined} className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(invoice.total)}</td>
+                              <td data-label="未払い" data-card-end="" className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : yen.format(invoice.unpaidAmount)}</td>
+                              <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                                 {canApprove ? (
                                   <form id={`received-status-${invoice.id}`} action={updateReceivedInvoiceStatus} onSubmit={statusSave.onSubmit}>
                                     <input type="hidden" name="receivedInvoiceId" value={invoice.id} />
@@ -298,7 +298,7 @@ export function ReceivedInvoicesWorkspace({
                                       className={`h-7 max-w-[140px] rounded-full border px-2 text-xs ${statusToneClass(invoice.status)} outline-none focus-visible:ring-2 focus-visible:ring-ring/50`}
                                       onChange={(event) => {
                                         // A status change never creates a payment; paid is reached through payment records or bank reconciliation.
-                                        if (event.currentTarget.value === "PAID" && invoice.paymentOutstandingAmount > 0) { event.currentTarget.value = invoice.status; setActiveId(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); if (company === "JAPAN") toast(operationFailureToast(paidGuardMessage)); return; }
+                                        if (event.currentTarget.value === "PAID" && invoice.paymentOutstandingAmount > 0) { event.currentTarget.value = invoice.status; openInvoice(invoice.id); setSaveResult({ id: invoice.id, message: paidGuardMessage, error: true }); if (company === "JAPAN") toast(operationFailureToast(paidGuardMessage)); return; }
                                         event.currentTarget.form?.requestSubmit();
                                       }}
                                     >
@@ -313,7 +313,7 @@ export function ReceivedInvoicesWorkspace({
                                   <StatusBadge kind="received" status={invoice.status} />
                                 )}
                               </td>
-                              <td data-label="ファイル" className="px-3 py-2">
+                              <td data-card-hide="" className="px-3 py-2">
                                 {invoice.fileUrl ? (
                                   <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
                                     表示
@@ -331,7 +331,7 @@ export function ReceivedInvoicesWorkspace({
               </table>
             </div>
 
-            <aside className="min-w-0 rounded-xl border bg-card p-5 shadow-sm">
+            <RecordDetail wide={false} open={detailOpen && Boolean(activeInvoice)} title={activeInvoice?.vendorName} label="開いている受領請求書" resetKey={activeInvoice?.id} onClose={() => setDetailOpen(false)} onPrevious={stepFrom(-1)} onNext={stepFrom(1)}>
               {activeInvoice ? (
                 <div className="space-y-6">
                   <div className="workspace-detail-group"><h2 className="mb-3 text-sm font-semibold">基本情報</h2>
@@ -470,12 +470,8 @@ export function ReceivedInvoicesWorkspace({
                   </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex h-full min-h-80 items-center justify-center text-sm text-muted-foreground">
-                  請求書を選択するとプレビューを表示します。
-                </div>
-              )}
-            </aside>
+              ) : null}
+            </RecordDetail>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 rounded-lg border py-12 text-sm text-muted-foreground">

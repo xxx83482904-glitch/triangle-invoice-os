@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { RowSelectionCheckbox, SelectionActionBar, SelectionToolbar } from "@/components/app/list-selection";
 import { OptionTabs } from "@/components/app/option-tabs";
+import { FilterPanel } from "@/components/app/filter-panel";
 import Link from "next/link";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -74,6 +75,15 @@ function DocumentStatusControl({ row, edit, onEdit, company, disabled }: { row: 
   return <select aria-label={`${row.title}のステータス`} value={current.status} disabled={disabled} className={`${selectClass} h-11 w-full min-w-0 px-2 text-xs ${statusToneClass(current.status)}`} onChange={(e) => onEdit({ ...current, status: e.target.value as IssuedEdit["status"] })}>
     {Object.entries(issuedStatusLabels).map(([value, label]) => <option key={value} value={value} disabled={value === "PARTIALLY_PAID"}>{label}</option>)}
   </select>;
+}
+
+// Only what is still of interest on a phone card: nothing is said about amounts that are zero.
+function IssuedAmountsLine({ row }: { row: DocumentRow }) {
+  const amounts = issuedRowAmounts(row);
+  return <>
+    {amounts.paid ? <span className="tabular-nums text-emerald-700 dark:text-emerald-400">入金 {number.format(amounts.paid)}</span> : null}
+    {amounts.outstanding ? <span className="tabular-nums text-muted-foreground">未入金 {number.format(amounts.outstanding)}</span> : null}
+  </>;
 }
 
 function IssuedAmounts({ row }: { row: DocumentRow }) {
@@ -285,10 +295,10 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     const url = URL.createObjectURL(new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = "documents-" + company + ".csv"; a.click(); URL.revokeObjectURL(url);
   }
-  return <section aria-label={issuedOnly ? "発行請求書一覧" : "全書類一覧"} className="min-w-0 space-y-6">
-    <div className="min-w-0 space-y-6">
+  return <section aria-label={issuedOnly ? "発行請求書一覧" : "全書類一覧"} className="min-w-0 space-y-3">
+    <div className="min-w-0 space-y-3">
     <MonthTabs label={issuedOnly ? "請求月" : "書類の月"} months={months} value={month === "all" ? "" : month} disabled={saving || deleting} onChange={(value) => { setMonth(value || "all"); setLimit(pageSize); }} />
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-3">
     {issuedOnly ? <>
       <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{recordMonthLabel(month)}</h2><span role="status" className="text-sm text-muted-foreground">{filtered.length} / {rows.length}件</span>{changes ? <span className="text-xs text-amber-700 dark:text-amber-300">未保存 {changes}件</span> : null}</div>
       {showIssuedSummary ? <dl aria-label="保存済み請求書の集計" className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
@@ -297,38 +307,31 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
         <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">未入金</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.outstanding)}</dd></div>
         <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">OCR要確認</dt><dd className="font-semibold text-amber-700 dark:text-amber-400">{summary.review}件</dd></div>
       </dl> : null}
-      <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み</h2>
-      <form className="flex min-w-0 flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setQuery(search); setLimit(pageSize); }}>
+      <FilterPanel activeCount={Number(counterpart !== "all") + Number(invoiceStatus !== "all")} onReset={hasFilters ? resetFilters : undefined} primary={<>
+        <form className="filter-panel-search flex gap-1" onSubmit={(event) => { event.preventDefault(); setQuery(search); setLimit(pageSize); }}>
+          <Input aria-label="書類を検索" placeholder="請求番号・取引先・案件を検索" className="h-11 min-w-0 flex-1" value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} />
+          <Button type="submit" variant="outline" size="icon" className="size-11 shrink-0 lg:size-9" title="検索" aria-label="検索" disabled={saving || deleting}><Search className="size-4" /></Button>
+        </form>
+        <OptionTabs label="入金状態で絞り込み" value={paymentFilter} options={[["all", "すべて"], ["unpaid", <span key="unpaid" title="一部入金を含む">未完了</span>], ["paid", "完了"]]} onChange={(value) => { setPaymentFilter(value); setLimit(pageSize); }} />
+      </>}>
         <select aria-label="取引先で絞り込み" className={`${recordSelectClass} sm:w-64`} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">すべてのクライアント</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
-        <Input aria-label="書類を検索" placeholder="請求番号・取引先・案件を検索" className="h-11 min-w-0 basis-48 flex-1" value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} />
-        <Button type="submit" variant="outline" size="icon" className="size-11 shrink-0" title="検索" aria-label="検索" disabled={saving || deleting}><Search className="size-4" /></Button>
-        {hasFilters ? <Button type="button" className="min-h-11 lg:min-h-11" variant="ghost" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
-      </form>
-      <div className="option-tabs-row">
         <OptionTabs label="請求書の状態で絞り込み" caption="状態" value={invoiceStatus} options={[["all", "すべて"], ["review", "OCR要確認"], ...Object.entries(issuedStatusLabels)]} onChange={(value) => { setInvoiceStatus(value); setLimit(pageSize); }} />
-        <OptionTabs label="入金状態で絞り込み" caption="入金" value={paymentFilter} options={[["all", "すべて"], ["unpaid", "未完了（一部入金含む）"], ["paid", "完了"]]} onChange={(value) => { setPaymentFilter(value); setLimit(pageSize); }} />
         <OptionTabs label="請求書のまとめ方" caption="まとめ方" value={grouping} options={[["none", "まとめない"], ["month", "月ごと"], ["client", "クライアントごと"], ["project", "案件ごと"]]} onChange={(value) => { setGrouping(value as IssuedGrouping); setLimit(pageSize); }} />
         <OptionTabs label="並び順" caption="並び順" value={sort} options={[["date-desc", "発行日が新しい順"], ["date-asc", "発行日が古い順"], ["amount-desc", "金額が大きい順"], ["amount-asc", "金額が小さい順"]]} onChange={(value) => { setSort(value); setLimit(pageSize); }} />
-      </div>
-      </section>
-    </> : <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み</h2>
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="書類を検索" placeholder="書類名・取引先・案件を検索" className="h-11 pl-9 lg:pl-9" value={query} onChange={(e) => { setQuery(e.target.value); setLimit(pageSize); }} /></div>
+      </FilterPanel>
+    </> : <FilterPanel activeCount={Number(counterpart !== "all") + Number(kind !== "all") + Number(category !== "all") + Number(paymentFilter !== "all")} onReset={hasFilters ? resetFilters : undefined} primary={<>
+      <div className="filter-panel-search relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="書類を検索" placeholder="書類名・取引先・案件を検索" className="h-11 pl-9 lg:pl-9" value={query} onChange={(e) => { setQuery(e.target.value); setLimit(pageSize); }} /></div>
+      <OptionTabs label="確認状態" value={state} options={[["all", "すべて"], ["review", "要確認"], ["open", "対応中"], ["done", issuedOnly ? "完了・取消" : "完了"]]} onChange={(value) => { setState(value); setLimit(pageSize); }} />
+      <span className="text-xs text-muted-foreground" role="status">{filtered.length} / {rows.length}件</span>
+    </>}>
       <select aria-label="取引先で絞り込み" className={selectClass} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">{issuedOnly ? "すべてのクライアント" : "すべての取引先"}</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
       {!issuedOnly ? <OptionTabs label="書類種別" caption="種別" value={kind} options={[["all", "すべて"], ...Object.entries(documentKindLabels)]} onChange={(value) => { setKind(value); setLimit(pageSize); }} /> : null}
       {!issuedOnly ? <OptionTabs label="書類分類" caption="分類" value={category} options={[["all", "すべて"], ...Object.entries(documentCategoryLabels)]} onChange={(value) => { setCategory(value); setLimit(pageSize); }} /> : null}
       <OptionTabs label="並び順" caption="並び順" value={sort} options={[["client", issuedOnly ? "クライアントごと" : "取引先ごと"], ["date-desc", "日付が新しい順"], ["date-asc", "日付が古い順"], ["amount-desc", "金額が大きい順"], ["name", "取引先名順"], ["project", "案件ごと"]]} onChange={(value) => { setSort(value); setLimit(pageSize); }} />
-    </div>
-    <div className="flex flex-wrap items-center gap-2">
-      <OptionTabs label="確認状態" caption="確認" value={state} options={[["all", "すべて"], ["review", "要確認"], ["open", "対応中"], ["done", issuedOnly ? "完了・取消" : "完了"]]} onChange={(value) => { setState(value); setLimit(pageSize); }} />
       {issuedOnly || kind === "issued" ? <OptionTabs label="入金状態で絞り込み" caption="入金" value={paymentFilter} options={[["all", "すべて"], ["unpaid", "未完了（一部入金含む）"], ["paid", "完了"]]} onChange={(value) => { setPaymentFilter(value); setLimit(pageSize); }} /> : null}
-      <span className="text-xs text-muted-foreground" role="status">{filtered.length} / {rows.length}件</span>
-      {hasFilters ? <Button variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
-      {canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="ml-auto" onClick={exportCsv}><Download className="size-4" /></Button> : null}
-    </div>
-    </section>}
+    </FilterPanel>}
     <SelectionToolbar selection={selection}>
-      {issuedOnly && canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="size-11" onClick={exportCsv}><Download className="size-4" /></Button> : null}
+      {canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="size-11 lg:size-9" onClick={exportCsv}><Download className="size-4" /></Button> : null}
       {issuedOnly && rows.some((row) => row.editable) ? <Button className="min-h-11" disabled={!changes || saving || deleting} onClick={() => save()}><OperationPending pending={company === "JAPAN" && saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{changes ? ` (${changes})` : ""}</OperationPending></Button> : null}
     </SelectionToolbar>
     {company === "JAPAN" ? <OperationError message={operationError} /> : null}
@@ -352,17 +355,19 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
           <div className="lg:hidden">
             {groups.map(([m, list]) => <Fragment key={m}>
               {grouped ? <button className="flex min-h-11 w-full items-center gap-2 bg-muted/60 px-3 text-sm font-medium" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button> : null}
-              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div {...selection.rowProps(r.id)} data-active={activeId === r.id ? "" : undefined} className="record-card mb-2 flex min-w-0 items-start gap-2 p-2">
+              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div {...selection.rowProps(r.id)} data-active={activeId === r.id ? "" : undefined} className="record-card record-card-compact mb-2 flex min-w-0 items-start gap-1 p-2">
                 <RowSelectionCheckbox selection={selection} id={r.id} label={r.title + "を選択"} />
-                <div className="grid min-w-0 flex-1 gap-1 text-left text-sm">
-                  <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button data-selection-open onClick={() => open(r)} className="min-h-11 break-words text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}</button>
-                  <span className="break-words text-xs text-muted-foreground">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart}</span>
+                <div className="grid min-w-0 flex-1 gap-0.5 text-left text-sm">
+                  <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} />
+                  <button data-selection-open onClick={() => open(r)} className="record-card-open break-words text-xs text-muted-foreground">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}{(edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart) ? ` · ${edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart}` : ""}</button>
                   {r.billingLabel ? <span className="break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}
-                  <DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />
-                  {(edits[r.id]?.needsReview ?? r.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
-                  <span className="flex flex-wrap items-center gap-2 text-xs"><span>{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</span><span className="ml-auto tabular-nums">{r.total === undefined ? "" : number.format(edits[r.id]?.total ?? r.total)}</span></span>
-                  {edits[r.id] ? <span className="text-xs text-amber-700 dark:text-amber-300">未保存</span> : null}
-                  {issuedOnly ? <><IssuedAmounts row={r} /><IssuedReviewStatus row={r} edit={edits[r.id]} /></> : null}
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs"><span className="min-w-0 max-w-[50%]"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} /></span><span className="tabular-nums text-muted-foreground">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</span>{r.total === undefined ? null : <span className="ml-auto text-sm font-medium tabular-nums">{number.format(edits[r.id]?.total ?? r.total)}</span>}</span>
+                  {issuedOnly || (edits[r.id]?.needsReview ?? r.needsReview) || edits[r.id] ? <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs">
+                    {issuedOnly ? <IssuedAmountsLine row={r} /> : null}
+                    {issuedOnly && r.imported ? <IssuedReviewStatus row={r} edit={edits[r.id]} /> : null}
+                    {!issuedOnly && (edits[r.id]?.needsReview ?? r.needsReview) ? <span className="text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
+                    {edits[r.id] ? <span className="text-amber-700 dark:text-amber-300">未保存</span> : null}
+                  </span> : null}
                 </div>
                 <DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} />
               </div></DocumentContextMenu>) : null}

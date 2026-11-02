@@ -601,11 +601,11 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .bank-ledger-savebar.is-unified { min-height: 60px; padding-block: 8px; }
 
 /* Items are cards: pressing anywhere on one selects it, and its controls keep their own action. */
-[data-selection-id] { cursor: pointer; }
+[data-selection-id], [data-card-press] { cursor: pointer; }
 .selection-tick { appearance: none; display: grid; flex: none; place-content: center; width: 20px; height: 20px; border: 1.5px solid var(--input); border-radius: 999px; background: transparent; cursor: pointer; }
 .selection-tick:checked { border-color: var(--primary); background: var(--primary); }
 .selection-tick:checked::after { content: ""; width: 5px; height: 10px; margin-top: -2px; border: solid var(--primary-foreground); border-width: 0 2px 2px 0; transform: rotate(45deg); }
-.record-card-open { max-width: 100%; text-align: left; font-weight: inherit; text-underline-offset: 3px; }
+.record-card-open { max-width: 100%; min-height: 0; text-align: left; font-weight: inherit; text-underline-offset: 3px; }
 .record-card-open:hover { color: var(--primary); text-decoration: underline; }
 
 .record-card { border: 1px solid var(--rule); border-radius: 12px; background-color: var(--card); box-shadow: inset 3px 0 var(--card-tone, transparent), var(--shadow-soft); transition: background-color 120ms ease, border-color 120ms ease; }
@@ -628,20 +628,26 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .record-cards > tbody > tr.record-section-row[data-drop] > td { border-radius: 10px; background: var(--selected); outline: 2px dashed var(--primary); outline-offset: -2px; }
 
 @media (max-width: 1023px) {
-  .record-cards-stack, .record-cards-stack > tbody { display: block; width: 100%; }
+  .record-cards-stack, .record-cards-stack > tbody { display: block; width: 100%; min-width: 0 !important; }
   .record-cards-stack > thead { display: none; }
   .record-cards-stack > tbody { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 8px; margin-block-end: 8px; }
-  .record-cards-stack > tbody > tr { display: block; position: relative; min-width: 0; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 12px; background-color: var(--card); box-shadow: inset 3px 0 var(--card-tone, transparent); }
+  .record-cards-stack > tbody > tr { display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 2px 12px; position: relative; min-width: 0; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 12px; background-color: var(--card); box-shadow: inset 3px 0 var(--card-tone, transparent); }
   .record-cards-stack > tbody > tr:hover, .record-cards-stack > tbody > tr[data-active] { background-color: var(--selected); }
   .record-cards-stack > tbody > tr[data-selected="true"] { border-color: var(--primary); background-color: var(--selected); background-image: var(--hatch); box-shadow: inset 3px 0 var(--card-tone, transparent), 0 0 0 1px var(--primary); }
-  .record-cards-stack > tbody > tr > td, .record-cards-stack > tbody > tr > td:first-child, .record-cards-stack > tbody > tr > td:last-child { display: flex; min-width: 0; max-width: none; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 !important; border: 0; border-radius: 0; background: none !important; box-shadow: none; white-space: normal; text-align: right; }
-  .record-cards-stack > tbody > tr > td:empty { display: none; }
-  .record-cards-stack > tbody > tr > td[data-label]::before { content: attr(data-label); flex: none; font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
-  .record-cards-stack > tbody > tr > td.record-card-title { justify-content: flex-start; padding-inline-end: 40px !important; font-size: 14px; font-weight: 500; text-align: left; }
+  .record-cards-stack > tbody > tr > td, .record-cards-stack > tbody > tr > td:first-child, .record-cards-stack > tbody > tr > td:last-child { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: 4px; padding: 0 !important; border: 0; border-radius: 0; background: none !important; box-shadow: none; font-size: 12px; white-space: normal; text-align: left; }
+  .record-cards-stack > tbody > tr > td:empty, .record-cards-stack > tbody > tr > td[data-card-hide] { display: none; }
+  .record-cards-stack > tbody > tr > td[data-card-end] { margin-inline-start: auto; font-size: 13px; font-weight: 500; }
+  .record-cards-stack > tbody > tr > td[data-card-line] { flex: 1 1 100%; }
+  .record-cards-stack > tbody > tr > td[data-card-sub] { order: 1; }
+  .record-cards-stack > tbody > tr > td[data-card-sub]:not([data-card-end]) { color: var(--muted-foreground); }
+  .record-cards-stack select { width: auto; height: 34px; min-height: 34px; }
+  .record-cards-stack [data-slot="button"] { min-height: 34px; }
+  .record-cards-stack > tbody > tr > td[data-label]::before { content: attr(data-label); flex: none; font-size: 11px; font-weight: 400; color: var(--muted-foreground); }
+  .record-cards-stack > tbody > tr > td.record-card-title { flex: 1 1 100%; order: -1; font-size: 14px; font-weight: 500; }
+  .record-cards-stack > tbody > tr:has(> td.record-card-tick) > td.record-card-title { padding-inline-end: 36px !important; }
   .record-cards-stack > tbody > tr > td.record-card-tick { position: absolute; inset-block-start: 0; inset-inline-end: 0; display: block; width: auto; padding: 0 !important; }
-  .record-cards-stack > tbody > tr > td.record-card-tick + td { padding-inline-end: 40px !important; }
-  .record-cards-stack > tbody > tr.record-section-row { grid-column: 1 / -1; padding: 4px 0; border: 0; background: none; box-shadow: none; }
-  .record-cards-stack > tbody > tr.record-section-row > td { padding: 0 !important; text-align: left; }
+  .record-cards-stack > tbody > tr.record-section-row { display: block; grid-column: 1 / -1; padding: 4px 0; border: 0; background: none; box-shadow: none; }
+  .record-cards-stack > tbody > tr.record-section-row > td { display: block; padding: 0 !important; font-size: 14px; text-align: left; }
   .record-cards-stack > tbody > tr.record-section-row[data-drop] { border-radius: 10px; background: var(--selected); outline: 2px dashed var(--primary); }
 }
 
@@ -661,3 +667,36 @@ body.has-selection-bar .workspace-main { padding-bottom: 180px; }
 .workspace-segmented > button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .workspace-segmented > button:disabled { opacity: 0.5; }
 @media (min-width: 1024px) { .workspace-segmented > button { min-height: 32px; } }
+
+/* Hand-written cards on small screens: the whole card is the press target, so its parts can be smaller. */
+@media (max-width: 1023px) {
+  .record-card-compact select { height: 34px; min-height: 34px; }
+  .record-card-compact [data-selection-open] { min-height: 0; padding-block: 2px; }
+  .record-card-compact label:has(> .selection-tick) { width: 28px; height: 34px; }
+  .record-card-compact summary { list-style: none; }
+  .record-card-compact summary::-webkit-details-marker { display: none; }
+}
+
+/* Filters: one row out, the rest behind a button. */
+.filter-panel { padding: 10px 12px; }
+.filter-panel-primary { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+.filter-panel-more { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-block-start: 10px; padding-block-start: 10px; border-block-start: 1px solid var(--rule); }
+.filter-panel-toggle { flex: none; min-height: 44px; }
+.filter-panel-search { flex: 1 1 200px; min-width: 0; }
+.filter-panel-count { display: inline-grid; place-content: center; min-width: 18px; height: 18px; padding-inline: 4px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+@media (min-width: 1024px) { .filter-panel-toggle { min-height: 36px; } }
+@media (max-width: 767px) {
+  .filter-panel-primary > * { order: 2; }
+  .filter-panel-primary > .filter-panel-search { order: 0; flex: 1 1 140px; }
+  .filter-panel-primary > .filter-panel-toggle { order: 1; }
+}
+.list-mode-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* The opened item: fixed beside the list, or over it. */
+.record-detail-pane { position: sticky; inset-block-start: 12px; align-self: start; max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.record-detail-dialog { inset: 0; display: flex; width: 100%; max-width: none; height: 100dvh; flex-direction: column; gap: 0; padding: 0; border-radius: 0; translate: none; }
+.record-detail-bar { display: flex; flex: none; align-items: center; gap: 8px; padding: 6px 8px; border-block-end: 1px solid var(--rule); background: var(--card); }
+.record-detail-bar [data-slot="button"] { flex: none; width: 44px; height: 44px; }
+.record-detail-body { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 12px; }
+@media (min-width: 768px) { .record-detail-dialog { inset-inline-start: auto; width: min(680px, 90vw); box-shadow: var(--shadow-raised); } }
+@media (min-width: 1024px) { .record-detail-dialog { width: min(960px, 92vw); } .record-detail-body { padding: 16px; } }

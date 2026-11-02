@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { SelectableRecordsTable } from "@/components/app/selectable-records-table";
+import { RecordsTable } from "@/components/app/records-table";
 import { createSelectOption, createVendor, moveClientOption, moveSelectOption, moveVendorOption } from "@/app/actions";
 import { ClientEditButton, ClientForm } from "@/components/app/client-editor";
 import { AppShell, PageHeader } from "@/components/app/shell";
@@ -55,7 +55,7 @@ export default async function PartnersPage({
           <Card variant="section" className="min-w-0">
             <CardHeader><CardTitle>クライアント</CardTitle></CardHeader>
             <CardContent>
-              <SelectableRecordsTable key={`clients-${company}`} headers={["順番", "会社名", "担当者", "メール", "登録番号", ...(mayEdit ? ["操作"] : [])]} rows={clients.map((client, index) => ({ id: client.id, label: client.companyName, cells: [
+              <RecordsTable key={`clients-${company}`} titleColumn={1} headers={["順番", "会社名", "担当者", "メール", "登録番号", ...(mayEdit ? ["操作"] : [])]} rows={clients.map((client, index) => ({ id: client.id, cells: [
                 <MoveButtons key="order" action={moveClientOption} id={client.id} disabled={!mayEdit} first={index === 0} last={index === clients.length - 1} />,
                 <span key="name" className="font-medium">{client.companyName}</span>, client.contactName, client.email, client.invoiceRegistrationNumber,
                 ...(mayEdit ? [<div key="actions" className="flex"><ClientEditButton company={company} client={client} /><ClientDeleteButton company={company} client={{ id: client.id, companyName: client.companyName, updatedAt: client.updatedAt }} /></div>] : []),
@@ -75,9 +75,9 @@ export default async function PartnersPage({
             <CardHeader><CardTitle>支払先</CardTitle></CardHeader>
             <CardContent>
               <p className="mb-3 text-xs text-muted-foreground">税金・社会保険の一覧はこの区分を優先します。「未設定」だけ支払先名から推定します。</p>
-              <SelectableRecordsTable key={`vendors-${company}`} headers={["順番", "会社名", "担当者", "メール", "銀行", "税金・社会保険の区分"]} rows={vendors.map((vendor, index) => ({ id: vendor.id, label: vendor.companyName, cells: [
+              <RecordsTable key={`vendors-${company}`} titleColumn={1} headers={["順番", "会社名", "担当者", "メール", "銀行", "税金・社会保険の区分"]} rows={vendors.map((vendor, index) => ({ id: vendor.id, cells: [
                 <MoveButtons key="order" action={moveVendorOption} id={vendor.id} disabled={!mayEditVendors} first={index === 0} last={index === vendors.length - 1} />,
-                <span key="name" className="font-medium">{vendor.companyName}</span>, vendor.contactName, vendor.email, `${vendor.bankName || ""} ${vendor.branchName || ""}`,
+                <span key="name" className="font-medium">{vendor.companyName}</span>, vendor.contactName, vendor.email, `${vendor.bankName || ""} ${vendor.branchName || ""}`.trim(),
                 mayEditVendors ? <VendorObligationEditor key="obligation" company={company} vendor={{ id: vendor.id, companyName: vendor.companyName, obligationKind: vendor.obligationKind, updatedAt: vendor.updatedAt }} /> : obligationKindLabels[vendor.obligationKind || "UNSET"],
               ] }))} />
             </CardContent>

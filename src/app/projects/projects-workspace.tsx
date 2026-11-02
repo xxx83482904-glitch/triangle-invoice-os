@@ -1,7 +1,7 @@
 "use client";
-import { useListSelection, type ListSelection } from "@/hooks/use-list-selection";
-import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
-import { isSelectionControl } from "@/lib/list-selection";
+import { cardPressProps } from "@/components/app/list-selection";
+import { RecordDetail } from "@/components/app/record-detail";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 import Link from "next/link";
 import {
@@ -94,7 +94,9 @@ export function ProjectsWorkspace({
   stageOptions: Option[];
   statusOptions: Option[];
 }) {
-  const [activeId, setActiveId] = useState(rows[0]?.id ?? "");
+  const [activeId, setActiveId] = useState("");
+  const [detailOpen, setDetailOpen] = useState(false);
+  const wide = useMediaQuery("(min-width: 1024px)");
   const [clientFilter, setClientFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(rows.length === 0);
@@ -120,7 +122,10 @@ export function ProjectsWorkspace({
 
   const activeRow = filteredRows.find((row) => row.id === activeId) ?? filteredRows[0] ?? rows.find((row) => row.id === activeId) ?? rows[0];
   const summary = useMemo(() => buildSummary(rows, showFinancials), [rows, showFinancials]);
-  const selection = useListSelection(filteredRows.map((row) => row.id), { availableIds: rows.map((row) => row.id) });
+  const stepFrom = (step: number) => {
+    const next = activeRow ? filteredRows[filteredRows.indexOf(activeRow) + step] : undefined;
+    return next ? () => setActiveId(next.id) : undefined;
+  };
 
   return (
     <div className="space-y-4">
@@ -202,22 +207,20 @@ export function ProjectsWorkspace({
           </div>
         ) : null}
 
-        <div className="grid min-h-[620px] lg:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid lg:min-h-[620px] lg:grid-cols-[minmax(0,1fr)_420px]">
           <div className="min-w-0 border-b lg:border-b-0 lg:border-r">
             <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-muted-foreground">
               <span>{filteredRows.length}件表示</span>
               <span>要対応順</span>
             </div>
-            <div className="max-h-[70vh] overflow-y-auto px-2 pt-2">
-              <SelectionToolbar selection={selection} />
+            <div className="px-2 pt-2 lg:max-h-[70vh] lg:overflow-y-auto">
               {filteredRows.map((row) => (
                 <ProjectListItem
                   key={row.id}
-                  active={row.id === activeRow?.id}
-                  selection={selection}
+                  active={row.id === (wide ? activeRow?.id : activeId)}
                   row={row}
                   showFinancials={showFinancials}
-                  onSelect={() => setActiveId(row.id)}
+                  onOpen={() => { setActiveId(row.id); setDetailOpen(true); }}
                 />
               ))}
               {filteredRows.length === 0 ? (
@@ -243,7 +246,7 @@ export function ProjectsWorkspace({
             </div>
           </div>
 
-          <aside className="min-w-0 bg-muted/20">
+          <RecordDetail wide={wide} open={detailOpen} title={activeRow?.name} label="開いている案件" resetKey={activeRow?.id} className="min-w-0 bg-muted/20" onClose={() => setDetailOpen(false)} onPrevious={stepFrom(-1)} onNext={stepFrom(1)}>
             {activeRow ? (
               <ProjectDetailPanel
                 canEdit={canEdit}
@@ -255,9 +258,9 @@ export function ProjectsWorkspace({
                 statusOptions={statusOptions}
               />
             ) : (
-              <div className="p-4 text-sm text-muted-foreground">案件を選択してください。</div>
+              <div className="p-4 text-sm text-muted-foreground">案件を押すと詳細を表示します。</div>
             )}
-          </aside>
+          </RecordDetail>
         </div>
       </section>
     </div>
@@ -338,14 +341,12 @@ function CreateProjectForm({
 
 function ProjectListItem({
   active,
-  selection,
-  onSelect,
+  onOpen,
   row,
   showFinancials,
 }: {
   active: boolean;
-  selection: ListSelection;
-  onSelect: () => void;
+  onOpen: () => void;
   row: ProjectWorkspaceRow;
   showFinancials: boolean;
 }) {
@@ -354,27 +355,18 @@ function ProjectListItem({
 
   return (
     <article
-      {...selection.rowProps(row.id)}
-      role="button"
+      {...cardPressProps(onOpen)}
       data-active={active ? "" : undefined}
-      className="record-card my-2 block w-full px-3 py-3 text-left"
-      onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) onSelect(); }}
-      onKeyDown={(event) => {
-        if (event.target === event.currentTarget && event.key === "Enter") {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
+      className="record-card my-2 block w-full px-3 py-2 text-left"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
-        <RowSelectionCheckbox selection={selection} id={row.id} label={`${row.name}を選択`} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">No. {row.index}</span>
             <CompanyBadge company={row.company} />
             <StatusBadge status={row.status} />
           </div>
-          <button type="button" data-selection-open className="record-card-open mt-1 line-clamp-2 text-sm font-semibold leading-snug" title="選択せずに開く">{row.name}</button>
+          <button type="button" data-selection-open className="record-card-open mt-1 line-clamp-2 text-sm font-semibold leading-snug" title="開く">{row.name}</button>
           <div className="mt-1 truncate text-xs text-muted-foreground">{row.clientName || "クライアント未設定"} / {projectStageLabel(row.company, row.stage) || "段階未設定"}</div>
         </div>
         <div className="shrink-0 text-right">
@@ -384,19 +376,19 @@ function ProjectListItem({
       </div>
 
       {showFinancials ? (
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
           <MiniAmount label="未請求" value={uninvoicedAmount} hot={(uninvoicedAmount ?? 0) > 0} />
           <MiniAmount label="未入金" value={row.unpaidIncomeAmount} hot={row.unpaidIncomeAmount > 0} />
           <MiniAmount label="請求差額（税込）" value={row.grossProfit} hot={row.grossProfit < 0} />
         </div>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
           <span>{row.issuedCount}件 請求書</span>
           <span>{row.receivedCount}件 受領請求書</span>
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex flex-wrap gap-1.5">
         {row.company === "JAPAN" && !row.contractFileUrl ? <Badge variant="outline" className="bg-muted text-muted-foreground">契約書なし（参考）</Badge> : null}
         {actionLabels.length > 0 ? (
           actionLabels.map((label) => <ActionBadge key={label}>{label}</ActionBadge>)
@@ -430,7 +422,7 @@ function ProjectDetailPanel({
   const uninvoicedAmount = projectUninvoiced(row.contractAmount, row.invoicedAmount);
 
   return (
-    <div className="sticky top-0 space-y-4 p-3 lg:max-h-[calc(100vh-96px)] lg:overflow-y-auto">
+    <div className="space-y-4 p-3">
       <div className="border-b pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

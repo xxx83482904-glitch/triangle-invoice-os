@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { isCardPress } from "../src/lib/list-selection";
+import { isCardPress, isOpenPress, isSelectionControl, pressSelects } from "../src/lib/list-selection";
 
 // Just enough of a DOM element for the press rules: closest() finds the nearest match by selector kind.
 class FakeElement extends EventTarget {
@@ -38,7 +38,7 @@ test("a press with no element target does nothing", () => {
 
 const lists = [
   "src/app/mail-sorter/ocr-documents-table.tsx", "src/app/received-invoices/received-invoices-workspace.tsx", "src/components/app/documents-workspace.tsx",
-  "src/components/app/estimates-list.tsx", "src/app/projects/projects-workspace.tsx", "src/components/app/banking-workspace.tsx", "src/components/app/selectable-records-table.tsx",
+  "src/components/app/estimates-list.tsx", "src/app/projects/projects-workspace.tsx", "src/components/app/banking-workspace.tsx", "src/components/app/records-table.tsx",
 ];
 for (const file of lists) {
   test(`${file} shows its items as cards and has no select-all checkbox`, () => {
@@ -72,3 +72,63 @@ for (const file of ["src/components/app/bank-reconciliation-workspace.tsx", "src
     assert.doesNotMatch(source, /type="month"/);
   });
 }
+
+test("a list in review mode leaves presses to open the item until something is selected", () => {
+  assert.equal(pressSelects(false, 0), false);
+  assert.equal(pressSelects(true, 0), true);
+  assert.equal(pressSelects(false, 2), true);
+});
+
+test("a press opens a card, except on a control or at the end of a text drag", () => {
+  assert.equal(isOpenPress(new FakeElement(), card), true);
+  assert.equal(isOpenPress(new FakeElement(new FakeElement()), card), false);
+  assert.equal(isOpenPress(new FakeElement(), card, "selected text"), false);
+  assert.equal(isOpenPress(new FakeElement(null, true), card), true);
+});
+
+test("the fold-out fields inside a card count as a control", () => {
+  let selector = "";
+  class Probe extends FakeElement { override closest(value: string) { selector ||= value; return null; } }
+  (globalThis as unknown as { Element: unknown }).Element = Probe;
+  isSelectionControl(new Probe(), card);
+  (globalThis as unknown as { Element: unknown }).Element = FakeElement;
+  assert.match(selector, /\bdetails\b/);
+});
+
+test("mail sorter starts in review mode, so going through the list selects nothing", () => {
+  const source = readFileSync("src/app/mail-sorter/ocr-documents-table.tsx", "utf8");
+  assert.match(source, /useState\(false\);\s*const \[detailOpen/);
+  assert.match(source, /disabled: isMoving, pickMode \}/);
+  assert.match(source, /<OptionTabs label="郵便物の選び方"/);
+});
+
+for (const file of ["src/app/received-invoices/received-invoices-workspace.tsx", "src/app/projects/projects-workspace.tsx"]) {
+  test(`${file} has nothing to do in bulk, so pressing a card only opens it`, () => {
+    const source = readFileSync(file, "utf8");
+    assert.match(source, /cardPressProps\(/);
+    assert.doesNotMatch(source, /useListSelection|RowSelectionCheckbox|SelectionToolbar/);
+  });
+}
+
+test("partners have no selection left", () => {
+  const source = readFileSync("src/components/app/records-table.tsx", "utf8");
+  assert.doesNotMatch(source, /useListSelection|RowSelectionCheckbox|SelectionToolbar/);
+});
+
+for (const file of ["src/app/mail-sorter/ocr-documents-table.tsx", "src/app/received-invoices/received-invoices-workspace.tsx", "src/app/projects/projects-workspace.tsx"]) {
+  test(`${file} keeps the opened item in view`, () => {
+    assert.match(readFileSync(file, "utf8"), /<RecordDetail\b/);
+  });
+}
+
+for (const file of ["src/app/mail-sorter/ocr-documents-table.tsx", "src/components/app/documents-workspace.tsx", "src/components/app/estimates-list.tsx", "src/components/app/banking-workspace.tsx"]) {
+  test(`${file} folds its less used filters`, () => {
+    const source = readFileSync(file, "utf8");
+    assert.match(source, /<FilterPanel\b/);
+    assert.doesNotMatch(source, /workspace-filter-panel/);
+  });
+}
+
+test("the detail panel does not close on a stray press, so typed values survive", () => {
+  assert.match(readFileSync("src/components/app/record-detail.tsx", "utf8"), /onInteractOutside=\{\(event\) => event\.preventDefault\(\)\}/);
+});
