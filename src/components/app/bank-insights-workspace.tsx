@@ -1,5 +1,6 @@
 "use client";
 
+import { MonthTabs } from "@/components/app/month-tabs";
 import { Button } from "@/components/ui/button";
 
 import Link from "next/link";
@@ -7,7 +8,6 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ArrowLeft, ArrowUpRight, ChartNoAxesCombined, CircleAlert, LoaderCircle, TrendingUp } from "lucide-react";
 import { bankSelectClass } from "@/components/app/banking-settings";
-import { Input } from "@/components/ui/input";
 import type { BankAccount } from "@/lib/banking-types";
 import type { BankSpendingInsights, SpendingAlert, SpendingSample } from "@/lib/bank-insights";
 import type { CompanyScope } from "@/lib/company";
@@ -15,9 +15,9 @@ import type { CompanyScope } from "@/lib/company";
 const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(value);
 const change = (value: number | null) => value === null ? "比較不可" : `${value > 0 ? "+" : ""}${money(value)}`;
 const names = { DUPLICATE: "同日・同額の重複候補", LARGE: "通常より大きい出金", RECURRING_INCREASE: "定期支払いの増額候補" };
-type Props = { company: CompanyScope; account: BankAccount; accounts: BankAccount[]; insights: BankSpendingInsights };
+type Props = { company: CompanyScope; account: BankAccount; accounts: BankAccount[]; months: string[]; insights: BankSpendingInsights };
 
-export function BankInsightsWorkspace({ company, account, accounts, insights: report }: Props) {
+export function BankInsightsWorkspace({ company, account, accounts, months, insights: report }: Props) {
   const router = useRouter(), [pending, startTransition] = useTransition();
   const [kind, setKind] = useState<"ALL" | SpendingAlert["kind"]>("ALL");
   const url = (values: Record<string, string> = {}) => `/banking?${new URLSearchParams({ company, account: account.id, month: report.month, analysisThrough: report.current.end, ...values })}`;
@@ -36,9 +36,9 @@ export function BankInsightsWorkspace({ company, account, accounts, insights: re
       <div className="min-w-0"><Button asChild variant="soft" size="sm"><Link href={url()}><ArrowLeft className="size-4 shrink-0" />口座・カード明細</Link></Button><h1 className="text-xl font-semibold">出金の傾向・注意</h1></div>
       <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><Link href={`/banking/forecast?${new URLSearchParams({ company, account: account.id })}`}><TrendingUp className="size-4" />口座の予測</Link></Button>
     </header>
-    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
-      <label className="grid min-w-0 gap-1 text-sm">口座・カード<select className={bankSelectClass} value={account.id} disabled={pending} onChange={(e) => navigate({ account: e.target.value })}>{accounts.map((row) => <option key={row.id} value={row.id}>{row.name}{row.available ? "" : "（連携終了）"}</option>)}</select></label>
-      <label className="grid min-w-0 gap-1 text-sm">対象月<Input type="month" className="min-h-11 min-w-0" value={report.month} max={report.asOf.slice(0, 7)} disabled={pending} onChange={(e) => { if (/^\d{4}-\d{2}$/.test(e.target.value) && e.target.value <= report.asOf.slice(0, 7)) navigate({ month: e.target.value }); }} /></label>
+    <div className="grid min-w-0 gap-3">
+      <label className="grid min-w-0 gap-1 text-sm sm:max-w-md">口座・カード<select className={bankSelectClass} value={account.id} disabled={pending} onChange={(e) => navigate({ account: e.target.value })}>{accounts.map((row) => <option key={row.id} value={row.id}>{row.name}{row.available ? "" : "（連携終了）"}</option>)}</select></label>
+      <MonthTabs label="対象月" value={report.month} months={months} today={report.asOf} showAll={false} disabled={pending} isMonthDisabled={(value) => value > report.asOf.slice(0, 7)} onChange={(month) => navigate({ month })} />
     </div>
     {pending ? <p role="status" className="flex items-center gap-2 text-sm"><LoaderCircle className="size-4 animate-spin" />集計中</p> : null}
     <p className="break-words text-xs text-muted-foreground">{report.current.start}〜{report.current.end} / {account.forecastSettings?.accountKind === "CARD" ? "カード利用額（銀行の引落額ではありません）" : "出金・カード利用額"} / 単位は元明細と同じ（通貨換算なし）</p>

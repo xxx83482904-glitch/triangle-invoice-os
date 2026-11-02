@@ -4,7 +4,8 @@ import { OperationError, OperationPending } from "@/components/app/operation-fee
 
 import Image from "next/image";
 import { useListSelection } from "@/hooks/use-list-selection";
-import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { RowSelectionCheckbox, SelectionActionBar, SelectionToolbar } from "@/components/app/list-selection";
+import { OptionTabs } from "@/components/app/option-tabs";
 import Link from "next/link";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -297,32 +298,30 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
         <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">OCR要確認</dt><dd className="font-semibold text-amber-700 dark:text-amber-400">{summary.review}件</dd></div>
       </dl> : null}
       <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み</h2>
-      <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        <select aria-label="取引先で絞り込み" className={recordSelectClass} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">すべてのクライアント</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
-        <select aria-label="請求書の状態で絞り込み" className={recordSelectClass} value={invoiceStatus} onChange={(e) => { setInvoiceStatus(e.target.value); setLimit(pageSize); }}><option value="all">すべての状態</option><option value="review">OCR要確認</option>{Object.entries(issuedStatusLabels).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select>
-        <select aria-label="入金状態で絞り込み" className={recordSelectClass} value={paymentFilter} onChange={(e) => { setPaymentFilter(e.target.value); setLimit(pageSize); }}><option value="all">すべての入金状態</option><option value="unpaid">入金未完了（一部入金含む）</option><option value="paid">入金完了</option></select>
-        <select aria-label="請求書のまとめ方" className={recordSelectClass} value={grouping} onChange={(e) => { setGrouping(e.target.value as IssuedGrouping); setLimit(pageSize); }}><option value="none">まとめない</option><option value="month">月ごと</option><option value="client">クライアントごと</option><option value="project">案件ごと</option></select>
-        <select aria-label="並び順" className={recordSelectClass} value={sort} onChange={(e) => { setSort(e.target.value); setLimit(pageSize); }}><option value="date-desc">発行日が新しい順</option><option value="date-asc">発行日が古い順</option><option value="amount-desc">金額が大きい順</option><option value="amount-asc">金額が小さい順</option></select>
-      </div>
       <form className="flex min-w-0 flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setQuery(search); setLimit(pageSize); }}>
+        <select aria-label="取引先で絞り込み" className={`${recordSelectClass} sm:w-64`} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">すべてのクライアント</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
         <Input aria-label="書類を検索" placeholder="請求番号・取引先・案件を検索" className="h-11 min-w-0 basis-48 flex-1" value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} />
         <Button type="submit" variant="outline" size="icon" className="size-11 shrink-0" title="検索" aria-label="検索" disabled={saving || deleting}><Search className="size-4" /></Button>
         {hasFilters ? <Button type="button" className="min-h-11 lg:min-h-11" variant="ghost" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
       </form>
+      <div className="option-tabs-row">
+        <OptionTabs label="請求書の状態で絞り込み" caption="状態" value={invoiceStatus} options={[["all", "すべて"], ["review", "OCR要確認"], ...Object.entries(issuedStatusLabels)]} onChange={(value) => { setInvoiceStatus(value); setLimit(pageSize); }} />
+        <OptionTabs label="入金状態で絞り込み" caption="入金" value={paymentFilter} options={[["all", "すべて"], ["unpaid", "未完了（一部入金含む）"], ["paid", "完了"]]} onChange={(value) => { setPaymentFilter(value); setLimit(pageSize); }} />
+        <OptionTabs label="請求書のまとめ方" caption="まとめ方" value={grouping} options={[["none", "まとめない"], ["month", "月ごと"], ["client", "クライアントごと"], ["project", "案件ごと"]]} onChange={(value) => { setGrouping(value as IssuedGrouping); setLimit(pageSize); }} />
+        <OptionTabs label="並び順" caption="並び順" value={sort} options={[["date-desc", "発行日が新しい順"], ["date-asc", "発行日が古い順"], ["amount-desc", "金額が大きい順"], ["amount-asc", "金額が小さい順"]]} onChange={(value) => { setSort(value); setLimit(pageSize); }} />
+      </div>
       </section>
     </> : <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み</h2>
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="書類を検索" placeholder="書類名・取引先・案件を検索" className="h-11 pl-9 lg:pl-9" value={query} onChange={(e) => { setQuery(e.target.value); setLimit(pageSize); }} /></div>
       <select aria-label="取引先で絞り込み" className={selectClass} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">{issuedOnly ? "すべてのクライアント" : "すべての取引先"}</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
-      {!issuedOnly ? <select aria-label="書類種別" className={selectClass} value={kind} onChange={(e) => { setKind(e.target.value); setLimit(pageSize); }}><option value="all">すべての書類</option>{Object.entries(documentKindLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}
-      {!issuedOnly ? <select aria-label="書類分類" className={selectClass} value={category} onChange={(e) => { setCategory(e.target.value); setLimit(pageSize); }}><option value="all">すべての分類</option>{Object.entries(documentCategoryLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}
-      <select aria-label="並び順" className={selectClass} value={sort} onChange={(e) => { setSort(e.target.value); setLimit(pageSize); }}><option value="client">{issuedOnly ? "クライアントごと" : "取引先ごと"}</option><option value="date-desc">日付が新しい順</option><option value="date-asc">日付が古い順</option><option value="amount-desc">金額が大きい順</option><option value="name">取引先名順</option><option value="project">案件ごと</option></select>
+      {!issuedOnly ? <OptionTabs label="書類種別" caption="種別" value={kind} options={[["all", "すべて"], ...Object.entries(documentKindLabels)]} onChange={(value) => { setKind(value); setLimit(pageSize); }} /> : null}
+      {!issuedOnly ? <OptionTabs label="書類分類" caption="分類" value={category} options={[["all", "すべて"], ...Object.entries(documentCategoryLabels)]} onChange={(value) => { setCategory(value); setLimit(pageSize); }} /> : null}
+      <OptionTabs label="並び順" caption="並び順" value={sort} options={[["client", issuedOnly ? "クライアントごと" : "取引先ごと"], ["date-desc", "日付が新しい順"], ["date-asc", "日付が古い順"], ["amount-desc", "金額が大きい順"], ["name", "取引先名順"], ["project", "案件ごと"]]} onChange={(value) => { setSort(value); setLimit(pageSize); }} />
     </div>
     <div className="flex flex-wrap items-center gap-2">
-      <div role="group" aria-label="確認状態" className="workspace-segmented">
-        {[["all", "すべて"], ["review", "要確認"], ["open", "対応中"], ["done", issuedOnly ? "完了・取消" : "完了"]].map(([v, l]) => <button key={v} type="button" className={`min-h-11 rounded-lg px-3 text-sm lg:min-h-9 ${state === v ? "bg-background font-semibold text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/60 hover:text-foreground"}`} aria-pressed={state === v} onClick={() => { setState(v); setLimit(pageSize); }}>{l}</button>)}
-      </div>
-      {issuedOnly || kind === "issued" ? <select aria-label="入金状態で絞り込み" className={selectClass} value={paymentFilter} onChange={(e) => { setPaymentFilter(e.target.value); setLimit(pageSize); }}><option value="all">すべての入金状態</option><option value="unpaid">入金未完了（一部入金含む）</option><option value="paid">入金完了</option></select> : null}
+      <OptionTabs label="確認状態" caption="確認" value={state} options={[["all", "すべて"], ["review", "要確認"], ["open", "対応中"], ["done", issuedOnly ? "完了・取消" : "完了"]]} onChange={(value) => { setState(value); setLimit(pageSize); }} />
+      {issuedOnly || kind === "issued" ? <OptionTabs label="入金状態で絞り込み" caption="入金" value={paymentFilter} options={[["all", "すべて"], ["unpaid", "未完了（一部入金含む）"], ["paid", "完了"]]} onChange={(value) => { setPaymentFilter(value); setLimit(pageSize); }} /> : null}
       <span className="text-xs text-muted-foreground" role="status">{filtered.length} / {rows.length}件</span>
       {hasFilters ? <Button variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
       {canExport ? <Button title="CSV出力" aria-label="CSV出力" variant="outline" size="icon" className="ml-auto" onClick={exportCsv}><Download className="size-4" /></Button> : null}
@@ -333,7 +332,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       {issuedOnly && rows.some((row) => row.editable) ? <Button className="min-h-11" disabled={!changes || saving || deleting} onClick={() => save()}><OperationPending pending={company === "JAPAN" && saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}すべて保存{changes ? ` (${changes})` : ""}</OperationPending></Button> : null}
     </SelectionToolbar>
     {company === "JAPAN" ? <OperationError message={operationError} /> : null}
-    {selectedRows.length ? <div aria-label="選択した書類の一括操作" className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-selected p-3 shadow-sm [&_button]:min-h-11">
+    {selectedRows.length ? <SelectionActionBar label="選択した書類の一括操作" className="[&_button]:min-h-11">
       <span className="mr-auto text-sm font-medium">{selectedRows.length}件選択{hiddenSelectedCount ? <span className="ml-2 text-xs font-normal text-muted-foreground">表示外 {hiddenSelectedCount}件を含む</span> : null}</span>
       {selectedRows.length > 0 && selectedRows.every((r) => r.kind === "issued" && r.editable) ? <Button variant="outline" size="sm" disabled={saving || deleting} className="text-destructive" onClick={() => askDelete(selectedRows)}><Trash2 className="size-4" />選択した{selectedRows.length}件を削除</Button> : null}
       {editableSelected.length ? <select aria-label="選択した発行請求書の状態を一括変更" disabled={saving || deleting} className={selectClass} value="" onChange={(e) => { const status = e.target.value as IssuedEdit["status"]; if (!status) return; setEdits((old) => { const next = { ...old }; for (const r of editableSelected) next[r.id] = { ...(old[r.id] || editFrom(r)), status }; return next; }); }}>
@@ -346,14 +345,14 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       {editableSelected.some((r) => r.imported) ? <>{[false, true].map((needsReview) => <Button key={String(needsReview)} type="button" variant="outline" disabled={saving || deleting} title={needsReview ? "選択した原本を未確認に戻す" : "選択した原本を一括確認"} onClick={() => {
         setEdits((old) => { const next = { ...old }; for (const r of editableSelected.filter((row) => row.imported)) next[r.id] = { ...(old[r.id] || editFrom(r)), needsReview }; return next; });
       }}>{needsReview ? <RotateCcw className="size-4" /> : <Check className="size-4" />}{needsReview ? "未確認に戻す" : "確認"}</Button>)}</> : null}
-    </div> : null}
+    </SelectionActionBar> : null}
     <div className={active && !issuedOnly ? "grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]" : "min-w-0"}>
       <div className="min-w-0">
-        <div role="region" aria-label={issuedOnly ? "発行請求書の明細一覧" : "書類の明細一覧"} tabIndex={0} className={issuedOnly ? "max-w-full rounded-xl border bg-card shadow-sm md:max-h-[70dvh] md:overflow-auto md:overscroll-contain" : "max-h-[70vh] overflow-auto rounded-xl border bg-card shadow-sm"}>
-          <div className="md:hidden">
+        <div role="region" aria-label={issuedOnly ? "発行請求書の明細一覧" : "書類の明細一覧"} tabIndex={0} className={issuedOnly ? "max-w-full lg:max-h-[70dvh] lg:overflow-auto lg:overscroll-contain" : "max-w-full lg:max-h-[70vh] lg:overflow-auto"}>
+          <div className="lg:hidden">
             {groups.map(([m, list]) => <Fragment key={m}>
               {grouped ? <button className="flex min-h-11 w-full items-center gap-2 bg-muted/60 px-3 text-sm font-medium" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button> : null}
-              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div {...selection.rowProps(r.id)} className={"flex min-w-0 items-start gap-2 border-b p-2 " + (selected.has(r.id) || activeId === r.id ? "bg-selected" : "")}>
+              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><div {...selection.rowProps(r.id)} data-active={activeId === r.id ? "" : undefined} className="record-card mb-2 flex min-w-0 items-start gap-2 p-2">
                 <RowSelectionCheckbox selection={selection} id={r.id} label={r.title + "を選択"} />
                 <div className="grid min-w-0 flex-1 gap-1 text-left text-sm">
                   <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button data-selection-open onClick={() => open(r)} className="min-h-11 break-words text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}</button>
@@ -369,14 +368,14 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
               </div></DocumentContextMenu>) : null}
             </Fragment>)}
           </div>
-          <table className={`workspace-record-table hidden w-full table-fixed text-left text-sm md:table ${issuedOnly ? "min-w-[960px]" : "min-w-[680px]"}`}>
+          <table className={`record-cards workspace-record-table hidden w-full table-fixed text-left text-sm lg:table ${issuedOnly ? "min-w-[960px]" : "min-w-[680px]"}`}>
             <thead className="sticky top-0 z-10 bg-background text-xs text-muted-foreground"><tr>
-              <th className="w-11 p-0"><SelectAllCheckbox selection={selection} label="表示中の書類をすべて選択" /></th>
+              <th className="w-11 p-0"><span className="sr-only">選択</span></th>
               <th className="w-[28%] p-2">案件名 / 書類</th><th className="w-[21%] p-2">取引先</th><th className="w-36 whitespace-nowrap p-2">{issuedOnly ? "発行日 / 入金期限" : "日付"}</th><th className={issuedOnly ? "w-36 p-2 text-right" : "w-24 p-2 text-right"}>{issuedOnly ? "請求・入金" : "金額"}</th><th className="w-40 p-2">状態</th>{issuedOnly ? <th className="w-28 min-w-28 whitespace-nowrap p-2 text-center">原本確認</th> : null}<th className="w-11"><span className="sr-only">操作</span></th>
             </tr></thead>
             <tbody>{groups.map(([m, list]) => <Fragment key={m}>
-              {grouped ? <tr className="border-t bg-muted/60"><td colSpan={issuedOnly ? 8 : 7} className="p-0"><button className="sticky left-0 flex min-h-11 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button></td></tr> : null}
-              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><tr {...selection.rowProps(r.id)} data-document-id={r.id} className={"border-t align-top " + (selected.has(r.id) || activeId === r.id ? "bg-selected" : "hover:bg-muted/30")}>
+              {grouped ? <tr className="record-section-row"><td colSpan={issuedOnly ? 8 : 7} className="p-0"><button className="sticky left-0 flex min-h-11 items-center gap-2 px-3 text-xs font-semibold" aria-expanded={!collapsed.has(m)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(m)) next.delete(m); else next.add(m); return next; })}>{collapsed.has(m) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}<span className="break-words text-left">{groupLabel(m, list)}</span></button></td></tr> : null}
+              {!collapsed.has(m) ? list.map((r) => <DocumentContextMenu key={r.id} row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting}><tr {...selection.rowProps(r.id)} data-document-id={r.id} data-active={activeId === r.id ? "" : undefined} className="align-top">
                 <td className="p-0"><RowSelectionCheckbox selection={selection} id={r.id} label={r.title + "を選択"} /></td>
                 <td className="px-2 py-3"><DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button data-selection-open className="min-h-11 w-full text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary" onClick={() => open(r)}><span className="block break-words">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button>{r.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}</td>
                 <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span></td>

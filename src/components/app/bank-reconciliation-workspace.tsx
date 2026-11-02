@@ -1,4 +1,6 @@
 "use client";
+import { MonthTabs } from "@/components/app/month-tabs";
+import { OptionTabs } from "@/components/app/option-tabs";
 import { useOperationError } from "@/hooks/use-operation-error";
 import { OperationPending } from "@/components/app/operation-feedback";
 
@@ -28,7 +30,7 @@ const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractio
 const stateLabels: Record<string, string> = { [RECONCILE_TODO_STATUS]: "直近2か月の未照合", unmatched: "未照合・一部照合", matched: "照合済み", conflict: "要再確認", not_required: "請求書不要（経費集計に残る）", excluded: "振替・対象外" };
 const touch = "min-h-11";
 type Props = {
-  company: CompanyScope; filters: { account: string; month: string; status: string; query: string; invoice: string };
+  company: CompanyScope; today: string; months: string[]; filters: { account: string; month: string; status: string; query: string; invoice: string };
   rows: ReconciliationBank[]; selected?: ReconciliationBank; invoices: ReconciliationInvoice[]; links: ReconciliationOverview["links"];
   accounts: Array<{ id: string; name: string; invoiceEligible: boolean }>;
   page: number; total: number; initialView: "bank" | "invoices" | "checks"; unlinkedMailCount: number; counts: { unmatched: number; recorded: number; overdue: number; conflicts: number };
@@ -62,7 +64,7 @@ function SyncStatusButton({ company, invoice }: { company: CompanyScope; invoice
   </>;
 }
 
-export function BankReconciliationWorkspace({ company, filters, rows, selected, invoices, links, accounts, page, total, initialView, counts, unlinkedMailCount, aiPreview, aiConfigured, aiModel, review, aiSettings, feeCategories }: Props) {
+export function BankReconciliationWorkspace({ company, today, months, filters, rows, selected, invoices, links, accounts, page, total, initialView, counts, unlinkedMailCount, aiPreview, aiConfigured, aiModel, review, aiSettings, feeCategories }: Props) {
   const router = useRouter(), [pending, startTransition] = useTransition();
   const view = initialView;
   const [query, setQuery] = useState(filters.query);
@@ -92,17 +94,20 @@ export function BankReconciliationWorkspace({ company, filters, rows, selected, 
     {unlinkedMailCount ? <p className="border-l-2 border-amber-500 pl-3 text-sm">受領請求書への連携が必要な郵便物が {unlinkedMailCount}件あります。<Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><Link href={mailInvoiceLinkRequiredHref(company)}>連携が必要な郵便物を確認<ArrowUpRight className="size-4" /></Link></Button></p> : null}
     {view !== "checks" ? <div className="workspace-segmented" role="group" aria-label="照合の表示">{(["bank", "invoices"] as const).map((value) => <button className={`min-h-11 min-w-0 rounded-lg px-3 text-sm lg:min-h-9 ${view === value ? "bg-background font-semibold text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/60"}`} key={value} aria-pressed={view === value} disabled={pending} onClick={() => navigate({ view: value })}>{value === "bank" ? "銀行から照合" : "請求書から確認"}</button>)}{view === "bank" ? <Button size="icon" variant="ghost" className="ml-auto size-11 md:hidden" aria-label="絞り込み" title="絞り込み" aria-expanded={filtersOpen} aria-controls="reconciliation-filters" onClick={() => setFiltersOpen(!filtersOpen)}><SlidersHorizontal className="size-4" /></Button> : null}</div> : null}
     {view === "bank" ? <>
-      <div id="reconciliation-filters" className={`workspace-filter-panel gap-3 md:grid md:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.2fr)] ${filtersOpen ? "grid" : "hidden"}`}><h2 className="text-sm font-semibold md:col-span-2 lg:col-span-4">絞り込み</h2>
+      <div id="reconciliation-filters" className={`workspace-filter-panel gap-3 md:grid ${filtersOpen ? "grid" : "hidden"}`}><h2 className="text-sm font-semibold">絞り込み</h2>
+        <MonthTabs label="銀行の取引月" value={filters.month} months={months} today={today} disabled={pending} onChange={(month) => navigate({ month })} />
+        <div className="grid min-w-0 gap-3 md:grid-cols-2">
         <select className={bankSelectClass} aria-label="照合口座" value={filters.account} disabled={pending} onChange={(e) => navigate({ account: e.target.value })}><option value="">すべての口座</option>{accounts.map((row) => <option key={row.id} value={row.id}>{row.name}{row.invoiceEligible ? "" : "（照合対象外）"}</option>)}</select>
-        <Input className={touch} type="month" aria-label="銀行の取引月" value={filters.month} disabled={pending} onChange={(e) => navigate({ month: e.target.value })} />
-        <select className={bankSelectClass} aria-label="照合状態" value={filters.status} disabled={pending} onChange={(e) => navigate({ status: e.target.value })}><option value="all">すべての状態</option>{Object.entries(stateLabels).filter(([key]) => company === "JAPAN" || key !== RECONCILE_TODO_STATUS).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select>
+        
         <form className="flex min-w-0 gap-1" onSubmit={(e) => { e.preventDefault(); navigate({ q: query }); }}><Input className={touch} aria-label="銀行摘要・金額を検索" placeholder="摘要・金額" value={query} maxLength={200} onChange={(e) => setQuery(e.target.value)} /><Button className="size-11 shrink-0" size="icon" variant="outline" type="submit" aria-label="検索" title="検索" disabled={pending}><Search className="size-4" /></Button></form>
+        </div>
+        <OptionTabs label="照合状態" caption="状態" value={filters.status} disabled={pending} options={[["all", "すべて"], ...Object.entries(stateLabels).filter(([key]) => company === "JAPAN" || key !== RECONCILE_TODO_STATUS)]} onChange={(status) => navigate({ status })} />
       </div>
       <p className="text-xs text-muted-foreground md:hidden">{filters.month || "全期間"} / {stateLabels[filters.status] || "すべての状態"}{filters.account ? ` / ${accounts.find((row) => row.id === filters.account)?.name || ""}` : ""}{filters.query ? ` / 検索: ${filters.query}` : ""}</p>
       {filters.status === RECONCILE_TODO_STATUS ? <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span className="min-w-0">{RECONCILE_TODO_NOTE}</span><Button className="h-auto px-2 py-1 text-xs" variant="ghost" size="sm" disabled={pending} onClick={() => navigate({ status: "unmatched" })}>全期間の未照合を見る</Button></p> : null}
       {filters.invoice ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-selected p-2 text-sm"><span className="break-words">請求書候補: {invoiceMap.get(filters.invoice)?.title || "対象外の請求書"}</span><Button className={touch} variant="ghost" onClick={() => navigate({ invoice: "" })}><X className="size-4" />解除</Button></div> : null}
       <BankReconciliationDesk key={`${filters.account}:${filters.month}:${filters.status}:${filters.invoice}:${page}:${selected?.id || ""}`} company={company} rows={rows} selected={selected} invoices={invoices} links={links} accounts={accounts} page={page} total={total} focusInvoice={filters.invoice} href={href} pending={pending} onRemove={(link) => { setRemoving(link); setError(""); }} aiPreview={aiPreview} aiConfigured={aiConfigured} aiModel={aiModel} feeCategories={feeCategories} />
-    </> : view === "checks" && aiPreview && review ? <BankReviewPanel company={company} review={review} preview={aiPreview} configured={aiConfigured} model={aiModel} /> : <section className="space-y-4" aria-label="請求書の照合状況"><div className="workspace-filter-panel grid gap-3 sm:grid-cols-2"><h2 className="text-sm font-semibold sm:col-span-2">絞り込み</h2><Input className={touch} aria-label="請求書を検索" placeholder="請求書・取引先・案件・金額" value={invoiceQuery} onChange={(e) => setInvoiceQuery(e.target.value)} /><select className={bankSelectClass} aria-label="請求書の照合状態" value={invoiceFilter} onChange={(e) => setInvoiceFilter(e.target.value)}><option value="unmatched">銀行未照合</option><option value="recorded">支払い登録済み・銀行未照合</option><option value="overdue">期限超過</option><option value="issues">要再確認・状態の不整合・照合対象外</option><option value="all">すべて</option></select></div><p className="text-xs text-muted-foreground">{invoiceRows.length}件{invoiceRows.length > 100 ? " / 先頭100件を表示。検索で絞り込めます。" : ""}。支払い登録済みと銀行照合済みは別の状態です。</p>
+    </> : view === "checks" && aiPreview && review ? <BankReviewPanel company={company} today={today} months={months} review={review} preview={aiPreview} configured={aiConfigured} model={aiModel} /> : <section className="space-y-4" aria-label="請求書の照合状況"><div className="workspace-filter-panel grid gap-3 sm:grid-cols-2"><h2 className="text-sm font-semibold sm:col-span-2">絞り込み</h2><Input className={touch} aria-label="請求書を検索" placeholder="請求書・取引先・案件・金額" value={invoiceQuery} onChange={(e) => setInvoiceQuery(e.target.value)} /><OptionTabs label="請求書の照合状態" caption="状態" value={invoiceFilter} options={[["unmatched", "銀行未照合"], ["recorded", "支払い登録済み・銀行未照合"], ["overdue", "期限超過"], ["issues", "要再確認・状態の不整合・照合対象外"], ["all", "すべて"]]} onChange={setInvoiceFilter} /></div><p className="text-xs text-muted-foreground">{invoiceRows.length}件{invoiceRows.length > 100 ? " / 先頭100件を表示。検索で絞り込めます。" : ""}。支払い登録済みと銀行照合済みは別の状態です。</p>
       <ul className="space-y-4">{invoiceRows.slice(0, 100).map((row) => <li className="space-y-3 rounded-xl border bg-card p-5 text-sm shadow-sm" key={row.key}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0"><p className="break-words font-medium">{row.title} / {row.party}</p><p className="break-words text-xs text-muted-foreground">{row.kind === "issued" ? "発行請求書" : `受領請求書${row.mailCount ? "・郵便物連携" : ""}`} / {row.project} / 期日 {row.dueDate || "未設定"}</p></div>

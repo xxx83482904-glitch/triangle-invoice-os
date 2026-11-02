@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { RowSelectionCheckbox, SelectionActionBar, SelectionToolbar } from "@/components/app/list-selection";
+import { OptionTabs } from "@/components/app/option-tabs";
 import { MonthTabs } from "@/components/app/month-tabs";
 import { RecordSaveBar } from "@/components/app/record-list-controls";
 import type { ProjectBasicOption } from "@/components/app/editable-project-select";
@@ -166,28 +167,28 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-0 flex-1 basis-56"><Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="見積書を検索" placeholder="番号・取引先・案件で検索" className="h-11 pl-9 lg:h-11 lg:pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} /></div>
       <select aria-label="取引先で絞り込み" className={selectClass} value={client} onChange={(event) => { setClient(event.target.value); setLimit(50); }}><option value="all">すべてのクライアント</option>{counterparts.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-      <select aria-label="見積書の並び順" className={selectClass} value={sort} onChange={(event) => { setSort(event.target.value); setLimit(50); }}><option value="client">クライアントごと</option><option value="date-desc">日付が新しい順</option><option value="date-asc">日付が古い順</option><option value="amount-desc">金額が大きい順</option><option value="project">案件ごと</option></select>
+      <OptionTabs label="見積書の並び順" caption="並び順" value={sort} options={[["client", "クライアントごと"], ["date-desc", "日付が新しい順"], ["date-asc", "日付が古い順"], ["amount-desc", "金額が大きい順"], ["project", "案件ごと"]]} onChange={(value) => { setSort(value); setLimit(50); }} />
     </div>
     <div className="flex flex-wrap items-center gap-2">
-      <select aria-label="見積書の状態" className={selectClass} value={status} onChange={(event) => { setStatus(event.target.value); setLimit(50); }}><option value="all">すべての状態</option>{Object.entries(estimateStatusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+      <OptionTabs label="見積書の状態" caption="状態" value={status} options={[["all", "すべて"], ...Object.entries(estimateStatusLabels)]} onChange={(value) => { setStatus(value); setLimit(50); }} />
       <span role="status" className="text-xs text-muted-foreground">{filtered.length} / {rows.length}件</span>
       {hasFilters ? <Button className="min-h-11" variant="ghost" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
     </div>
     <MonthTabs label="見積月" months={months} value={month === "all" ? "" : month} disabled={busy} onChange={(value) => { setMonth(value || "all"); setLimit(50); }} />
     <SelectionToolbar selection={selection} />
-    {selected.length ? <div aria-label="選択した見積書の一括操作" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-selected px-3 py-2">
+    {selected.length ? <SelectionActionBar label="選択した見積書の一括操作">
       <span className="mr-auto text-sm">{selected.length}件選択{selection.hiddenCount ? `（表示外 ${selection.hiddenCount}件を含む）` : ""}</span>
       {editableSelected.length ? <select aria-label="選択した見積書の状態を一括変更" className={selectClass} disabled={busy} value="" onChange={(event) => {
         const value = event.target.value as EstimateListEdit["status"]; if (!value) return;
         setEdits((old) => { const next = { ...old }; for (const e of editableSelected) next[e.id] = { ...(old[e.id] || estimateListEditFrom(e)), status: value }; return next; });
       }}><option value="">見積 {editableSelected.length}件を一括変更</option>{Object.entries(estimateStatusLabels).filter(([key]) => key !== "CONVERTED").map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select> : null}
       {editableSelected.length === selected.length ? <Button variant="outline" className="min-h-11 text-destructive" disabled={busy} onClick={() => askDelete(selected)}><Trash2 className="size-4" />選択した{selected.length}件を削除</Button> : null}
-    </div> : null}
+    </SelectionActionBar> : null}
     {error && !deleteTargets.length ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
     <div className={active ? "grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]" : "min-w-0"}>
-      <div ref={scroller} className="max-h-[70vh] min-w-0 overflow-auto border-y">
+      <div ref={scroller} className="max-h-[70vh] min-w-0 overflow-auto">
         <div className="md:min-w-[720px]">
-          <div className={`sticky top-0 z-10 hidden items-center gap-2 border-b bg-background text-xs text-muted-foreground md:grid ${gridClass}`}><SelectAllCheckbox selection={selection} label="表示中の見積書をすべて選択" /><span>案件名 / 見積番号</span><span>取引先</span><span>見積日 / 有効期限</span><span className="text-right">金額</span><span>状態</span><span /></div>
+          <div className={`sticky top-0 z-10 hidden items-center gap-2 border-b bg-background text-xs text-muted-foreground md:grid ${gridClass}`}><span /><span>案件名 / 見積番号</span><span>取引先</span><span>見積日 / 有効期限</span><span className="text-right">金額</span><span>状態</span><span /></div>
           {groups.map(([key, list]) => <Fragment key={key}>
             <button className="sticky left-0 flex min-h-11 w-full items-center gap-2 border-y bg-muted/60 px-3 text-left text-xs font-semibold" aria-expanded={!collapsed.has(key)} onClick={() => setCollapsed((old) => { const next = new Set(old); if (next.has(key)) next.delete(key); else next.add(key); return next; })}>
               {collapsed.has(key) ? <ChevronRight className="size-4 shrink-0" /> : <ChevronDown className="size-4 shrink-0" />}<span className="break-words">{sort === "client" ? list[0].counterpart : sort === "project" ? list[0].projectName || "案件未設定" : monthLabel(key)}</span>
@@ -196,7 +197,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
               const e = estimateMap.get(row.sourceId); if (!e) return null;
               const edit = edits[e.id];
               return <EstimateActions key={e.id} label={e.estimateNumber} actions={actions(e)} disabled={busy}>
-                <div {...selection.rowProps(e.id)} data-estimate-id={e.id} className={`grid grid-cols-[44px_minmax(0,1fr)_44px] items-start gap-2 border-b py-3 text-sm ${gridClass} ${selection.selected.has(e.id) || activeId === e.id ? "bg-selected" : "hover:bg-muted/30"}`}>
+                <div {...selection.rowProps(e.id)} data-estimate-id={e.id} data-active={activeId === e.id ? "" : undefined} className={`record-card my-2 grid grid-cols-[44px_minmax(0,1fr)_44px] items-start gap-2 py-3 text-sm ${gridClass}`}>
                   <RowSelectionCheckbox selection={selection} id={e.id} label={`${e.estimateNumber}を選択`} />
                   <div className="min-w-0">{projectControl(e)}<button data-selection-open className="min-h-11 w-full break-words text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary" onClick={() => onOpen(e.id)}>{e.estimateNumber}<span className="block">発行見積書{edit ? " · 未保存" : ""}</span></button>{row.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {row.billingLabel}</span> : null}</div>
                   <span className="col-start-2 break-words md:col-start-auto md:pt-3">{counterpart(e)}</span>

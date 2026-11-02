@@ -1,5 +1,6 @@
 "use client";
 
+import { OptionTabs } from "@/components/app/option-tabs";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -96,7 +97,7 @@ export function BankForecastWorkspace({ company, account, accounts, evidence }: 
     <section className="space-y-3 border-y py-4" aria-labelledby="forecast-settings">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="forecast-settings" className="text-base font-semibold">予測条件</h2><Button variant="ghost" size="icon" className="size-[44px]" title="保存済みの条件に戻す" aria-label="保存済みの条件に戻す" disabled={!dirty || pending} onClick={() => { setDraft(saved); setError(""); }}><RotateCcw className="size-4" /></Button></div>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <label className="grid min-w-0 gap-1 text-sm">口座の種類<select className={bankSelectClass} value={draft.accountKind} disabled={pending} onChange={(e) => update({ accountKind: e.target.value as BankForecastSettings["accountKind"], openingBalance: e.target.value === "BANK" ? draft.openingBalance : undefined })}><option value="UNKNOWN">未設定</option><option value="BANK">銀行口座</option><option value="CARD">クレジットカード</option><option value="OTHER">その他</option></select></label>
+        <div className="grid min-w-0 gap-1 text-sm">口座の種類<OptionTabs label="口座の種類" value={draft.accountKind} disabled={pending} options={[["UNKNOWN", "未設定"], ["BANK", "銀行口座"], ["CARD", "クレジットカード"], ["OTHER", "その他"]]} onChange={(accountKind) => update({ accountKind, openingBalance: accountKind === "BANK" ? draft.openingBalance : undefined })} /></div>
         <label className="grid min-w-0 gap-1 text-sm">{monthName(month)}1日の残高<Input className="h-[44px]" type="number" step={1} min={-1e12} max={1e12} disabled={pending || !bank} value={draft.openingBalance ?? ""} placeholder={bank ? "未設定" : "銀行口座のみ"} onChange={(e) => update({ openingBalance: e.target.value === "" ? undefined : Number(e.target.value) })} /></label>
         <label className="grid min-w-0 gap-1 text-sm">残高の警戒ライン<Input className="h-[44px]" type="number" min={0} max={1e12} step={1} disabled={pending || !bank} value={draft.minimumBalance} onChange={(e) => update({ minimumBalance: Number(e.target.value) })} /></label>
         <label className="grid min-w-0 gap-1 text-sm">入金・返金の増減（%）<Input className="h-[44px]" type="number" min={-100} max={200} step={1} disabled={pending} value={draft.incomePercent} onChange={(e) => update({ incomePercent: Number(e.target.value) })} /></label>

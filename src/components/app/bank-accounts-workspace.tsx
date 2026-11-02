@@ -1,5 +1,6 @@
 "use client";
 
+import { OptionTabs } from "@/components/app/option-tabs";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -77,9 +78,7 @@ export function BankAccountsWorkspace({ company, today, month, latestMonth, peri
     </dl>
     <div className="flex flex-wrap items-end gap-3">
       <label className="relative min-w-0 flex-1 basis-56"><Search aria-hidden className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input aria-label="銀行名・口座番号を検索" placeholder="銀行名・口座番号" className="h-11 pl-9 lg:h-11 lg:pl-9" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-      <div className="flex w-full items-center gap-3 sm:w-auto"><select aria-label="口座の並び順" className={`${bankSelectClass} min-w-0 flex-1 sm:w-48`} value={sort} onChange={(event) => setSort(event.target.value)}>
-        <option value="name">銀行・口座名順</option><option value="balance">計算残高が多い順</option><option value="income">入金が多い順</option><option value="expense">出金が多い順</option><option value="net">差額が大きい順</option><option value="latest">最新取引順</option>
-      </select>
+      <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto"><OptionTabs label="口座の並び順" caption="並び順" value={sort} options={[["name", "銀行・口座名順"], ["balance", "計算残高が多い順"], ["income", "入金が多い順"], ["expense", "出金が多い順"], ["net", "差額が大きい順"], ["latest", "最新取引順"]]} onChange={setSort} />
       <span role="status" className="shrink-0 py-3 text-xs text-muted-foreground">{filtered.length} / {rows.length}口座</span></div>
     </div>
     {(["BANK", "CARD", "OTHER", "UNKNOWN"] as const).map((kind) => {

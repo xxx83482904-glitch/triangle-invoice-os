@@ -50,18 +50,18 @@ export default async function PaymentsPage({
         <Card variant="section">
           <CardHeader><CardTitle>未入金一覧</CardTitle></CardHeader>
           <CardContent>
-            <Table>
+            <Table className="record-cards record-cards-stack record-cards-compact">
               <TableHeader><TableRow><TableHead>請求書</TableHead><TableHead>クライアント</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>入金済み</TableHead><TableHead>状態</TableHead></TableRow></TableHeader>
-              <TableBody>{unpaidIssued.map((invoice) => <TableRow key={invoice.id}><TableCell>{invoice.invoiceNumber}</TableCell><TableCell>{data.clients.find((client) => client.id === invoice.clientId)?.companyName}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell></TableRow>)}</TableBody>
+              <TableBody>{unpaidIssued.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell data-label="クライアント">{data.clients.find((client) => client.id === invoice.clientId)?.companyName}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell data-label="合計">{yen.format(invoice.total)}</TableCell><TableCell data-label="入金済み">{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell></TableRow>)}</TableBody>
             </Table>
           </CardContent>
         </Card>
         <Card variant="section">
           <CardHeader><CardTitle>未払い・支払い予定</CardTitle></CardHeader>
           <CardContent>
-            <Table>
+            <Table className="record-cards record-cards-stack record-cards-compact">
               <TableHeader><TableRow><TableHead>支払先</TableHead><TableHead>案件</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>支払済み</TableHead><TableHead>状態</TableHead></TableRow></TableHeader>
-              <TableBody>{unpaidReceived.map((invoice) => <TableRow key={invoice.id}><TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{data.projects.find((project) => project.id === invoice.projectId)?.name}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="received" status={invoice.status} /></TableCell></TableRow>)}</TableBody>
+              <TableBody>{unpaidReceived.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell data-label="案件">{data.projects.find((project) => project.id === invoice.projectId)?.name}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell data-label="合計">{yen.format(invoice.total)}</TableCell><TableCell data-label="支払済み">{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell data-label="状態"><StatusBadge kind="received" status={invoice.status} /></TableCell></TableRow>)}</TableBody>
             </Table>
           </CardContent>
         </Card>

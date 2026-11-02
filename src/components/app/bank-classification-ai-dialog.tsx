@@ -1,11 +1,11 @@
 "use client";
 
+import { OptionTabs } from "@/components/app/option-tabs";
 import { useState, useTransition } from "react";
 import { Bot, ChevronLeft, ChevronRight, LoaderCircle, Search } from "lucide-react";
 import { classifyWithAiAction, prepareClassificationAiAction } from "@/app/banking/classification-ai-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { bankSelectClass } from "@/components/app/banking-settings";
 import { CLASSIFICATION_AI_BATCH_SIZE, type ClassificationAiPreview, type ClassificationAiResult } from "@/lib/bank-classification-ai-types";
 import type { CompanyScope } from "@/lib/company";
 
@@ -47,11 +47,7 @@ export function BankClassificationAiDialog({ company, open, onOpenChange, rowIds
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>{history ? "過去実績でAI再判定" : "AIで勘定科目を判定"}</DialogTitle><DialogDescription>{history ? "未確定の予測分類を、確認済みの過去実績で再判定します。手動選択・分類確定・ルールは変更しません。" : "未分類の明細のみが対象です。手動変更・確認済み・ルールで判定できる明細は保護されます。"}</DialogDescription></DialogHeader>
       <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="size-5 shrink-0 accent-primary" checked={history} disabled={pending} onChange={(e) => { setHistory(e.target.checked); setPreview(null); setConsent(false); }} />確認済みの過去実績を参照して再判定</label>
-      <label className="grid min-w-0 gap-1 text-sm">対象<select aria-label="AI分類の対象" className={bankSelectClass} value={scope} disabled={pending} onChange={(e) => { setScope(e.target.value as typeof scope); setPreview(null); setConsent(false); setError(""); }}>
-        {rowIds.length ? <option value="page">表示中の明細（{rowIds.length}件）</option> : null}
-        {selectedIds.length ? <option value="selected">選択した明細（{selectedIds.length}件）</option> : null}
-        <option value="all">{company === "JAPAN" ? "日本" : "中国"}の全期間・全口座</option>
-      </select></label>
+      <div className="grid min-w-0 gap-1 text-sm">対象<OptionTabs label="AI分類の対象" value={scope} disabled={pending} options={[...(rowIds.length ? [["page", `表示中の明細（${rowIds.length}件）`] as const] : []), ...(selectedIds.length ? [["selected", `選択した明細（${selectedIds.length}件）`] as const] : []), ["all", `${company === "JAPAN" ? "日本" : "中国"}の全期間・全口座`] as const]} onChange={(value) => { setScope(value as typeof scope); setPreview(null); setConsent(false); setError(""); }} /></div>
       <Button className="min-h-11" variant="outline" disabled={pending} onClick={() => prepare()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Search className="size-4" />}対象データを確認</Button>
       {preview ? <>
         <div role="status" className="space-y-1 border-l-2 border-primary bg-selected p-3 text-sm">

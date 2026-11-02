@@ -1,7 +1,7 @@
 "use client";
 import { statusToneClass } from "@/lib/status-tone";
 import { useListSelection } from "@/hooks/use-list-selection";
-import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
 import { isSelectionControl } from "@/lib/list-selection";
 
 import Link from "next/link";
@@ -83,11 +83,11 @@ function monthLabel(key: string) {
 }
 
 function paymentTone(row: ReceivedInvoiceWorkspaceItem, today: string) {
-  if (row.unpaidExclusion || row.total <= 0) return "border-l-muted-foreground";
-  if (row.paymentComplete) return "border-l-emerald-500";
-  if (isOverdue(row, today)) return "border-l-red-500";
-  if (isDueSoon(row, today)) return "border-l-amber-500";
-  return "border-l-sky-500";
+  if (row.unpaidExclusion || row.total <= 0) return "[--card-tone:var(--muted-foreground)]";
+  if (row.paymentComplete) return "[--card-tone:var(--color-emerald-500)]";
+  if (isOverdue(row, today)) return "[--card-tone:var(--color-red-500)]";
+  if (isDueSoon(row, today)) return "[--card-tone:var(--color-amber-500)]";
+  return "[--card-tone:var(--color-sky-500)]";
 }
 
 function SelectField({
@@ -231,12 +231,12 @@ export function ReceivedInvoicesWorkspace({
         <div className="mb-3"><MonthTabs label="請求月" value={listMonth} months={months} counts={monthCounts} undatedLabel="日付なし" onChange={setListMonth} /></div>
         <SelectionToolbar selection={selection} />
         {filteredInvoices.length ? (
-          <div className="mt-4 grid min-h-[720px] overflow-hidden rounded-xl border bg-card shadow-sm">
-            <div className="max-h-[420px] min-w-0 overflow-auto">
-              <table className="workspace-record-table w-full min-w-[980px] text-sm">
-                <thead className="bg-muted/50 text-xs text-muted-foreground">
+          <div className="mt-4 grid gap-4">
+            <div className="min-w-0 lg:max-h-[60dvh] lg:overflow-auto">
+              <table className="record-cards record-cards-stack workspace-record-table w-full text-sm">
+                <thead className="text-xs text-muted-foreground">
                   <tr>
-                    <th className="w-11 p-0"><SelectAllCheckbox selection={selection} label="表示中の受領請求書をすべて選択" /></th>
+                    <th className="w-11 p-0"><span className="sr-only">選択</span></th>
                     <th className="px-3 py-2 text-left">請求元</th>
                     <th className="px-3 py-2 text-left">案件</th>
                     <th className="px-3 py-2 text-left">請求日</th>
@@ -252,7 +252,7 @@ export function ReceivedInvoicesWorkspace({
                     const monthUnpaid = monthInvoices.reduce((sum, invoice) => sum + invoice.unpaidAmount, 0);
                     return (
                       <tbody key={month}>
-                        <tr className="border-t bg-muted/30">
+                        <tr className="record-section-row">
                           <td colSpan={9} className="px-3 py-2">
                             <div className="flex w-full items-center justify-between gap-3">
                               <span className="min-w-0 text-sm font-medium">{monthLabel(month)}</span>
@@ -268,25 +268,26 @@ export function ReceivedInvoicesWorkspace({
                             <tr
                               key={invoice.id}
                               {...selection.rowProps(invoice.id)}
-                              className={`cursor-pointer border-t border-l-2 transition hover:bg-muted/40 ${paymentTone(invoice, today)} ${selection.selected.has(invoice.id) ? "bg-selected" : active ? "bg-selected" : ""}`}
+                              data-active={active ? "" : undefined}
+                              className={paymentTone(invoice, today)}
                               onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) setActiveId(invoice.id); }}
                             >
-                              <td className="p-0"><RowSelectionCheckbox selection={selection} id={invoice.id} label={`${invoice.vendorName} ${invoice.issueDate}を選択`} /></td>
-                              <td className="max-w-[220px] truncate px-3 py-2 font-medium">{invoice.vendorName}</td>
-                              <td className="max-w-[220px] truncate px-3 py-2">
+                              <td className="record-card-tick p-0"><RowSelectionCheckbox selection={selection} id={invoice.id} label={`${invoice.vendorName} ${invoice.issueDate}を選択`} /></td>
+                              <td className="record-card-title max-w-[220px] truncate px-3 py-2 font-medium"><button type="button" data-selection-open className="record-card-open" title="選択せずに開く">{invoice.vendorName}</button></td>
+                              <td data-label="案件" className="max-w-[220px] truncate px-3 py-2">
                                 <Link href={`/projects/${invoice.projectId}?company=${company}`} prefetch={false} className="hover:underline underline-offset-4 hover:text-primary" onClick={(event) => event.stopPropagation()}>
                                   {invoice.projectName}
                                 </Link>
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2">{formatDate(invoice.issueDate)}</td>
-                              <td className="whitespace-nowrap px-3 py-2">
+                              <td data-label="請求日" className="whitespace-nowrap px-3 py-2">{formatDate(invoice.issueDate)}</td>
+                              <td data-label="支払期限" className="whitespace-nowrap px-3 py-2">
                                 <span className={isOverdue(invoice, today) ? "font-medium text-red-700" : isDueSoon(invoice, today) ? "font-medium text-amber-700" : ""}>
                                   {formatDate(invoice.dueDate)}
                                 </span>
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(invoice.total)}</td>
-                              <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : yen.format(invoice.unpaidAmount)}</td>
-                              <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                              <td data-label="差引支払額" className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(invoice.total)}</td>
+                              <td data-label="未払い" className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : yen.format(invoice.unpaidAmount)}</td>
+                              <td data-label="状態" className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                                 {canApprove ? (
                                   <form id={`received-status-${invoice.id}`} action={updateReceivedInvoiceStatus} onSubmit={statusSave.onSubmit}>
                                     <input type="hidden" name="receivedInvoiceId" value={invoice.id} />
@@ -312,7 +313,7 @@ export function ReceivedInvoicesWorkspace({
                                   <StatusBadge kind="received" status={invoice.status} />
                                 )}
                               </td>
-                              <td className="px-3 py-2">
+                              <td data-label="ファイル" className="px-3 py-2">
                                 {invoice.fileUrl ? (
                                   <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
                                     表示
@@ -330,7 +331,7 @@ export function ReceivedInvoicesWorkspace({
               </table>
             </div>
 
-            <aside className="min-w-0 border-t bg-muted/20 p-5">
+            <aside className="min-w-0 rounded-xl border bg-card p-5 shadow-sm">
               {activeInvoice ? (
                 <div className="space-y-6">
                   <div className="workspace-detail-group"><h2 className="mb-3 text-sm font-semibold">基本情報</h2>

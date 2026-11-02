@@ -1,5 +1,6 @@
 "use client";
 
+import { OptionTabs } from "@/components/app/option-tabs";
 import { useEffect, useId, useRef, useState } from "react";
 import { Download, ExternalLink, FileArchive, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,7 +78,7 @@ export function SectionExportDialog({ scope, role, disabled = false }: { scope: 
         </select></label>
         <label htmlFor={`${id}-start`} className="grid min-w-0 gap-1 text-sm">開始日<Input id={`${id}-start`} className="h-11 min-w-0" type="date" value={range.start} onChange={(e) => setRange((r) => ({ ...r, start: e.target.value }))} /></label>
         <label htmlFor={`${id}-end`} className="grid min-w-0 gap-1 text-sm">終了日<Input id={`${id}-end`} className="h-11 min-w-0" type="date" value={range.end} onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))} /></label>
-        {scope !== "banking" ? <label htmlFor={`${id}-basis`} className="col-span-2 grid min-w-0 gap-1 text-sm sm:col-span-1">日付基準<select id={`${id}-basis`} className={control} value={basis} onChange={(e) => setBasis(e.target.value)}><option value="document">書類日（郵便物・契約書は登録日）</option><option value="folder">フォルダー月（月単位）</option>{scope === "issued" || scope === "all" ? <option value="transaction">発行請求書は取引日・他は書類日</option> : null}</select></label> : null}
+        {scope !== "banking" ? <div className="col-span-2 grid min-w-0 gap-1 text-sm">日付基準<OptionTabs label="日付基準" value={basis} options={[["document", "書類日（郵便物・契約書は登録日）"], ["folder", "フォルダー月（月単位）"], ...(scope === "issued" || scope === "all" ? [["transaction", "発行請求書は取引日・他は書類日"] as const] : [])]} onChange={setBasis} /></div> : null}
         <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-5 shrink-0" checked={undated} onChange={(e) => setUndated(e.target.checked)} />日付未設定を「期間未判定」として含める</label>
       </fieldset>
       <div className="flex flex-wrap items-center justify-between gap-2 border-y py-2 text-sm" aria-live="polite"><span>{loading ? "読み込み中…" : `${count.toLocaleString()}件`}{scope === "all" && preview ? ` / 口座明細 ${preview.bank.length.toLocaleString()}件` : ""}</span><span className="text-muted-foreground">状態・勘定科目は現在の保存値</span></div>

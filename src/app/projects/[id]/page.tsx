@@ -67,18 +67,18 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <Card variant="section">
             <CardHeader><CardTitle>発行請求書一覧</CardTitle></CardHeader>
             <CardContent>
-              <Table>
+              <Table className="record-cards record-cards-stack record-cards-compact">
                 <TableHeader><TableRow><TableHead>番号</TableHead><TableHead>発行日</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>入金</TableHead><TableHead>状態</TableHead><TableHead>PDF</TableHead></TableRow></TableHeader>
-                <TableBody>{issued.map((invoice) => <TableRow key={invoice.id}><TableCell>{invoice.invoiceNumber}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell><TableCell><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell></TableRow>)}</TableBody>
+                <TableBody>{issued.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell data-label="発行日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell data-label="合計">{yen.format(invoice.total)}</TableCell><TableCell data-label="入金">{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell><TableCell data-label="PDF"><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
           </Card>
           {showTotals ? <Card variant="section">
             <CardHeader><CardTitle>受領請求書・支払い状況</CardTitle></CardHeader>
             <CardContent>
-              <Table>
+              <Table className="record-cards record-cards-stack record-cards-compact">
                 <TableHeader><TableRow><TableHead>請求元</TableHead><TableHead>請求日</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>支払済み</TableHead><TableHead>状態</TableHead><TableHead>ファイル</TableHead></TableRow></TableHeader>
-                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{formatDate(invoice.issueDate)}</TableCell><TableCell>{formatDate(invoice.dueDate)}</TableCell><TableCell>{yen.format(invoice.total)}</TableCell><TableCell>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell><StatusBadge kind="received" status={invoice.status} /></TableCell><TableCell>{invoice.fileUrl ? <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank">表示<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></a></Button> : "-"}</TableCell></TableRow>)}</TableBody>
+                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell data-label="請求日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell data-label="合計">{yen.format(invoice.total)}</TableCell><TableCell data-label="支払済み">{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell data-label="状態"><StatusBadge kind="received" status={invoice.status} /></TableCell><TableCell data-label="ファイル">{invoice.fileUrl ? <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank">表示<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></a></Button> : "-"}</TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
           </Card> : null}

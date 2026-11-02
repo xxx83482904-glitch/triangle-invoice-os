@@ -87,7 +87,7 @@ export default async function GuestInvoicesPage({
           <Card variant="section">
             <CardHeader><CardTitle>自分が発行した請求書</CardTitle></CardHeader>
             <CardContent>
-              <Table>
+              <Table className="record-cards record-cards-stack">
                 <TableHeader>
                   <TableRow>
                     <TableHead>番号</TableHead>
@@ -102,13 +102,13 @@ export default async function GuestInvoicesPage({
                 <TableBody>
                   {invoices.map((invoice) => (
                     <TableRow key={invoice.id}>
-                      <TableCell className="font-mono text-xs">{invoice.invoiceNumber}</TableCell>
-                      <TableCell>{data.projects.find((project) => project.id === invoice.projectId)?.name}</TableCell>
-                      <TableCell>{formatDate(invoice.issueDate)}</TableCell>
-                      <TableCell>{formatDate(invoice.dueDate)}</TableCell>
-                      <TableCell className="text-right">{yen.format(invoice.total)}</TableCell>
-                      <TableCell><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell>
-                      <TableCell>
+                      <TableCell className="record-card-title font-mono text-xs">{invoice.invoiceNumber}</TableCell>
+                      <TableCell data-label="案件">{data.projects.find((project) => project.id === invoice.projectId)?.name}</TableCell>
+                      <TableCell data-label="発行日">{formatDate(invoice.issueDate)}</TableCell>
+                      <TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell>
+                      <TableCell data-label="合計" className="text-right">{yen.format(invoice.total)}</TableCell>
+                      <TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell>
+                      <TableCell data-label="PDF">
                         <Button asChild size="sm" variant="outline">
                           <a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">
                             PDF

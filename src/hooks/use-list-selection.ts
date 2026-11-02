@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction, type MouseEvent, type KeyboardEvent } from "react";
-import { isSelectionControl, isSelectionGesture, selectListItem, selectListScope, type SelectionGesture, type SelectionState } from "@/lib/list-selection";
+import { isCardPress, isSelectionControl, isSelectionGesture, selectListItem, selectListScope, type SelectionGesture, type SelectionState } from "@/lib/list-selection";
 
 export function useListSelection(ids: string[], { availableIds = ids, disabled = false }: { availableIds?: string[]; disabled?: boolean } = {}) {
   const [state, setState] = useState<SelectionState>({ selected: new Set(), anchor: null });
@@ -21,8 +21,10 @@ export function useListSelection(ids: string[], { availableIds = ids, disabled =
       if (event.button === 0 && isSelectionGesture(event) && !isSelectionControl(event.target, event.currentTarget)) event.preventDefault();
     },
     onClickCapture: (event: MouseEvent<HTMLElement>) => {
-      if (event.button !== 0 || !isSelectionGesture(event) || isSelectionControl(event.target, event.currentTarget)) return;
-      event.preventDefault(); event.stopPropagation(); choose(id, event);
+      if (event.button !== 0 || isSelectionControl(event.target, event.currentTarget)) return;
+      if (isSelectionGesture(event)) { event.preventDefault(); event.stopPropagation(); choose(id, event); return; }
+      // Dragging across text to copy it is not a press on the card.
+      if (isCardPress(event.target, event.currentTarget) && !window.getSelection()?.toString()) choose(id);
     },
     onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => {
       if (event.target !== event.currentTarget || (event.key !== " " && !(event.key === "Enter" && isSelectionGesture(event)))) return;

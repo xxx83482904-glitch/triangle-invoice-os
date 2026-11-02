@@ -136,14 +136,14 @@ function OptionGroupCard({
     <Card variant="section">
       <CardHeader><CardTitle>{optionGroupLabels[group]}</CardTitle></CardHeader>
       <CardContent className="grid gap-5 xl:grid-cols-[1fr_320px]">
-        <Table>
+        <Table className="record-cards record-cards-stack">
           <TableHeader><TableRow><TableHead className="w-20">順番</TableHead><TableHead>表示名</TableHead><TableHead>値</TableHead></TableRow></TableHeader>
           <TableBody>
             {options.map((option, index) => (
               <TableRow key={option.id}>
-                <TableCell><MoveButtons action={moveSelectOption} id={option.id} disabled={disabled} first={index === 0} last={index === options.length - 1} /></TableCell>
-                <TableCell className="font-medium">{option.label}</TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{option.value}</TableCell>
+                <TableCell data-label="順番"><MoveButtons action={moveSelectOption} id={option.id} disabled={disabled} first={index === 0} last={index === options.length - 1} /></TableCell>
+                <TableCell data-label="表示名" className="font-medium">{option.label}</TableCell>
+                <TableCell data-label="値" className="font-mono text-xs text-muted-foreground">{option.value}</TableCell>
               </TableRow>
             ))}
           </TableBody>

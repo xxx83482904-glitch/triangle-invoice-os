@@ -1,5 +1,6 @@
 "use client";
 
+import { OptionTabs } from "@/components/app/option-tabs";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Save, Trash2 } from "lucide-react";
@@ -74,8 +75,8 @@ export function BankingSettings({ company, accounts, categories, rules, open, on
         </form> : null}
         {bankCategorySections.map((section) => {
           const members = categories.filter((row) => !row.deletedAt && bankCategorySection(row.group).id === section.id);
-          return members.length ? <section key={section.id}><h3 className={`border-b py-3 text-sm font-semibold ${section.tone}`}>{section.label}<span className="ml-2 font-normal text-muted-foreground">{members.length}</span></h3><ul className="divide-y">
-          {members.map((row) => <li key={row.id} className="flex min-w-0 items-center justify-between gap-2 py-2">
+          return members.length ? <section key={section.id}><h3 className={`border-b py-3 text-sm font-semibold ${section.tone}`}>{section.label}<span className="ml-2 font-normal text-muted-foreground">{members.length}</span></h3><ul className="mt-2 space-y-2">
+          {members.map((row) => <li key={row.id} className="record-card flex min-w-0 items-center justify-between gap-2 px-3 py-2">
             <div className={`min-w-0 break-words ${row.parentId ? "pl-4" : "font-medium"}`}><span>{row.parentId ? `${parents.find((item) => item.id === row.parentId)?.name || ""} / ` : ""}{row.name}</span><span className="ml-2 text-xs font-normal text-muted-foreground">{row.sourceId ? "MF" : "独自"}{!row.available ? "・無効" : ""}</span></div>
             {!row.sourceId ? <div className="flex shrink-0">
               <Button type="button" variant="ghost" size="icon" className="size-11" title="科目を編集" aria-label={`${row.name}を編集`} disabled={pending} onClick={() => setCategory(row)}><Pencil className="size-4" /></Button>
@@ -91,17 +92,17 @@ export function BankingSettings({ company, accounts, categories, rules, open, on
         {rule ? <form className="grid gap-3 border-y py-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); run(() => saveBankRuleAction(company, rule), () => setRule(null)); }}>
           <label className="grid min-w-0 gap-1">ルール名<Input className="h-11" required maxLength={150} value={rule.name} disabled={pending} onChange={(e) => setRule({ ...rule, name: e.target.value })} /></label>
           <label className="grid min-w-0 gap-1">摘要キーワード<Input className="h-11" required maxLength={250} value={rule.keyword} disabled={pending} onChange={(e) => setRule({ ...rule, keyword: e.target.value })} /></label>
-          <label className="grid min-w-0 gap-1">一致方法<select className={bankSelectClass} value={rule.match} disabled={pending} onChange={(e) => setRule({ ...rule, match: e.target.value as BankRule["match"] })}><option value="CONTAINS">部分一致</option><option value="EXACT">完全一致</option></select></label>
+          <div className="grid min-w-0 gap-1">一致方法<OptionTabs label="一致方法" value={rule.match} disabled={pending} options={[["CONTAINS", "部分一致"], ["EXACT", "完全一致"]]} onChange={(match) => setRule({ ...rule, match })} /></div>
           <label className="grid min-w-0 gap-1">対象口座<select className={bankSelectClass} value={rule.bankAccountId || ""} disabled={pending} onChange={(e) => setRule({ ...rule, bankAccountId: e.target.value || undefined })}><option value="">すべての口座・カード</option>{accounts.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
-          <label className="grid min-w-0 gap-1">入出金<select className={bankSelectClass} value={rule.side} disabled={pending} onChange={(e) => setRule({ ...rule, side: e.target.value as BankRule["side"] })}><option value="ALL">すべて</option><option value="INCOME">入金・返金</option><option value="EXPENSE">出金・利用</option></select></label>
+          <div className="grid min-w-0 gap-1">入出金<OptionTabs label="入出金" value={rule.side} disabled={pending} options={[["ALL", "すべて"], ["INCOME", "入金・返金"], ["EXPENSE", "出金・利用"]]} onChange={(side) => setRule({ ...rule, side })} /></div>
           <label className="grid min-w-0 gap-1">扱い<select className={bankSelectClass} value={rule.treatment} disabled={pending} onChange={(e) => setRule({ ...rule, treatment: e.target.value as BankRule["treatment"] })}>{Object.entries(treatmentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           <div className="grid min-w-0 gap-1"><span>勘定科目・補助科目</span><BankCategoryFields label="ルールの" categories={categories} categoryId={rule.categoryId} subCategoryId={rule.subCategoryId} disabled={pending} onChange={(categoryId, subCategoryId) => setRule({ ...rule, categoryId: categoryId || undefined, subCategoryId: subCategoryId || undefined })} /></div>
           <label className="grid min-w-0 gap-1">優先順位（小さい順）<Input className="h-11" type="number" min={1} max={9999} required value={rule.priority} disabled={pending} onChange={(e) => setRule({ ...rule, priority: Number(e.target.value) })} /></label>
           <label className="flex min-h-11 items-center gap-2"><input type="checkbox" className="size-5" checked={rule.enabled} disabled={pending} onChange={(e) => setRule({ ...rule, enabled: e.target.checked })} />有効</label>
           <div className="flex items-end gap-2"><Button className="min-h-11" disabled={pending}><Save className="size-4" />保存</Button><Button type="button" className="min-h-11" variant="ghost" disabled={pending} onClick={() => setRule(null)}>キャンセル</Button></div>
         </form> : null}
-        <ul className="divide-y">
-          {rules.filter((row) => !row.deletedAt).sort((a, b) => a.priority - b.priority).map((row) => <li key={row.id} className="flex min-w-0 items-center justify-between gap-2 py-3">
+        <ul className="space-y-2">
+          {rules.filter((row) => !row.deletedAt).sort((a, b) => a.priority - b.priority).map((row) => <li key={row.id} className="record-card flex min-w-0 items-center justify-between gap-2 px-3 py-2">
             <div className="min-w-0 break-words"><div className="font-medium">{row.name}{!row.enabled ? "（停止中）" : ""}</div><div className="text-xs text-muted-foreground">{row.keyword} / {categories.find((cat) => cat.id === row.categoryId)?.name || treatmentLabels[row.treatment]} / 優先 {row.priority}</div></div>
             <div className="flex shrink-0"><Button type="button" variant="ghost" size="icon" className="size-11" title="ルールを編集" aria-label={`${row.name}を編集`} disabled={pending} onClick={() => setRule(row)}><Pencil className="size-4" /></Button><Button type="button" variant="ghost" size="icon" className="size-11" title="ルールを削除" aria-label={`${row.name}を削除`} disabled={pending} onClick={() => { if (window.confirm(`「${row.name}」を削除しますか？`)) run(() => deleteBankDefinitionAction(company, "rule", row.id, row.updatedAt)); }}><Trash2 className="size-4" /></Button></div>
           </li>)}

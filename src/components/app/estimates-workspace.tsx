@@ -1,5 +1,6 @@
 "use client";
 
+import { OptionTabs } from "@/components/app/option-tabs";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, LoaderCircle, Save } from "lucide-react";
@@ -47,7 +48,7 @@ function EstimateEditor({ estimate, projects, clients, pending, onSave, company 
         <label className="min-w-0 space-y-1">取引先<select aria-label="取引先" className={selectClass} required value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}><option value="">取引先を選択</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
         <label className="min-w-0 space-y-1">見積日<Input aria-label="見積日" type="date" required value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} /></label>
         <label className="min-w-0 space-y-1">有効期限<Input aria-label="有効期限" type="date" required min={form.issueDate} value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} /></label>
-        <label className="min-w-0 space-y-1">ステータス<select aria-label="ステータス" className={selectClass} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EstimateInput["status"] })}>{Object.entries(estimateStatusLabels).filter(([key]) => key !== "CONVERTED").map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <div className="min-w-0 space-y-1">ステータス<OptionTabs label="ステータス" value={form.status} options={Object.entries(estimateStatusLabels).filter(([key]) => key !== "CONVERTED") as [EstimateInput["status"], string][]} onChange={(status) => setForm({ ...form, status })} /></div>
       </div>
       <DocumentItemsEditor initialItems={estimate?.items} disabled={pending} />
       <label className="block space-y-1">備考<Textarea aria-label="備考" maxLength={10000} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>

@@ -29,3 +29,8 @@ export function isSelectionControl(target: EventTarget | null, root: EventTarget
   const control = target.closest('input, select, textarea, button, a, label, [role="button"], [role="checkbox"], [role="combobox"], [role="menuitem"], [contenteditable]:not([contenteditable="false"])');
   return Boolean(control && control !== root && !control.hasAttribute("data-selection-open"));
 }
+
+// A plain press on a card selects it. Controls keep their action, and the title opens the item without selecting it.
+export function isCardPress(target: EventTarget | null, root: EventTarget | null) {
+  return !isSelectionControl(target, root) && !(target as Element).closest("[data-selection-open]");
+}

@@ -24,8 +24,8 @@ export default async function UsersPage() {
     <PageHeader title="利用者管理" />
     <section className="mb-8 min-w-0" aria-labelledby="pending-users">
       <h2 id="pending-users" className="mb-3 text-base font-semibold">承認待ち {pending.length}件</h2>
-      <div className="divide-y border-y">
-        {pending.length ? pending.map((user) => <div key={user.id} className="grid min-w-0 gap-3 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
+      <div className="space-y-2">
+        {pending.length ? pending.map((user) => <div key={user.id} className="record-card grid min-w-0 gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
           <div className="min-w-0 space-y-1">
             <div className="break-words font-medium">{user.name}</div>
             <div className="break-all text-sm text-muted-foreground">{user.email}</div>
@@ -37,8 +37,8 @@ export default async function UsersPage() {
     </section>
     <section aria-labelledby="registered-users">
       <h2 id="registered-users" className="mb-3 text-base font-semibold">登録済み利用者</h2>
-      <div className="divide-y border-y">
-        {users.filter((user) => user.accessStatus !== "PENDING").map((user) => <div key={user.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3">
+      <div className="space-y-2">
+        {users.filter((user) => user.accessStatus !== "PENDING").map((user) => <div key={user.id} className="record-card flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0"><div className="break-words font-medium">{user.name}</div><div className="break-all text-sm text-muted-foreground">{user.email}</div></div>
           <div className="text-sm">{user.accessStatus === "REJECTED" ? "申請却下" : roleLabel(user.role)}</div>
         </div>)}

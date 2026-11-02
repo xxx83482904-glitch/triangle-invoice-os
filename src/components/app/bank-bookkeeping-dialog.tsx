@@ -1,4 +1,5 @@
 "use client";
+import { OptionTabs } from "@/components/app/option-tabs";
 import { useOperationError } from "@/hooks/use-operation-error";
 import { OperationPending } from "@/components/app/operation-feedback";
 
@@ -138,7 +139,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
         </>}
       </section>
       <section className="min-w-0 space-y-3 border-t pt-3">
-        <label className="block space-y-1"><span className="font-medium">請求書</span><select className={selectClass} aria-label="請求書の要否" value={draft.invoiceRequirement} onChange={(event) => change({ invoiceRequirement: event.target.value as BankBookkeepingInput["invoiceRequirement"], reviewed: false })}><option value="UNDECIDED">未判断</option><option value="REQUIRED">必要</option><option value="NOT_REQUIRED" disabled={detail.invoiceLinked}>不要</option></select></label>
+        <div className="block space-y-1"><span className="font-medium">請求書</span><OptionTabs label="請求書の要否" value={draft.invoiceRequirement} options={[["UNDECIDED", "未判断"], ["REQUIRED", "必要"], ["NOT_REQUIRED", "不要", detail.invoiceLinked]]} onChange={(invoiceRequirement) => change({ invoiceRequirement, reviewed: false })} /></div>
         {detail.invoiceLinked ? <p className="text-xs text-muted-foreground">請求書照合済み</p> : null}
         <label className="flex min-h-11 items-center gap-3"><input type="checkbox" className="size-5 accent-primary" checked={Boolean(draft.hold)} onChange={(event) => change({ hold: event.target.checked ? { reason: "MISSING_DOCUMENT", question: "" } : null, reviewed: false })} /><span className="font-medium">保留</span></label>
         {draft.hold ? <div className="min-w-0 space-y-2 border-l-2 border-amber-500 pl-3"><label className="block space-y-1"><span className="text-xs text-muted-foreground">保留理由</span><select className={selectClass} aria-label="保留理由" value={draft.hold.reason} onChange={(event) => change({ hold: { ...draft.hold!, reason: event.target.value as BankHoldReason }, reviewed: false })}>{Object.entries(holdLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="block space-y-1" htmlFor={`${prefix}-question`}><span className="text-xs text-muted-foreground">確認事項 (必須)</span><textarea id={`${prefix}-question`} className="min-h-24 w-full min-w-0 rounded-md border bg-background p-2" maxLength={2000} required value={draft.hold.question} onChange={(event) => change({ hold: { ...draft.hold!, question: event.target.value }, reviewed: false })} /></label>{holdInvalid ? <p role="status" className="text-xs text-amber-700">確認事項が未入力です</p> : null}</div> : null}

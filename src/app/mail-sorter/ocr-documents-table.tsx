@@ -11,7 +11,8 @@ import { OriginalDocumentPreview } from "@/app/received-invoices/original-docume
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, AlertTriangle, CheckSquare, Download, ExternalLink, FileText, Folder, FolderPlus, GripVertical, HelpCircle, Image as ImageIcon, List, LoaderCircle, Maximize2, Minimize2, Pencil, Plus, Save, Search, Trash2, UploadCloud, X } from "lucide-react";
 import { useListSelection } from "@/hooks/use-list-selection";
-import { RowSelectionCheckbox, SelectionToolbar } from "@/components/app/list-selection";
+import { RowSelectionCheckbox, SelectionActionBar, SelectionToolbar } from "@/components/app/list-selection";
+import { OptionTabs } from "@/components/app/option-tabs";
 import { isSelectionControl } from "@/lib/list-selection";
 import { Fragment, type CSSProperties, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { MonthTabs } from "@/components/app/month-tabs";
@@ -971,9 +972,6 @@ export function OcrDocumentsTable({
         <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み・表示</h2>
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <div className="relative min-w-0 basis-64 flex-1"><Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} aria-label="郵便物を検索" placeholder="発送元・ファイル名・案件を検索" className="min-h-11 pl-9 lg:min-h-11 lg:pl-9" onChange={(event) => { setQuery(event.target.value); setVisibleListCount(LIST_BATCH_SIZE); }} /></div>
-          <select aria-label="郵便物の分類で絞り込み" className="h-11 max-w-full rounded-md border bg-background px-3 text-sm" value={categoryFilter} onChange={(event) => startFilterTransition(() => { setCategoryFilter(event.target.value as CategoryFilter); setVisibleListCount(LIST_BATCH_SIZE); })}>
-            <option value="all">すべての分類</option>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
           <div role="group" aria-label="郵便物の表示形式" className="flex rounded-md border p-0.5">
             <Button type="button" size="icon" className="size-11 lg:size-11" variant={viewMode === "list" ? "secondary" : "ghost"} aria-pressed={viewMode === "list"} aria-label="一覧表示" title="一覧表示" onClick={() => startFilterTransition(() => setViewMode("list"))}><List className="size-4" /></Button>
             <Button type="button" size="icon" className="size-11 lg:size-11" variant={viewMode === "folder" ? "secondary" : "ghost"} aria-pressed={viewMode === "folder"} aria-label="フォルダー表示" title="フォルダー表示" onClick={() => startFilterTransition(() => setViewMode("folder"))}><Folder className="size-4" /></Button>
@@ -1001,6 +999,7 @@ export function OcrDocumentsTable({
               {filter === "all" ? "すべて" : filter === "processed" ? "処理済み" : "未処理"}<span className="text-xs tabular-nums">{processingCounts[filter]}</span>
             </button>)}
           </div>
+          <OptionTabs label="郵便物の分類で絞り込み" caption="分類" value={categoryFilter} options={[["all", "すべて"], ...categoryOptions.map((option) => [option.value, option.label] as const)]} onChange={(value) => startFilterTransition(() => { setCategoryFilter(value as CategoryFilter); setVisibleListCount(LIST_BATCH_SIZE); })} />
           {duplicateRows.length || duplicateFilter === "duplicates" ? <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={duplicateFilter === "duplicates"} onChange={(event) => startFilterTransition(() => { setDuplicateFilter(event.target.checked ? "duplicates" : "all"); setVisibleListCount(LIST_BATCH_SIZE); })} />重複候補のみ ({duplicateRows.length})</label> : null}
           {duplicateRows.length ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={() => setSelectedIds(new Set(filteredRows.filter(isDuplicate).map((row) => row.id)))}><CheckSquare className="size-4" />重複を選択</Button> : null}
           {hasFilters ? <Button type="button" variant="ghost" className="min-h-11 lg:min-h-11" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
@@ -1023,7 +1022,7 @@ export function OcrDocumentsTable({
         <SelectionToolbar selection={selection} />
         <div>
           {selectedRows.length || pendingEdits.length ? (
-            <div className="sticky top-16 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-background/95 p-3 shadow-sm backdrop-blur lg:top-2 [&_button]:min-h-11 [&_select]:min-h-11">
+            <SelectionActionBar label="選択した郵便物の操作" className="[&_button]:min-h-11 [&_select]:min-h-11">
               <Badge variant={selectedRows.length ? "default" : "secondary"}>
                 {selectedRows.length ? `${selectedRows.length}件選択` : "未保存あり"}
               </Badge>
@@ -1091,26 +1090,25 @@ export function OcrDocumentsTable({
                 <X className="h-3.5 w-3.5" />
                 選択解除
               </Button>
-            </div>
+            </SelectionActionBar>
           ) : null}
           {hasFilters && !filteredRows.length ? <p role="status" className="mb-3 border-l-2 border-primary py-3 pl-3 text-sm">条件に合う郵便物がありません。</p> : null}
           {groups.length ? (
             viewMode === "list" ? (
               <div
-                className="grid min-h-0 overflow-hidden rounded-xl border bg-card shadow-sm xl:min-h-[640px] xl:grid-cols-[minmax(0,1fr)_8px_var(--mail-list-preview-width)]"
+                className="grid min-h-0 gap-y-4 xl:min-h-[640px] xl:grid-cols-[minmax(0,1fr)_8px_var(--mail-list-preview-width)]"
                 style={listGridStyle}
               >
                 <div className="min-w-0 overflow-x-auto">
                   {listGroups.length ? (
-                    <table className="workspace-record-table w-full min-w-[920px] text-sm">
-                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <table className="record-cards record-cards-stack record-cards-compact workspace-record-table w-full text-sm">
+                      <thead className="text-xs text-muted-foreground">
                         <tr>
                           <th className="w-10 px-3 py-2 text-left"></th>
                           <th className="px-3 py-2 text-left">発送元</th>
                           <th className="px-3 py-2 text-left">処理</th>
                           <th className="px-3 py-2 text-left">分類</th>
-                          <th className="px-3 py-2 text-left">重複</th>
-                          <th className="px-3 py-2 text-left">請求日</th>
+                                                    <th className="px-3 py-2 text-left">請求日</th>
                           <th className="px-3 py-2 text-right">金額</th>
                           <th className="px-3 py-2 text-left">保存先</th>
                           <th className="px-3 py-2 text-left">ファイル</th>
@@ -1123,16 +1121,17 @@ export function OcrDocumentsTable({
                           return (
                           <Fragment key={month}>
                             <tr
-                              className={`border-t bg-muted/30 ${isFileDragOver || isDocumentDragOver ? "bg-selected" : ""}`}
+                              className="record-section-row"
+                              data-drop={isFileDragOver || isDocumentDragOver ? "" : undefined}
                               {...monthDropHandlers(month)}
                             >
-                              <td colSpan={9} className="px-3 py-2">
+                              <td colSpan={8} className="px-3 py-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="sticky left-3 z-10 flex items-center gap-2 bg-muted/30 pr-2 text-sm font-medium">
+                                  <span className="flex items-center gap-2 text-sm font-medium">
                                     <Folder className="h-4 w-4 text-primary" />
                                     <span>{monthLabel(month)}</span>
                                   </span>
-                                  <div className="sticky right-3 z-10 ml-auto flex items-center gap-2 bg-muted/30 pl-2">
+                                  <div className="ml-auto flex items-center gap-2">
                                     <span className="text-xs text-muted-foreground">{listMonthCounts.get(month) ?? monthRows.length}件</span>
                                     <Button
                                       type="button"
@@ -1154,7 +1153,6 @@ export function OcrDocumentsTable({
                             </tr>
                             {monthRows.length ? (
                               monthRows.map((row) => {
-                                const isSelected = selectedIds.has(row.id);
                                 const isActive = row.id === listPreviewRow?.id;
                                 const isDragging = draggedIds.has(row.id);
                                 return (
@@ -1162,13 +1160,8 @@ export function OcrDocumentsTable({
                                     key={row.id}
                                     {...selection.rowProps(row.id)}
                                     draggable={canEdit}
-                                    className={`cursor-pointer border-t transition hover:bg-muted/50 ${
-                                      isActive ? "bg-selected" : ""
-                                    } ${isSelected ? "bg-selected ring-1 ring-inset ring-primary/30" : ""} ${
-                                      processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"
-                                    } ${
-                                      isDragging ? "opacity-50" : ""
-                                    }`}
+                                    data-active={isActive ? "" : undefined}
+                                    className={`${processingValueForRow(row) === "processed" ? "[--card-tone:var(--color-green-500)]" : "[--card-tone:var(--color-amber-400)]"} ${isDragging ? "opacity-50" : ""}`}
                                     onClick={(event) => {
                                       if (isSelectionControl(event.target, event.currentTarget)) return;
                                       setActiveMonth(month);
@@ -1185,17 +1178,16 @@ export function OcrDocumentsTable({
                                       setDragOverMonth(null);
                                     }}
                                   >
-                                    <td className="p-0">
+                                    <td className="record-card-tick p-0">
                                       <RowSelectionCheckbox selection={selection} id={row.id} label={`${shippingSenderName(row)}を選択`} />
                                     </td>
-                                    <td className="max-w-[240px] truncate px-3 py-2 font-medium">{shippingSenderName(row)}</td>
-                                    <td className="px-3 py-2">{renderProcessingControl(row)}</td>
-                                    <td className="px-3 py-2">{renderCategoryControl(row)}</td>
-                                    <td className="px-3 py-2">{renderDuplicateBadge(row) ?? <span className="text-xs text-muted-foreground">-</span>}</td>
-                                    <td className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
-                                    <td className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
-                                    <td className="max-w-[200px] px-3 py-2"><span className="flex flex-wrap items-center gap-1"><span className="truncate">{row.savedAs}</span>{row.linkBroken ? <Badge variant="destructive">参照切れ</Badge> : null}{row.fileMissing ? <Badge variant="destructive">原本なし</Badge> : null}</span></td>
-                                    <td className="px-3 py-2">
+                                    <td className="record-card-title max-w-[240px] px-3 py-2 font-medium"><span className="flex flex-wrap items-center gap-1"><button type="button" data-selection-open className="record-card-open" title="選択せずに開く">{shippingSenderName(row)}</button>{renderDuplicateBadge(row)}</span></td>
+                                    <td data-label="処理" className="px-3 py-2">{renderProcessingControl(row)}</td>
+                                    <td data-label="分類" className="px-3 py-2">{renderCategoryControl(row)}</td>
+                                    <td data-label="請求日" className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
+                                    <td data-label="金額" className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
+                                    <td data-label="保存先" className="max-w-[200px] px-3 py-2"><span className="flex flex-wrap items-center gap-1"><span className="truncate">{row.savedAs}</span>{row.linkBroken ? <Badge variant="destructive">参照切れ</Badge> : null}{row.fileMissing ? <Badge variant="destructive">原本なし</Badge> : null}</span></td>
+                                    <td data-label="ファイル" className="px-3 py-2">
                                       {row.fileUrl ? (
                                         <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={row.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()}>
                                           表示
@@ -1208,8 +1200,8 @@ export function OcrDocumentsTable({
                                 );
                               })
                             ) : (
-                              <tr className="border-t">
-                                <td colSpan={9} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                              <tr className="record-section-row">
+                                <td colSpan={8} className="px-3 py-6 text-center text-xs text-muted-foreground">
                                   <span className="sticky left-3 inline-block">この月の郵便物はありません。</span>
                                 </td>
                               </tr>
@@ -1246,7 +1238,7 @@ export function OcrDocumentsTable({
                   <GripVertical className="h-4 w-4" />
                 </div>
 
-                <aside className="min-w-0 border-t bg-muted/20 p-5 xl:border-t-0 xl:border-l">
+                <aside className="min-w-0 rounded-xl border bg-card p-5 shadow-sm">
                   {listPreviewRow && listPreviewMonth ? (
                     <div className="space-y-4">
                       <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
@@ -1404,7 +1396,6 @@ export function OcrDocumentsTable({
                 <div className="space-y-1">
                   {activeRows.map((row) => {
                     const isActive = row.id === activeRow?.id;
-                    const isSelected = selectedIds.has(row.id);
                     const isDragging = draggedIds.has(row.id);
                     return (
                       <div
@@ -1412,9 +1403,8 @@ export function OcrDocumentsTable({
                         {...selection.rowProps(row.id)}
                         role="button"
                         draggable={canEdit}
-                        className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${processingValueForRow(row) === "processed" ? "border-l-2 border-l-green-500" : "border-l-2 border-l-amber-400"} ${
-                          isActive ? "border-primary bg-selected" : "border-transparent hover:bg-muted"
-                        } ${isSelected ? "bg-selected ring-1 ring-inset ring-primary/30" : ""} ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
+                        data-active={isActive ? "" : undefined}
+                        className={`record-card w-full px-3 py-2.5 text-left ${processingValueForRow(row) === "processed" ? "[--card-tone:var(--color-green-500)]" : "[--card-tone:var(--color-amber-400)]"} ${isDragging ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
                         onClick={(event) => {
                           if (isSelectionControl(event.target, event.currentTarget)) return;
                           setActiveRowId(row.id);
@@ -1439,7 +1429,7 @@ export function OcrDocumentsTable({
                           <div className="min-w-0 flex-1">
                             <div className="flex min-w-0 flex-col items-start gap-1">
                               <div className="flex w-full min-w-0 items-center gap-2">
-                                <div className="truncate text-sm font-medium">{shippingSenderName(row)}</div>
+                                <button type="button" data-selection-open className="record-card-open truncate text-sm font-medium" title="選択せずに開く">{shippingSenderName(row)}</button>
                                 {senderColumn === "normal" ? renderDuplicateBadge(row) : null}
                               </div>
                               {senderColumn === "normal" ? (

@@ -14,6 +14,13 @@ test("Ctrl and Command toggle only the target without mutating prior selection",
   assert.deepEqual(values(selectListItem(next, ids, "a", { ctrlKey: true })), ["d"]);
 });
 
+test("A plain press on a card toggles only that card and keeps the others", () => {
+  let state = selectListItem(empty(), ids, "a");
+  state = selectListItem(state, ids, "c");
+  assert.deepEqual(values(state), ["a", "c"]);
+  assert.deepEqual(values(selectListItem(state, ids, "a")), ["c"]);
+});
+
 test("Shift follows current display order in either direction", () => {
   const first = selectListItem(empty(), ids, "e");
   assert.deepEqual(values(selectListItem(first, ids, "b", { shiftKey: true })), ["b", "c", "d", "e"]);

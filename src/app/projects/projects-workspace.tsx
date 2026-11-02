@@ -208,7 +208,7 @@ export function ProjectsWorkspace({
               <span>{filteredRows.length}件表示</span>
               <span>要対応順</span>
             </div>
-            <div className="max-h-[70vh] overflow-y-auto">
+            <div className="max-h-[70vh] overflow-y-auto px-2 pt-2">
               <SelectionToolbar selection={selection} />
               {filteredRows.map((row) => (
                 <ProjectListItem
@@ -356,10 +356,8 @@ function ProjectListItem({
     <article
       {...selection.rowProps(row.id)}
       role="button"
-      className={cn(
-        "block w-full border-b px-3 py-3 text-left transition-colors hover:bg-muted/60",
-        selection.selected.has(row.id) ? "bg-selected" : active ? "bg-selected ring-1 ring-inset ring-primary/30" : "bg-background",
-      )}
+      data-active={active ? "" : undefined}
+      className="record-card my-2 block w-full px-3 py-3 text-left"
       onClick={(event) => { if (!isSelectionControl(event.target, event.currentTarget)) onSelect(); }}
       onKeyDown={(event) => {
         if (event.target === event.currentTarget && event.key === "Enter") {
@@ -376,7 +374,7 @@ function ProjectListItem({
             <CompanyBadge company={row.company} />
             <StatusBadge status={row.status} />
           </div>
-          <div className="mt-1 line-clamp-2 text-sm font-semibold leading-snug">{row.name}</div>
+          <button type="button" data-selection-open className="record-card-open mt-1 line-clamp-2 text-sm font-semibold leading-snug" title="選択せずに開く">{row.name}</button>
           <div className="mt-1 truncate text-xs text-muted-foreground">{row.clientName || "クライアント未設定"} / {projectStageLabel(row.company, row.stage) || "段階未設定"}</div>
         </div>
         <div className="shrink-0 text-right">

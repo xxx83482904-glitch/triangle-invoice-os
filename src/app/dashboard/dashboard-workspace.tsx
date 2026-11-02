@@ -71,7 +71,7 @@ export function DashboardWorkspace({ summary: s, nextSteps = [], companyLabel }:
       <section ref={workRef} tabIndex={-1} aria-labelledby="dashboard-work-title" className="dash-panel dash-grid-docs scroll-mt-20 outline-none">
         <div className="dash-panel-head">
           <h2 id="dashboard-work-title" className="dash-panel-title">対応する書類</h2>
-          {view !== "review" ? <select aria-label="書類の期限" className={`${recordSelectClass} dash-select`} value={timing} onChange={(event) => { setTiming(event.target.value); setLimit(8); }}><option value="all">すべての期限</option><option value="overdue">期限超過</option><option value="soon">7日以内</option><option value="undated">期限未設定</option></select> : null}
+          {view !== "review" ? <div role="group" aria-label="書類の期限" className="dash-track" data-inline="">{([["all", "すべて"], ["overdue", "期限超過"], ["soon", "7日以内"], ["undated", "期限未設定"]] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={timing === value} onClick={() => { setTiming(value); setLimit(8); }}>{label}</button>)}</div> : null}
         </div>
         <div role="group" aria-label="対応書類の種類" className="dash-track">
           {([["income", "未入金", s.incoming.count], ["expense", "未払い", s.outgoing.count], ["review", "書類確認", s.review.length]] as const).map(([value, label, count]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => openWork(value)}>{label}<span>{count}</span></button>)}
