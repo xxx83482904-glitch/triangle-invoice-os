@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/components/app/list-selection";
-import { RecordMonthNavigation, RecordSaveBar } from "@/components/app/record-list-controls";
+import { MonthTabs } from "@/components/app/month-tabs";
+import { RecordSaveBar } from "@/components/app/record-list-controls";
 import type { ProjectBasicOption } from "@/components/app/editable-project-select";
 import { useListSelection } from "@/hooks/use-list-selection";
 import { toast } from "@/hooks/use-toast";
@@ -172,7 +173,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
       <span role="status" className="text-xs text-muted-foreground">{filtered.length} / {rows.length}件</span>
       {hasFilters ? <Button className="min-h-11" variant="ghost" onClick={resetFilters}><X className="size-4" />絞り込みを解除</Button> : null}
     </div>
-    <RecordMonthNavigation label="見積月" months={months} value={month === "all" ? "" : month} disabled={busy} onChange={(value) => { setMonth(value || "all"); setLimit(50); }} />
+    <MonthTabs label="見積月" months={months} value={month === "all" ? "" : month} disabled={busy} onChange={(value) => { setMonth(value || "all"); setLimit(50); }} />
     <SelectionToolbar selection={selection} />
     {selected.length ? <div aria-label="選択した見積書の一括操作" className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-selected px-3 py-2">
       <span className="mr-auto text-sm">{selected.length}件選択{selection.hiddenCount ? `（表示外 ${selection.hiddenCount}件を含む）` : ""}</span>

@@ -6,14 +6,6 @@ import { Button } from "@/components/ui/button";
 export const recordSelectClass = "h-11 w-full min-w-0 max-w-full rounded-lg border bg-[var(--field)] px-3 text-sm lg:h-9";
 export const recordMonthLabel = (month: string) => !month || month === "all" ? "すべての月" : month === "undated" ? "日付未設定" : `${month.slice(0, 4)}年${Number(month.slice(5, 7))}月`;
 
-export function RecordMonthNavigation({ label, months, value, disabled, onChange }: {
-  label: string; months: string[]; value: string; disabled?: boolean; onChange: (month: string) => void;
-}) {
-  return <nav aria-label={label} className="record-month-navigation">
-    {["", ...months].map((month) => <button type="button" key={month} disabled={disabled} className="hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50" aria-pressed={value === month} onClick={() => onChange(month)}>{recordMonthLabel(month)}</button>)}
-  </nav>;
-}
-
 export function RecordSaveBar({ label, disabled, saving, onSave, onReset }: {
   label: string; disabled: boolean; saving?: boolean; onSave: () => void; onReset?: () => void;
 }) {

@@ -1,27 +1,7 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
+import { Check, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { bankFiscalYear } from "@/lib/bank-account-overview";
-import { bankLedgerMonths, bankLedgerYearMonth } from "@/lib/bank-ledger";
-
-export function BankFiscalMonthTabs({ value, months, today, disabled, onChange }: {
-  value: string; months: string[]; today: string; disabled: boolean; onChange: (month: string) => void;
-}) {
-  const year = bankFiscalYear(value || [...months].sort().at(-1) || today);
-  const years = [...new Set([year, bankFiscalYear(today), ...months.map(bankFiscalYear)])].sort((a, b) => b - a);
-  return <nav aria-label="取引月" className="bank-fiscal-months">
-    <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1">
-      <Button variant="outline" size="icon" className="size-9" title="前の年度" aria-label="前の年度" disabled={disabled || year <= 1901} onClick={() => onChange(bankLedgerYearMonth(year - 1, months))}><ChevronLeft className="size-4" /></Button>
-      <select aria-label="決算年度" className="bank-period-select" value={year} disabled={disabled} onChange={(event) => onChange(bankLedgerYearMonth(Number(event.target.value), months))}>{years.map((item) => <option key={item} value={item}>{item - 1}.09 - {item}.08</option>)}</select>
-      <Button variant="outline" size="icon" className="size-9" title="次の年度" aria-label="次の年度" disabled={disabled || year >= Math.max(bankFiscalYear(today), ...months.map(bankFiscalYear))} onClick={() => onChange(bankLedgerYearMonth(year + 1, months))}><ChevronRight className="size-4" /></Button>
-      <button type="button" className="bank-all-months" disabled={disabled} aria-pressed={!value} onClick={() => onChange("")}>全期間</button>
-    </div>
-    <div className="bank-month-tabs" aria-label="月を選択">
-      {bankLedgerMonths(year).map((month) => <button type="button" key={month} title={`${month.slice(0, 4)}年${Number(month.slice(5))}月`} aria-label={`${month.slice(0, 4)}年${Number(month.slice(5))}月`} aria-pressed={value === month} disabled={disabled} onClick={() => onChange(month)}>{Number(month.slice(5))}月</button>)}
-    </div>
-  </nav>;
-}
 
 export function BankSelectionReview({ count, amount, reviewedCount, disabled, onClear, onReview }: {
   count: number; amount: number; reviewedCount: number; disabled: boolean; onClear: () => void; onReview: (reviewed: boolean) => void;

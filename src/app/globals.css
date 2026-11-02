@@ -482,14 +482,10 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .workspace-shell [data-slot="table-head"] { font-size: 12px; height: 44px; font-weight: 400; color: var(--muted-foreground); }
 .workspace-shell [data-slot="table-cell"] { font-size: 13px; }
 .workspace-shell [data-selection-id][data-selected="true"] { background-color: var(--selected); background-image: var(--hatch); box-shadow: inset 2px 0 var(--primary); }
-.record-month-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; background: var(--track); }
-.record-month-navigation button { min-height: 44px; padding: 6px 12px; border-radius: 8px; font-size: 13px; }
-.record-month-navigation button[aria-pressed="true"] { background: var(--card); color: var(--foreground); font-weight: 500; box-shadow: var(--shadow-soft); }
 .record-savebar { border-color: var(--edge); border-radius: 14px; background: var(--card); box-shadow: var(--shadow-raised); }
 @media (min-width: 1024px) {
   .workspace-main [data-slot="select-trigger"] { min-height: 36px; }
   .workspace-main :is([data-slot="input"], [data-slot="select-trigger"], select):not(.bank-ledger-table *) { height: 36px; min-height: 36px; }
-  .record-month-navigation button { min-height: 36px; }
 }
 .bank-account-filter { width: 270px; max-width: 100%; }
 .bank-ledger-header > div:first-child { flex: 1 1 450px; }
@@ -501,15 +497,22 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .bank-workflow-line > nav { border-bottom: 0; }
 .bank-ledger-totals { padding-block: 0; }
 .bank-ledger-layout { display: grid; min-width: 0; gap: 24px; padding-top: 0; }
-.bank-fiscal-months { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
-.bank-period-select { min-width: 0; max-width: 145px; height: 36px; background: transparent; color: var(--foreground); font-size: 13px; font-weight: 400; }
-.bank-month-tabs { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; gap: 4px; border-radius: 12px; padding: 4px; background: var(--track); }
-.bank-month-tabs button, .bank-all-months { min-width: 44px; min-height: 44px; flex: 1; border: 1px solid transparent; border-radius: 9px; padding: 5px 6px; white-space: nowrap; font-size: 13px; color: var(--body); }
-.bank-all-months { background: var(--track); }
-.bank-month-tabs button:hover, .bank-all-months:hover { background: var(--selected); color: var(--foreground); }
-.bank-month-tabs button[aria-pressed="true"], .bank-all-months[aria-pressed="true"] { background: var(--card); color: var(--foreground); font-weight: 500; box-shadow: var(--shadow-soft); }
-.bank-month-tabs button:focus-visible, .bank-all-months:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-.bank-month-tabs button:disabled, .bank-all-months:disabled { opacity: 0.5; }
+.month-tabs { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+.month-tabs-year { min-width: 0; max-width: 145px; height: 36px; background: transparent; color: var(--foreground); font-size: 13px; font-weight: 400; }
+.month-tabs-row { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; gap: 4px; border-radius: 12px; padding: 4px; background: var(--track); }
+.month-tabs-row button, .month-tabs-all { min-width: 44px; min-height: 44px; flex: 1; border: 1px solid transparent; border-radius: 9px; padding: 5px 6px; white-space: nowrap; font-size: 13px; color: var(--body); }
+.month-tabs-all { background: var(--track); }
+.month-tabs-row button:hover, .month-tabs-all:hover { background: var(--selected); color: var(--foreground); }
+.month-tabs-row button[aria-pressed="true"], .month-tabs-all[aria-pressed="true"] { background: var(--card); color: var(--foreground); font-weight: 500; box-shadow: var(--shadow-soft); }
+.month-tabs-row button:focus-visible, .month-tabs-all:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.month-tabs-row button:disabled, .month-tabs-all:disabled { opacity: 0.5; }
+.month-tabs-row button, .month-tabs-all { display: inline-flex; flex-wrap: wrap; align-items: baseline; align-content: center; justify-content: center; gap: 0 3px; }
+.month-tabs-row button small, .month-tabs-all small { font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.month-tabs-row button[data-empty]:not([aria-pressed="true"]) { color: var(--muted-foreground); opacity: 0.6; }
+@media (max-width: 1023px) {
+  .month-tabs-row { flex-basis: 100%; }
+}
+.month-tabs-row button[data-drop] { background: var(--selected); outline: 2px dashed var(--primary); outline-offset: -2px; }
 .bank-ledger-filters { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .bank-ledger-search { grid-column: span 2; }
 .bank-bulk-treatment { max-width: 155px; }
@@ -542,7 +545,7 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
   .bank-ledger-table td { height: 62px; padding-top: 6px; padding-bottom: 6px; }
 }
 @media (min-width: 1024px) {
-  .bank-month-tabs button, .bank-all-months { min-width: 38px; min-height: 36px; }
+  .month-tabs-row button, .month-tabs-all { min-width: 38px; min-height: 36px; }
   .banking-main { padding-bottom: 80px; }
   .bank-ledger-savebar { bottom: 0; padding-inline: 20px; }
   .bank-row-link { min-height: 32px; }
@@ -573,8 +576,8 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 }
 @media (max-width: 767px) {
   .bank-account-filter { max-width: 100%; }
-  .bank-month-tabs { flex-basis: 100%; }
-  .bank-month-tabs button { min-height: 44px; }
+  .month-tabs-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .month-tabs-row button { min-width: 0; min-height: 44px; }
   .bank-ledger-savebar > span { order: 3; width: 100%; }
   .bank-ledger-savebar > button { margin-left: auto; }
   .bank-row-link { min-height: 44px; }

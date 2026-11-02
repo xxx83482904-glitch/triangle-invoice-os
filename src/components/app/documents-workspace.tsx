@@ -10,7 +10,8 @@ import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTr
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronRight, Download, ExternalLink, FileText, LoaderCircle, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
 import { ReviewStatusTag } from "@/components/app/review-status-tag";
-import { RecordMonthNavigation, RecordSaveBar, recordMonthLabel, recordSelectClass } from "@/components/app/record-list-controls";
+import { MonthTabs } from "@/components/app/month-tabs";
+import { RecordSaveBar, recordMonthLabel, recordSelectClass } from "@/components/app/record-list-controls";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { groupIssuedDocuments, issuedListSummary, issuedRowAmounts, type IssuedGrouping } from "@/lib/issued-list";
 import { Button } from "@/components/ui/button";
@@ -285,7 +286,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
   }
   return <section aria-label={issuedOnly ? "発行請求書一覧" : "全書類一覧"} className="min-w-0 space-y-6">
     <div className="min-w-0 space-y-6">
-    {issuedOnly ? <RecordMonthNavigation label="請求月" months={months} value={month === "all" ? "" : month} disabled={saving || deleting} onChange={(value) => { setMonth(value || "all"); setLimit(pageSize); }} /> : null}
+    <MonthTabs label={issuedOnly ? "請求月" : "書類の月"} months={months} value={month === "all" ? "" : month} disabled={saving || deleting} onChange={(value) => { setMonth(value || "all"); setLimit(pageSize); }} />
     <div className="min-w-0 space-y-4">
     {issuedOnly ? <>
       <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{recordMonthLabel(month)}</h2><span role="status" className="text-sm text-muted-foreground">{filtered.length} / {rows.length}件</span>{changes ? <span className="text-xs text-amber-700 dark:text-amber-300">未保存 {changes}件</span> : null}</div>
@@ -312,7 +313,6 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     </> : <section className="workspace-filter-panel space-y-3"><h2 className="text-sm font-semibold">絞り込み</h2>
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input aria-label="書類を検索" placeholder="書類名・取引先・案件を検索" className="h-11 pl-9 lg:pl-9" value={query} onChange={(e) => { setQuery(e.target.value); setLimit(pageSize); }} /></div>
-      <select aria-label="月で絞り込み" className={selectClass} value={month} onChange={(e) => { setMonth(e.target.value); setLimit(pageSize); }}><option value="all">すべての月</option>{months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
       <select aria-label="取引先で絞り込み" className={selectClass} value={counterpart} onChange={(e) => { setCounterpart(e.target.value); setLimit(pageSize); }}><option value="all">{issuedOnly ? "すべてのクライアント" : "すべての取引先"}</option>{counterparts.map(([value, name]) => <option key={value} value={value}>{name || "取引先未設定"}</option>)}</select>
       {!issuedOnly ? <select aria-label="書類種別" className={selectClass} value={kind} onChange={(e) => { setKind(e.target.value); setLimit(pageSize); }}><option value="all">すべての書類</option>{Object.entries(documentKindLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}
       {!issuedOnly ? <select aria-label="書類分類" className={selectClass} value={category} onChange={(e) => { setCategory(e.target.value); setLimit(pageSize); }}><option value="all">すべての分類</option>{Object.entries(documentCategoryLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : null}

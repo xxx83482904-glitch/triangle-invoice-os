@@ -11,7 +11,8 @@ import { RowSelectionCheckbox, SelectAllCheckbox } from "@/components/app/list-s
 import { useRouter } from "next/navigation";
 import { Bot, CheckCheck, CircleAlert, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, Pencil, RefreshCw, Save, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
-import { BankFiscalMonthTabs, BankReviewTag, BankSelectionReview } from "@/components/app/bank-ledger-controls";
+import { BankReviewTag, BankSelectionReview } from "@/components/app/bank-ledger-controls";
+import { MonthTabs } from "@/components/app/month-tabs";
 import { bankSelectionAmount, reviewBankDrafts } from "@/lib/bank-ledger";
 import Link from "next/link";
 import { BankBalanceSummary, type BankBalanceSummaryProps } from "@/components/app/bank-balance-summary";
@@ -506,7 +507,7 @@ export function BankingWorkspace(props: Props) {
         {filters.analysisThrough ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-selected p-2 text-sm"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
         {filters.transaction ? <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary bg-selected p-2 text-sm"><span>指定された明細を表示中</span><Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
         <section className="workspace-filter-panel space-y-1 p-3"><h2 className="text-xs font-semibold">絞り込み</h2>
-        <BankFiscalMonthTabs value={filters.month} months={months} today={bankToday()} disabled={pending} onChange={(month) => navigate({ month })} />
+        <MonthTabs label="取引月" value={filters.month} months={months} today={bankToday()} disabled={pending} onChange={(month) => navigate({ month })} />
         <div className="bank-ledger-filters">
           <select className={bankSelectClass} aria-label="勘定科目で絞り込み" value={filterEdits.category ?? filters.category} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, category: e.target.value }))}><option value="">すべての勘定科目</option>{bankCategoryCatalog(categories.map((row) => ({ ...row, available: true }))).map((section) => <optgroup key={section.id} label={section.label}>{section.entries.map(({ category }) => <option key={category.id} value={category.id}>{category.name}</option>)}</optgroup>)}</select>
           <select className={bankSelectClass} aria-label="入出金で絞り込み" value={filterEdits.side ?? filters.side} disabled={pending} onChange={(e) => setFilterEdits((current) => ({ ...current, side: e.target.value, analysisThrough: "" }))}><option value="">入金・出金すべて</option><option value="INCOME">入金・返金</option><option value="EXPENSE">出金・利用</option></select>

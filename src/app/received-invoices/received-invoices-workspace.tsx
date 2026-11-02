@@ -5,7 +5,7 @@ import { RowSelectionCheckbox, SelectAllCheckbox, SelectionToolbar } from "@/com
 import { isSelectionControl } from "@/lib/list-selection";
 
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, ChevronRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
+import { ArrowUpRight, ExternalLink, FileText, Image as ImageIcon, Save } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { updateReceivedInvoiceInline, updateReceivedInvoiceStatus } from "@/app/actions";
 import { useFeedbackForm } from "@/hooks/use-feedback-form";
@@ -29,6 +29,8 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CompanyScope } from "@/lib/company";
 import { formatDate, yen } from "@/lib/format";
 import type { ReceivedInvoiceStatus } from "@/lib/types";
+import { MonthTabs } from "@/components/app/month-tabs";
+import { countByMonth } from "@/lib/month-tabs";
 import { filterReceivedInvoices, receivedFilterLabels as filterLabels, receivedInvoiceIsOverdue as isOverdue, receivedInvoiceIsDueSoon as isDueSoon, receivedListTotals, receivedSummaryBasis, type ReceivedWorkFilter as WorkFilter } from "@/lib/received-invoice-list";
 
 type Option = {
@@ -142,14 +144,17 @@ export function ReceivedInvoicesWorkspace({
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [activeId, setActiveId] = useState(initialId ?? invoices[0]?.id ?? "");
-  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
+  const [listMonth, setListMonth] = useState("");
   const [filter, setFilter] = useState<WorkFilter>(initialId ? "all" : "unpaid");
   const [query, setQuery] = useState("");
   const [saving, startSaving] = useTransition();
   const statusSave = useFeedbackForm(company, saveReceivedInvoiceStatus, "状態を保存しました");
   const [saveResult, setSaveResult] = useState<{ id: string; message: string; error?: boolean }>();
 
-  const filteredInvoices = useMemo(() => filterReceivedInvoices(invoices, filter, query, today), [filter, invoices, query, today]);
+  const matchingInvoices = useMemo(() => filterReceivedInvoices(invoices, filter, query, today), [filter, invoices, query, today]);
+  const filteredInvoices = useMemo(() => listMonth ? matchingInvoices.filter((invoice) => monthKey(invoice) === listMonth) : matchingInvoices, [listMonth, matchingInvoices]);
+  const months = useMemo(() => invoices.map((invoice) => monthKey(invoice)), [invoices]);
+  const monthCounts = useMemo(() => countByMonth(matchingInvoices.map((invoice) => monthKey(invoice))), [matchingInvoices]);
 
   const activeInvoice = filteredInvoices.find((invoice) => invoice.id === activeId) ?? filteredInvoices[0] ?? null;
 
@@ -164,19 +169,10 @@ export function ReceivedInvoicesWorkspace({
 
   const totals = useMemo(() => receivedListTotals(filteredInvoices), [filteredInvoices]);
 
-  const selection = useListSelection(monthGroups.flatMap(([month, list]) => collapsedMonths.has(month) ? [] : list.map((row) => row.id)), { availableIds: invoices.map((row) => row.id) });
+  const selection = useListSelection(monthGroups.flatMap(([, list]) => list.map((row) => row.id)), { availableIds: invoices.map((row) => row.id) });
 
   const counts = useMemo(() => Object.fromEntries((Object.keys(filterLabels) as WorkFilter[])
     .map((item) => [item, filterReceivedInvoices(invoices, item, "", today).length])) as Record<WorkFilter, number>, [invoices, today]);
-
-  const toggleMonth = (month: string) => {
-    setCollapsedMonths((current) => {
-      const next = new Set(current);
-      if (next.has(month)) next.delete(month);
-      else next.add(month);
-      return next;
-    });
-  };
 
   return (
     <Card variant="section">
@@ -186,7 +182,7 @@ export function ReceivedInvoicesWorkspace({
         </div>
         {showTotals ? <section aria-label="受領請求書の集計" className="w-full min-w-0 space-y-2 text-xs text-muted-foreground lg:max-w-2xl">
           <div className="flex flex-wrap gap-x-3 gap-y-1 break-all" role="status">
-            {receivedSummaryBasis(filter, query).map((label) => <span key={label}>{label}</span>)}
+            {receivedSummaryBasis(filter, query, listMonth ? monthLabel(listMonth) : undefined).map((label) => <span key={label}>{label}</span>)}
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
@@ -206,7 +202,6 @@ export function ReceivedInvoicesWorkspace({
             </div>
           </div>
           <p>未払いはアーカイブ・却下・債務グループの支払対象外を除外{totals.excludedCount ? "（表示中" + totals.excludedCount + "件）" : ""}。合計・支払済は表示中の書類と支払記録を集計します。</p>
-          <p>月の折りたたみは集計に影響しません。</p>
         </section> : null}
       </CardHeader>
       <CardContent>
@@ -232,7 +227,8 @@ export function ReceivedInvoicesWorkspace({
           />
         </div>
 
-        <p className="mb-3 text-xs text-muted-foreground">絞り込みボタンの件数は検索前の件数です。</p>
+        <p className="mb-3 text-xs text-muted-foreground">絞り込みボタンの件数は月と検索で絞る前の件数です。</p>
+        <div className="mb-3"><MonthTabs label="請求月" value={listMonth} months={months} counts={monthCounts} undatedLabel="日付なし" onChange={setListMonth} /></div>
         <SelectionToolbar selection={selection} />
         {filteredInvoices.length ? (
           <div className="mt-4 grid min-h-[720px] overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -252,29 +248,21 @@ export function ReceivedInvoicesWorkspace({
                   </tr>
                 </thead>
                 {monthGroups.map(([month, monthInvoices]) => {
-                    const collapsed = collapsedMonths.has(month);
                     const monthTotal = monthInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
                     const monthUnpaid = monthInvoices.reduce((sum, invoice) => sum + invoice.unpaidAmount, 0);
                     return (
                       <tbody key={month}>
                         <tr className="border-t bg-muted/30">
                           <td colSpan={9} className="px-3 py-2">
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between gap-3 text-left"
-                              onClick={() => toggleMonth(month)}
-                            >
-                              <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                                {collapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                                <span>{monthLabel(month)}</span>
-                              </span>
+                            <div className="flex w-full items-center justify-between gap-3">
+                              <span className="min-w-0 text-sm font-medium">{monthLabel(month)}</span>
                               <span className="shrink-0 text-xs text-muted-foreground">
                                 {monthInvoices.length}件{showTotals ? ` / ${yen.format(monthTotal)} / 未払い ${yen.format(Math.max(0, monthUnpaid))}` : ""}
                               </span>
-                            </button>
+                            </div>
                           </td>
                         </tr>
-                        {collapsed ? null : monthInvoices.map((invoice) => {
+                        {monthInvoices.map((invoice) => {
                           const active = activeInvoice?.id === invoice.id;
                           return (
                             <tr
@@ -491,7 +479,7 @@ export function ReceivedInvoicesWorkspace({
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 rounded-lg border py-12 text-sm text-muted-foreground">
             <p>条件に合う受領請求書はありません。</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => { setFilter("all"); setQuery(""); }}>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setFilter("all"); setQuery(""); setListMonth(""); }}>
               条件をリセット
             </Button>
           </div>

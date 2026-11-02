@@ -95,6 +95,7 @@ test("search applies to every card as well as the visible unpaid rows", () => {
 });
 
 test("basis labels identify the filter, trimmed search and all-period scope including undated documents", () => {
+  assert.equal(receivedSummaryBasis("all", "", "2026年10月")[2], "期間：2026年10月");
   assert.deepEqual(receivedSummaryBasis("unpaid", "  "), ["表示中の絞り込み：未払い", "検索：なし", "期間：全期間（日付なしを含む）"]);
   assert.deepEqual(receivedSummaryBasis("all", "  合成検索目印  "), ["表示中の絞り込み：すべて", "検索：「合成検索目印」", "期間：全期間（日付なしを含む）"]);
 });

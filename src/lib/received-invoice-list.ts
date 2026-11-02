@@ -51,6 +51,6 @@ export function receivedListTotals(rows: ReceivedInvoiceListRow[]) {
   };
 }
 
-export function receivedSummaryBasis(filter: ReceivedWorkFilter, query: string) {
-  return ["表示中の絞り込み：" + receivedFilterLabels[filter], query.trim() ? "検索：「" + query.trim() + "」" : "検索：なし", "期間：全期間（日付なしを含む）"];
+export function receivedSummaryBasis(filter: ReceivedWorkFilter, query: string, month?: string) {
+  return ["表示中の絞り込み：" + receivedFilterLabels[filter], query.trim() ? "検索：「" + query.trim() + "」" : "検索：なし", month ? "期間：" + month : "期間：全期間（日付なしを含む）"];
 }
