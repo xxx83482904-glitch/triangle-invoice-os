@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RowSelectionCheckbox, SelectionActionBar, SelectionToolbar } from "@/components/app/list-selection";
 import { OptionTabs } from "@/components/app/option-tabs";
+import { PdfLayoutDialog } from "@/components/app/pdf-layout-dialog";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { MonthTabs } from "@/components/app/month-tabs";
 import { RecordSaveBar } from "@/components/app/record-list-controls";
@@ -214,6 +215,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
       {active && activeEdit ? <aside ref={preview} aria-label="見積書プレビュー" className="min-w-0 scroll-mt-28 space-y-3 border-t pt-3 xl:sticky xl:top-3 xl:max-h-[80vh] xl:overflow-auto xl:border-l xl:border-t-0 xl:pl-4">
         <div className="flex items-start justify-between gap-2"><h2 className="break-all font-semibold">{active.estimateNumber}</h2><Button variant="ghost" size="icon" className="size-11 shrink-0" title="プレビューを閉じる" aria-label="プレビューを閉じる" onClick={() => onOpen("")}><X className="size-4" /></Button></div>
         <div className="flex flex-wrap gap-2"><Button asChild variant="outline" className="min-h-11"><a href={`/api/estimates/${active.id}/pdf?v=${encodeURIComponent(active.updatedAt)}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />PDFを開く</a></Button>
+          <PdfLayoutDialog kind="estimate" id={active.id} title={active.estimateNumber} company={company} canSave={editable(active)} updatedAt={active.updatedAt} size="default" />
           {actions(active).filter((action) => !["プレビュー", "削除"].includes(action.label)).map((action) => <Button key={action.label} variant="outline" className="min-h-11" disabled={busy} onClick={action.action}><action.icon className="size-4" />{action.label}</Button>)}
         </div>
         {edits[active.id] ? <p className="text-xs text-amber-700 dark:text-amber-300">未保存の変更あり・PDFは保存済みの内容</p> : null}

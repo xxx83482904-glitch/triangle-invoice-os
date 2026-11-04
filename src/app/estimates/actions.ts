@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
 import type { EstimateInput, EstimateListEdit } from "@/lib/estimate-values";
 import { convertEstimate, deleteEstimate, deleteEstimates, saveEstimate, saveEstimateListEdits, updateEstimateStatus, type EstimateStatusUpdate, type EstimateConversion, type EstimateTarget } from "@/lib/estimates";
+import { applyEstimatePdfLayout, type PdfLayoutSave } from "@/lib/invoice-pdf-layout-store";
 import { mutateData } from "@/lib/store";
 
 function refresh() {
@@ -57,5 +58,14 @@ export async function deleteEstimatesAction(company: CompanyScope, input: Estima
   try {
     await mutateData(user.id, "DELETE_ESTIMATES", "Estimate", "batch", (data) => deleteEstimates(data, user, company, input));
     refresh(); return { success: true };
+  } catch (error) { return { error: message(error) }; }
+}
+
+// The PDF layout is presentation only, so the estimate keeps its `updatedAt` and open list edits stay valid.
+export async function saveEstimatePdfLayout(company: CompanyScope, input: PdfLayoutSave) {
+  const user = await requireUser();
+  try {
+    const result = await mutateData(user.id, "SAVE_ESTIMATE_PDF_LAYOUT", "Estimate", input.id, (data) => applyEstimatePdfLayout(data, user, company, input));
+    refresh(); return { success: true, layout: result.layout };
   } catch (error) { return { error: message(error) }; }
 }

@@ -22,6 +22,7 @@ import { documentCategoryLabels, documentKindLabels, issuedStatusLabels, type Do
 import type { CompanyScope } from "@/lib/company";
 import { deleteIssuedInvoices, saveIssuedInvoiceEdits, type IssuedEdit } from "@/app/issued-invoices/actions";
 import { DocumentContextMenu, DocumentMenuButton } from "@/components/app/document-row-menu";
+import { PdfLayoutDialog } from "@/components/app/pdf-layout-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { todayIso } from "@/lib/format";
@@ -124,6 +125,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       {(edit?.needsReview ?? row.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
       <span className="text-xs text-muted-foreground">{documentKindLabels[row.kind]}</span>
       {fileUrl ? <Button asChild variant="outline" size="sm"><a href={fileUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />{generated ? "PDFを開く" : "原本を開く"}</a></Button> : null}
+      {generated ? <PdfLayoutDialog kind={row.kind === "estimate" ? "estimate" : "issued"} id={row.sourceId} title={row.title} company={company} canSave={Boolean(row.editable)} updatedAt={row.updatedAt} /> : null}
       {view === "all" ? <Button asChild variant="soft" size="sm"><Link prefetch={false} href={row.sourceHref}>管理画面</Link></Button> : null}
     </div>
     {view !== "edit" ? <>{edit ? <p className="text-xs text-amber-700 dark:text-amber-300">未保存の変更あり・原本は保存済みの内容</p> : null}{fileUrl ? (

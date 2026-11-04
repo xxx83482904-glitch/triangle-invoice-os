@@ -3,10 +3,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { documentRows } from "@/lib/documents";
 import { contentDispositionFileName, readUploadedFile } from "@/lib/files";
 import { companyFromParam } from "@/lib/company";
-import { createIssuedInvoicePdf } from "@/lib/issued-invoice-pdf";
+import { buildIssuedInvoicePdf } from "@/lib/issued-invoice-pdf";
+import { pdfLayoutFromQuery } from "@/lib/invoice-pdf-layout";
+import { pdfResponseHeaders } from "@/lib/pdf-response";
 import { readData } from "@/lib/store";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
@@ -28,11 +30,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const buffer = await createIssuedInvoicePdf(invoice, data);
-    return new NextResponse(new Uint8Array(buffer), { headers: {
-      "Content-Type": "application/pdf", "Content-Disposition": contentDispositionFileName(`${invoice.invoiceNumber}.pdf`),
-      "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
-    } });
+    // Layout keys in the query (from the preview dialog) win over the layout saved on the invoice.
+    const result = await buildIssuedInvoicePdf(invoice, data, pdfLayoutFromQuery(new URL(request.url).searchParams));
+    return new NextResponse(new Uint8Array(result.pdf), { headers: pdfResponseHeaders(`${invoice.invoiceNumber}.pdf`, result) });
   } catch {
     return NextResponse.json({ error: "請求書PDFの生成に失敗しました。再読み込みしてください" }, { status: 500 });
   }

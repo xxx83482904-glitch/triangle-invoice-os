@@ -169,6 +169,18 @@ export type Project = {
   deletedAt?: string | null;
 };
 
+// Presentation choices for the generated PDF; amounts and items are never affected.
+export type InvoicePdfLayout = {
+  density?: "relaxed" | "standard" | "compact";
+  fontSize?: "small" | "standard" | "large";
+  margin?: "narrow" | "standard" | "wide";
+  fitOnePage?: boolean;
+  showNotes?: boolean;
+  showBank?: boolean;
+  showSeal?: boolean;
+  pageBreakBefore?: number;
+};
+
 export type IssuedInvoiceItem = {
   id: string;
   invoiceId: string;
@@ -210,6 +222,7 @@ export type IssuedInvoice = {
   needsReview?: boolean;
   notes?: string;
   internalMemo?: string;
+  pdfLayout?: InvoicePdfLayout;
   createdById: string;
   paidAt?: string;
   createdAt: string;
@@ -234,6 +247,7 @@ export type Estimate = {
   total: number;
   notes?: string;
   internalMemo?: string;
+  pdfLayout?: InvoicePdfLayout;
   invoiceId?: string;
   createdById: string;
   createdAt: string;
