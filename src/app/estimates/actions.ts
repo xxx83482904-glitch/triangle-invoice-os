@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
 import type { EstimateInput, EstimateListEdit } from "@/lib/estimate-values";
 import { convertEstimate, deleteEstimate, deleteEstimates, saveEstimate, saveEstimateListEdits, updateEstimateStatus, type EstimateStatusUpdate, type EstimateConversion, type EstimateTarget } from "@/lib/estimates";
+import { applyEstimatePdfEdits } from "@/lib/invoice-pdf-layout-store";
+import { pdfIssueMessage, type PdfEditsInput } from "@/lib/pdf-document-values";
 import { mutateData } from "@/lib/store";
 
 function refresh() {
@@ -58,4 +60,13 @@ export async function deleteEstimatesAction(company: CompanyScope, input: Estima
     await mutateData(user.id, "DELETE_ESTIMATES", "Estimate", "batch", (data) => deleteEstimates(data, user, company, input));
     refresh(); return { success: true };
   } catch (error) { return { error: message(error) }; }
+}
+
+// Layout and wording are presentation only; number, dates, lines and notes change the estimate itself.
+export async function saveEstimatePdfEdits(company: CompanyScope, input: PdfEditsInput) {
+  const user = await requireUser();
+  try {
+    const result = await mutateData(user.id, "SAVE_ESTIMATE_PDF", "Estimate", input.id, (data) => applyEstimatePdfEdits(data, user, company, input));
+    refresh(); return { success: true, updatedAt: result.updatedAt };
+  } catch (error) { return { error: error instanceof ZodError ? pdfIssueMessage(error.issues[0]) : message(error) }; }
 }

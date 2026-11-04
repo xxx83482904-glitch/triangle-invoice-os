@@ -170,6 +170,23 @@ export type Project = {
   deletedAt?: string | null;
 };
 
+// Presentation choices for the generated PDF; amounts and items are never affected.
+export type InvoicePdfLayout = {
+  density?: "relaxed" | "standard" | "compact";
+  fontSize?: "small" | "standard" | "large";
+  margin?: "narrow" | "standard" | "wide";
+  fitOnePage?: boolean;
+  showNotes?: boolean;
+  showBank?: boolean;
+  showDueDate?: boolean;
+  showSeal?: boolean;
+  pageBreakBefore?: number;
+};
+
+// Wording printed on the generated PDF for this document only; an empty string hides that wording.
+export type InvoicePdfTextKey = "title" | "recipient" | "subject" | "greeting" | "issuerName" | "issuerPostalCode" | "issuerAddress" | "issuerBuilding" | "issuerPhone" | "issuerRegistration" | "bankLine" | "accountName" | "feeNote" | "numberLabel" | "dateLabel" | "amountLabel" | "subjectLabel" | "descriptionHeader" | "quantityHeader" | "unitPriceHeader" | "amountHeader" | "subtotalLabel" | "taxLabel" | "totalLabel" | "notesLabel" | "bankLabel" | "dueLabel" | "validityLabel" | "continuedLabel";
+export type InvoicePdfText = Partial<Record<InvoicePdfTextKey, string>>;
+
 export type IssuedInvoiceItem = {
   id: string;
   invoiceId: string;
@@ -211,6 +228,8 @@ export type IssuedInvoice = {
   needsReview?: boolean;
   notes?: string;
   internalMemo?: string;
+  pdfLayout?: InvoicePdfLayout;
+  pdfText?: InvoicePdfText;
   createdById: string;
   paidAt?: string;
   createdAt: string;
@@ -235,6 +254,8 @@ export type Estimate = {
   total: number;
   notes?: string;
   internalMemo?: string;
+  pdfLayout?: InvoicePdfLayout;
+  pdfText?: InvoicePdfText;
   invoiceId?: string;
   createdById: string;
   createdAt: string;
