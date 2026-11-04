@@ -1,5 +1,6 @@
 "use server";
 
+import { applyImportShipmentFormFields } from "@/lib/import-shipment-views";
 import { projectCreationValues } from "@/lib/project-display";
 
 import { revalidatePath } from "next/cache";
@@ -140,6 +141,7 @@ const mailDocumentCategories: MailDocumentCategory[] = [
   "DELIVERY_NOTE",
   "RECEIPT",
   "NOTICE",
+  "CUSTOMS",
   "OTHER",
 ];
 
@@ -815,6 +817,7 @@ export async function updateOcrDocumentInline(formData: FormData) {
       mailDocument.title = value(formData, "fileName") || mailDocument.title;
       mailDocument.originalFileName = value(formData, "fileName") || mailDocument.originalFileName;
       mailDocument.memo = optional(formData, "memo");
+      applyImportShipmentFormFields(draft, formData, mailDocument);
       mailDocument.updatedAt = timestamp;
     }
 
@@ -829,6 +832,7 @@ export async function updateOcrDocumentInline(formData: FormData) {
       Object.assign(receivedInvoice, amounts);
       const status = receivedInvoiceStatus(value(formData, "status"));
       receivedInvoice.memo = optional(formData, "memo");
+      applyImportShipmentFormFields(draft, formData, receivedInvoice);
       if (status === "PAID") {
         markReceivedInvoicePaid(draft, receivedInvoice, user.id, timestamp);
       } else {

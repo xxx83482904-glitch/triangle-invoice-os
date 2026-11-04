@@ -1,3 +1,4 @@
+import { importShipmentOptions } from "@/lib/import-shipment-views";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -113,6 +114,7 @@ export default async function MailSorterPage({
         mailDocumentId: document.id,
         mailUpdatedAt: document.updatedAt,
         memo: document.memo,
+        importShipmentId: document.importShipmentId,
         mimeType: document.mimeType,
         ocrPreview: previewText(document.ocrText),
         receivedInvoiceId: invoice?.id,
@@ -151,6 +153,7 @@ export default async function MailSorterPage({
         mailProcessed: isMailProcessed(invoice),
         invoiceUpdatedAt: invoice.updatedAt,
         memo: invoice.memo,
+        importShipmentId: invoice.importShipmentId,
         mimeType: invoice.mimeType,
         ocrPreview: previewText(invoice.ocrText),
         receivedInvoiceId: invoice.id,
@@ -195,6 +198,7 @@ export default async function MailSorterPage({
           rows={rows}
           statusOptions={statusOptions}
           vendors={vendors.map((vendor) => ({ label: vendor.companyName, value: vendor.id }))}
+          shipments={importShipmentOptions(data, company)}
         />
         {mayUpload ? <MailSorterDropzone company={company} /> : null}
       </div>

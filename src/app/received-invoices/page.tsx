@@ -1,3 +1,4 @@
+import { importShipmentOptions } from "@/lib/import-shipment-views";
 import Link from "next/link";
 import { isMailProcessed } from "@/lib/mail-processing";
 import { SectionExportDialog } from "@/components/app/section-export-dialog";
@@ -85,6 +86,7 @@ export default async function ReceivedInvoicesPage({
         id: invoice.id,
         issueDate: invoice.issueDate,
         memo: invoice.memo,
+        importShipmentId: invoice.importShipmentId,
         mimeType: invoice.mimeType || linkedMail?.mimeType,
         ocrText: invoice.ocrText || linkedMail?.ocrText,
         originalFileName: invoice.originalFileName || linkedMail?.originalFileName,
@@ -128,6 +130,7 @@ export default async function ReceivedInvoicesPage({
           projects={projects.map((project) => ({ label: project.name, value: project.id }))}
           statusOptions={statusOptions}
           vendors={vendors.map((vendor) => ({ label: vendor.companyName, value: vendor.id }))}
+          shipments={importShipmentOptions(data, company)}
         />
 
         {mayUpload ? (

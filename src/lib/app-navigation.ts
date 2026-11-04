@@ -14,6 +14,7 @@ export const appNavigation = [
     { href: "/issued-invoices", label: "発行請求書", permission: "view:issuedInvoices" },
     { href: "/mail-sorter", label: "郵便仕分け", permission: "view:mailSorter" },
     { href: "/received-invoices", label: "受領請求書", permission: "view:receivedInvoices" },
+    { href: "/imports", label: "輸入", permission: "view:imports" },
   ] },
   { label: "入出金・分析", items: [
     { href: "/payments", label: "入金・支払い", permission: "view:payments" },
@@ -49,7 +50,7 @@ export function mobileNavigation(role: UserRole) {
 export function workflowNavigation(pathname: string, params: URLSearchParams, role: UserRole) {
   const company = navigationCompany(role, params.get("company"));
   const sales = ["/projects", "/estimates", "/issued-invoices"];
-  const receiving = ["/mail-sorter", "/received-invoices"];
+  const receiving = ["/mail-sorter", "/received-invoices", "/imports"];
   const bank = pathname === "/banking" || pathname.startsWith("/banking/");
   const paths = sales.some((path) => navigationActive(pathname, path)) ? sales : receiving.includes(pathname) ? receiving : [];
   const items = bank ? [

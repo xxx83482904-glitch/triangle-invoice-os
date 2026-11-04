@@ -68,6 +68,7 @@ export type OcrDocumentListItem = {
   mailProcessed?: boolean;
   mailDocumentId?: string;
   memo?: string;
+  importShipmentId?: string;
   mimeType?: string;
   ocrPreview: string;
   ocrText?: string;
@@ -105,6 +106,7 @@ const categoryLabels: Record<MailDocumentCategory, string> = {
   DELIVERY_NOTE: "納品書",
   RECEIPT: "領収書",
   NOTICE: "通知",
+  CUSTOMS: "輸入・通関",
   OTHER: "その他",
 };
 
@@ -115,6 +117,7 @@ const categoryOptions: Array<{ label: string; value: MailDocumentCategory }> = [
   { label: "納品書", value: "DELIVERY_NOTE" },
   { label: "領収書", value: "RECEIPT" },
   { label: "通知", value: "NOTICE" },
+  { label: "輸入・通関", value: "CUSTOMS" },
   { label: "その他", value: "OTHER" },
 ];
 
@@ -166,6 +169,7 @@ function categorySelectClass(category: MailDocumentCategory) {
     ESTIMATE: "border-orange-300 bg-orange-100 text-orange-800",
     DELIVERY_NOTE: "border-orange-300 bg-orange-100 text-orange-800",
     NOTICE: "border-amber-300 bg-amber-100 text-amber-800",
+    CUSTOMS: "border-teal-300 bg-teal-100 text-teal-800",
     OTHER: "border-border bg-secondary text-secondary-foreground",
   }[category];
   return `h-6 max-w-[104px] rounded-full border px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${tone}`;
@@ -349,6 +353,7 @@ function DocumentEditor({
   linkTargets = [],
   projects,
   row,
+  shipments = [],
   statusOptions,
   surface,
   vendors,
@@ -359,6 +364,7 @@ function DocumentEditor({
   linkTargets?: Option[];
   projects: Option[];
   row: OcrDocumentListItem;
+  shipments?: Option[];
   statusOptions: Option[];
   surface: "folder" | "list";
   vendors: Option[];
@@ -414,6 +420,17 @@ function DocumentEditor({
               </>
             )}
           </div>
+          {shipments.length || row.importShipmentId ? (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">輸入便</label>
+              <select form={editFormId} name="importShipmentId" defaultValue={row.importShipmentId ?? ""} className={selectClass()} disabled={!canEdit}>
+                <option value="">なし</option>
+                {shipments.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {row.extracted ? (
             <>
               <div className="space-y-2">
@@ -496,6 +513,7 @@ export function OcrDocumentsTable({
   statusOptions,
   vendors,
   folders,
+  shipments = [],
 }: {
   canEdit: boolean;
   canExport?: boolean;
@@ -507,6 +525,7 @@ export function OcrDocumentsTable({
   rows: OcrDocumentListItem[];
   statusOptions: Option[];
   vendors: Option[];
+  shipments?: Option[];
 }) {
   const router = useRouter();
   const [isMoving, startMoveTransition] = useTransition();
@@ -1291,7 +1310,7 @@ export function OcrDocumentsTable({
                           </button>
                           {showEditor ? (
                             <div className="border-t p-3">
-                              <DocumentEditor
+                              <DocumentEditor shipments={shipments}
                                 key={listPreviewRow.id}
                                 canEdit={canEdit}
                                 company={company}
@@ -1616,6 +1635,17 @@ export function OcrDocumentsTable({
                               </>
                             )}
                           </div>
+                          {shipments.length || activeRow.importShipmentId ? (
+                            <div className="space-y-2">
+                              <label className="text-xs font-medium text-muted-foreground">輸入便</label>
+                              <select form={`ocr-edit-${activeRow.id}`} name="importShipmentId" defaultValue={activeRow.importShipmentId ?? ""} className={selectClass()} disabled={!canEdit}>
+                                <option value="">なし</option>
+                                {shipments.map((option) => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : null}
                           {activeRow.extracted ? (
                             <>
                               <div className="space-y-2">

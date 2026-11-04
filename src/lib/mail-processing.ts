@@ -10,7 +10,7 @@ const editSchema = z.object({
   mailDocumentId: reference.optional(), receivedInvoiceId: reference.optional(),
   mailUpdatedAt: reference.optional(), invoiceUpdatedAt: reference.optional(),
   processingStatus: z.enum(["processed", "unprocessed"]).optional(),
-  category: z.enum(["INVOICE", "CONTRACT", "ESTIMATE", "DELIVERY_NOTE", "RECEIPT", "NOTICE", "OTHER"]).optional(),
+  category: z.enum(["INVOICE", "CONTRACT", "ESTIMATE", "DELIVERY_NOTE", "RECEIPT", "NOTICE", "CUSTOMS", "OTHER"]).optional(),
 }).strict().refine((row) => row.mailDocumentId || row.receivedInvoiceId, "書類を指定してください")
   .refine((row) => row.processingStatus !== undefined || row.category !== undefined, "保存する変更がありません");
 export type MailSorterEdit = z.input<typeof editSchema>;

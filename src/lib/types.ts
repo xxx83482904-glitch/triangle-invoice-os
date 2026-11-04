@@ -50,6 +50,7 @@ export type MailDocumentCategory =
   | "DELIVERY_NOTE"
   | "RECEIPT"
   | "NOTICE"
+  | "CUSTOMS"
   | "OTHER";
 
 export type SelectOptionGroup =
@@ -264,6 +265,8 @@ export type ReceivedInvoice = {
   paidAt?: string;
   paymentMethod?: string;
   memo?: string;
+  importShipmentId?: string;
+  importDocumentKind?: ImportDocumentKind;
   // Debt group: 請求書 → 再請求 → 督促 → 領収書 of one debt share a debtGroupId; only the latest payable role is paid.
   debtGroupId?: string;
   debtRole?: DebtRole;
@@ -297,6 +300,9 @@ export type MailDocument = {
   relatedReceivedInvoiceId?: string;
   mailProcessed?: boolean;
   memo?: string;
+  // Import paperwork: which shipment this belongs to and what it is within that shipment.
+  importShipmentId?: string;
+  importDocumentKind?: ImportDocumentKind;
   uploadedById: string;
   createdAt: string;
   updatedAt: string;
@@ -402,6 +408,17 @@ export type InvoiceNumberSetting = {
   updatedAt: string;
 };
 
+export type ImportDocumentKind = "SUPPLIER_INVOICE" | "PACKING_LIST" | "WAYBILL" | "IMPORT_PERMIT" | "BROKER_INVOICE" | "TAX_PAYMENT" | "OTHER";
+export type ImportShipmentStatus = "OPEN" | "CLEARED" | "CLOSED";
+// One import (便): the customs figures of a shipment plus the paper trail attached from mail and received invoices.
+export type ImportShipment = {
+  id: string; company: "JAPAN" | "CHINA"; title: string; projectId?: string; supplierName?: string; brokerVendorId?: string;
+  permitNumber?: string; permitDate?: string; arrivalDate?: string; folderMonth?: string;
+  goodsValue?: number; dutyAmount?: number; importTaxNational?: number; importTaxLocal?: number; brokerFee?: number; otherCost?: number;
+  status: ImportShipmentStatus; memo?: string;
+  createdById: string; createdAt: string; updatedAt: string; deletedAt?: string | null;
+};
+
 export type AppData = {
   appEdition?: "JAPAN" | "CHINA";
   seedVersion?: number;
@@ -435,6 +452,7 @@ export type AppData = {
   manualObligations?: ManualObligation[];
   payrollSettings?: PayrollSettings[];
   integrityAcknowledgements?: IntegrityAcknowledgement[];
+  importShipments?: ImportShipment[];
 };
 
 export type IntegrityAcknowledgement = {

@@ -41,6 +41,7 @@ const categoryLabels: Record<MailDocumentCategory, string> = {
   DELIVERY_NOTE: "納品書",
   RECEIPT: "領収書",
   NOTICE: "通知",
+  CUSTOMS: "輸入・通関",
   OTHER: "その他",
 };
 

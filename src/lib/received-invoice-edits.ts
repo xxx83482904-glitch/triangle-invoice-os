@@ -1,3 +1,4 @@
+import { applyImportShipmentFormFields } from "@/lib/import-shipment-views";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
 import { can, canAccessCompany } from "@/lib/rbac";
@@ -20,5 +21,6 @@ export function applyReceivedInvoiceFields(data: AppData, user: Pick<User, "id" 
   // Validate every field before touching the invoice or related payment records.
   Object.assign(invoice, amounts, { projectId: project.id, vendorId: vendor.id,
     issueDate: field("issueDate"), dueDate: field("dueDate"), memo: field("memo") || undefined });
+  applyImportShipmentFormFields(data, form, invoice);
   return invoice;
 }

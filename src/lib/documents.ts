@@ -42,7 +42,7 @@ export const documentKindLabels: Record<DocumentKind, string> = {
   issued: "発行請求書", estimate: "見積書", received: "受領請求書", mail: "郵便物", contract: "契約書", attachment: "添付書類",
 };
 export const documentCategoryLabels: Record<string, string> = {
-  INVOICE: "請求書", RECEIPT: "領収書", CONTRACT: "契約書", ESTIMATE: "見積書", DELIVERY_NOTE: "納品書", NOTICE: "通知書", OTHER: "その他",
+  INVOICE: "請求書", RECEIPT: "領収書", CONTRACT: "契約書", ESTIMATE: "見積書", DELIVERY_NOTE: "納品書", NOTICE: "通知書", CUSTOMS: "輸入・通関", OTHER: "その他",
 };
 export const receivedStatusLabels: Record<string, string> = {
   RECEIVED: "受領済み", OCR_PENDING: "読み取り待ち", REVIEWING: "確認中", APPROVAL_PENDING: "承認待ち", SCHEDULED: "支払予定",

@@ -7,7 +7,7 @@ import type { UserRole } from "../src/lib/types";
 
 test("navigation retains every existing destination exactly once and removes empty role groups", () => {
   const paths = appNavigation.flatMap((group) => group.items.map((item) => item.href));
-  assert.equal(paths.length, 12); assert.equal(new Set(paths).size, 12);
+  assert.equal(paths.length, 13); assert.equal(new Set(paths).size, 13);
   for (const role of ["ADMIN", "ACCOUNTING", "CHIEF_DESIGNER", "PROJECT_MANAGER", "MAIL_EDITOR", "BILLING_EDITOR", "DESIGNER", "GUEST"] as UserRole[]) {
     const groups = navigationGroups(role), { primary, more } = mobileNavigation(role);
     assert.ok(groups.every((group) => group.items.length && group.items.every((item) => canRole(role, item.permission))));

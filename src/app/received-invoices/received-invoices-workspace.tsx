@@ -50,6 +50,7 @@ export type ReceivedInvoiceWorkspaceItem = ReceivedInvoiceAmounts & {
   id: string;
   issueDate: string;
   memo?: string;
+  importShipmentId?: string;
   mimeType?: string;
   ocrText?: string;
   originalFileName?: string;
@@ -129,6 +130,7 @@ export function ReceivedInvoicesWorkspace({
   projects,
   statusOptions,
   vendors,
+  shipments = [],
 }: {
   initialId?: string;
   showTotals?: boolean;
@@ -140,6 +142,7 @@ export function ReceivedInvoicesWorkspace({
   projects: Option[];
   statusOptions: Option[];
   vendors: Option[];
+  shipments?: Option[];
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [activeId, setActiveId] = useState(initialId ?? "");
@@ -451,6 +454,10 @@ export function ReceivedInvoicesWorkspace({
                           <span className="text-xs font-medium text-muted-foreground">支払期限</span>
                           <Input name="dueDate" type="date" defaultValue={activeInvoice.dueDate} />
                         </label>
+                        {shipments.length || activeInvoice.importShipmentId ? <label className="space-y-1">
+                          <span className="text-xs font-medium text-muted-foreground">輸入便</span>
+                          <SelectField name="importShipmentId" defaultValue={activeInvoice.importShipmentId ?? ""} options={[{ label: "なし", value: "" }, ...shipments]} />
+                        </label> : null}
                       </div>
                       <ReceivedAmountFields amounts={activeInvoice} />
                       <label className="block space-y-1">

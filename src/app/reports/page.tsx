@@ -13,6 +13,7 @@ import { percent, yen } from "@/lib/format";
 import { monthlyInvoiceSummary } from "@/lib/accounting-summary";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData } from "@/lib/store";
+import { importMonthlySummary, importShipmentViews } from "@/lib/import-shipment-views";
 
 export default async function ReportsPage({
   searchParams,
@@ -40,6 +41,7 @@ export default async function ReportsPage({
   const clients = data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company));
   const vendors = data.vendors.filter((vendor) => !vendor.deletedAt && partnerMatchesCompany(vendor, company));
   const months = monthlyInvoiceSummary(issuedInvoices, receivedInvoices, payments);
+  const importMonths = importMonthlySummary(importShipmentViews(data, company));
 
   return (
     <AppShell>
@@ -92,6 +94,15 @@ export default async function ReportsPage({
                 return <TableRow key={vendor.id}><TableCell className="font-medium">{vendor.companyName}</TableCell><TableCell>{yen.format(invoices.reduce((sum, invoice) => sum + invoice.total, 0))}</TableCell><TableCell>{yen.format(invoices.reduce((sum, invoice) => sum + paidForReceived(data, invoice.id), 0))}</TableCell></TableRow>;
               })}</TableBody>
             </Table>
+          </CardContent>
+        </Card>
+        <Card variant="section">
+          <CardHeader><CardTitle>輸入の関税・消費税（月別）</CardTitle></CardHeader>
+          <CardContent>
+            {importMonths.length ? <Table>
+              <TableHeader><TableRow><TableHead>月</TableHead><TableHead>便数</TableHead><TableHead>課税価格</TableHead><TableHead>関税</TableHead><TableHead>輸入消費税</TableHead><TableHead>通関手数料・その他</TableHead><TableHead>諸費用合計</TableHead></TableRow></TableHeader>
+              <TableBody>{importMonths.map((row) => <TableRow key={row.month}><TableCell className="font-medium">{row.month}</TableCell><TableCell>{row.count}</TableCell><TableCell>{yen.format(row.goodsValue)}</TableCell><TableCell>{yen.format(row.dutyAmount)}</TableCell><TableCell>{yen.format(row.importTax)}</TableCell><TableCell>{yen.format(row.brokerFee + row.otherCost)}</TableCell><TableCell>{yen.format(row.costTotal)}</TableCell></TableRow>)}</TableBody>
+            </Table> : <p className="text-sm text-muted-foreground">輸入便の登録はまだありません。<Link href={`/imports?company=${company}`} className="underline underline-offset-4">輸入</Link>から登録できます。</p>}
           </CardContent>
         </Card>
       </section>

@@ -1,3 +1,4 @@
+import { suggestsCustomsCategory } from "@/lib/import-shipments";
 import "server-only";
 
 import { createSign } from "node:crypto";
@@ -98,6 +99,7 @@ const aiCategoryMap: Record<string, MailDocumentCategory> = {
   estimate: "ESTIMATE",
   invoice: "INVOICE",
   notice: "NOTICE",
+  customs: "CUSTOMS",
   other: "OTHER",
   receipt: "RECEIPT",
 };
@@ -126,7 +128,7 @@ const CN = {
 
 const AI_SYSTEM_PROMPT =
   "You classify Japanese and Chinese business documents and extract business fields. Return JSON only. " +
-  "documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, other. " +
+  "documentType must be one of invoice, contract, estimate, delivery_note, receipt, notice, customs, other. Use customs for import permits, packing lists, air waybills, bills of lading and customs duty payment slips, not for a broker's invoice. " +
   "Required fields: senderName, contentSummary, amountSummary, paymentDestination, confidence, reason, warnings. " +
   "senderName: aggressively find the company or organization that sent, issued, billed, sold, mailed, or requests payment. Never use the recipient, bill-to company, client, delivery destination, project owner, or file name as senderName. " +
   "Prefer explicit issuer, biller, seller, supplier or receipt issuer labels. Never use the remittance bank, branch or account holder as issuer merely because they appear in payment instructions. " +
@@ -326,6 +328,7 @@ function inferContentSummary(text: string, category: MailDocumentCategory) {
     ESTIMATE: "見積書",
     INVOICE: "請求書",
     NOTICE: "通知書",
+    CUSTOMS: "輸入・通関書類",
     OTHER: "その他書類",
     RECEIPT: "領収書",
   };
@@ -711,6 +714,18 @@ export function classifyMailDocument(extracted: ExtractedText): MailDocumentClas
   const dates = extractDates(text);
   const amounts = extractAmounts(text);
   const invoiceSignal = includesAny(text, invoicePatterns);
+
+  // Import paperwork (permit, packing list, waybill, duty payment) carries tax lines but is not an invoice to pay.
+  if (suggestsCustomsCategory(text)) {
+    return {
+      category: "CUSTOMS",
+      confidence: Math.min(100, 60 + (dates.length ? 10 : 0) + (extracted.confidence ? 10 : 0)),
+      amountSummary: buildAmountSummary(text, null) || undefined,
+      contentSummary: inferContentSummary(text, "CUSTOMS"),
+      paymentDestination: extractPaymentDestination(text) || undefined,
+      reason: "Import or customs document keywords were detected.",
+    };
+  }
 
   if (invoiceSignal && amounts.total > 0) {
     return {
