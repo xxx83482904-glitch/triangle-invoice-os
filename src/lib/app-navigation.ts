@@ -18,6 +18,7 @@ export const appNavigation = [
   ] },
   { label: "入出金・分析", items: [
     { href: "/payments", label: "入金・支払い", permission: "view:payments" },
+    { href: "/expenses", label: "経費精算", permission: "submit:expenses" },
     { href: "/reports", label: "集計", permission: "view:reports" },
   ] },
   { label: "管理", items: [

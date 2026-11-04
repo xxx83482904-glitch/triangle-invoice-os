@@ -26,6 +26,11 @@ export function dashboardNextSteps(data: AppData, user: Pick<User, "id" | "role"
   }
   deadline("expense", "soon"); deadline("income", "soon");
   steps.push({ id: "documents", label: "書類確認", count: summary.review.length, reason: "下書き・入力不足・支払記録の確認が残っています。", target: { view: "review", timing: "all" } });
+  if (can(user, "manage:expenses")) {
+    const submitted = (data.expenseClaims || []).filter((row) => row.company === summary.company && !row.deletedAt && row.status === "SUBMITTED");
+    steps.push({ id: "expenses-submitted", label: "経費の承認待ち", count: submitted.length, amount: submitted.reduce((sum, row) => sum + row.amount, 0),
+      reason: "提出された立替経費の承認が残っています。", target: { href: `/expenses?${query}&status=SUBMITTED` } });
+  }
   if (overview) {
     steps.push({ id: "bank-unreviewed", label: "未確認の口座明細", count: summary.banking.unreviewed, reason: "科目と内容の確認が残っています。", target: { href: `/banking?${query}&status=unreviewed` } });
     steps.push({ id: "bank-unmatched", label: "直近2か月の未照合", count: overview.banks.filter((row) => isReconcileTodo(row, summary.today)).length, reason: RECONCILE_TODO_NOTE,
