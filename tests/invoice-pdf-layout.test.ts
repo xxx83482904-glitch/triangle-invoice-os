@@ -127,10 +127,19 @@ test("a page break can be forced before a line or before the totals, and turns t
 });
 
 test("optional blocks change the plan: no bank block when hidden, a validity line for estimates", () => {
+  const closing = (result: PdfPlan) => result.pages.at(-1)!.blocks.find((block): block is Extract<PlannedBlock, { kind: "bank" }> => block.kind === "bank");
+  const both = plan(5);
+  assert.deepEqual([closing(both)?.box, closing(both)?.due], [true, true]);
   const noBank = plan(5, { notes: true }, { showBank: false, showNotes: false });
-  assert.deepEqual(kinds(noBank.pages[0]).filter((kind) => kind !== "item" && kind !== "blank"), ["totals"]);
+  assert.deepEqual([closing(noBank)?.box, closing(noBank)?.due], [false, true], "the due date stands on its own");
+  const noDue = plan(5, {}, { showDueDate: false });
+  assert.deepEqual([closing(noDue)?.box, closing(noDue)?.due], [true, false], "the payment box stands on its own");
+  assert.ok(closing(noDue)!.height < closing(both)!.height && closing(noBank)!.height < closing(noDue)!.height, "each part takes its own room");
+  const neither = plan(5, { notes: true }, { showBank: false, showDueDate: false, showNotes: false });
+  assert.deepEqual(kinds(neither.pages[0]).filter((kind) => kind !== "item" && kind !== "blank"), ["totals"]);
   const estimate = plan(5, { notes: true, kind: "estimate" });
   assert.deepEqual(kinds(estimate.pages[0]).slice(-3), ["totals", "notes", "validity"]);
+  assert.ok(!kinds(plan(5, { notes: true, kind: "estimate" }, { showDueDate: false }).pages[0]).includes("validity"));
   const details = plan(20, { details: true });
   const detailBlocks = details.pages.flatMap((page) => page.blocks).filter((block): block is Extract<PlannedBlock, { kind: "item" }> => block.kind === "item" && block.lines.some((line) => line.muted));
   assert.equal(detailBlocks.length, 7);
@@ -154,9 +163,9 @@ test("very long lines and notes split across pages without dropping anything", (
 });
 
 test("layout choices round-trip through the query string and the stored form", () => {
-  const chosen: ResolvedPdfLayout = { density: "compact", fontSize: "small", margin: "narrow", fitOnePage: false, showNotes: false, showBank: false, showSeal: false, pageBreakBefore: 3 };
+  const chosen: ResolvedPdfLayout = { density: "compact", fontSize: "small", margin: "narrow", fitOnePage: false, showNotes: false, showBank: false, showDueDate: false, showSeal: false, pageBreakBefore: 3 };
   const query = pdfLayoutQuery(chosen);
-  assert.equal(query, "density=compact&font=small&margin=narrow&fit=0&notes=0&bank=0&seal=0&break=3");
+  assert.equal(query, "density=compact&font=small&margin=narrow&fit=0&notes=0&bank=0&due=0&seal=0&break=3");
   assert.deepEqual(resolvePdfLayout(pdfLayoutFromQuery(new URLSearchParams(query))), chosen);
   assert.equal(pdfLayoutFromQuery(new URLSearchParams("v=2026-01-01")), undefined, "no layout keys means the saved layout applies");
   assert.deepEqual(resolvePdfLayout(pdfLayoutFromQuery(new URLSearchParams("density=huge&font=small&break=0"))), { ...defaultPdfLayout, fontSize: "small" });

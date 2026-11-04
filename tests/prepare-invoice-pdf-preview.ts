@@ -28,6 +28,8 @@ async function main() {
   addInvoice("pdf-5", "TRI-2026-0005", 5, {}, {});
   addInvoice("pdf-20", "TRI-2026-0020", 20, { pdfLayout: { density: "compact", showSeal: false } }, { notes: true });
   addInvoice("pdf-40", "TRI-2026-0040", 40, {}, { notes: true });
+  addInvoice("pdf-paid", "TRI-2026-0003", 3, {}, {});
+  data.payments.push({ id: "payment-paid", type: "INCOME", issuedInvoiceId: "pdf-paid", amount: 1000, paymentDate: "2026-02-10", createdById: "admin", createdAt: timestamp, updatedAt: timestamp });
   // The imported original keeps its file and must not show the layout dialog.
   data.issuedInvoices.push({ ...base, id: "imported", invoiceNumber: "TRI-2026-0001", fileUrl: "/api/files/imported.pdf", originalFileName: "imported.pdf", mimeType: "application/pdf", notes: undefined });
   await writeFile(path.join(root, "uploads", "imported.pdf"), "%PDF-1.4\n% synthetic placeholder\n");
@@ -39,6 +41,7 @@ async function main() {
   data.users = [
     { id: "admin", name: "合成検証管理者", email: "admin@example.invalid", passwordHash, role: "ADMIN", createdAt: timestamp, updatedAt: timestamp },
     { id: "billing", name: "合成請求担当者", email: "billing@example.invalid", passwordHash, role: "BILLING_EDITOR", createdAt: timestamp, updatedAt: timestamp },
+    { id: "mail", name: "合成郵便担当者", email: "mail_editor@example.invalid", passwordHash, role: "MAIL_EDITOR", createdAt: timestamp, updatedAt: timestamp },
   ];
   assertJapanData(data);
   await writeFile(path.join(root, "app-data.json"), JSON.stringify(data, null, 2));

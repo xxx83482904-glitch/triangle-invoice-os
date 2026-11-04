@@ -6,7 +6,8 @@ import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
 import type { EstimateInput, EstimateListEdit } from "@/lib/estimate-values";
 import { convertEstimate, deleteEstimate, deleteEstimates, saveEstimate, saveEstimateListEdits, updateEstimateStatus, type EstimateStatusUpdate, type EstimateConversion, type EstimateTarget } from "@/lib/estimates";
-import { applyEstimatePdfLayout, type PdfLayoutSave } from "@/lib/invoice-pdf-layout-store";
+import { applyEstimatePdfEdits } from "@/lib/invoice-pdf-layout-store";
+import { pdfIssueMessage, type PdfEditsInput } from "@/lib/pdf-document-values";
 import { mutateData } from "@/lib/store";
 
 function refresh() {
@@ -61,11 +62,11 @@ export async function deleteEstimatesAction(company: CompanyScope, input: Estima
   } catch (error) { return { error: message(error) }; }
 }
 
-// The PDF layout is presentation only, so the estimate keeps its `updatedAt` and open list edits stay valid.
-export async function saveEstimatePdfLayout(company: CompanyScope, input: PdfLayoutSave) {
+// Layout and wording are presentation only; number, dates, lines and notes change the estimate itself.
+export async function saveEstimatePdfEdits(company: CompanyScope, input: PdfEditsInput) {
   const user = await requireUser();
   try {
-    const result = await mutateData(user.id, "SAVE_ESTIMATE_PDF_LAYOUT", "Estimate", input.id, (data) => applyEstimatePdfLayout(data, user, company, input));
-    refresh(); return { success: true, layout: result.layout };
-  } catch (error) { return { error: message(error) }; }
+    const result = await mutateData(user.id, "SAVE_ESTIMATE_PDF", "Estimate", input.id, (data) => applyEstimatePdfEdits(data, user, company, input));
+    refresh(); return { success: true, updatedAt: result.updatedAt };
+  } catch (error) { return { error: error instanceof ZodError ? pdfIssueMessage(error.issues[0]) : message(error) }; }
 }

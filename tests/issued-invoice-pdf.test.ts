@@ -7,6 +7,10 @@ import { PDFParse } from "pdf-parse";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { buildIssuedInvoicePdf, createEstimatePdf, createIssuedInvoicePdf, invoiceIssuer } from "../src/lib/issued-invoice-pdf";
 import { pdfLayoutFromQuery, pdfLayoutQuery } from "../src/lib/invoice-pdf-layout";
+import { estimatePdfContent, estimatePdfDraft, issuedInvoicePdfDraft, issuedPdfContent } from "../src/lib/pdf-document-draft";
+import { pdfTextDefaults } from "../src/lib/pdf-document-text";
+import { pdfTextFields } from "../src/lib/pdf-document-values";
+import type { InvoicePdfText } from "../src/lib/types";
 import { invoicePdfCases, invoicePdfFixture } from "./invoice-pdf-fixture";
 import type { Estimate, TaxRate } from "../src/lib/types";
 import { documentItemTotals } from "../src/lib/document-items";
@@ -188,7 +192,7 @@ test("synthetic invoices stay on one page when they can, and long ones repeat th
 test("the preview query, the saved layout and the optional blocks all go through the same plan", async () => {
   const data = invoicePdfFixture(16, { notes: true });
   const invoice = data.issuedInvoices[0];
-  const chosen = { density: "relaxed", fontSize: "large", margin: "wide", fitOnePage: false, showNotes: false, showBank: false, showSeal: false } as const;
+  const chosen = { density: "relaxed", fontSize: "large", margin: "wide", fitOnePage: false, showNotes: false, showBank: false, showDueDate: false, showSeal: false } as const;
   const fromQuery = await buildIssuedInvoicePdf(invoice, data, pdfLayoutFromQuery(new URLSearchParams(pdfLayoutQuery(chosen))));
   const fromSaved = await buildIssuedInvoicePdf({ ...invoice, pdfLayout: chosen }, data);
   const standard = await buildIssuedInvoicePdf(invoice, data);
@@ -202,7 +206,7 @@ test("the preview query, the saved layout and the optional blocks all go through
     try {
       const text = (await parser.getText()).text.replaceAll(/\s/g, "");
       assert.ok(!text.includes("振込先"), `${name}: bank block hidden`);
-      assert.ok(!text.includes("お支払期限"), `${name}: due date hidden with the bank block`);
+      assert.ok(!text.includes("お支払期限"), `${name}: due date hidden`);
       assert.ok(!text.includes("備考"), `${name}: notes hidden`);
       assert.ok(text.includes("合計"));
       const image = (await parser.getScreenshot({ desiredWidth: 400 })).pages[0];
@@ -222,4 +226,68 @@ test("the preview query, the saved layout and the optional blocks all go through
     assert.ok(pages.pages[0].text.includes("明細6 ") && !pages.pages[0].text.includes("明細7 "));
     assert.ok(pages.pages[1].text.includes("明細7 ") && pages.pages[1].text.includes("摘要") && pages.pages[1].text.includes("合計"));
   } finally { await parser.destroy(); }
+});
+
+const pdfText = async (pdf: Buffer) => {
+  const parser = new PDFParse({ data: pdf });
+  try { return (await parser.getText()).text.replaceAll(/\s/g, ""); } finally { await parser.destroy(); }
+};
+
+test("the due date can be shown or hidden on its own, apart from the bank details", async () => {
+  const data = invoicePdfFixture(3);
+  const invoice = data.issuedInvoices[0];
+  const standard = await pdfText(await createIssuedInvoicePdf(invoice, data));
+  assert.ok(standard.includes("お支払期限：2026/02/28") && standard.includes(invoiceIssuer.accountNumber));
+  const noDue = await pdfText(await createIssuedInvoicePdf(invoice, data, { showDueDate: false }));
+  assert.ok(!noDue.includes("お支払期限") && !noDue.includes("2026/02/28"), "no due date anywhere");
+  assert.ok(noDue.includes(invoiceIssuer.accountNumber) && noDue.includes("振込手数料"), "the bank details stay");
+  const noBank = await pdfText(await createIssuedInvoicePdf(invoice, data, { showBank: false }));
+  assert.ok(noBank.includes("お支払期限：2026/02/28"), "the due date stays");
+  assert.ok(!noBank.includes(invoiceIssuer.accountNumber) && !noBank.includes("振込先") && !noBank.includes("振込手数料"));
+  const estimate: Estimate = { ...invoice, estimateNumber: "EST-DUE", validUntil: "2026-03-31", status: "DRAFT", items: data.issuedInvoiceItems };
+  assert.ok((await pdfText(await createEstimatePdf(estimate, data))).includes("見積有効期限：2026/03/31"));
+  assert.ok(!(await pdfText(await createEstimatePdf(estimate, data, { showDueDate: false }))).includes("見積有効期限"));
+});
+
+test("every piece of wording on the PDF can be replaced or removed", async () => {
+  const data = invoicePdfFixture(30, { notes: true });
+  const invoice = data.issuedInvoices[0];
+  invoice.notes = "連絡事項の本文";
+  const estimate: Estimate = { ...invoice, estimateNumber: "EST-TEXT", validUntil: "2026-03-31", status: "DRAFT", items: data.issuedInvoiceItems };
+  for (const kind of ["invoice", "estimate"] as const) {
+    const fields = pdfTextFields.filter((field) => !field.only || field.only === kind);
+    const defaults = pdfTextDefaults(invoice, data, kind);
+    const replaced = Object.fromEntries(fields.map((field, index) => [field.key, `編集語${index}号`])) as InvoicePdfText;
+    // 30 lines at the standard settings use two pages, which also prints the continuation wording.
+    const layout = { fitOnePage: false };
+    const build = (text: InvoicePdfText) => kind === "invoice" ? createIssuedInvoicePdf({ ...invoice, pdfText: text }, data, layout) : createEstimatePdf({ ...estimate, pdfText: text }, data, layout);
+    const printed = await pdfText(await build(replaced));
+    for (const [index, field] of fields.entries()) assert.ok(printed.includes(`編集語${index}号`), `${kind}: ${field.label} is printed`);
+    for (const value of [defaults.issuerName, defaults.issuerAddress, defaults.greeting, "御中", "税抜計", "摘要"]) assert.ok(!printed.includes(value.replaceAll(/\s/g, "")), `${kind}: standard wording "${value}" is gone`);
+    assert.ok(printed.includes(kind === "invoice" ? "TRI-2026-SAMPLE" : "EST-TEXT"), "the number itself comes from the document");
+    assert.ok(printed.includes("511,500"), "amounts are unaffected");
+    const blank = Object.fromEntries(fields.map((field) => [field.key, ""])) as InvoicePdfText;
+    const emptied = await pdfText(await build(blank));
+    for (const value of [defaults.title, defaults.issuerName, defaults.issuerAddress, "御中", "税抜計", "摘要", "備考", defaults.feeNote]) assert.ok(!emptied.includes(value.replaceAll(/\s/g, "")), `${kind}: "${value}" is removed when emptied`);
+    assert.ok(emptied.includes("明細1") && emptied.includes("511,500"), "lines and amounts stay when wording is removed");
+  }
+});
+
+test("an unsaved draft reaches the PDF: number, dates, lines, notes and recalculated totals", async () => {
+  const data = invoicePdfFixture(2);
+  const invoice = data.issuedInvoices[0];
+  const content = issuedPdfContent(invoice, data.issuedInvoiceItems);
+  content.number = "TRI-DRAFT-9"; content.issueDate = "2026-02-01"; content.dueDate = "2026-03-15"; content.notes = "下書きの備考です";
+  content.items = [{ description: "下書きの品名", details: "下書きの内訳", quantity: 3, unitPrice: 1000, taxRate: 10 }];
+  const before = structuredClone(data);
+  const draft = issuedInvoicePdfDraft(invoice, data, { content });
+  const text = await pdfText(await createIssuedInvoicePdf(draft.invoice, draft.data));
+  for (const value of ["TRI-DRAFT-9", "2026/02/01", "2026/03/15", "下書きの備考です", "下書きの品名", "下書きの内訳", "3,000", "300", "3,300"]) assert.ok(text.includes(value), value);
+  for (const value of ["TRI-2026-SAMPLE", "2026SUMMER", "49,500"]) assert.ok(!text.includes(value), value);
+  assert.deepEqual(data, before);
+  const estimate: Estimate = { ...invoice, estimateNumber: "EST-BASE", validUntil: "2026-03-31", status: "DRAFT", items: data.issuedInvoiceItems };
+  const estimateContent = { ...estimatePdfContent(estimate), number: "EST-DRAFT", dueDate: "2026-04-30", notes: "見積の下書き", items: [{ description: "見積の品名", quantity: 2, unitPrice: 5000, taxRate: 10 as const }] };
+  const estimateText = await pdfText(await createEstimatePdf(estimatePdfDraft(estimate, data, { content: estimateContent }), data));
+  for (const value of ["EST-DRAFT", "2026/04/30", "見積の下書き", "見積の品名", "10,000", "11,000"]) assert.ok(estimateText.includes(value), value);
+  assert.ok(!estimateText.includes("EST-BASE"));
 });

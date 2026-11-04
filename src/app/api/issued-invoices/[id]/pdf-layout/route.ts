@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
 import { documentRows } from "@/lib/documents";
-import { pdfLayoutMeta } from "@/lib/pdf-layout-meta";
+import { issuedPdfMeta } from "@/lib/pdf-layout-meta";
 import { readData } from "@/lib/store";
 
-// What the layout dialog needs before it shows a generated invoice: the saved layout and the line labels.
+// What the PDF dialog needs before it shows a generated invoice.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "ログインしてください" }, { status: 401 });
@@ -18,6 +18,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   }
   if (invoice.fileUrl) return NextResponse.json({ error: "取り込んだ原本にはレイアウト調整がありません" }, { status: 409 });
-  const items = data.issuedInvoiceItems.filter((item) => item.invoiceId === invoice.id);
-  return NextResponse.json(pdfLayoutMeta(invoice, items, Boolean(invoice.notes?.trim())), { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json(issuedPdfMeta(invoice, data, user), { headers: { "Cache-Control": "private, no-store" } });
 }

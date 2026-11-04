@@ -19,10 +19,10 @@ export const pdfMarginLabels: Record<PdfMargin, string> = { narrow: "狭い", st
 
 export type ResolvedPdfLayout = {
   density: PdfDensity; fontSize: PdfFontSize; margin: PdfMargin;
-  fitOnePage: boolean; showNotes: boolean; showBank: boolean; showSeal: boolean;
+  fitOnePage: boolean; showNotes: boolean; showBank: boolean; showDueDate: boolean; showSeal: boolean;
   pageBreakBefore?: number;
 };
-export const defaultPdfLayout: ResolvedPdfLayout = { density: "standard", fontSize: "standard", margin: "standard", fitOnePage: true, showNotes: true, showBank: true, showSeal: true };
+export const defaultPdfLayout: ResolvedPdfLayout = { density: "standard", fontSize: "standard", margin: "standard", fitOnePage: true, showNotes: true, showBank: true, showDueDate: true, showSeal: true };
 
 export const pdfLayoutSchema = z.object({
   density: z.enum(pdfDensities).optional(),
@@ -31,10 +31,13 @@ export const pdfLayoutSchema = z.object({
   fitOnePage: z.boolean().optional(),
   showNotes: z.boolean().optional(),
   showBank: z.boolean().optional(),
+  showDueDate: z.boolean().optional(),
   showSeal: z.boolean().optional(),
   // 1-based line index; `items + 1` breaks before the totals block.
   pageBreakBefore: z.number().int().min(1).max(maxDocumentItems + 1).optional(),
 }).strict();
+
+const flagKeys = ["fitOnePage", "showNotes", "showBank", "showDueDate", "showSeal"] as const;
 
 export function resolvePdfLayout(layout?: InvoicePdfLayout | null): ResolvedPdfLayout {
   const resolved: ResolvedPdfLayout = { ...defaultPdfLayout };
@@ -42,7 +45,7 @@ export function resolvePdfLayout(layout?: InvoicePdfLayout | null): ResolvedPdfL
   if (layout.density && pdfDensities.includes(layout.density)) resolved.density = layout.density;
   if (layout.fontSize && pdfFontSizes.includes(layout.fontSize)) resolved.fontSize = layout.fontSize;
   if (layout.margin && pdfMargins.includes(layout.margin)) resolved.margin = layout.margin;
-  for (const key of ["fitOnePage", "showNotes", "showBank", "showSeal"] as const) if (typeof layout[key] === "boolean") resolved[key] = layout[key];
+  for (const key of flagKeys) if (typeof layout[key] === "boolean") resolved[key] = layout[key];
   if (Number.isInteger(layout.pageBreakBefore) && (layout.pageBreakBefore as number) >= 1) resolved.pageBreakBefore = layout.pageBreakBefore;
   return resolved;
 }
@@ -52,7 +55,7 @@ export function normalizePdfLayout(layout: InvoicePdfLayout | null | undefined):
   const resolved = resolvePdfLayout(layout);
   const stored: InvoicePdfLayout = {};
   for (const key of ["density", "fontSize", "margin"] as const) if (resolved[key] !== defaultPdfLayout[key]) stored[key] = resolved[key] as never;
-  for (const key of ["fitOnePage", "showNotes", "showBank", "showSeal"] as const) if (resolved[key] !== defaultPdfLayout[key]) stored[key] = resolved[key];
+  for (const key of flagKeys) if (resolved[key] !== defaultPdfLayout[key]) stored[key] = resolved[key];
   if (resolved.pageBreakBefore) stored.pageBreakBefore = resolved.pageBreakBefore;
   return Object.keys(stored).length ? stored : undefined;
 }
@@ -61,7 +64,7 @@ export function samePdfLayout(a: InvoicePdfLayout | null | undefined, b: Invoice
   return JSON.stringify(resolvePdfLayout(a)) === JSON.stringify(resolvePdfLayout(b));
 }
 
-const queryKeys = { density: "density", fontSize: "font", margin: "margin", fitOnePage: "fit", showNotes: "notes", showBank: "bank", showSeal: "seal", pageBreakBefore: "break" } as const;
+const queryKeys = { density: "density", fontSize: "font", margin: "margin", fitOnePage: "fit", showNotes: "notes", showBank: "bank", showDueDate: "due", showSeal: "seal", pageBreakBefore: "break" } as const;
 
 // The preview and the download share one query string, so both go through the same plan.
 export function pdfLayoutQuery(layout: InvoicePdfLayout | null | undefined) {
@@ -70,7 +73,7 @@ export function pdfLayoutQuery(layout: InvoicePdfLayout | null | undefined) {
   params.set(queryKeys.density, resolved.density);
   params.set(queryKeys.fontSize, resolved.fontSize);
   params.set(queryKeys.margin, resolved.margin);
-  for (const key of ["fitOnePage", "showNotes", "showBank", "showSeal"] as const) params.set(queryKeys[key], resolved[key] ? "1" : "0");
+  for (const key of flagKeys) params.set(queryKeys[key], resolved[key] ? "1" : "0");
   if (resolved.pageBreakBefore) params.set(queryKeys.pageBreakBefore, String(resolved.pageBreakBefore));
   return params.toString();
 }
@@ -83,7 +86,7 @@ export function pdfLayoutFromQuery(params: URLSearchParams): InvoicePdfLayout | 
   const breakAt = Number(params.get(queryKeys.pageBreakBefore));
   return {
     density: pick(queryKeys.density, pdfDensities), fontSize: pick(queryKeys.fontSize, pdfFontSizes), margin: pick(queryKeys.margin, pdfMargins),
-    fitOnePage: flag(queryKeys.fitOnePage), showNotes: flag(queryKeys.showNotes), showBank: flag(queryKeys.showBank), showSeal: flag(queryKeys.showSeal),
+    fitOnePage: flag(queryKeys.fitOnePage), showNotes: flag(queryKeys.showNotes), showBank: flag(queryKeys.showBank), showDueDate: flag(queryKeys.showDueDate), showSeal: flag(queryKeys.showSeal),
     pageBreakBefore: Number.isInteger(breakAt) && breakAt >= 1 && breakAt <= maxDocumentItems + 1 ? breakAt : undefined,
   };
 }
@@ -109,7 +112,7 @@ export type PdfMetrics = {
   contentBottom: number; footerY: number;
   s: (size: number) => number; lh: (size: number) => number; h: (offset: number) => number;
   columns: { descX: number; descWidth: number; detailsIndent: number; qtyRight: number; qtyWidth: number; unitRight: number; unitWidth: number; amountRight: number; amountWidth: number };
-  tableHeaderH: number; blankRowH: number; totalsRowH: number; notesGap: number; notesTitleH: number; bankGap: number; bankH: number; validityH: number;
+  tableHeaderH: number; blankRowH: number; totalsRowH: number; notesGap: number; notesTitleH: number; bankGap: number; validityH: number;
 };
 
 export function pdfMetrics(layout: Pick<ResolvedPdfLayout, "density" | "margin">, fontScale: number): PdfMetrics {
@@ -130,7 +133,7 @@ export function pdfMetrics(layout: Pick<ResolvedPdfLayout, "density" | "margin">
       amountRight: right - 2, amountWidth: Math.round(width * 0.152),
     },
     tableHeaderH: round(16 * pad), blankRowH: round(lh(10) + 2 * rowPad), totalsRowH: round(lh(10) + 6 * pad),
-    notesGap: round(18 * pad), notesTitleH: round(lh(9) + 3 * pad), bankGap: round(28 * pad), bankH: round(91 * fontScale), validityH: round(40 * fontScale),
+    notesGap: round(18 * pad), notesTitleH: round(lh(9) + 3 * pad), bankGap: round(28 * pad), validityH: round(40 * fontScale),
   };
 }
 
@@ -146,7 +149,7 @@ export type PlannedBlock =
   | { kind: "blank"; height: number }
   | { kind: "totals"; rows: [string, string][]; height: number }
   | { kind: "notes"; title: boolean; lines: PlannedText[]; height: number }
-  | { kind: "bank"; height: number }
+  | { kind: "bank"; height: number; box: boolean; due: boolean }
   | { kind: "validity"; height: number };
 export type PlannedPage = { first: boolean; tableTop: number; capacity: number; tableHeader: boolean; blocks: PlannedBlock[]; used: number };
 export type PdfHeaderPlan = { recipientLines: string[]; recipientY: number; recipientBottom: number; subjectLines: string[]; subjectY: number; subjectRule: number; tableTop: number };
@@ -248,7 +251,9 @@ function buildPlan(input: PdfPlanInput, layout: ResolvedPdfLayout, fontScale: nu
   const totals: PlannedBlock = { kind: "totals", rows: input.totals, height: round(input.totals.length * m.totalsRowH) };
   const notesLines = layout.showNotes && input.notes?.trim() ? wrapText(input.notes, m.width, m.s(9), measure).map((text): PlannedText => ({ text, size: m.s(9), indent: 0, muted: false, height: m.lh(9) })) : [];
   const notesBlock = (lines: PlannedText[], title: boolean): PlannedBlock => ({ kind: "notes", title, lines, height: round((title ? m.notesGap + m.notesTitleH : 0) + lines.reduce((sum, line) => sum + line.height, 0)) });
-  const closing: PlannedBlock | null = input.kind === "invoice" ? layout.showBank ? { kind: "bank", height: round(m.bankGap + m.bankH) } : null : { kind: "validity", height: m.validityH };
+  const closing: PlannedBlock | null = input.kind === "invoice"
+    ? layout.showBank || layout.showDueDate ? { kind: "bank", box: layout.showBank, due: layout.showDueDate, height: round(m.bankGap + closingBodyHeight(fontScale, layout.showBank, layout.showDueDate)) } : null
+    : layout.showDueDate ? { kind: "validity", height: m.validityH } : null;
   const tail: PlannedBlock[] = [totals, ...(notesLines.length ? [notesBlock(notesLines, true)] : []), ...(closing ? [closing] : [])];
   const tailHeight = round(tail.reduce((sum, block) => sum + block.height, 0));
   const breakBeforeTail = layout.pageBreakBefore === input.items.length + 1;
@@ -296,6 +301,11 @@ function buildPlan(input: PdfPlanInput, layout: ResolvedPdfLayout, fontScale: nu
   for (const entry of pages) entry.tableHeader = entry.blocks.some((block) => block.kind === "item" || block.kind === "blank");
   const applied: AppliedPdfLayout = { density: layout.density, fontSize: layout.fontSize, margin: layout.margin, fontScale, pages: pages.length, fitted: false };
   return { layout, metrics: m, header, pages, applied };
+}
+
+// The payment box with its fee note, and the due date line, can each be left out on their own.
+function closingBodyHeight(fontScale: number, box: boolean, due: boolean) {
+  return round(((box ? 77 : 0) + (due ? 14 : 0)) * fontScale);
 }
 
 function forcedBreakInside(layout: ResolvedPdfLayout, itemCount: number) {

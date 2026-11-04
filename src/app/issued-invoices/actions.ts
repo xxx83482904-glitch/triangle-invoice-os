@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
 import { applyIssuedInvoiceEdits, type IssuedEdit } from "@/lib/issued-invoice-edits";
 import { applyIssuedInvoiceDeletion, type IssuedDelete } from "@/lib/issued-invoice-delete";
-import { applyIssuedInvoicePdfLayout, type PdfLayoutSave } from "@/lib/invoice-pdf-layout-store";
+import { applyIssuedInvoicePdfEdits } from "@/lib/invoice-pdf-layout-store";
+import { pdfIssueMessage, type PdfEditsInput } from "@/lib/pdf-document-values";
 import { can } from "@/lib/rbac";
 import { mutateData } from "@/lib/store";
 export type { IssuedEdit } from "@/lib/issued-invoice-edits";
@@ -30,13 +32,13 @@ export async function deleteIssuedInvoices(company: CompanyScope, input: IssuedD
   } catch (error) { return { error: error instanceof Error ? error.message : "削除に失敗しました" }; }
 }
 
-// The PDF layout is presentation only, so the invoice keeps its `updatedAt` and open list edits stay valid.
-export async function saveIssuedInvoicePdfLayout(company: CompanyScope, input: PdfLayoutSave) {
+// Layout and wording are presentation only; number, dates, lines and notes change the invoice itself.
+export async function saveIssuedInvoicePdfEdits(company: CompanyScope, input: PdfEditsInput) {
   const user = await requireUser();
   if (!can(user, "manage:issuedInvoices")) return { error: "権限がありません" };
   try {
-    const result = await mutateData(user.id, "SAVE_ISSUED_INVOICE_PDF_LAYOUT", "IssuedInvoice", input.id, (data) => applyIssuedInvoicePdfLayout(data, user, company, input));
-    for (const path of ["/documents", "/issued-invoices"]) revalidatePath(path, "page");
-    return { success: true, layout: result.layout };
-  } catch (error) { return { error: error instanceof Error ? error.message : "保存に失敗しました" }; }
+    const result = await mutateData(user.id, "SAVE_ISSUED_INVOICE_PDF", "IssuedInvoice", input.id, (data) => applyIssuedInvoicePdfEdits(data, user, company, input));
+    for (const path of result.contentChanged ? ["/documents", "/issued-invoices", "/dashboard", "/projects", "/projects/[id]", "/reports", "/payments"] : ["/documents", "/issued-invoices"]) revalidatePath(path, "page");
+    return { success: true, updatedAt: result.updatedAt };
+  } catch (error) { return { error: error instanceof ZodError ? pdfIssueMessage(error.issues[0]) : error instanceof Error ? error.message : "保存に失敗しました" }; }
 }

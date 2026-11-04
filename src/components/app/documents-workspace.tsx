@@ -125,7 +125,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       {(edit?.needsReview ?? row.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
       <span className="text-xs text-muted-foreground">{documentKindLabels[row.kind]}</span>
       {fileUrl ? <Button asChild variant="outline" size="sm"><a href={fileUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />{generated ? "PDFを開く" : "原本を開く"}</a></Button> : null}
-      {generated ? <PdfLayoutDialog kind={row.kind === "estimate" ? "estimate" : "issued"} id={row.sourceId} title={row.title} company={company} canSave={Boolean(row.editable)} updatedAt={row.updatedAt} /> : null}
+      {generated ? <PdfLayoutDialog kind={row.kind === "estimate" ? "estimate" : "issued"} id={row.sourceId} title={row.title} company={company} canSave={Boolean(row.editable)} updatedAt={row.updatedAt} listEditPending={Boolean(edit)} /> : null}
       {view === "all" ? <Button asChild variant="soft" size="sm"><Link prefetch={false} href={row.sourceHref}>管理画面</Link></Button> : null}
     </div>
     {view !== "edit" ? <>{edit ? <p className="text-xs text-amber-700 dark:text-amber-300">未保存の変更あり・原本は保存済みの内容</p> : null}{fileUrl ? (

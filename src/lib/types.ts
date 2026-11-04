@@ -177,9 +177,14 @@ export type InvoicePdfLayout = {
   fitOnePage?: boolean;
   showNotes?: boolean;
   showBank?: boolean;
+  showDueDate?: boolean;
   showSeal?: boolean;
   pageBreakBefore?: number;
 };
+
+// Wording printed on the generated PDF for this document only; an empty string hides that wording.
+export type InvoicePdfTextKey = "title" | "recipient" | "subject" | "greeting" | "issuerName" | "issuerPostalCode" | "issuerAddress" | "issuerBuilding" | "issuerPhone" | "issuerRegistration" | "bankLine" | "accountName" | "feeNote" | "numberLabel" | "dateLabel" | "amountLabel" | "subjectLabel" | "descriptionHeader" | "quantityHeader" | "unitPriceHeader" | "amountHeader" | "subtotalLabel" | "taxLabel" | "totalLabel" | "notesLabel" | "bankLabel" | "dueLabel" | "validityLabel" | "continuedLabel";
+export type InvoicePdfText = Partial<Record<InvoicePdfTextKey, string>>;
 
 export type IssuedInvoiceItem = {
   id: string;
@@ -223,6 +228,7 @@ export type IssuedInvoice = {
   notes?: string;
   internalMemo?: string;
   pdfLayout?: InvoicePdfLayout;
+  pdfText?: InvoicePdfText;
   createdById: string;
   paidAt?: string;
   createdAt: string;
@@ -248,6 +254,7 @@ export type Estimate = {
   notes?: string;
   internalMemo?: string;
   pdfLayout?: InvoicePdfLayout;
+  pdfText?: InvoicePdfText;
   invoiceId?: string;
   createdById: string;
   createdAt: string;
