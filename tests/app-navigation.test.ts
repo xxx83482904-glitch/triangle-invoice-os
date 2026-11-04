@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { appNavigation, mobileNavigation, navigationActive, navigationCompany, navigationGroups, workflowNavigation } from "../src/lib/app-navigation";
 import { canRole } from "../src/lib/rbac";
+import { navigationIconNames } from "../src/lib/navigation-icons";
 import { matchesMailSearch } from "../src/lib/mail-search";
 import type { UserRole } from "../src/lib/types";
 
@@ -79,4 +80,8 @@ test("mail search handles multiple terms, Japanese width, case and missing OCR w
   for (const query of ["大阪", "テスト 大阪", "領収書"]) assert.equal(matchesMailSearch(row, query), false, query);
   assert.ok(matchesMailSearch({ fileName: "scan.png", ocrPreview: "" }, "scan"));
   assert.deepEqual(row, before);
+});
+
+test("every navigation destination names an icon for the phone menu", () => {
+  for (const item of appNavigation.flatMap((group) => group.items)) assert.ok(navigationIconNames[item.href], item.href);
 });

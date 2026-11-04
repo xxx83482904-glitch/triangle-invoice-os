@@ -2,19 +2,21 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCircle, Mail, ReceiptText, Users, UserCheck, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCircle, Mail, Receipt, ReceiptText, Ship, Users, UserCheck, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { companyForUser, defaultPathForRole } from "@/lib/rbac";
 import { mobileNavigation, navigationActive, navigationCompany, navigationGroups, workflowNavigation } from "@/lib/app-navigation";
+import { navigationIconNames } from "@/lib/navigation-icons";
 import type { UserRole } from "@/lib/types";
 
-const icons: Record<string, typeof Files> = {
-  "/dashboard": LayoutGrid, "/documents": Files, "/projects": Building2, "/mail-sorter": Mail,
-  "/issued-invoices": FileText, "/estimates": ReceiptText, "/received-invoices": ReceiptText,
-  "/payments": WalletCards, "/banking": WalletCards, "/partners": Users, "/reports": BarChart3, "/users": UserCheck,
-};
+const iconComponents: Record<string, typeof Files> = { BarChart3, Building2, FileText, Files, LayoutGrid, Mail, Receipt, ReceiptText, Ship, Users, UserCheck, WalletCards };
+
+// A destination without an icon of its own still renders; rendering undefined took the whole shell down on phones.
+function navigationIcon(href: string) {
+  return iconComponents[navigationIconNames[href] ?? ""] ?? LayoutGrid;
+}
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {
   const params = new URLSearchParams(searchParams.toString());
@@ -97,7 +99,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
   return (
     <nav aria-label="メインメニュー（モバイル）" style={{ gridTemplateColumns: `repeat(${Math.max(1, primaryItems.length + (moreItems.length ? 1 : 0))}, minmax(0, 1fr))` }} className="grid h-16 items-stretch gap-1 px-2 py-1.5">
       {primaryItems.map((item) => {
-        const Icon = icons[item.href];
+        const Icon = navigationIcon(item.href);
         const active = navigationActive(pathname, item.href);
         return (
           <Link
@@ -131,7 +133,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="top" sideOffset={8} className="max-h-[65dvh] w-56 overflow-y-auto">
             {moreItems.map((item) => {
-              const Icon = icons[item.href];
+              const Icon = navigationIcon(item.href);
               return (
                 <DropdownMenuItem key={item.href} asChild>
                   <Link href={navHref(item.href, company)} prefetch={false} aria-current={navigationActive(pathname, item.href) ? "page" : undefined} className="flex min-h-11 items-center gap-2 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary">
@@ -159,7 +161,7 @@ export function AppNav({ role }: { role: UserRole }) {
       {navigationGroups(role).map((group) => <div key={group.label}>
         <p className="mb-1 px-3 text-xs font-medium text-muted-foreground">{group.label}</p>
         <div className="space-y-0.5">{group.items.map((item) => {
-        const Icon = icons[item.href];
+        const Icon = navigationIcon(item.href);
         const active = navigationActive(pathname, item.href);
         return (
           <Link
