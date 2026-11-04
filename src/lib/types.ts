@@ -186,6 +186,23 @@ export type InvoicePdfLayout = {
 export type InvoicePdfTextKey = "title" | "recipient" | "subject" | "greeting" | "issuerName" | "issuerPostalCode" | "issuerAddress" | "issuerBuilding" | "issuerPhone" | "issuerRegistration" | "bankLine" | "accountName" | "feeNote" | "numberLabel" | "dateLabel" | "amountLabel" | "subjectLabel" | "descriptionHeader" | "quantityHeader" | "unitPriceHeader" | "amountHeader" | "subtotalLabel" | "taxLabel" | "totalLabel" | "notesLabel" | "bankLabel" | "dueLabel" | "validityLabel" | "continuedLabel";
 export type InvoicePdfText = Partial<Record<InvoicePdfTextKey, string>>;
 
+export type ExpenseClaimStatus = "SUBMITTED" | "RETURNED" | "APPROVED" | "PAID" | "WITHDRAWN";
+export type ExpensePaidWith = "CASH" | "PERSONAL_CARD" | "OTHER";
+export type ExpenseClaimAction = "SUBMIT" | "EDIT" | "RESUBMIT" | "WITHDRAW" | "APPROVE" | "RETURN" | "PAY" | "UNPAY";
+// One receipt a staff member paid for and wants back: submitted, reviewed by accounting, then settled.
+export type ExpenseClaim = {
+  id: string; company: "JAPAN" | "CHINA"; submittedById: string;
+  spentOn: string; amount: number; payee: string; purpose: string;
+  categoryId?: string; projectId?: string; paidWith?: ExpensePaidWith;
+  fileUrl?: string; originalFileName?: string; mimeType?: string; ocrText?: string;
+  status: ExpenseClaimStatus;
+  reviewedById?: string; reviewedAt?: string; reviewNote?: string;
+  paidAt?: string; paidById?: string; paymentMemo?: string;
+  memo?: string;
+  history: Array<{ action: ExpenseClaimAction; at: string; byId: string; note?: string }>;
+  createdAt: string; updatedAt: string; deletedAt?: string | null;
+};
+
 export type IssuedInvoiceItem = {
   id: string;
   invoiceId: string;
@@ -456,6 +473,7 @@ export type AppData = {
   manualObligations?: ManualObligation[];
   payrollSettings?: PayrollSettings[];
   integrityAcknowledgements?: IntegrityAcknowledgement[];
+  expenseClaims?: ExpenseClaim[];
 };
 
 export type IntegrityAcknowledgement = {

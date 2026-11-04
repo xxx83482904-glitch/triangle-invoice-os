@@ -3,6 +3,8 @@ import type { CompanyScope } from "@/lib/company";
 
 const permissions = {
   ADMIN: [
+    "submit:expenses",
+    "manage:expenses",
     "view:documents",
     "view:dashboard",
     "view:projects",
@@ -29,6 +31,8 @@ const permissions = {
     "view:all",
   ],
   ACCOUNTING: [
+    "submit:expenses",
+    "manage:expenses",
     "view:documents",
     "view:dashboard",
     "view:projects",
@@ -53,6 +57,7 @@ const permissions = {
     "view:all",
   ],
   CHIEF_DESIGNER: [
+    "submit:expenses",
     "view:documents",
     "view:projects",
     "view:receivedInvoices",
@@ -62,6 +67,7 @@ const permissions = {
     "comment:project",
   ],
   PROJECT_MANAGER: [
+    "submit:expenses",
     "view:documents",
     "view:projects",
     "view:issuedInvoices",
@@ -71,9 +77,9 @@ const permissions = {
     "manage:issuedInvoices",
     "comment:project",
   ],
-  MAIL_EDITOR: ["view:documents", "view:mailSorter", "manage:mailSorter"],
+  MAIL_EDITOR: ["view:documents", "view:mailSorter", "manage:mailSorter", "submit:expenses"],
   BILLING_EDITOR: ["view:issuedInvoices", "manage:issuedInvoices", "view:partners", "manage:clients", "create:invoiceProjects", "export:issuedInvoices"],
-  DESIGNER: ["view:assigned", "upload:receivedInvoices", "comment:project"],
+  DESIGNER: ["view:assigned", "upload:receivedInvoices", "comment:project", "submit:expenses"],
   GUEST: ["guest:createIssuedInvoices"],
 } satisfies Record<UserRole, string[]>;
 
