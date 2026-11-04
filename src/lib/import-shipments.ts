@@ -75,3 +75,91 @@ export function suggestsCustomsCategory(text = "", fileName = "") {
   const detected = detectImportDocument(text, fileName);
   return Boolean(detected && customsDocumentKinds.includes(detected.kind));
 }
+
+export type ImportShipmentFields = Partial<Pick<ImportShipment, "permitNumber" | "permitDate" | "arrivalDate" | "supplierName" | "goodsValue" | "dutyAmount" | "importTaxNational" | "importTaxLocal" | "brokerFee">>;
+export type ImportFillKey = keyof ImportShipmentFields | "brokerVendorId";
+export const importFillLabels: Record<ImportFillKey, string> = {
+  permitNumber: "許可番号", permitDate: "許可日", arrivalDate: "到着日", supplierName: "仕入先", goodsValue: "課税価格",
+  dutyAmount: "関税", importTaxNational: "輸入消費税", importTaxLocal: "地方消費税", brokerFee: "通関手数料", brokerVendorId: "通関業者",
+};
+// What each paper is trusted to state: duty and tax come from the permit or the payment slip, never from a broker's own invoice lines.
+export const importFillKeysByKind: Record<ImportDocumentKind, ImportFillKey[]> = {
+  IMPORT_PERMIT: ["permitNumber", "permitDate", "arrivalDate", "supplierName", "goodsValue", "dutyAmount", "importTaxNational", "importTaxLocal"],
+  TAX_PAYMENT: ["permitNumber", "dutyAmount", "importTaxNational", "importTaxLocal"],
+  BROKER_INVOICE: ["permitNumber", "brokerFee", "brokerVendorId"],
+  SUPPLIER_INVOICE: ["supplierName"], PACKING_LIST: ["supplierName"], WAYBILL: ["supplierName"], OTHER: [],
+};
+
+export function normalizePermitNumber(value: string) {
+  return value.normalize("NFKC").toUpperCase().replace(/[\s-]/g, "");
+}
+
+function importDate(source: string, label: string) {
+  const date = /(?:令和(元|\d{1,2})年\s*(\d{1,2})月\s*(\d{1,2})日|R(\d{1,2})[./-](\d{1,2})[./-](\d{1,2})|(\d{4})[./年-]\s*(\d{1,2})[./月-]\s*(\d{1,2})日?)/i;
+  const match = source.match(new RegExp(`(?:${label})[^0-9]{0,12}?(${date.source})(?![0-9])`, "i"));
+  if (!match) return undefined;
+  const parts = match[1].match(date)!;
+  const year = parts[1] ? 2018 + (parts[1] === "元" ? 1 : Number(parts[1])) : parts[4] ? 2018 + Number(parts[4]) : Number(parts[7]);
+  const month = Number(parts[2] || parts[5] || parts[8]), day = Number(parts[3] || parts[6] || parts[9]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return year >= 1000 && parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+    ? parsed.toISOString().slice(0, 10) : undefined;
+}
+
+export function extractImportShipmentFields(text = "", fileName = ""): ImportShipmentFields {
+  // Filenames help classification; only labelled document content supplies shipment fields.
+  void fileName;
+  const source = text.normalize("NFKC").replace(/[\u3000\t]/g, " ").replace(/\r\n?/g, "\n");
+  const fields: ImportShipmentFields = {};
+  const moneyLabels = {
+    goodsValue: "課税価格|課税標準額|CIF価格",
+    // A rate or a combined total ("関税等", "関税・消費税") is not the duty itself.
+    dutyAmount: "関税額?(?!額?\\s*(?:率|等|・|、|及び|および))",
+    importTaxNational: "(?<!地方)(?:内国消費税額?|輸入消費税額?|消費税額?)(?!額?\\s*(?:率|等|・|、|及び|および))",
+    importTaxLocal: "地方消費税額?(?!額?\\s*(?:率|等|・|、|及び|および))",
+    brokerFee: "通関料|通関手数料|取扱(?:手数)?料|通関業務料",
+  } as const;
+  for (const key of Object.keys(moneyLabels) as Array<keyof typeof moneyLabels>) {
+    const pattern = new RegExp(`(?:${moneyLabels[key]})[^0-9]{0,12}?([0-9][0-9,]*(?:\\.[0-9]+)?)`, "gi");
+    const seen = new Set<string>(), values: number[] = [];
+    for (const match of source.matchAll(pattern)) {
+      const value = Number(match[1].replace(/,/g, ""));
+      if (!Number.isFinite(value)) continue;
+      if (key === "brokerFee") {
+        const start = source.lastIndexOf("\n", match.index - 1) + 1;
+        const end = source.indexOf("\n", match.index + match[0].length);
+        const line = `${source.slice(start, end < 0 ? undefined : end).trim()}:${match.index - start}`;
+        if (seen.has(line)) continue;
+        seen.add(line);
+      }
+      values.push(value);
+    }
+    if (values.length) fields[key] = key === "brokerFee" ? round(values.reduce((sum, value) => sum + value, 0)) : Math.max(...values);
+  }
+  const permit = source.match(/(?:輸入)?(?:申告|許可)番号[^0-9A-Z]{0,8}([0-9A-Z][0-9A-Z-]{5,19})(?![0-9A-Z-])/i)?.[1];
+  if (permit) fields.permitNumber = permit.toUpperCase();
+  const permitDate = importDate(source, "(?:輸入)?許可(?:年月)?日|許可日付");
+  const arrivalDate = importDate(source, "(?:入港|到着|搬入)(?:年月)?日");
+  if (permitDate) fields.permitDate = permitDate;
+  if (arrivalDate) fields.arrivalDate = arrivalDate;
+  const supplier = source.match(/(?:(?:仕出人|輸出者)(?:名称|名)?|Shipper(?:'s)?(?:\s*name)?|Exporter|Seller)[ ]*:?[ ]*([^\n]*)(?:\n([\s\S]*))?/i);
+  if (supplier) {
+    const cut = (value: string) => value.split(/輸入者|Importer|Consignee|住所|Address|コード|Code/i)[0].trim();
+    const name = cut(supplier[1]) || cut(supplier[2]?.split("\n").find((line) => line.trim()) ?? "");
+    if (name) fields.supplierName = name.slice(0, 80);
+  }
+  return fields;
+}
+
+export function fillImportShipment(row: ImportShipment, fields: ImportShipmentFields & { brokerVendorId?: string }, allowed?: ImportFillKey[]): ImportFillKey[] {
+  const filled: ImportFillKey[] = [];
+  for (const key of Object.keys(importFillLabels) as ImportFillKey[]) {
+    if (allowed && !allowed.includes(key)) continue;
+    const value = fields[key];
+    if ((row[key] === undefined || row[key] === "") && value !== undefined && value !== "") {
+      Object.assign(row, { [key]: value });
+      filled.push(key);
+    }
+  }
+  return filled;
+}

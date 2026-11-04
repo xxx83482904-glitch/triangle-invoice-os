@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { saveImportShipmentAction } from "@/app/imports/actions";
+import { ImportDropzone } from "@/app/imports/import-dropzone";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { cardPressProps } from "@/components/app/list-selection";
 import { MonthTabs } from "@/components/app/month-tabs";
@@ -19,7 +20,7 @@ import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import { formatDate, yen } from "@/lib/format";
 import type { ImportShipmentMutation, ImportShipmentView } from "@/lib/import-shipment-views";
-import { importChecklistKinds, importDocumentKindLabels, importDocumentKinds, importShipmentStatusLabels, importShipmentStatuses, type ImportLinkedDocument } from "@/lib/import-shipments";
+import { importChecklistKinds, importDocumentKindLabels, importDocumentKinds, importFillLabels, importShipmentStatusLabels, importShipmentStatuses, type ImportLinkedDocument } from "@/lib/import-shipments";
 import { countByMonth } from "@/lib/month-tabs";
 import { operationFailureToast } from "@/lib/operation-feedback";
 import type { ImportDocumentKind, ImportShipmentStatus } from "@/lib/types";
@@ -63,7 +64,8 @@ function useShipmentSave(company: CompanyScope) {
   const run = (input: ImportShipmentMutation, done: string, after?: (result: { id: string }) => void) => start(async () => {
     const result = await saveImportShipmentAction(company, input);
     if (!result.success) { toast(operationFailureToast(result.error)); return; }
-    toast({ title: done, variant: "success" });
+    const read = result.action === "assign" && result.filled.length ? `${result.filled.map((key) => importFillLabels[key]).join("・")}を読み取りました。` : "";
+    toast({ title: `${done}${read}`, variant: "success" });
     after?.(result);
     router.refresh();
   });
@@ -98,6 +100,7 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
   const filtering = status !== "all" || Boolean(query);
 
   return <div className="space-y-6">
+    {canEdit ? <ImportDropzone company={company} onCreated={open} /> : null}
     {unassigned.length ? <UnassignedDocuments company={company} canEdit={canEdit} documents={unassigned} shipments={rows} onCreate={startCreate} /> : null}
     <Card variant="section">
       <CardHeader className="space-y-3">
@@ -178,7 +181,7 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
             {creating ? (
               <div className="p-4"><ShipmentForm key="new" company={company} projects={projects} vendors={vendors} onSaved={(id) => { setCreating(false); setActiveId(id); }} /></div>
             ) : paneRow ? (
-              <ShipmentDetail key={`${paneRow.id}:${paneRow.updatedAt}`} canEdit={canEdit} company={company} row={paneRow} unassigned={unassigned} projects={projects} vendors={vendors} onDeleted={() => { setDetailOpen(false); setActiveId(""); }} />
+              <ShipmentDetail key={paneRow.id} canEdit={canEdit} company={company} row={paneRow} unassigned={unassigned} projects={projects} vendors={vendors} onDeleted={() => { setDetailOpen(false); setActiveId(""); }} />
             ) : (
               <div className="p-4 text-sm text-muted-foreground">便を押すと詳細を表示します。</div>
             )}
@@ -239,6 +242,7 @@ function ShipmentDetail({ canEdit, company, row, unassigned, projects, vendors, 
           {others.map((document) => <DocumentLine key={document.key} document={document} canEdit={canEdit} pending={pending} onDetach={() => detach(document)} />)}
         </li> : null}
       </ul>
+      {canEdit ? <ImportDropzone company={company} shipmentId={row.id} compact /> : null}
       {canEdit ? <AttachForm company={company} shipmentId={row.id} candidates={unassigned} /> : null}
     </section>
 
@@ -335,7 +339,7 @@ function UnassignedDocuments({ company, canEdit, documents, shipments, onCreate 
           {canEdit ? <Button type="button" size="sm" variant="outline" className="gap-1" onClick={onCreate}><Plus className="size-4" />新しい便</Button> : null}
         </div>
       </div>
-      <p className={`text-xs text-muted-foreground ${expanded ? "" : "hidden lg:block"}`}>郵便仕分けの分類「輸入・通関」と、関税・通関の語がある書類です。便を選んで追加すると、その便の書類として揃い具合に数えられます。</p>
+      <p className={`text-xs text-muted-foreground ${expanded ? "" : "hidden lg:block"}`}>郵便仕分けの分類「輸入・通関」と、関税・通関の語がある書類です。便を選んで追加すると、その便の書類として揃い具合に数えられます。上のドロップ領域に入れると自動で判定・紐付けします。</p>
     </CardHeader>
     <CardContent className={expanded ? "" : "hidden lg:block"}>
       <ul className="divide-y">

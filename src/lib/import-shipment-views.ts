@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { companyFromParam, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
-import { detectImportDocument, importChecklist, importDocumentKinds, importShipmentAmounts, importShipmentMonth, importShipmentStatuses, missingImportDocuments, type ImportLinkedDocument, type ImportShipmentAmounts } from "@/lib/import-shipments";
+import { detectImportDocument, extractImportShipmentFields, fillImportShipment, importChecklist, importDocumentKinds, importFillKeysByKind, importShipmentAmounts, importShipmentMonth, importShipmentStatuses, missingImportDocuments, normalizePermitNumber, type ImportFillKey, type ImportLinkedDocument, type ImportShipmentAmounts } from "@/lib/import-shipments";
 import { receivedPaymentSummary } from "@/lib/payment-records";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, ImportDocumentKind, ImportShipment, MailDocument, ReceivedInvoice, User } from "@/lib/types";
@@ -30,7 +30,7 @@ function mailDocumentView(company: CompanyScope, mail: MailDocument): ImportLink
   return {
     key: `mail:${mail.id}`, source: "mail", id: mail.id, title: mail.title || mail.originalFileName, party: mail.senderName || "差出人不明",
     date: mail.folderMonth ? `${mail.folderMonth}-01` : mail.createdAt.slice(0, 10), kind: mail.importDocumentKind ?? detected?.kind ?? "OTHER",
-    suggestedKind: detected?.kind, evidence: detected?.evidence, href: `/mail-sorter?company=${company}`, updatedAt: mail.updatedAt,
+    suggestedKind: mail.importDocumentKind ?? detected?.kind, evidence: detected?.evidence, href: `/mail-sorter?company=${company}`, updatedAt: mail.updatedAt,
   };
 }
 
@@ -39,7 +39,7 @@ function receivedInvoiceView(data: AppData, company: CompanyScope, invoice: Rece
   const fallback: ImportDocumentKind = brokerVendorId && invoice.vendorId === brokerVendorId ? "BROKER_INVOICE" : "SUPPLIER_INVOICE";
   return {
     key: `received:${invoice.id}`, source: "received", id: invoice.id, title: invoice.originalFileName || "受領請求書", party: vendorName(data, invoice.vendorId),
-    date: invoice.issueDate, amount: invoice.total, kind: invoice.importDocumentKind ?? detected?.kind ?? fallback, suggestedKind: detected?.kind ?? fallback, evidence: detected?.evidence,
+    date: invoice.issueDate, amount: invoice.total, kind: invoice.importDocumentKind ?? detected?.kind ?? fallback, suggestedKind: invoice.importDocumentKind ?? detected?.kind ?? fallback, evidence: detected?.evidence,
     href: `/received-invoices?company=${company}&document=${encodeURIComponent(invoice.id)}`, updatedAt: invoice.updatedAt,
     paid: invoice.status === "PAID" || receivedPaymentSummary(data, invoice).complete,
   };
@@ -81,6 +81,12 @@ export function importShipmentOptions(data: AppData, company: CompanyScope) {
   return importShipmentViews(data, company).map((row) => ({ value: row.id, label: `${row.title}（${row.month.replace("-", "年")}月）` }));
 }
 
+export function findImportShipmentByPermitNumber(data: AppData, company: CompanyScope, permitNumber: string) {
+  const normalized = normalizePermitNumber(permitNumber);
+  return normalized ? data.importShipments?.find((row) => !row.deletedAt && companyFromParam(row.company) === company
+    && normalizePermitNumber(row.permitNumber ?? "") === normalized) : undefined;
+}
+
 export type ImportMonthlyRow = { month: string; count: number; goodsValue: number; dutyAmount: number; importTax: number; brokerFee: number; otherCost: number; costTotal: number };
 
 export function importMonthlySummary(rows: ImportShipmentView[]): ImportMonthlyRow[] {
@@ -110,7 +116,7 @@ const mutationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create"), ...fields }).strict(),
   z.object({ action: z.literal("update"), id: reference, version, ...fields }).strict(),
   z.object({ action: z.literal("delete"), id: reference, version }).strict(),
-  z.object({ action: z.literal("assign"), shipmentId: reference.nullable(), source: z.enum(["mail", "received"]), documentId: reference, kind: z.enum(importDocumentKinds).optional() }).strict(),
+  z.object({ action: z.literal("assign"), shipmentId: reference.nullable(), source: z.enum(["mail", "received"]), documentId: reference, kind: z.enum(importDocumentKinds).optional(), fill: z.boolean().default(true) }).strict(),
 ]);
 export type ImportShipmentMutation = z.input<typeof mutationSchema>;
 type ShipmentFields = z.infer<typeof mutationSchema> & { action: "create" };
@@ -159,8 +165,17 @@ export function applyImportShipmentMutation(data: AppData, actor: Actor, company
     if (shipment) target.importShipmentId = shipment.id; else delete target.importShipmentId;
     const detected = value.kind ?? target.importDocumentKind ?? detectImportDocument(target.ocrText, target.originalFileName)?.kind;
     if (detected) target.importDocumentKind = detected;
+    let filled: ImportFillKey[] = [];
+    if (shipment && value.fill && detected && detected !== "OTHER") {
+      const candidates = extractImportShipmentFields(target.ocrText, target.originalFileName);
+      const vendor = "vendorId" in target ? data.vendors.find((row) => row.id === target.vendorId && !row.deletedAt && partnerMatchesCompany(row, company)) : undefined;
+      const brokerVendorId = detected === "BROKER_INVOICE" ? vendor?.id : undefined;
+      if (detected === "SUPPLIER_INVOICE" && vendor) candidates.supplierName ||= vendor.companyName;
+      filled = fillImportShipment(shipment, { ...candidates, brokerVendorId }, importFillKeysByKind[detected]);
+      if (filled.length) shipment.updatedAt = stamp(shipment.updatedAt);
+    }
     target.updatedAt = stamp(target.updatedAt);
-    return { id: target.id, action: value.action, updatedAt: target.updatedAt, shipmentId: shipment?.id ?? null, kind: target.importDocumentKind };
+    return { id: target.id, action: value.action, updatedAt: target.updatedAt, shipmentId: shipment?.id ?? null, kind: target.importDocumentKind, filled };
   }
   const row = liveShipment(value.id);
   if (!row) throw new Error("輸入便が見つかりません");

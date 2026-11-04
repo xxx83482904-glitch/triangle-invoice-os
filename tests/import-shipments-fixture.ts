@@ -31,7 +31,7 @@ export function importShipmentsFixture(): AppData {
     mail("permit-1", "輸入許可通知書 第1便", { importShipmentId: "ship-1", importDocumentKind: "IMPORT_PERMIT", ocrText: "輸入許可通知書 輸入許可番号 合成-0001 関税額 15,000円 消費税額 40,000円 地方消費税額 11,000円" }),
     mail("packing-1", "パッキングリスト 第1便", { importShipmentId: "ship-1", ocrText: "PACKING LIST carton 12" }),
     mail("awb-1", "AWB 第1便", { importShipmentId: "ship-1", ocrText: "AIR WAYBILL 合成-AWB-001" }),
-    mail("permit-3", "輸入許可通知書 未割当", { ocrText: "輸入許可通知書 輸入許可番号 合成-0003 関税額 3,000円" }),
+    mail("permit-3", "輸入許可通知書 未割当", { ocrText: "輸入許可通知書 輸入許可番号 SYN-0003 関税額 3,000円" }),
     mail("packing-x", "梱包明細", { category: "OTHER", ocrText: "PACKING LIST 3 cartons" }),
     mail("receipt-1", "合成領収書", { category: "RECEIPT", senderName: "合成東京ガス", ocrText: "領収書 消費税" }),
     mail("linked-1", "通関請求書（郵便）", { category: "INVOICE", relatedReceivedInvoiceId: "broker-3", ocrText: "通関料 関税 立替 請求書" }),

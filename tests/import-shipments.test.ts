@@ -6,8 +6,8 @@ import path from "node:path";
 import { admin, manager, timestamp } from "./document-fixture";
 import { importShipmentsFixture } from "./import-shipments-fixture";
 import { appNavigation, navigationGroups } from "../src/lib/app-navigation";
-import { detectImportDocument, importShipmentAmounts, importShipmentMonth, suggestsCustomsCategory } from "../src/lib/import-shipments";
-import { applyImportShipmentFormFields, applyImportShipmentMutation, importMonthlySummary, importShipmentOptions, importShipmentViews, unassignedImportDocuments } from "../src/lib/import-shipment-views";
+import { detectImportDocument, extractImportShipmentFields, fillImportShipment, importShipmentAmounts, importShipmentMonth, normalizePermitNumber, suggestsCustomsCategory } from "../src/lib/import-shipments";
+import { applyImportShipmentFormFields, applyImportShipmentMutation, findImportShipmentByPermitNumber, importMonthlySummary, importShipmentOptions, importShipmentViews, unassignedImportDocuments } from "../src/lib/import-shipment-views";
 import { classifyMailDocument } from "../src/lib/ocr";
 import type { AppData } from "../src/lib/types";
 
@@ -64,6 +64,10 @@ test("the unassigned list shows import-looking documents once and ignores other 
   const broker = documents.find((document) => document.key === "received:broker-3")!;
   assert.equal(broker.suggestedKind, "BROKER_INVOICE"); assert.equal(broker.paid, false); assert.equal(broker.amount, 45000);
   assert.equal(documents.find((document) => document.key === "mail:packing-x")?.suggestedKind, "PACKING_LIST");
+  // A kind recorded on the document outranks keyword detection, so a plain invoice taken in as その他 is offered as that.
+  const data = importShipmentsFixture(); data.receivedInvoices.find((invoice) => invoice.id === "gas-1")!.importDocumentKind = "OTHER";
+  const plain = unassignedImportDocuments(data, "JAPAN").find((document) => document.key === "received:gas-1")!;
+  assert.equal(plain.kind, "OTHER"); assert.equal(plain.suggestedKind, "OTHER");
 });
 
 test("mutations need manage:imports, check versions and leave invoice and mail content unchanged", () => {
@@ -84,6 +88,7 @@ test("mutations need manage:imports, check versions and leave invoice and mail c
   const assigned = applyImportShipmentMutation(data, admin, "JAPAN", { action: "assign", shipmentId: row.id, source: "mail", documentId: "permit-3" });
   const permit = data.mailDocuments.find((mail) => mail.id === "permit-3")!;
   assert.equal(permit.importShipmentId, row.id); assert.equal(permit.importDocumentKind, "IMPORT_PERMIT"); assert.equal(assigned.kind, "IMPORT_PERMIT");
+  assert.equal(row.permitNumber, "SYN-0003"); assert.equal(row.dutyAmount, 3000);
   applyImportShipmentMutation(data, admin, "JAPAN", { action: "assign", shipmentId: row.id, source: "received", documentId: "broker-3", kind: "BROKER_INVOICE" });
   const view = importShipmentViews(data, "JAPAN").find((item) => item.id === row.id)!;
   assert.equal(view.documents.length, 2); assert.deepEqual(view.missing, ["SUPPLIER_INVOICE", "PACKING_LIST", "WAYBILL"]);
@@ -97,6 +102,125 @@ test("mutations need manage:imports, check versions and leave invoice and mail c
   assert.ok(unassignedImportDocuments(data, "JAPAN").some((document) => document.key === "received:broker-3"));
   assert.equal(importShipmentViews(data, "JAPAN").some((item) => item.id === row.id), false);
   assert.deepEqual(strip(data.receivedInvoices), before);
+});
+
+test("import fields read labelled amounts on one line and keep national and local tax separate", () => {
+  assert.deepEqual(extractImportShipmentFields("関税額 15,000円 消費税額 ¥40,000 地方消費税額 11,000円 課税価格 500,000"), {
+    dutyAmount: 15000, importTaxNational: 40000, importTaxLocal: 11000, goodsValue: 500000,
+  });
+  assert.deepEqual(extractImportShipmentFields("地方消費税額 11,000円"), { importTaxLocal: 11000 });
+  assert.deepEqual(extractImportShipmentFields(), {});
+});
+
+test("import fields read amounts on the following line and normalize full width text", () => {
+  assert.deepEqual(extractImportShipmentFields("課税標準額\n合計 (円)\n500,000\n関税\n15,000円\n内国消費税額\n40,000\n地方消費税\n11,000"), {
+    goodsValue: 500000, dutyAmount: 15000, importTaxNational: 40000, importTaxLocal: 11000,
+  });
+  assert.deepEqual(extractImportShipmentFields("ＣＩＦ価格：ＪＰＹ５００，０００．５０\n関税額：￥１５，０００\n輸入消費税額：４０，０００円\n地方消費税額：１１，０００円"), {
+    goodsValue: 500000.5, dutyAmount: 15000, importTaxNational: 40000, importTaxLocal: 11000,
+  });
+});
+
+test("import dates accept Japanese eras, Gregorian separators, and arrival labels", () => {
+  for (const date of ["令和8年10月5日", "2026/10/05", "2026-10-05", "2026.10.5", "2026年10月5日", "R8.10.5"]) {
+    assert.deepEqual(extractImportShipmentFields(`輸入許可年月日：${date}\n入港日 2026/10/01`), { permitDate: "2026-10-05", arrivalDate: "2026-10-01" }, date);
+  }
+  assert.equal(extractImportShipmentFields("許可日付 R6.10.5").permitDate, "2024-10-05");
+  assert.equal(extractImportShipmentFields("許可日 令和1年5月1日").permitDate, "2019-05-01");
+  assert.equal(extractImportShipmentFields("到着年月日 2026.10.2").arrivalDate, "2026-10-02");
+  assert.equal(extractImportShipmentFields("搬入日 2026年10月3日").arrivalDate, "2026-10-03");
+  assert.deepEqual(extractImportShipmentFields("許可日 2026/02/30\n入港日 2026/13/01"), {});
+});
+
+test("import amounts choose the maximum, retain exemption zeros and exclude tax rate labels", () => {
+  assert.deepEqual(extractImportShipmentFields("課税価格 120,000\n課税価格 180,000\n課税価格 合計 300,000\n関税額 0円"), { goodsValue: 300000, dutyAmount: 0 });
+  assert.deepEqual(extractImportShipmentFields("関税率 10%\n消費税率 7.8%\n輸入消費税率 10%\n地方消費税率 2.2%"), {});
+  assert.equal(detectImportDocument("請求書 消費税 10% 合計 110,000円 振込先"), undefined);
+});
+
+test("broker charges sum distinct lines and count a repeated line only once", () => {
+  assert.equal(extractImportShipmentFields("通関料 3,000円\n取扱料 2,000円\n通関料 3,000円").brokerFee, 5000);
+  assert.equal(extractImportShipmentFields("通関手数料\n3,000円\n取扱手数料\n2,000円\n通関手数料\n3,000円").brokerFee, 5000);
+  assert.equal(extractImportShipmentFields("通関業務料 1,000円 取扱料 JPY2,000.50").brokerFee, 3000.5);
+});
+
+test("supplier names use the label line or next nonempty line and stop at recipient or address labels", () => {
+  assert.equal(extractImportShipmentFields("仕出人: 合成海外家具廠").supplierName, "合成海外家具廠");
+  assert.equal(extractImportShipmentFields("輸出者：\n\n合成海外家具廠\n住所: 合成住所").supplierName, "合成海外家具廠");
+  for (const label of ["Shipper", "Exporter", "Seller"]) assert.equal(extractImportShipmentFields(`${label}: Synthetic Company Address: Synthetic Street`).supplierName, "Synthetic Company");
+  assert.equal(extractImportShipmentFields("仕出人 合成海外家具廠 輸入者 合成輸入社").supplierName, "合成海外家具廠");
+  assert.equal(extractImportShipmentFields("仕出人:\n住所: 合成住所").supplierName, undefined);
+  assert.equal(extractImportShipmentFields(`仕出人: ${"合".repeat(90)}`).supplierName?.length, 80);
+});
+
+test("permit numbers use ASCII after NFKC and normalize case, spaces and hyphens for matching", () => {
+  assert.equal(extractImportShipmentFields("申告番号：\nｓｙｎ－０００１").permitNumber, "SYN-0001");
+  assert.equal(extractImportShipmentFields("輸入許可番号: syn-0002").permitNumber, "SYN-0002");
+  assert.equal(normalizePermitNumber(" ｓｙｎ－０００１ "), "SYN0001");
+  assert.equal(normalizePermitNumber("syn - 0001"), "SYN0001");
+  assert.deepEqual(extractImportShipmentFields("許可番号 12345"), {});
+});
+
+test("fillImportShipment writes only empty fields and reports exactly the changed keys", () => {
+  const row = importShipmentsFixture().importShipments![0];
+  row.permitNumber = ""; row.dutyAmount = 0; delete row.arrivalDate;
+  const filled = fillImportShipment(row, { permitNumber: "SYN-0009", arrivalDate: "2026-10-01", dutyAmount: 15000, supplierName: "上書きしない", brokerVendorId: "other", goodsValue: 1 });
+  assert.deepEqual(filled, ["permitNumber", "arrivalDate"]);
+  assert.equal(row.dutyAmount, 0); assert.equal(row.supplierName, "合成海外家具廠"); assert.equal(row.goodsValue, 500000); assert.equal(row.brokerVendorId, "broker");
+  assert.deepEqual(fillImportShipment(row, { permitNumber: "", brokerFee: undefined }), []);
+  row.brokerVendorId = "";
+  assert.deepEqual(fillImportShipment(row, { brokerVendorId: "synthetic-broker" }), ["brokerVendorId"]);
+});
+
+test("assign fills empty shipment fields by default, can opt out, and changes the shipment version only on fill", () => {
+  const data = importShipmentsFixture(), row = data.importShipments!.find((item) => item.id === "ship-2")!;
+  const before = row.updatedAt;
+  const input = { action: "assign" as const, shipmentId: row.id, source: "mail" as const, documentId: "permit-3" };
+  const skipped = applyImportShipmentMutation(data, admin, "JAPAN", { ...input, fill: false });
+  assert.deepEqual(skipped.filled, []); assert.equal(row.permitNumber, undefined); assert.equal(row.updatedAt, before);
+  const assigned = applyImportShipmentMutation(data, admin, "JAPAN", input);
+  assert.deepEqual(assigned.filled, ["permitNumber"]); assert.equal(row.permitNumber, "SYN-0003"); assert.equal(row.dutyAmount, 5000); assert.notEqual(row.updatedAt, before);
+  const filledVersion = row.updatedAt;
+  assert.deepEqual(applyImportShipmentMutation(data, admin, "JAPAN", input).filled, []); assert.equal(row.updatedAt, filledVersion);
+  assert.deepEqual(applyImportShipmentMutation(data, admin, "JAPAN", { ...input, shipmentId: null }).filled, []); assert.equal(row.updatedAt, filledVersion);
+});
+
+test("assign uses invoice vendors for broker and supplier candidates and never fills OTHER documents", () => {
+  const data = importShipmentsFixture(), row = data.importShipments!.find((item) => item.id === "ship-old")!;
+  const broker = applyImportShipmentMutation(data, admin, "JAPAN", { action: "assign", shipmentId: row.id, source: "received", documentId: "broker-3", kind: "BROKER_INVOICE" });
+  assert.equal(row.brokerVendorId, "broker"); assert.deepEqual(broker.filled, ["brokerVendorId"]);
+  const supplier = applyImportShipmentMutation(data, admin, "JAPAN", { action: "assign", shipmentId: row.id, source: "received", documentId: "supplier-1", kind: "SUPPLIER_INVOICE" });
+  assert.equal(row.supplierName, "合成海外家具廠"); assert.deepEqual(supplier.filled, ["supplierName"]);
+  const other = applyImportShipmentMutation(data, admin, "JAPAN", { action: "assign", shipmentId: row.id, source: "mail", documentId: "permit-3", kind: "OTHER" });
+  assert.equal(row.permitNumber, undefined); assert.deepEqual(other.filled, []);
+  const plain = data.receivedInvoices.find((invoice) => invoice.id === "gas-1")!;
+  plain.ocrText = "請求書 消費税 10% 合計 110,000円 振込先";
+  assert.deepEqual(applyImportShipmentMutation(data, admin, "JAPAN", { action: "assign", shipmentId: row.id, source: "received", documentId: plain.id }).filled, []);
+});
+
+test("each kind of paper fills only the fields it is trusted for, and combined tax totals are not amounts", () => {
+  const data = importShipmentsFixture(), row = data.importShipments!.find((item) => item.id === "ship-old")!;
+  const broker = data.receivedInvoices.find((invoice) => invoice.id === "broker-3")!;
+  broker.ocrText = "合成通関サービス 請求書 申告番号 SYN-0077 通関料 3,000円 消費税 10% 300円 関税 立替 15,000円 輸入消費税 立替 40,000円";
+  const result = applyImportShipmentMutation(data, admin, "JAPAN", { action: "assign", shipmentId: row.id, source: "received", documentId: "broker-3", kind: "BROKER_INVOICE" });
+  assert.deepEqual(result.filled, ["permitNumber", "brokerFee", "brokerVendorId"]);
+  assert.equal(row.permitNumber, "SYN-0077"); assert.equal(row.brokerFee, 3000); assert.equal(row.importTaxNational, undefined); assert.equal(row.dutyAmount, 1000);
+  assert.deepEqual(fillImportShipment({ ...row, permitNumber: undefined, brokerFee: undefined }, { permitNumber: "X", goodsValue: 5 }, ["goodsValue"]), ["goodsValue"]);
+  assert.deepEqual(extractImportShipmentFields("関税・消費税等 55,000円\n関税額等 55,000円\n関税額 15,000円"), { dutyAmount: 15000 });
+  assert.deepEqual(extractImportShipmentFields("消費税等 4,000円 地方消費税及び 1,000円"), {});
+  assert.equal(extractImportShipmentFields("仕出人名 合成海外家具廠\n仕出人コード 12345").supplierName, "合成海外家具廠");
+  assert.equal(extractImportShipmentFields("Shipper's name: Synthetic Furniture Co., Ltd.").supplierName, "Synthetic Furniture Co., Ltd.");
+});
+
+test("permit matching ignores punctuation, case and width but excludes deleted shipments and other companies", () => {
+  const data = importShipmentsFixture();
+  data.importShipments![0].permitNumber = "ＳＹＮ－０００１";
+  assert.equal(findImportShipmentByPermitNumber(data, "JAPAN", "syn 0001")?.id, "ship-1");
+  assert.equal(findImportShipmentByPermitNumber(data, "CHINA", "SYN-0001"), undefined);
+  data.importShipments!.find((row) => row.id === "ship-deleted")!.permitNumber = "SYN-9999";
+  assert.equal(findImportShipmentByPermitNumber(data, "JAPAN", "syn9999"), undefined);
+  assert.equal(findImportShipmentByPermitNumber(data, "JAPAN", ""), undefined);
+  assert.equal(findImportShipmentByPermitNumber(data, "JAPAN", " - "), undefined);
 });
 
 test("mail and received invoice forms set or clear the shipment link only when the field is present", () => {

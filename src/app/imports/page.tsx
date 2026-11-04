@@ -29,7 +29,7 @@ export default async function ImportsPage({
 
   return (
     <AppShell>
-      <PageHeader title="輸入" description="1回の輸入（便）ごとに、仕入先インボイス・パッキングリスト・AWB/B/L・輸入許可通知書・通関業者の請求書をまとめ、関税と輸入消費税を記録します。" />
+      <PageHeader title="輸入" description="1回の輸入（便）ごとに、仕入先インボイス・パッキングリスト・AWB/B/L・輸入許可通知書・通関業者の請求書をまとめ、関税と輸入消費税を記録します。書類をドロップすると OCR で種類を判定し、許可番号・関税・輸入消費税を便に書き込みます。" />
       <ImportsWorkspace
         key={`${company}:${params.shipment || ""}`}
         initialId={params.shipment}
