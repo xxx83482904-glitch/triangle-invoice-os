@@ -128,22 +128,50 @@ function shipperKey(name = "") {
 const within45Days = (left: string, right: string) => Math.abs(Date.parse(left) - Date.parse(right)) <= 45 * 86400000;
 
 // The caller supplies shipments from the same company as the document views.
+const strongFamilies = [["declarationNumber", "D"], ["blNumber", "B"], ["invoiceNumber", "I"], ["containerNumber", "C"]] as const;
+type DraftGroup = { documents: ImportBoardDocument[]; weak: boolean };
+const groupFamilies = (group: DraftGroup) => new Set(group.documents.flatMap((document) => strongFamilies.filter(([key]) => document.references[key]).map(([, family]) => family)));
+const groupShippers = (group: DraftGroup) => new Set(group.documents.map((document) => shipperKey(document.references.shipperName)).filter(Boolean));
+const groupLatest = (group: DraftGroup) => group.documents.reduce((latest, document) => document.date > latest ? document.date : latest, "");
+
+// A bill of lading knows its B/L number and the invoice and packing list know their invoice number; only the shipper ties them.
+// They join when their numbers do not overlap and each is the other's only such partner, so a shipper with several open shipments
+// is never merged by guesswork.
+function joinComplementaryGroups(groups: DraftGroup[]) {
+  const partners = (group: DraftGroup) => {
+    const families = groupFamilies(group), shippers = groupShippers(group);
+    if (!families.size || !shippers.size) return [];
+    return groups.filter((other) => other !== group && [...groupFamilies(other)].length && ![...groupFamilies(other)].some((family) => families.has(family))
+      && [...groupShippers(other)].some((shipper) => shippers.has(shipper)) && within45Days(groupLatest(group), groupLatest(other)));
+  };
+  for (let merged = true; merged;) {
+    merged = false;
+    for (const group of groups) {
+      const [partner, ...rest] = partners(group);
+      if (!partner || rest.length || partners(partner).length !== 1) continue;
+      group.documents.push(...partner.documents); group.weak = true;
+      groups.splice(groups.indexOf(partner), 1); merged = true; break;
+    }
+  }
+  return groups;
+}
+
 export function groupImportDocuments(documents: ImportBoardDocument[], shipments: ImportShipment[]): ImportDocumentGroup[] {
   const parents = documents.map((_, index) => index);
   const root = (index: number): number => {
     while (parents[index] !== index) { parents[index] = parents[parents[index]]; index = parents[index]; }
     return index;
   };
-  const strongKeys = documents.map((document) => referencePairs.flatMap(([key], index) => {
+  const strongKeys = documents.map((document) => strongFamilies.flatMap(([key, family]) => {
     const value = normalizeReference(document.references[key] ?? "");
-    return value ? [`${["D", "B", "I"][index]}:${value}`] : [];
+    return value ? [`${family}:${value}`] : [];
   }));
   const owners = new Map<string, number>();
   strongKeys.forEach((keys, index) => keys.forEach((key) => {
     const owner = owners.get(key);
     if (owner === undefined) owners.set(key, index); else parents[root(index)] = root(owner);
   }));
-  const strong = new Map<number, { documents: ImportBoardDocument[]; weak: boolean }>();
+  const strong = new Map<number, DraftGroup>();
   documents.forEach((document, index) => {
     if (!strongKeys[index].length) return;
     const id = root(index), group = strong.get(id) ?? { documents: [], weak: false };
@@ -159,6 +187,7 @@ export function groupImportDocuments(documents: ImportBoardDocument[], shipments
     if (candidates.length === 1) { candidates[0].documents.push(document); candidates[0].weak = true; }
     else groups.push({ documents: [document], weak: Boolean(name) });
   }
+  joinComplementaryGroups(groups);
   return groups.map((group): ImportDocumentGroup => {
     const references: ImportReferences = {};
     for (const document of group.documents) {

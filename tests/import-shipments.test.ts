@@ -222,6 +222,20 @@ test("the OCR placeholder payee never becomes a shipment's broker", () => {
   assert.equal(row.brokerVendorId, undefined); assert.deepEqual(result.filled, []);
 });
 
+test("a lading group and an invoice group of one shipper join only when each is the other's only partner", () => {
+  const shipper = { shipperName: "Synthetic Furniture Co., Ltd." };
+  const lading = boardDocument("bl", { blNumber: "SYNB1TKY260001A", ...shipper }, { kind: "WAYBILL" });
+  const packing = boardDocument("packing", { invoiceNumber: "SYN-INV-0091", ...shipper }, { kind: "PACKING_LIST" });
+  const invoice = boardDocument("invoice", { invoiceNumber: "SYN-INV-0091", shipperName: "SYNTHETIC FURNITURE CO LTD" }, { kind: "SUPPLIER_INVOICE" });
+  const joined = groupImportDocuments([lading, packing, invoice], []);
+  assert.equal(joined.length, 1); assert.equal(joined[0].weak, true); assert.equal(joined[0].blNumber, "SYNB1TKY260001A"); assert.equal(joined[0].invoiceNumber, "SYN-INV-0091");
+  const second = boardDocument("bl2", { blNumber: "SYNB2TKY260002B", ...shipper }, { kind: "WAYBILL" });
+  assert.equal(groupImportDocuments([lading, second, packing, invoice], []).length, 3);
+  const notice = boardDocument("notice", { containerNumber: "SYNU1234567" }, { kind: "OTHER" });
+  const third = boardDocument("bl3", { blNumber: "SYNB3TKY260003C", containerNumber: "SYNU1234567" }, { kind: "WAYBILL" });
+  assert.equal(groupImportDocuments([notice, third], []).length, 1);
+});
+
 test("permit matching ignores punctuation, case and width but excludes deleted shipments and other companies", () => {
   const data = importShipmentsFixture();
   data.importShipments![0].permitNumber = "ＳＹＮ－０００１";
@@ -349,9 +363,10 @@ test("document views expose original display names and references with titles as
   const view = importShipmentViews(data, "JAPAN").find((row) => row.id === "ship-2")!;
   assert.equal(view.documents.find((document) => document.id === mail.id)?.displayName, "合成B-L原本.pdf");
   assert.equal(view.checklist.find((entry) => entry.kind === "SUPPLIER_INVOICE")?.documents[0].references.invoiceNumber, "SYN-INV-0091");
+  // The lading pair and the invoice pair share one shipper and are each other's only partner, so they form one shipment candidate.
   const groups = groupImportDocuments(unassigned, []);
-  assert.equal(groups.find((group) => group.blNumber === "SYN1BL260001")?.documents.length, 2);
-  assert.equal(groups.find((group) => group.invoiceNumber === "SYN-INV-0091")?.documents.length, 2);
+  const joined = groups.find((group) => group.blNumber === "SYN1BL260001")!;
+  assert.equal(joined.documents.length, 4); assert.equal(joined.invoiceNumber, "SYN-INV-0091"); assert.equal(joined.weak, true);
 });
 
 test("reference lookup respects priority, normalization, company and deletion and never compares empty keys", () => {

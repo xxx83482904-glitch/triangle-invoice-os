@@ -62,6 +62,17 @@ test("references are read from the labels papers actually carry, and the first O
     { blNumber: "SYNB1TKY260001A", shipperName: "SYNTHETIC FURNITURE CO., LTD." });
   assert.deepEqual(readImportReferences("PACKING LIST\nInvoice No. SYN-INV-0091\nShipper: Synthetic Furniture Co., Ltd.\nDate: 2026/09/20"), { invoiceNumber: "SYN-INV-0091", shipperName: "Synthetic Furniture Co., Ltd." });
   // A label whose value is elsewhere must not borrow the next reference's value.
-  assert.deepEqual(readImportReferences("Ocean B/L No.\nVoy No.: 2610N\nI/V No.\nSYN-INV-0091\nContainer No: SYNU1234567"), { invoiceNumber: "SYN-INV-0091" });
+  assert.deepEqual(readImportReferences("Ocean B/L No.\nVoy No.: 2610N\nI/V No.\nSYN-INV-0091\nContainer No: SYNU1234567"), { invoiceNumber: "SYN-INV-0091", containerNumber: "SYNU1234567" });
   assert.deepEqual(readImportReferences("B/L No.\nSYNB1TKY260001A\nI/V No.\nSYN-INV-0091"), { blNumber: "SYNB1TKY260001A", invoiceNumber: "SYN-INV-0091" });
+});
+
+test("transport numbers are found away from their label, in the file name, and as containers", () => {
+  const lading = "House Bill of Lading\nShipper\nSYNTHETIC FURNITURE CO., LTD.\nB/L No.\nVESSEL / VOYAGE\nJOB No.\nTOTAL CARTONS: 334\nPort of loading\nSHENZHEN\nSYNB1TKY260001A\nFreight prepaid\nSYNB1TKY260001A";
+  assert.deepEqual(readImportReferences(lading), { blNumber: "SYNB1TKY260001A", shipperName: "SYNTHETIC FURNITURE CO., LTD." });
+  assert.deepEqual(readImportReferences("請求書\nOcean B/L No.\nVoy No.: 2610N\nI/V No.\nContainer No:\n通関料 ¥3,000\nSYNB1TKY260001A\nSYNU1234567"), { blNumber: "SYNB1TKY260001A", containerNumber: "SYNU1234567" });
+  assert.deepEqual(readImportReferences("HOUSE AIR WAYBILL\nAWB No. 123-45678901\nShipper: Synthetic Furniture Co., Ltd."), { blNumber: "123-45678901", shipperName: "Synthetic Furniture Co., Ltd." });
+  assert.equal(readImportReferences("AIR WAYBILL\nAWB No.\nPieces 12\nGross 320 kg\nFlight 2026-09-28\n123-45678901").blNumber, "123-45678901");
+  assert.equal(readImportReferences("B/L No.\nVESSEL", "SYNB1TKY260001A.pdf").blNumber, "SYNB1TKY260001A");
+  // A product code on an ordinary invoice is not a bill of lading number.
+  assert.deepEqual(readImportReferences("請求書\n品番 ABC1234567890\n合計 110,000円"), {});
 });

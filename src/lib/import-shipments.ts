@@ -111,7 +111,7 @@ export function documentDisplayName(ocrText = "", fallback = "") {
   return /\.(pdf|jpe?g|png)$/i.test(first) && first.length <= 120 ? first.replace(/^.*[\\/]/, "") : fallback;
 }
 
-export type ImportReferences = { declarationNumber?: string; blNumber?: string; invoiceNumber?: string; shipperName?: string };
+export type ImportReferences = { declarationNumber?: string; blNumber?: string; invoiceNumber?: string; containerNumber?: string; shipperName?: string };
 
 const shipperLabel = /(?:(?:仕出人|輸出者)(?:名称|名)?|Shipper(?:'s)?(?:\s*name)?|Exporter|Seller)[ ]*:?[ ]*/i;
 const shipperStop = /輸入者|Importer|Consignee|住所|Address|コード|Code/i;
@@ -144,6 +144,22 @@ const invoiceLabel = /仕入書番号|インボイス(?:番号|No)|INVOICE\s*(?:
 const datelike = /^\d{4}[/.-]\d{1,2}[/.-]\d{1,2}$/;
 const otherReference = /(?:Container|Seal|Ref\.?|Job|Voy(?:age)?|Booking|Order|P\/?O)\s*(?:No|Number|#)/i;
 const codeToken = (window: string, pattern: RegExp) => window.match(pattern)?.map((token) => token.trim()).find((token) => /\d/.test(token) && !datelike.test(token) && !/^(?:NO|BL|AWB|HAWB|MAWB)$/i.test(token));
+// Transport numbers have shapes of their own: an ocean B/L is a carrier code and digits, an air waybill is 3 digits, a dash and 8 digits,
+// a container is three letters, a category letter and 7 digits. On a bill of lading the number often sits lines away from its label.
+const blContext = /B\/L|BILL OF LADING|WAYBILL|\bAWB\b|HAWB|MAWB|船荷証券/i;
+const oceanBlToken = /^[A-Z]{3,4}\d[A-Z0-9]{7,15}$/;
+const airWaybillToken = /^\d{3}-\d{8}$/;
+const containerToken = /\b[A-Z]{3}[UJZ]\d{7}\b/;
+function transportNumber(lines: string[]) {
+  if (!lines.some((line) => blContext.test(line))) return undefined;
+  const counts = new Map<string, number>();
+  const words = [lines[0]?.replace(/\.[a-z0-9]+$/i, "") ?? "", ...lines.flatMap((line) => line.toUpperCase().split(/[\s:：,、()\[\]]+/))];
+  for (const word of words) {
+    if (!(oceanBlToken.test(word) || airWaybillToken.test(word)) || containerToken.test(word)) continue;
+    counts.set(word, (counts.get(word) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
 
 export function readImportReferences(text = "", fileName = ""): ImportReferences {
   const lines = normalizeOcrLines(fileName + "\n" + text);
@@ -152,10 +168,13 @@ export function readImportReferences(text = "", fileName = ""): ImportReferences
     if (naccs) return naccs.replace(/\D/g, "");
     return window.split("\n").slice(0, 3).join("\n").match(/(?<![0-9A-Z])[0-9A-Z][0-9A-Z-]{5,19}(?![0-9A-Z-])/i)?.[0].toUpperCase();
   });
-  const blNumber = valueNear(lines, blLabel, 6, (window) => codeToken(window.toUpperCase(), /\b[A-Z]{2,6}[A-Z0-9-]{4,18}\b/g), new RegExp(invoiceLabel.source + "|" + otherReference.source, "i"));
-  const invoiceNumber = valueNear(lines, invoiceLabel, 4, (window) => codeToken(window.toUpperCase(), /\b[A-Z0-9][A-Z0-9/-]{3,24}\b/g), new RegExp(blLabel.source + "|" + otherReference.source, "i"));
+  const blNumber = valueNear(lines, blLabel, 6, (window) => codeToken(window.toUpperCase(), /\b(?:[A-Z]{2,6}[A-Z0-9-]{4,18}|\d{3}-\d{8})\b/g), new RegExp(invoiceLabel.source + "|" + otherReference.source, "i"))
+    ?? transportNumber(lines);
+  const invoiceNumber = valueNear(lines, invoiceLabel, 8, (window) => codeToken(window.toUpperCase(), /\b[A-Z0-9][A-Z0-9/-]{3,24}\b/g), new RegExp(blLabel.source + "|" + otherReference.source, "i"));
+  const containerNumber = lines.join("\n").toUpperCase().match(containerToken)?.[0];
   const shipperName = readShipperName(lines);
-  return { ...(declarationNumber ? { declarationNumber } : {}), ...(blNumber ? { blNumber } : {}), ...(invoiceNumber ? { invoiceNumber } : {}), ...(shipperName ? { shipperName } : {}) };
+  return { ...(declarationNumber ? { declarationNumber } : {}), ...(blNumber ? { blNumber } : {}), ...(invoiceNumber ? { invoiceNumber } : {}),
+    ...(containerNumber ? { containerNumber } : {}), ...(shipperName ? { shipperName } : {}) };
 }
 
 const dateToken = /(?:令和(元|\d{1,2})年\s*(\d{1,2})月\s*(\d{1,2})日|R(\d{1,2})[./-](\d{1,2})[./-](\d{1,2})|(\d{4})[./年-]\s*(\d{1,2})[./月-]\s*(\d{1,2})日?)(?![0-9])/gi;
