@@ -53,6 +53,7 @@ async function assertSavedFile(data: AppData, mailId: string, expected: Buffer) 
 
 test("permit intake saves a CUSTOMS original and creates and fills a shipment in one import mutation", async () => {
   const request = input(permitText), result = await intakeImportDocument(request);
+  assert.equal(result.displayName, request.fileName);
   assert.equal(result.error, undefined); assert.equal(result.kind, "IMPORT_PERMIT"); assert.equal(result.savedAs, "other-document"); assert.equal(result.shipmentCreated, true);
   assert.deepEqual(result.filled, ["許可番号", "許可日", "到着日", "仕入先", "課税価格", "関税", "輸入消費税", "地方消費税"]);
   const data = await readData(), row = data.importShipments![0], mail = data.mailDocuments[0];
@@ -78,6 +79,27 @@ test("a tax payment with the same normalized declaration number joins the existi
   assert.equal(data.mailDocuments.find((row) => row.id === result.mailDocumentId)?.importShipmentId, first.shipmentId);
 });
 
+test("a B/L joins a shipment by B/L alone and retains the uploaded display name", async () => {
+  const data = await readData();
+  data.importShipments = [{ id: "synthetic-bl-shipment", company: "JAPAN", title: "合成B/L便", status: "OPEN", blNumber: "ＳＹＮ１ＢＬ－２６０００１", createdById: admin.id, createdAt: timestamp, updatedAt: timestamp }];
+  await writeFile(path.join(root, "app-data.json"), JSON.stringify(data));
+  const result = await intakeImportDocument(input("HOUSE BILL OF LADING\nB/L No. SYN1BL260001\nShipper: 合成海外家具廠", { fileName: "合成B-L原本.pdf" }));
+  assert.equal(result.error, undefined); assert.equal(result.kind, "WAYBILL"); assert.equal(result.shipmentId, "synthetic-bl-shipment"); assert.equal(result.shipmentCreated, undefined);
+  assert.equal(result.displayName, "合成B-L原本.pdf"); assert.notEqual(result.fileName, result.displayName);
+  const after = await readData();
+  assert.equal(after.importShipments!.length, 1); assert.equal(after.importShipments![0].permitNumber, undefined);
+  assert.equal(after.mailDocuments.find((mail) => mail.id === result.mailDocumentId)?.importShipmentId, result.shipmentId);
+});
+
+test("a packing list joins by invoice number without creating another shipment", async () => {
+  const data = await readData();
+  data.importShipments = [{ id: "synthetic-invoice-shipment", company: "JAPAN", title: "合成インボイス便", status: "OPEN", invoiceNumber: "SYN/INV.0091", createdById: admin.id, createdAt: timestamp, updatedAt: timestamp }];
+  await writeFile(path.join(root, "app-data.json"), JSON.stringify(data));
+  const result = await intakeImportDocument(input("PACKING LIST\nInvoice No. SYN-INV-0091\nShipper: 合成海外家具廠"));
+  assert.equal(result.error, undefined); assert.equal(result.kind, "PACKING_LIST"); assert.equal(result.shipmentId, "synthetic-invoice-shipment");
+  assert.equal(result.shipmentCreated, undefined); assert.equal(result.displayName, "合成書類.pdf"); assert.equal((await readData()).importShipments!.length, 1);
+});
+
 test("broker invoices become received invoices and fill the selected shipment's vendor and fee", async () => {
   const first = await intakeImportDocument(input(permitText));
   const request = input("発行者: 合成通関株式会社\n請求書 通関料 3,000円 関税 立替 15,000円 請求金額 18,000円 支払期限 2026-11-10", { shipmentId: first.shipmentId });
@@ -101,6 +123,7 @@ test("packing lists without a target are saved but do not create a shipment", as
 
 test("a missing target returns a link error while preserving the uploaded original", async () => {
   const request = input(permitText, { shipmentId: "synthetic-missing" }), result = await intakeImportDocument(request), data = await readData();
+  assert.equal(result.displayName, request.fileName);
   assert.equal(result.error, "輸入便が見つかりません"); assert.equal(result.savedAs, "other-document"); assert.equal(result.shipmentId, undefined); assert.deepEqual(result.filled, []);
   assert.equal(data.mailDocuments.length, 1); assert.equal(data.mailDocuments[0].importShipmentId, undefined); assert.equal(data.importShipments!.length, 0);
   await assertSavedFile(data, result.mailDocumentId!, request.buffer);

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { saveImportShipmentAction } from "@/app/imports/actions";
 import { ImportDropzone } from "@/app/imports/import-dropzone";
 import { FilterPanel } from "@/components/app/filter-panel";
@@ -19,8 +19,8 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import { formatDate, yen } from "@/lib/format";
-import type { ImportShipmentMutation, ImportShipmentView } from "@/lib/import-shipment-views";
-import { importChecklistKinds, importDocumentKindLabels, importDocumentKinds, importFillLabels, importShipmentStatusLabels, importShipmentStatuses, type ImportLinkedDocument } from "@/lib/import-shipments";
+import type { ImportBoardDocument, ImportDocumentGroup, ImportShipmentMutation, ImportShipmentView } from "@/lib/import-shipment-views";
+import { importChecklistKinds, importDocumentKindLabels, importDocumentKinds, importFillLabels, importShipmentStatusLabels, importShipmentStatuses } from "@/lib/import-shipments";
 import { countByMonth } from "@/lib/month-tabs";
 import { operationFailureToast } from "@/lib/operation-feedback";
 import type { ImportDocumentKind, ImportShipmentStatus } from "@/lib/types";
@@ -54,6 +54,7 @@ function shipmentFields(form: FormData) {
   }
   return {
     title: text("title"), projectId: text("projectId"), supplierName: text("supplierName"), brokerVendorId: text("brokerVendorId"), permitNumber: text("permitNumber"),
+    blNumber: text("blNumber"), invoiceNumber: text("invoiceNumber"),
     permitDate: text("permitDate"), arrivalDate: text("arrivalDate"), folderMonth: text("folderMonth"), status: text("status") as ImportShipmentStatus, memo: text("memo"), ...amounts,
   };
 }
@@ -61,19 +62,31 @@ function shipmentFields(form: FormData) {
 function useShipmentSave(company: CompanyScope) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const run = (input: ImportShipmentMutation, done: string, after?: (result: { id: string }) => void) => start(async () => {
-    const result = await saveImportShipmentAction(company, input);
-    if (!result.success) { toast(operationFailureToast(result.error)); return; }
-    const read = result.action === "assign" && result.filled.length ? `${result.filled.map((key) => importFillLabels[key]).join("・")}を読み取りました。` : "";
-    toast({ title: `${done}${read}`, variant: "success" });
-    after?.(result);
-    router.refresh();
-  });
+  const inFlight = useRef(false);
+  type Result = Extract<Awaited<ReturnType<typeof saveImportShipmentAction>>, { success: true }>;
+  const run = (input: ImportShipmentMutation, done: string | ((result: Result) => string), after?: (result: Result) => void) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    start(async () => {
+      try {
+        const result = await saveImportShipmentAction(company, input);
+        if (!result.success) { toast(operationFailureToast(result.error)); return; }
+        const read = (result.action === "assign" || result.action === "group") && result.filled.length ? `${result.filled.map((key) => importFillLabels[key]).join("・")}を読み取りました。` : "";
+        const title = result.action === "reread" ? result.changed.length
+          ? `${result.changed.map(({ key }) => importFillLabels[key]).join("・")}を書き直しました。元の値は画面右上の取り消しで戻せます。`
+          : "書類から読み直せる項目はありませんでした。" : `${typeof done === "function" ? done(result) : done}${read}`;
+        toast({ title, variant: "success" });
+        after?.(result);
+        router.refresh();
+      } catch (error) { toast(operationFailureToast(error)); }
+      finally { inFlight.current = false; }
+    });
+  };
   return { pending, run };
 }
 
-export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned, projects, vendors }: {
-  initialId?: string; canEdit: boolean; company: CompanyScope; rows: ImportShipmentView[]; unassigned: ImportLinkedDocument[]; projects: Option[]; vendors: Option[];
+export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned, groups, projects, vendors }: {
+  initialId?: string; canEdit: boolean; company: CompanyScope; rows: ImportShipmentView[]; unassigned: ImportBoardDocument[]; groups: ImportDocumentGroup[]; projects: Option[]; vendors: Option[];
 }) {
   const wide = useMediaQuery("(min-width: 1024px)");
   const [month, setMonth] = useState("");
@@ -87,7 +100,7 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
   const needle = query.trim().toLocaleLowerCase("ja-JP");
   const filtered = useMemo(() => rows.filter((row) => (!month || row.month === month)
     && (status === "all" || (status === "missing" ? row.missing.length > 0 : row.status === status))
-    && (!needle || [row.title, row.supplierName, row.brokerName, row.projectName, row.permitNumber, row.memo].some((text) => (text ?? "").toLocaleLowerCase("ja-JP").includes(needle)))),
+    && (!needle || [row.title, row.supplierName, row.brokerName, row.projectName, row.permitNumber, row.blNumber, row.invoiceNumber, row.memo].some((text) => (text ?? "").toLocaleLowerCase("ja-JP").includes(needle)))),
   [rows, month, status, needle]);
   const activeRow = rows.find((row) => row.id === activeId) ?? null;
   // Beside the list the pane shows the first item until one is pressed; over the list it waits for a press.
@@ -101,7 +114,7 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
 
   return <div className="space-y-6">
     {canEdit ? <ImportDropzone company={company} onCreated={open} /> : null}
-    {unassigned.length ? <UnassignedDocuments company={company} canEdit={canEdit} documents={unassigned} shipments={rows} onCreate={startCreate} /> : null}
+    {groups.length ? <ShipmentCandidates company={company} canEdit={canEdit} groups={groups} shipments={rows} onCreated={open} /> : null}
     <Card variant="section">
       <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -120,7 +133,7 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
           primary={<>
             <label className="filter-panel-search relative min-w-0 flex-1 basis-56">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} placeholder="便名・仕入先・許可番号・案件を検索" className="h-11 pl-9 lg:h-9" onChange={(event) => setQuery(event.target.value)} />
+              <Input value={query} placeholder="便名・仕入先・参照番号・案件を検索" className="h-11 pl-9 lg:h-9" onChange={(event) => setQuery(event.target.value)} />
             </label>
             <OptionTabs label="輸入便の状態で絞り込み" value={status} options={statusFilterOptions} onChange={setStatus} />
           </>}
@@ -192,9 +205,9 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
   </div>;
 }
 
-function DocumentLine({ document, canEdit, pending, onDetach }: { document: ImportLinkedDocument; canEdit: boolean; pending: boolean; onDetach: () => void }) {
+function DocumentLine({ document, canEdit, pending, onDetach }: { document: ImportBoardDocument; canEdit: boolean; pending: boolean; onDetach: () => void }) {
   return <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-    <Link href={document.href} prefetch={false} className="inline-flex min-w-0 max-w-full items-center gap-1 font-medium text-foreground hover:underline underline-offset-4"><span className="truncate">{document.title}</span><ExternalLink className="size-3 shrink-0" /></Link>
+    <Link href={document.href} prefetch={false} title={document.title} className="inline-flex min-w-0 max-w-full items-center gap-1 font-medium text-foreground hover:underline underline-offset-4"><span className="truncate">{document.displayName}</span><ExternalLink className="size-3 shrink-0" /></Link>
     <span className="text-muted-foreground">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? ` / ${yen.format(document.amount)}` : ""}</span>
     {document.source === "received" ? <Badge variant="outline" className={document.paid ? "border-emerald-200 text-emerald-700 dark:text-emerald-300" : "border-amber-200 text-amber-800 dark:text-amber-300"}>{document.paid ? "支払済" : "未払い"}</Badge> : null}
     {canEdit ? <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" disabled={pending} onClick={onDetach}>外す</Button> : null}
@@ -202,23 +215,27 @@ function DocumentLine({ document, canEdit, pending, onDetach }: { document: Impo
 }
 
 function ShipmentDetail({ canEdit, company, row, unassigned, projects, vendors, onDeleted }: {
-  canEdit: boolean; company: CompanyScope; row: ImportShipmentView; unassigned: ImportLinkedDocument[]; projects: Option[]; vendors: Option[]; onDeleted: () => void;
+  canEdit: boolean; company: CompanyScope; row: ImportShipmentView; unassigned: ImportBoardDocument[]; projects: Option[]; vendors: Option[]; onDeleted: () => void;
 }) {
   const { pending, run } = useShipmentSave(company);
   const others = row.documents.filter((document) => !importChecklistKinds.includes(document.kind));
-  const detach = (document: ImportLinkedDocument) => run({ action: "assign", shipmentId: null, source: document.source, documentId: document.id }, "輸入便から外しました。");
+  const detach = (document: ImportBoardDocument) => run({ action: "assign", shipmentId: null, source: document.source, documentId: document.id }, "輸入便から外しました。");
   return <div className="space-y-5 p-4">
     <section aria-label="輸入便の費用" className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
       {([["関税", row.dutyAmount], ["輸入消費税", row.importTax], ["諸費用合計", row.costTotal], ["着地原価", row.landedCost]] as const).map(([label, value]) => (
         <div key={label} className="min-w-0 rounded-lg border bg-background/60 px-3 py-2"><div>{label}</div><div className="break-all font-mono text-sm font-medium text-foreground">{yen.format(value)}</div></div>
       ))}
     </section>
+    {canEdit ? <Button type="button" variant="ghost" size="sm" disabled={pending || !row.documents.length}
+      onClick={() => run({ action: "reread", id: row.id, version: row.updatedAt }, "")}>{pending ? "処理中…" : "書類から読み直す"}</Button> : null}
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       <Badge variant="outline" className={statusTone[row.status]}>{importShipmentStatusLabels[row.status]}</Badge>
       <span>{monthLabel(row.month)}</span>
       {row.projectName ? <span>{row.projectName}</span> : null}
       {row.brokerName ? <span>通関: {row.brokerName}</span> : null}
       {row.permitNumber ? <span className="font-mono">許可番号 {row.permitNumber}</span> : null}
+      {row.blNumber ? <Badge variant="outline" className="max-w-full whitespace-normal break-all font-mono">B/L {row.blNumber}</Badge> : null}
+      {row.invoiceNumber ? <Badge variant="outline" className="max-w-full whitespace-normal break-all font-mono">INV {row.invoiceNumber}</Badge> : null}
       {row.unpaidCount ? <span className="text-amber-700 dark:text-amber-300">未払いの請求書 {row.unpaidCount}件</span> : null}
     </div>
 
@@ -257,7 +274,7 @@ function ShipmentDetail({ canEdit, company, row, unassigned, projects, vendors, 
   </div>;
 }
 
-function AttachForm({ company, shipmentId, candidates }: { company: CompanyScope; shipmentId: string; candidates: ImportLinkedDocument[] }) {
+function AttachForm({ company, shipmentId, candidates }: { company: CompanyScope; shipmentId: string; candidates: ImportBoardDocument[] }) {
   const { pending, run } = useShipmentSave(company);
   const [key, setKey] = useState("");
   const [kind, setKind] = useState<ImportDocumentKind | "">("");
@@ -268,7 +285,7 @@ function AttachForm({ company, shipmentId, candidates }: { company: CompanyScope
     <label className="min-w-0 flex-1 basis-48 space-y-1">
       <span className="text-xs font-medium text-muted-foreground">書類を追加</span>
       <select value={chosen.key} className={`${selectClass} w-full`} onChange={(event) => { setKey(event.target.value); setKind(""); }}>
-        {candidates.map((document) => <option key={document.key} value={document.key}>{document.title} / {document.party}</option>)}
+        {candidates.map((document) => <option key={document.key} value={document.key}>{document.displayName} / {document.party}</option>)}
       </select>
     </label>
     <label className="space-y-1">
@@ -307,6 +324,8 @@ function ShipmentForm({ company, row, projects, vendors, onSaved }: { company: C
       </label>
       <label className="space-y-1"><span className={field}>海外の仕入先</span><Input name="supplierName" maxLength={200} defaultValue={row?.supplierName ?? ""} /></label>
       <label className="space-y-1"><span className={field}>輸入許可番号</span><Input name="permitNumber" maxLength={100} defaultValue={row?.permitNumber ?? ""} className="font-mono" /></label>
+      <label className="space-y-1"><span className={field}>B/L・AWB番号</span><Input name="blNumber" maxLength={100} defaultValue={row?.blNumber ?? ""} className="font-mono" /></label>
+      <label className="space-y-1"><span className={field}>インボイス番号</span><Input name="invoiceNumber" maxLength={100} defaultValue={row?.invoiceNumber ?? ""} className="font-mono" /></label>
       <label className="space-y-1"><span className={field}>輸入許可日</span><Input name="permitDate" type="date" defaultValue={row?.permitDate ?? ""} /></label>
       <label className="space-y-1"><span className={field}>到着日</span><Input name="arrivalDate" type="date" defaultValue={row?.arrivalDate ?? ""} /></label>
       <label className="space-y-1"><span className={field}>表示する月（空欄なら許可日の月）</span><Input name="folderMonth" type="month" defaultValue={row?.folderMonth ?? ""} /></label>
@@ -316,57 +335,85 @@ function ShipmentForm({ company, row, projects, vendors, onSaved }: { company: C
     </div>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {amountFields.map(([key, label]) => (
-        <label key={key} className="space-y-1"><span className={field}>{label}</span><Input name={key} type="number" inputMode="numeric" min="0" step="1" defaultValue={row?.[key] || ""} className="font-mono" /></label>
+        <label key={key} className="space-y-1"><span className={field}>{label}</span><Input name={key} type="number" inputMode="numeric" min="0" step="1" defaultValue={row?.recorded[key] ?? ""} className="font-mono" /></label>
       ))}
     </div>
     <label className="block space-y-1"><span className={field}>メモ</span><Textarea name="memo" maxLength={2000} defaultValue={row?.memo ?? ""} className="min-h-20" /></label>
   </form>;
 }
 
-function UnassignedDocuments({ company, canEdit, documents, shipments, onCreate }: {
-  company: CompanyScope; canEdit: boolean; documents: ImportLinkedDocument[]; shipments: ImportShipmentView[]; onCreate: () => void;
+function ShipmentCandidates({ company, canEdit, groups, shipments, onCreated }: {
+  company: CompanyScope; canEdit: boolean; groups: ImportDocumentGroup[]; shipments: ImportShipmentView[]; onCreated: (id: string) => void;
 }) {
-  const { pending, run } = useShipmentSave(company);
   const [expanded, setExpanded] = useState(false);
-  const [choices, setChoices] = useState<Record<string, { shipmentId: string; kind: ImportDocumentKind }>>({});
-  const choice = (document: ImportLinkedDocument) => choices[document.key] ?? { shipmentId: shipments[0]?.id ?? "", kind: document.suggestedKind ?? document.kind };
-  return <Card variant="section">
+  return <Card variant="section" className="min-w-0">
     <CardHeader className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <CardTitle>未割当の輸入関係書類 <span className="font-normal text-muted-foreground">{documents.length}件</span></CardTitle>
-        <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="outline" className="lg:hidden" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "閉じる" : "開く"}</Button>
-          {canEdit ? <Button type="button" size="sm" variant="outline" className="gap-1" onClick={onCreate}><Plus className="size-4" />新しい便</Button> : null}
-        </div>
+        <CardTitle>便の候補 <span className="font-normal text-muted-foreground">{groups.length}組・{groups.reduce((sum, group) => sum + group.documents.length, 0)}件</span></CardTitle>
+        <Button type="button" size="sm" variant="outline" className="lg:hidden" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "閉じる" : "開く"}</Button>
       </div>
-      <p className={`text-xs text-muted-foreground ${expanded ? "" : "hidden lg:block"}`}>郵便仕分けの分類「輸入・通関」と、関税・通関の語がある書類です。便を選んで追加すると、その便の書類として揃い具合に数えられます。上のドロップ領域に入れると自動で判定・紐付けします。</p>
+      <p className={`text-xs text-muted-foreground ${expanded ? "" : "hidden lg:block"}`}>取り込んだ書類を、申告番号・B/L/AWB番号・インボイス番号・荷主名が同じものどうしでまとめています。組ごとに便を作るか、既存の便に追加できます。</p>
     </CardHeader>
-    <CardContent className={expanded ? "" : "hidden lg:block"}>
-      <ul className="divide-y">
-        {documents.map((document) => {
-          const current = choice(document);
-          return <li key={document.key} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:gap-3">
-            <div className="min-w-0 flex-1 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Link href={document.href} prefetch={false} className="truncate font-medium hover:underline underline-offset-4">{document.title}</Link>
-                <Badge variant="secondary">{importDocumentKindLabels[document.suggestedKind ?? document.kind]}</Badge>
-                <span className="text-xs text-muted-foreground">{document.source === "mail" ? "郵便物" : "受領請求書"}</span>
-              </div>
-              <div className="text-xs text-muted-foreground">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? ` / ${yen.format(document.amount)}` : ""}{document.evidence ? ` / 検出語: ${document.evidence}` : ""}</div>
-            </div>
-            {canEdit ? <div className="flex flex-wrap items-center gap-2">
-              <select aria-label="追加する便" value={current.shipmentId} className={`${selectClass} max-w-56`} onChange={(event) => setChoices({ ...choices, [document.key]: { ...current, shipmentId: event.target.value } })}>
-                {shipments.length ? null : <option value="">便がありません</option>}
-                {shipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.title}（{monthLabel(shipment.month)}）</option>)}
-              </select>
-              <select aria-label="書類の種類" value={current.kind} className={selectClass} onChange={(event) => setChoices({ ...choices, [document.key]: { ...current, kind: event.target.value as ImportDocumentKind } })}>
-                {importDocumentKinds.map((value) => <option key={value} value={value}>{importDocumentKindLabels[value]}</option>)}
-              </select>
-              <Button type="button" size="sm" disabled={pending || !current.shipmentId} onClick={() => run({ action: "assign", shipmentId: current.shipmentId, source: document.source, documentId: document.id, kind: current.kind }, "輸入便に追加しました。")}>追加</Button>
-            </div> : null}
-          </li>;
-        })}
-      </ul>
+    <CardContent className={`space-y-3 ${expanded ? "" : "hidden lg:block"}`}>
+      {groups.map((group) => <ShipmentCandidate key={group.key} company={company} canEdit={canEdit} group={group} shipments={shipments} onCreated={onCreated} />)}
     </CardContent>
   </Card>;
+}
+
+function ShipmentCandidate({ company, canEdit, group, shipments, onCreated }: {
+  company: CompanyScope; canEdit: boolean; group: ImportDocumentGroup; shipments: ImportShipmentView[]; onCreated: (id: string) => void;
+}) {
+  const { pending, run } = useShipmentSave(company);
+  const [title, setTitle] = useState(group.suggestedTitle);
+  const [shipmentId, setShipmentId] = useState("");
+  const [kinds, setKinds] = useState<Record<string, ImportDocumentKind>>({});
+  const kind = (document: ImportBoardDocument) => kinds[document.key] ?? document.suggestedKind ?? document.kind;
+  const submit = (targetId: string | null) => {
+    const shipmentTitle = targetId ? shipments.find((row) => row.id === targetId)?.title ?? group.shipment?.title ?? "輸入便" : title.trim();
+    run({ action: "group", shipmentId: targetId, ...(targetId ? {} : { title }), documents: group.documents.map((document) => ({ source: document.source, documentId: document.id, kind: kind(document) })) },
+      (result) => result.action === "group" ? `${result.count}件を『${shipmentTitle}』にまとめました。` : "",
+      (result) => { if (result.action === "group" && result.created) onCreated(result.id); });
+  };
+  return <section aria-label={group.suggestedTitle} className="min-w-0 space-y-3 rounded-lg border bg-background/60 p-3">
+    <div className="min-w-0 space-y-1">
+      <h3 className="break-words text-sm font-medium">{group.suggestedTitle}</h3>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 break-all font-mono text-xs text-muted-foreground">
+        {group.declarationNumber ? <span>申告 {group.declarationNumber}</span> : null}
+        {group.blNumber ? <span>B/L {group.blNumber}</span> : null}
+        {group.invoiceNumber ? <span>INV {group.invoiceNumber}</span> : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        {group.shipment ? <Badge variant="outline" className="max-w-full whitespace-normal break-all">{group.shipment.title} の書類と一致</Badge> : null}
+        {group.weak ? <span>荷主名だけの手掛かりです</span> : null}
+        {!group.hasPermit ? <span>許可通知書待ち</span> : null}
+      </div>
+    </div>
+    <ul className="divide-y">
+      {group.documents.map((document) => <li key={document.key} className="flex min-w-0 flex-col gap-2 py-2 sm:flex-row sm:items-start sm:gap-3">
+        <select aria-label={`${document.displayName}の種類`} value={kind(document)} disabled={pending || !canEdit} className={`${selectClass} w-full sm:w-44 sm:shrink-0`}
+          onChange={(event) => setKinds({ ...kinds, [document.key]: event.target.value as ImportDocumentKind })}>
+          {importDocumentKinds.map((value) => <option key={value} value={value}>{importDocumentKindLabels[value]}</option>)}
+        </select>
+        <div className="min-w-0 flex-1 text-xs text-muted-foreground">
+          <Link href={document.href} prefetch={false} title={document.title} className="block break-all text-sm font-medium text-foreground hover:underline underline-offset-4">{document.displayName}</Link>
+          {document.title !== document.displayName ? <p className="break-all">保存名: {document.title}</p> : null}
+          <p className="break-words">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? ` / ${yen.format(document.amount)}` : ""}</p>
+        </div>
+      </li>)}
+    </ul>
+    {canEdit ? <div className="flex min-w-0 flex-col gap-3 border-t pt-3">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+        {group.shipment ? <Button type="button" size="sm" className="h-auto max-w-full whitespace-normal break-all py-2" disabled={pending} onClick={() => submit(group.shipment!.id)}>{group.shipment.title} に追加</Button>
+          : <><Input aria-label="便名" value={title} maxLength={200} disabled={pending} className="min-w-0 sm:max-w-lg" onChange={(event) => setTitle(event.target.value)} />
+            <Button type="button" size="sm" className="shrink-0" disabled={pending || !title.trim()} onClick={() => submit(null)}>この組で便を作る</Button></>}
+      </div>
+      <div className="flex min-w-0 items-center gap-2">
+        <select aria-label="別の便に追加" value={shipmentId} disabled={pending || !shipments.length} className={`${selectClass} min-w-0 flex-1 sm:max-w-lg`} onChange={(event) => setShipmentId(event.target.value)}>
+          <option value="">別の便に追加</option>
+          {shipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.title}（{monthLabel(shipment.month)}）</option>)}
+        </select>
+        <Button type="button" variant="ghost" size="sm" className="shrink-0" disabled={pending || !shipmentId} onClick={() => submit(shipmentId)}>追加</Button>
+      </div>
+    </div> : null}
+  </section>;
 }

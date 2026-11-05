@@ -46,3 +46,25 @@ export function importShipmentsFixture(): AppData {
   ];
   return data;
 }
+
+export function importGroupingFixture(): AppData {
+  const data = importShipmentsFixture();
+  const mail = (id: string, title: string, ocrText: string): MailDocument => ({
+    ...data.mailDocuments[0], id, title, originalFileName: `${id}-saved.pdf`, fileUrl: `/api/files/${id}.pdf`,
+    importShipmentId: undefined, importDocumentKind: undefined, ocrText,
+  });
+  const invoice = (id: string, vendorId: string, ocrText: string): ReceivedInvoice => ({
+    ...data.receivedInvoices[0], id, vendorId, originalFileName: `${id}-saved.pdf`, fileUrl: `/api/files/${id}.pdf`,
+    importShipmentId: undefined, importDocumentKind: undefined, ocrText,
+  });
+  data.mailDocuments.push(
+    mail("bl-9", "合成B/L 保存書類", "合成B-L原本.pdf\nHOUSE BILL OF LADING\nB/L No. SYN1BL260001\nShipper: 合成海外家具廠"),
+    mail("packing-9", "合成梱包明細 保存書類", "合成梱包明細原本.pdf\nPACKING LIST\nInvoice No. SYN-INV-0091\nShipper: 合成海外家具廠"),
+    mail("packing-10", "合成別便 梱包明細", "合成別便原本.pdf\nPACKING LIST\nInvoice No. SYN-INV-0101\nShipper: 合成別便製作所"),
+  );
+  data.receivedInvoices.push(
+    invoice("broker-9", "broker", "合成通関原本.pdf\n請求書 通関料 3,000円\nB/L No. SYN1BL260001"),
+    invoice("supplier-9", "overseas", "合成仕入原本.pdf\nCOMMERCIAL INVOICE\nInvoice No. SYN-INV-0091\nSeller: 合成海外家具廠\nFOB"),
+  );
+  return data;
+}

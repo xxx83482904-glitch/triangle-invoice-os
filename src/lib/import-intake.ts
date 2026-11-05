@@ -2,8 +2,8 @@ import "server-only";
 
 import { ZodError, z } from "zod";
 import { companyFromParam } from "@/lib/company";
-import { applyImportShipmentMutation, findImportShipmentByPermitNumber } from "@/lib/import-shipment-views";
-import { detectImportDocument, extractImportShipmentFields, importDocumentKinds, importFillKeysByKind, importFillLabels, type ImportFillKey, type ImportShipmentFields } from "@/lib/import-shipments";
+import { applyImportShipmentMutation, findImportShipmentByReferences } from "@/lib/import-shipment-views";
+import { detectImportDocument, extractImportShipmentFields, importDocumentKinds, importFillKeysByKind, importFillLabels, readImportReferences, type ImportFillKey, type ImportShipmentFields } from "@/lib/import-shipments";
 import { intakeMailDocument, type MailIntakeInput, type MailIntakeResult } from "@/lib/mail-intake";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import { mutateData } from "@/lib/store";
@@ -12,20 +12,21 @@ import { isActiveUser } from "@/lib/user-access";
 
 export type ImportIntakeInput = Omit<MailIntakeInput, "importShipmentId" | "importDocumentKind"> & { shipmentId?: string; kind?: ImportDocumentKind };
 export type ImportIntakeResult = MailIntakeResult & {
-  kind: ImportDocumentKind; shipmentId?: string; shipmentTitle?: string; shipmentCreated?: boolean; filled: string[];
+  displayName: string; kind: ImportDocumentKind; shipmentId?: string; shipmentTitle?: string; shipmentCreated?: boolean; filled: string[];
 };
 
 export async function intakeImportDocument(input: ImportIntakeInput): Promise<ImportIntakeResult> {
   const { user, company, extracted, fileName } = input;
   assertCompanyAccess(user, company); assertCan(user, "manage:imports");
   const kind = z.enum(importDocumentKinds).parse(input.kind ?? detectImportDocument(extracted.text, fileName)?.kind ?? "OTHER");
-  // The permit number matches on any paper that quotes it; the other fields follow the per-kind trust list.
-  const candidates = kind === "OTHER" ? {} : extractImportShipmentFields(extracted.text, fileName);
+  // Reference matching is independent of which fields this kind of paper may fill.
+  const references = readImportReferences(extracted.text, fileName);
+  const candidates = kind === "OTHER" ? {} : extractImportShipmentFields(extracted.text, fileName, kind);
   const fields: ImportShipmentFields = Object.fromEntries(Object.entries(candidates).filter(([key]) => importFillKeysByKind[kind].includes(key as ImportFillKey)));
   // Customs papers name the shipper, which reads better on the board than a line the sender heuristic picks from the permit.
   const senderName = ["IMPORT_PERMIT", "PACKING_LIST", "WAYBILL"].includes(kind) ? candidates.supplierName : undefined;
   const saved = await intakeMailDocument({ ...input, senderName, importShipmentId: undefined, importDocumentKind: kind });
-  const result: ImportIntakeResult = { ...saved, kind, filled: [] };
+  const result: ImportIntakeResult = { ...saved, displayName: fileName, kind, filled: [] };
   const source = saved.receivedInvoiceId ? "received" : "mail";
   const documentId = saved.receivedInvoiceId ?? saved.mailDocumentId!;
   try {
@@ -35,7 +36,7 @@ export async function intakeImportDocument(input: ImportIntakeInput): Promise<Im
       assertCompanyAccess(actor, company); assertCan(actor, "manage:imports");
       let shipment = input.shipmentId
         ? data.importShipments?.find((row) => row.id === input.shipmentId && !row.deletedAt && companyFromParam(row.company) === company)
-        : candidates.permitNumber ? findImportShipmentByPermitNumber(data, company, candidates.permitNumber) : undefined;
+        : findImportShipmentByReferences(data, company, references);
       if (input.shipmentId && !shipment) throw new Error("輸入便が見つかりません");
       let shipmentCreated: true | undefined;
       const filled = new Set<ImportFillKey>();

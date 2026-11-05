@@ -13,6 +13,15 @@ import type { ImportIntakeResult } from "@/lib/import-intake";
 import { importDocumentKindLabels } from "@/lib/import-shipments";
 import { operationFailureToast, unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
 
+function intakeSummary(results: ImportIntakeResult[]) {
+  const saved = results.filter((row) => row.savedAs);
+  const created = saved.filter((row) => row.shipmentCreated).length;
+  const assigned = saved.filter((row) => row.shipmentId && !row.shipmentCreated).length;
+  const unassigned = saved.filter((row) => !row.shipmentId).length;
+  const details = [created ? `便を${created}つ作成` : "", assigned ? `${assigned}件を既存の便に追加` : "", unassigned ? `${unassigned}件は未割当（下の「便の候補」にまとめています）` : ""].filter(Boolean);
+  return `${saved.length}件を取り込みました。${details.length ? `${details.join("、")}。` : ""}`;
+}
+
 export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
   company: CompanyScope; shipmentId?: string; compact?: boolean; onCreated?: (id: string) => void;
 }) {
@@ -60,10 +69,10 @@ export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
         if (failure || feedback.variant === "destructive") {
           const message = [failure, feedback.title, feedback.description].filter(Boolean).join("。");
           setError(message);
-          toast(failure ? operationFailureToast(message) : feedback);
+          const failureFeedback = failure ? operationFailureToast(message) : feedback;
+          toast({ ...failureFeedback, description: [intakeSummary(completed), failureFeedback.description].filter(Boolean).join(" ") });
         } else {
-          const createdCount = completed.filter((row) => row.shipmentCreated).length;
-          toast({ title: `${completed.length}件を取り込みました。${createdCount ? `（便を${createdCount}つ作成）` : ""}`, variant: "success" });
+          toast({ title: intakeSummary(completed), variant: "success" });
         }
         inFlight.current = false;
         router.refresh();
@@ -90,7 +99,7 @@ export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
             <h3 className="text-sm font-medium">{compact ? "この便に書類をドロップ" : "輸入書類をドロップ（OCR）"}</h3>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{compact
               ? "読み取った許可番号や税額は、空欄の項目にだけ書き込みます。"
-              : "PDF/JPEG/PNGを読み取り、輸入許可通知書・パッキングリスト・AWB/B/L・通関業者の請求書などの種類を判定します。輸入許可通知書は便を自動で作り、許可番号・関税・輸入消費税を書き込みます。許可番号が一致する便があればその便に付き、見つからなければ未割当に入ります。"}</p>
+              : "PDF/JPEG/PNGを読み取り、輸入許可通知書・パッキングリスト・AWB/B/L・通関業者の請求書などの種類を判定します。輸入許可通知書は便を自動で作り、許可番号・関税・輸入消費税を書き込みます。申告番号・B/L/AWB番号・インボイス番号が一致する便があればその便に付き、未割当の書類は下の「便の候補」にまとめます。"}</p>
             {pending ? <p role="status" className="mt-2 text-sm text-muted-foreground">OCR処理中… {progress.done}/{progress.total}件</p> : null}
           </div>
         </div>
@@ -103,9 +112,11 @@ export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
         <p className="text-muted-foreground">選択{retryFiles.length}件を保持しています。登録済みの内容を確認してから再試行してください。</p>
         <Button type="button" variant="outline" size="sm" className="h-auto max-w-full whitespace-normal" onClick={() => upload(retryFiles)}>保持したファイルを再試行（{retryFiles.length}件）</Button>
       </div> : null}
+      {results.length ? <p role="status" className="mt-3 text-xs text-muted-foreground">{intakeSummary(results)}</p> : null}
       {results.length ? <ul className={`mt-3 grid min-w-0 gap-2 ${compact ? "" : "lg:grid-cols-2"}`} aria-label="輸入書類の取込結果">
         {results.map((result, index) => <li key={`${result.fileName}:${index}`} className="min-w-0 space-y-2 rounded-md border p-3 text-xs text-muted-foreground">
-          <p className="break-all font-medium text-foreground">{result.fileName}</p>
+          <p className="break-all font-medium text-foreground">{result.displayName}</p>
+          <p className="break-all text-[11px] text-muted-foreground">保存名: {result.fileName}</p>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{importDocumentKindLabels[result.kind]}</Badge>
             {result.savedAs ? <Badge variant="outline">{result.savedAs === "received-invoice" ? "受領請求書" : "郵便物"}</Badge> : null}
@@ -115,7 +126,7 @@ export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
           <p className="break-words">{result.shipmentId ? `便: ${result.shipmentTitle}` : result.savedAs ? "未割当" : "未保存"}</p>
           {result.filled.length ? <p>読み取り: {result.filled.join("・")}</p> : null}
           {result.duplicate ? <p className="break-words">{result.duplicateReason || "重複候補として保存しました"}{result.duplicateTitle ? ` / 既存: ${result.duplicateTitle}` : ""}{result.duplicateScore ? ` / 類似度 ${result.duplicateScore}%` : ""}</p> : null}
-          {result.warnings?.length ? <ul className="list-disc space-y-1 pl-4">{result.warnings.map((warning, i) => <li key={i} className="break-words">{warning}</li>)}</ul> : null}
+          {result.warnings?.length ? <details><summary className="cursor-pointer">詳細 {result.warnings.length}件</summary><ul className="mt-1 list-disc space-y-1 pl-4">{result.warnings.map((warning, i) => <li key={i} className="break-words">{warning}</li>)}</ul></details> : null}
           {result.error ? <p className="break-words"><Badge variant="outline" className="mr-1 border-destructive/40 text-destructive">エラー</Badge>{result.error}</p> : null}
         </li>)}
       </ul> : null}

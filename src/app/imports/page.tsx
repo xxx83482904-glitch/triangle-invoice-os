@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
-import { importShipmentViews, unassignedImportDocuments } from "@/lib/import-shipment-views";
+import { groupImportDocuments, importShipmentViews, unassignedImportDocuments } from "@/lib/import-shipment-views";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { readDataForRequest as readData } from "@/lib/store";
 import { ImportsWorkspace } from "./imports-workspace";
@@ -18,6 +18,8 @@ export default async function ImportsPage({
   if (!user) redirect("/login");
   if (!can(user, "view:imports")) redirect(defaultPathForRole(user.role));
   const data = await readData();
+  const unassigned = unassignedImportDocuments(data, company);
+  const groups = groupImportDocuments(unassigned, (data.importShipments ?? []).filter((row) => companyFromParam(row.company) === company));
   const projects = data.projects
     .filter((project) => !project.deletedAt && matchesCompany(project, company))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja"))
@@ -36,7 +38,8 @@ export default async function ImportsPage({
         canEdit={can(user, "manage:imports")}
         company={company}
         rows={importShipmentViews(data, company)}
-        unassigned={unassignedImportDocuments(data, company)}
+        unassigned={unassigned}
+        groups={groups}
         projects={projects}
         vendors={vendors}
       />

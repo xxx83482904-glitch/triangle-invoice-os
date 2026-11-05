@@ -34,7 +34,7 @@ export async function POST(request: Request) {
         const extracted = await extractDocumentText(file.name, file.type, buffer);
         results.push(await intakeImportDocument({ user, company, fileName: file.name, mimeType: file.type, buffer, extracted, shipmentId, kind }));
       } catch (error) {
-        results.push({ fileName: file.name, kind: kind ?? "OTHER", filled: [], error: message(error) });
+        results.push({ fileName: file.name, displayName: file.name, kind: kind ?? "OTHER", filled: [], error: message(error) });
       }
     }
     for (const path of ["/imports", "/mail-sorter", "/received-invoices", "/documents", "/reports"]) revalidatePath(path);

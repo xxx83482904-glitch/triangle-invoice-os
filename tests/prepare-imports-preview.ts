@@ -3,14 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { hashSync } from "bcryptjs";
 import { assertJapanData } from "../src/lib/japan-storage";
-import { importShipmentsFixture } from "./import-shipments-fixture";
+import { importGroupingFixture } from "./import-shipments-fixture";
 import { timestamp } from "./document-fixture";
 
 // Writes a synthetic data folder for looking at the import board locally. Nothing in it is real.
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "triangle-imports-preview-"));
   await mkdir(path.join(root, "uploads"));
-  const data = importShipmentsFixture();
+  const data = importGroupingFixture();
   data.mailDocuments = data.mailDocuments.filter((row) => row.company !== "CHINA");
   const passwordHash = hashSync("local-banking-test-only", 10);
   data.users = [

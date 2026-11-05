@@ -19,9 +19,9 @@ function message(error: unknown) {
 export async function saveImportShipmentAction(company: CompanyScope, input: ImportShipmentMutation) {
   const user = await requireUser();
   try {
-    const names = { create: "CREATE_IMPORT_SHIPMENT", update: "UPDATE_IMPORT_SHIPMENT", delete: "DELETE_IMPORT_SHIPMENT", assign: "ASSIGN_IMPORT_DOCUMENT" } as const;
+    const names = { create: "CREATE_IMPORT_SHIPMENT", update: "UPDATE_IMPORT_SHIPMENT", delete: "DELETE_IMPORT_SHIPMENT", assign: "ASSIGN_IMPORT_DOCUMENT", group: "GROUP_IMPORT_DOCUMENTS", reread: "REREAD_IMPORT_SHIPMENT" } as const;
     const targetType = input.action === "assign" ? (input.source === "mail" ? "MailDocument" : "ReceivedInvoice") : "ImportShipment";
-    const targetId = input.action === "assign" ? input.documentId : "id" in input ? input.id : "new";
+    const targetId = input.action === "assign" ? input.documentId : input.action === "group" ? input.shipmentId ?? "new" : "id" in input ? input.id : "new";
     const result = await mutateData(user.id, names[input.action], targetType, targetId, (data) => applyImportShipmentMutation(data, liveActor(data, user.id), company, input));
     for (const path of ["/imports", "/mail-sorter", "/received-invoices", "/documents", "/reports"]) revalidatePath(path);
     return { success: true as const, ...result };
