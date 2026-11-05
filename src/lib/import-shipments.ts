@@ -76,22 +76,80 @@ export function suggestsCustomsCategory(text = "", fileName = "") {
   return Boolean(detected && customsDocumentKinds.includes(detected.kind));
 }
 
-export type ImportShipmentFields = Partial<Pick<ImportShipment, "permitNumber" | "permitDate" | "arrivalDate" | "supplierName" | "goodsValue" | "dutyAmount" | "importTaxNational" | "importTaxLocal" | "brokerFee">>;
+export type ImportShipmentFields = Partial<Pick<ImportShipment, "permitNumber" | "permitDate" | "arrivalDate" | "supplierName" | "goodsValue" | "dutyAmount" | "importTaxNational" | "importTaxLocal" | "brokerFee" | "blNumber" | "invoiceNumber">>;
 export type ImportFillKey = keyof ImportShipmentFields | "brokerVendorId";
 export const importFillLabels: Record<ImportFillKey, string> = {
   permitNumber: "許可番号", permitDate: "許可日", arrivalDate: "到着日", supplierName: "仕入先", goodsValue: "課税価格",
   dutyAmount: "関税", importTaxNational: "輸入消費税", importTaxLocal: "地方消費税", brokerFee: "通関手数料", brokerVendorId: "通関業者",
+  blNumber: "B/L・AWB番号", invoiceNumber: "インボイス番号",
 };
 // What each paper is trusted to state: duty and tax come from the permit or the payment slip, never from a broker's own invoice lines.
 export const importFillKeysByKind: Record<ImportDocumentKind, ImportFillKey[]> = {
-  IMPORT_PERMIT: ["permitNumber", "permitDate", "arrivalDate", "supplierName", "goodsValue", "dutyAmount", "importTaxNational", "importTaxLocal"],
+  IMPORT_PERMIT: ["permitNumber", "permitDate", "arrivalDate", "supplierName", "goodsValue", "dutyAmount", "importTaxNational", "importTaxLocal", "blNumber", "invoiceNumber"],
   TAX_PAYMENT: ["permitNumber", "dutyAmount", "importTaxNational", "importTaxLocal"],
-  BROKER_INVOICE: ["permitNumber", "brokerFee", "brokerVendorId"],
-  SUPPLIER_INVOICE: ["supplierName"], PACKING_LIST: ["supplierName"], WAYBILL: ["supplierName"], OTHER: [],
+  BROKER_INVOICE: ["permitNumber", "blNumber", "brokerFee", "brokerVendorId"],
+  SUPPLIER_INVOICE: ["supplierName", "invoiceNumber"], PACKING_LIST: ["supplierName", "invoiceNumber"], WAYBILL: ["supplierName", "blNumber"], OTHER: [],
 };
 
-export function normalizePermitNumber(value: string) {
-  return value.normalize("NFKC").toUpperCase().replace(/[\s-]/g, "");
+// Reference numbers compare without case, width, spaces or punctuation, so "ｓｙｎ－０００１" and "SYN 0001" are one number.
+export function normalizeReference(value: string) {
+  return value.normalize("NFKC").toUpperCase().replace(/[\s\-/._]/g, "");
+}
+export const normalizePermitNumber = normalizeReference;
+
+// Google Vision reads some kanji as their traditional forms; NFKC leaves those alone.
+const glyphVariants: Record<string, string> = { "稅": "税", "內": "内", "戾": "戻", "產": "産", "藏": "蔵", "滯": "滞", "檢": "検", "點": "点", "關": "関" };
+export function normalizeOcrLines(text = ""): string[] {
+  return text.normalize("NFKC").replace(/[稅內戾產藏滯檢點關]/g, (glyph) => glyphVariants[glyph] ?? glyph).replace(/[\u3000\t]/g, " ")
+    .split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+// Uploaded files are renamed on save, but the OCR text starts with the name the person gave the file.
+export function documentDisplayName(ocrText = "", fallback = "") {
+  const first = normalizeOcrLines(ocrText)[0] ?? "";
+  return /\.(pdf|jpe?g|png)$/i.test(first) && first.length <= 120 ? first.replace(/^.*[\\/]/, "") : fallback;
+}
+
+export type ImportReferences = { declarationNumber?: string; blNumber?: string; invoiceNumber?: string; shipperName?: string };
+
+const shipperLabel = /(?:(?:仕出人|輸出者)(?:名称|名)?|Shipper(?:'s)?(?:\s*name)?|Exporter|Seller)[ ]*:?[ ]*/i;
+const shipperStop = /輸入者|Importer|Consignee|住所|Address|コード|Code/i;
+function readShipperName(lines: string[]) {
+  const index = lines.findIndex((line) => shipperLabel.test(line));
+  if (index < 0) return undefined;
+  const cut = (value: string) => value.split(shipperStop)[0].trim();
+  const same = cut(lines[index].replace(shipperLabel, ""));
+  const name = same || cut(lines.slice(index + 1, index + 4).find((line) => /[A-Za-z一-龯ぁ-んァ-ヶ]{2,}/.test(line) && !shipperStop.test(line.slice(0, 4))) ?? "");
+  return name ? name.slice(0, 80) : undefined;
+}
+
+// Tabular papers come out of OCR column by column, so a label's value may sit a few lines below it.
+function valueNear(lines: string[], label: RegExp, reach: number, pick: (window: string) => string | undefined) {
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!label.test(lines[index])) continue;
+    const window = [lines[index].replace(label, " "), ...lines.slice(index + 1, index + 1 + reach)].join("\n");
+    const value = pick(window);
+    if (value) return value;
+  }
+  return undefined;
+}
+const declarationLabel = /(?:輸入)?(?:申告|許可)番号/;
+const blLabel = /B\/L\s*番号|B\/L\s*No\.?|\bBL\s*No\.?|AWB\s*No\.?|(?:HOUSE|MASTER)?\s*AIR\s*WAYBILL\s*(?:NO|NUMBER)|\bHAWB\b|\bMAWB\b|船荷証券番号/i;
+const invoiceLabel = /仕入書番号|インボイス(?:番号|No)|INVOICE\s*(?:NO|NUMBER|#)|I\/V\s*No\.?|\bINV\.?\s*No\.?/i;
+const datelike = /^\d{4}[/.-]\d{1,2}[/.-]\d{1,2}$/;
+const codeToken = (window: string, pattern: RegExp) => window.match(pattern)?.map((token) => token.trim()).find((token) => /\d/.test(token) && !datelike.test(token) && !/^(?:NO|BL|AWB|HAWB|MAWB)$/i.test(token));
+
+export function readImportReferences(text = "", fileName = ""): ImportReferences {
+  const lines = normalizeOcrLines(fileName + "\n" + text);
+  const declarationNumber = valueNear(lines, declarationLabel, 12, (window) => {
+    const naccs = window.match(/\d{3}[\s-]?\d{4}[\s-]?\d{4}(?!\d)/)?.[0];
+    if (naccs) return naccs.replace(/\D/g, "");
+    return window.split("\n").slice(0, 3).join("\n").match(/(?<![0-9A-Z])[0-9A-Z][0-9A-Z-]{5,19}(?![0-9A-Z-])/i)?.[0].toUpperCase();
+  });
+  const blNumber = valueNear(lines, blLabel, 6, (window) => codeToken(window.toUpperCase(), /\b[A-Z]{2,6}[A-Z0-9-]{4,18}\b/g));
+  const invoiceNumber = valueNear(lines, invoiceLabel, 4, (window) => codeToken(window.toUpperCase(), /\b[A-Z0-9][A-Z0-9/-]{3,24}\b/g));
+  const shipperName = readShipperName(lines);
+  return { ...(declarationNumber ? { declarationNumber } : {}), ...(blNumber ? { blNumber } : {}), ...(invoiceNumber ? { invoiceNumber } : {}), ...(shipperName ? { shipperName } : {}) };
 }
 
 function importDate(source: string, label: string) {
@@ -106,11 +164,11 @@ function importDate(source: string, label: string) {
     ? parsed.toISOString().slice(0, 10) : undefined;
 }
 
-export function extractImportShipmentFields(text = "", fileName = ""): ImportShipmentFields {
-  // Filenames help classification; only labelled document content supplies shipment fields.
-  void fileName;
-  const source = text.normalize("NFKC").replace(/[\u3000\t]/g, " ").replace(/\r\n?/g, "\n");
-  const fields: ImportShipmentFields = {};
+export function extractImportShipmentFields(text = "", fileName = "", kind?: ImportDocumentKind): ImportShipmentFields {
+  void kind;
+  const source = normalizeOcrLines(text).join("\n");
+  const references = readImportReferences(text, fileName);
+  const fields: ImportShipmentFields = { ...(references.blNumber ? { blNumber: references.blNumber } : {}), ...(references.invoiceNumber ? { invoiceNumber: references.invoiceNumber } : {}) };
   const moneyLabels = {
     goodsValue: "課税価格|課税標準額|CIF価格",
     // A rate or a combined total ("関税等", "関税・消費税") is not the duty itself.
@@ -136,18 +194,12 @@ export function extractImportShipmentFields(text = "", fileName = ""): ImportShi
     }
     if (values.length) fields[key] = key === "brokerFee" ? round(values.reduce((sum, value) => sum + value, 0)) : Math.max(...values);
   }
-  const permit = source.match(/(?:輸入)?(?:申告|許可)番号[^0-9A-Z]{0,8}([0-9A-Z][0-9A-Z-]{5,19})(?![0-9A-Z-])/i)?.[1];
-  if (permit) fields.permitNumber = permit.toUpperCase();
+  if (references.declarationNumber) fields.permitNumber = references.declarationNumber;
   const permitDate = importDate(source, "(?:輸入)?許可(?:年月)?日|許可日付");
   const arrivalDate = importDate(source, "(?:入港|到着|搬入)(?:年月)?日");
   if (permitDate) fields.permitDate = permitDate;
   if (arrivalDate) fields.arrivalDate = arrivalDate;
-  const supplier = source.match(/(?:(?:仕出人|輸出者)(?:名称|名)?|Shipper(?:'s)?(?:\s*name)?|Exporter|Seller)[ ]*:?[ ]*([^\n]*)(?:\n([\s\S]*))?/i);
-  if (supplier) {
-    const cut = (value: string) => value.split(/輸入者|Importer|Consignee|住所|Address|コード|Code/i)[0].trim();
-    const name = cut(supplier[1]) || cut(supplier[2]?.split("\n").find((line) => line.trim()) ?? "");
-    if (name) fields.supplierName = name.slice(0, 80);
-  }
+  if (references.shipperName) fields.supplierName = references.shipperName;
   return fields;
 }
 

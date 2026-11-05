@@ -452,6 +452,7 @@ export type ImportShipmentStatus = "OPEN" | "CLEARED" | "CLOSED";
 export type ImportShipment = {
   id: string; company: "JAPAN" | "CHINA"; title: string; projectId?: string; supplierName?: string; brokerVendorId?: string;
   permitNumber?: string; permitDate?: string; arrivalDate?: string; folderMonth?: string;
+  blNumber?: string; invoiceNumber?: string;   // reference numbers shared by the papers of one shipment
   goodsValue?: number; dutyAmount?: number; importTaxNational?: number; importTaxLocal?: number; brokerFee?: number; otherCost?: number;
   status: ImportShipmentStatus; memo?: string;
   createdById: string; createdAt: string; updatedAt: string; deletedAt?: string | null;
