@@ -49,10 +49,11 @@ export function missingImportDocuments(documents: ImportLinkedDocument[]) {
 
 // Keywords only suggest the kind; the person confirms it when attaching the document to a shipment.
 const invoiceWords = /請求書|invoice/i;
-const brokerWords = /通関(料|手数料|業務|費用|代行)|立替|customs (clearance|brokerage)|clearance fee/i;
+const brokerWords = /通関(料|手数料|業務|費用|代行)|輸入申告料|立替|customs (clearance|brokerage)|clearance fee/i;
+const brokerContext = /輸入申告|輸入者|B\/L|AWB|税関|通関/i;
 const importWords = /関税|輸入消費税|通関|税関/;
 const kindPatterns: Array<[ImportDocumentKind, RegExp]> = [
-  ["IMPORT_PERMIT", /輸入許可通知書|輸入許可書|輸入(申告|許可)番号|import permit|輸入申告/i],
+  ["IMPORT_PERMIT", /輸入許可通知書|輸入許可書|import permit/i],
   ["PACKING_LIST", /packing list|パッキングリスト|梱包明細/i],
   ["WAYBILL", /air waybill|\bAWB\b|bill of lading|\bB\/L\b|船荷証券|sea waybill/i],
   ["TAX_PAYMENT", /(関税|輸入消費税|税関).{0,20}納付|納付.{0,20}(関税|輸入消費税|税関)/],
@@ -63,7 +64,7 @@ const kindPatterns: Array<[ImportDocumentKind, RegExp]> = [
 export function detectImportDocument(text = "", fileName = ""): { kind: ImportDocumentKind; evidence: string } | undefined {
   const source = `${fileName}\n${text}`.normalize("NFKC");
   // A broker's invoice quotes the permit number, so the invoice signal wins over the permit words.
-  if (invoiceWords.test(source) && brokerWords.test(source) && importWords.test(source)) return { kind: "BROKER_INVOICE", evidence: source.match(brokerWords)![0] };
+  if (invoiceWords.test(source) && brokerWords.test(source) && (importWords.test(source) || brokerContext.test(source))) return { kind: "BROKER_INVOICE", evidence: source.match(brokerWords)![0] };
   for (const [kind, pattern] of kindPatterns) {
     const match = source.match(pattern);
     if (match) return { kind, evidence: match[0] };
@@ -124,11 +125,15 @@ function readShipperName(lines: string[]) {
 }
 
 // Tabular papers come out of OCR column by column, so a label's value may sit a few lines below it.
-function valueNear(lines: string[], label: RegExp, reach: number, pick: (window: string) => string | undefined) {
+function valueNear(lines: string[], label: RegExp, reach: number, pick: (window: string) => string | undefined, stop?: RegExp) {
   for (let index = 0; index < lines.length; index += 1) {
     if (!label.test(lines[index])) continue;
-    const window = [lines[index].replace(label, " "), ...lines.slice(index + 1, index + 1 + reach)].join("\n");
-    const value = pick(window);
+    const below: string[] = [];
+    for (const next of lines.slice(index + 1, index + 1 + reach)) {
+      if (stop?.test(next)) break;
+      below.push(next);
+    }
+    const value = pick([lines[index].replace(label, " "), ...below].join("\n"));
     if (value) return value;
   }
   return undefined;
@@ -137,6 +142,7 @@ const declarationLabel = /(?:輸入)?(?:申告|許可)番号/;
 const blLabel = /B\/L\s*番号|B\/L\s*No\.?|\bBL\s*No\.?|AWB\s*No\.?|(?:HOUSE|MASTER)?\s*AIR\s*WAYBILL\s*(?:NO|NUMBER)|\bHAWB\b|\bMAWB\b|船荷証券番号/i;
 const invoiceLabel = /仕入書番号|インボイス(?:番号|No)|INVOICE\s*(?:NO|NUMBER|#)|I\/V\s*No\.?|\bINV\.?\s*No\.?/i;
 const datelike = /^\d{4}[/.-]\d{1,2}[/.-]\d{1,2}$/;
+const otherReference = /(?:Container|Seal|Ref\.?|Job|Voy(?:age)?|Booking|Order|P\/?O)\s*(?:No|Number|#)/i;
 const codeToken = (window: string, pattern: RegExp) => window.match(pattern)?.map((token) => token.trim()).find((token) => /\d/.test(token) && !datelike.test(token) && !/^(?:NO|BL|AWB|HAWB|MAWB)$/i.test(token));
 
 export function readImportReferences(text = "", fileName = ""): ImportReferences {
@@ -146,60 +152,139 @@ export function readImportReferences(text = "", fileName = ""): ImportReferences
     if (naccs) return naccs.replace(/\D/g, "");
     return window.split("\n").slice(0, 3).join("\n").match(/(?<![0-9A-Z])[0-9A-Z][0-9A-Z-]{5,19}(?![0-9A-Z-])/i)?.[0].toUpperCase();
   });
-  const blNumber = valueNear(lines, blLabel, 6, (window) => codeToken(window.toUpperCase(), /\b[A-Z]{2,6}[A-Z0-9-]{4,18}\b/g));
-  const invoiceNumber = valueNear(lines, invoiceLabel, 4, (window) => codeToken(window.toUpperCase(), /\b[A-Z0-9][A-Z0-9/-]{3,24}\b/g));
+  const blNumber = valueNear(lines, blLabel, 6, (window) => codeToken(window.toUpperCase(), /\b[A-Z]{2,6}[A-Z0-9-]{4,18}\b/g), new RegExp(invoiceLabel.source + "|" + otherReference.source, "i"));
+  const invoiceNumber = valueNear(lines, invoiceLabel, 4, (window) => codeToken(window.toUpperCase(), /\b[A-Z0-9][A-Z0-9/-]{3,24}\b/g), new RegExp(blLabel.source + "|" + otherReference.source, "i"));
   const shipperName = readShipperName(lines);
   return { ...(declarationNumber ? { declarationNumber } : {}), ...(blNumber ? { blNumber } : {}), ...(invoiceNumber ? { invoiceNumber } : {}), ...(shipperName ? { shipperName } : {}) };
 }
 
-function importDate(source: string, label: string) {
-  const date = /(?:令和(元|\d{1,2})年\s*(\d{1,2})月\s*(\d{1,2})日|R(\d{1,2})[./-](\d{1,2})[./-](\d{1,2})|(\d{4})[./年-]\s*(\d{1,2})[./月-]\s*(\d{1,2})日?)/i;
-  const match = source.match(new RegExp(`(?:${label})[^0-9]{0,12}?(${date.source})(?![0-9])`, "i"));
-  if (!match) return undefined;
-  const parts = match[1].match(date)!;
+const dateToken = /(?:令和(元|\d{1,2})年\s*(\d{1,2})月\s*(\d{1,2})日|R(\d{1,2})[./-](\d{1,2})[./-](\d{1,2})|(\d{4})[./年-]\s*(\d{1,2})[./月-]\s*(\d{1,2})日?)(?![0-9])/gi;
+function isoDate(parts: RegExpMatchArray) {
   const year = parts[1] ? 2018 + (parts[1] === "元" ? 1 : Number(parts[1])) : parts[4] ? 2018 + Number(parts[4]) : Number(parts[7]);
   const month = Number(parts[2] || parts[5] || parts[8]), day = Number(parts[3] || parts[6] || parts[9]);
   const parsed = new Date(Date.UTC(year, month - 1, day));
-  return year >= 1000 && parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
-    ? parsed.toISOString().slice(0, 10) : undefined;
+  return year >= 1000 && parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day ? parsed.toISOString().slice(0, 10) : undefined;
+}
+
+// Money on these papers carries a yen sign, a 円 suffix, thousands commas or a JPY prefix; bare numbers are codes, dates and rates.
+const moneyToken = /[¥￥]\s?\d{1,3}(?:[,\s]{1,2}\d{3})*(?:\.\d+)?|[¥￥]\s?\d+(?:\.\d+)?|JPY\s?\d{1,3}(?:[,\s]{1,2}\d{3})*(?:\.\d+)?|\d{1,3}(?:,\s?\d{3})+(?:\.\d+)?(?:\s?円)?|\d+(?:\.\d+)?\s?円/gi;
+function amountsIn(window: string): number[] {
+  const values: number[] = [];
+  for (const match of window.matchAll(moneyToken)) {
+    const after = window.slice(match.index + match[0].length, match.index + match[0].length + 2);
+    if (/^\s?%/.test(after) || /^[/-]\d/.test(after)) continue;
+    const value = Number(match[0].replace(/[¥￥JPYjpy円,\s]/g, ""));
+    if (Number.isFinite(value)) values.push(round(value));
+  }
+  return values;
+}
+
+// The text after a label: the rest of its line, then the lines below it up to the reach, stopping at the next label of the same family.
+function windowsAfter(lines: string[], label: RegExp, reach: number, stop?: RegExp) {
+  const windows: Array<{ index: number; offset: number; window: string }> = [];
+  const every = new RegExp(label.source, label.flags.includes("g") ? label.flags : label.flags + "g");
+  lines.forEach((line, index) => {
+    for (const match of line.matchAll(every)) {
+      const parts = [line.slice(match.index + match[0].length)];
+      for (const next of lines.slice(index + 1, index + 1 + reach)) {
+        if (stop?.test(next)) break;
+        parts.push(next);
+      }
+      windows.push({ index, offset: match.index, window: parts.join("\n") });
+    }
+  });
+  return windows;
+}
+const firstAmountNear = (lines: string[], label: RegExp, reach: number, stop?: RegExp) =>
+  windowsAfter(lines, label, reach, stop).map(({ index, offset, window }) => ({ index, offset, window, value: amountsIn(window)[0] })).filter((entry) => entry.value !== undefined) as Array<{ index: number; offset: number; window: string; value: number }>;
+
+function dateNear(lines: string[], label: RegExp, reach: number) {
+  for (const { window } of windowsAfter(lines, label, reach, dateLabels)) {
+    for (const match of window.matchAll(dateToken)) {
+      const value = isoDate(match);
+      if (value) return value;
+    }
+  }
+  return undefined;
+}
+const dateLabels = /(?:申告|許可|入港|搬入|到着|作成|発行|請求|支払)(?:予定)?(?:年月)?日/;
+
+// Rates and combined totals ("関税等", "関税・消費税") are not the amounts themselves.
+const notAmount = "(?!額?\\s*(?:率|等|・|、|及び|および))";
+const dutyLabel = new RegExp("関税額?" + notAmount);
+const nationalLabel = new RegExp("(?<!地方)(?:内国消費税額?|輸入消費税額?|消費税額?)" + notAmount);
+const localLabel = new RegExp("地方消費税額?" + notAmount);
+const cifLabel = /申告価格\s*\(?\s*CIF\s*\)?/i;
+const goodsLabel = /課税価格|課税標準額|CIF価格/i;
+const feeLabel = /通関料|通関手数料|通関業務(?:手数)?料|取扱(?:手数)?料|輸入申告料/;
+
+// NACCS permits and payment slips print the three taxes in one column and their figures in another, so labels and values do not
+// sit together. The local consumption tax is the national one times 22/78, truncated to hundreds, which identifies the pair
+// without labels; the duty is whatever remains of the tax total.
+function readTaxesByArithmetic(lines: string[]) {
+  if (!lines.some((line) => nationalLabel.test(line)) || !lines.some((line) => localLabel.test(line))) return undefined;
+  const amounts = [...new Set(amountsIn(lines.join("\n")))];
+  let best: { national: number; local: number } | undefined;
+  for (const national of amounts) {
+    if (national <= 0 || national % 100 !== 0) continue;
+    const target = (national * 22) / 78;
+    const local = amounts.filter((value) => value % 100 === 0 && target - value >= 0 && target - value < 400).sort((a, b) => b - a)[0];
+    if (local === undefined || (local === 0 && target >= 100)) continue;
+    if (!best || national > best.national) best = { national, local };
+  }
+  if (!best) return undefined;
+  const base = best.national + best.local;
+  const total = amounts.filter((value) => value >= base && (value === base || amounts.includes(round(value - base)))).sort((a, b) => a - b)[0];
+  return { importTaxNational: best.national, importTaxLocal: best.local, ...(total === undefined ? {} : { dutyAmount: round(total - base) }) };
+}
+
+function readGoodsValue(lines: string[]) {
+  const cif = firstAmountNear(lines, cifLabel, 6);
+  if (cif.length) return round(cif.reduce((sum, entry) => sum + entry.value, 0));
+  const entries = firstAmountNear(lines, goodsLabel, 3);
+  if (!entries.length) return undefined;
+  const total = entries.find((entry) => /合計/.test(entry.window.split("\n")[0]) || /合計/.test(lines[entry.index]));
+  return total ? total.value : Math.max(...entries.map((entry) => entry.value));
+}
+
+function readBrokerFee(lines: string[]) {
+  const seen = new Set<string>();
+  let sum = 0, found = false;
+  for (const entry of firstAmountNear(lines, feeLabel, 2)) {
+    const key = lines[entry.index] + "|" + entry.offset + "|" + entry.value;
+    if (seen.has(key)) continue;
+    seen.add(key); sum += entry.value; found = true;
+  }
+  return found ? round(sum) : undefined;
 }
 
 export function extractImportShipmentFields(text = "", fileName = "", kind?: ImportDocumentKind): ImportShipmentFields {
   void kind;
-  const source = normalizeOcrLines(text).join("\n");
+  const lines = normalizeOcrLines(text);
   const references = readImportReferences(text, fileName);
-  const fields: ImportShipmentFields = { ...(references.blNumber ? { blNumber: references.blNumber } : {}), ...(references.invoiceNumber ? { invoiceNumber: references.invoiceNumber } : {}) };
-  const moneyLabels = {
-    goodsValue: "課税価格|課税標準額|CIF価格",
-    // A rate or a combined total ("関税等", "関税・消費税") is not the duty itself.
-    dutyAmount: "関税額?(?!額?\\s*(?:率|等|・|、|及び|および))",
-    importTaxNational: "(?<!地方)(?:内国消費税額?|輸入消費税額?|消費税額?)(?!額?\\s*(?:率|等|・|、|及び|および))",
-    importTaxLocal: "地方消費税額?(?!額?\\s*(?:率|等|・|、|及び|および))",
-    brokerFee: "通関料|通関手数料|取扱(?:手数)?料|通関業務料",
-  } as const;
-  for (const key of Object.keys(moneyLabels) as Array<keyof typeof moneyLabels>) {
-    const pattern = new RegExp(`(?:${moneyLabels[key]})[^0-9]{0,12}?([0-9][0-9,]*(?:\\.[0-9]+)?)`, "gi");
-    const seen = new Set<string>(), values: number[] = [];
-    for (const match of source.matchAll(pattern)) {
-      const value = Number(match[1].replace(/,/g, ""));
-      if (!Number.isFinite(value)) continue;
-      if (key === "brokerFee") {
-        const start = source.lastIndexOf("\n", match.index - 1) + 1;
-        const end = source.indexOf("\n", match.index + match[0].length);
-        const line = `${source.slice(start, end < 0 ? undefined : end).trim()}:${match.index - start}`;
-        if (seen.has(line)) continue;
-        seen.add(line);
-      }
-      values.push(value);
-    }
-    if (values.length) fields[key] = key === "brokerFee" ? round(values.reduce((sum, value) => sum + value, 0)) : Math.max(...values);
-  }
+  const fields: ImportShipmentFields = {};
   if (references.declarationNumber) fields.permitNumber = references.declarationNumber;
-  const permitDate = importDate(source, "(?:輸入)?許可(?:年月)?日|許可日付");
-  const arrivalDate = importDate(source, "(?:入港|到着|搬入)(?:年月)?日");
+  if (references.blNumber) fields.blNumber = references.blNumber;
+  if (references.invoiceNumber) fields.invoiceNumber = references.invoiceNumber;
+  if (references.shipperName) fields.supplierName = references.shipperName;
+  const permitDate = dateNear(lines, /(?:輸入)?許可(?:年月)?日|許可日付/, 3);
+  const arrivalDate = dateNear(lines, /(?:入港|到着|搬入)(?:年月)?日/, 3);
   if (permitDate) fields.permitDate = permitDate;
   if (arrivalDate) fields.arrivalDate = arrivalDate;
-  if (references.shipperName) fields.supplierName = references.shipperName;
+  const goodsValue = readGoodsValue(lines);
+  if (goodsValue !== undefined) fields.goodsValue = goodsValue;
+  Object.assign(fields, readTaxesByArithmetic(lines));
+  // Papers that print each tax beside its label still read the simple way.
+  const labelled: Array<["dutyAmount" | "importTaxNational" | "importTaxLocal", RegExp]> = [["dutyAmount", dutyLabel], ["importTaxNational", nationalLabel], ["importTaxLocal", localLabel]];
+  for (const [key, label] of labelled) {
+    if (fields[key] !== undefined) continue;
+    const entries = firstAmountNear(lines, label, 2);
+    const beside = entries.filter((entry) => amountsIn(entry.window.split("\n")[0]).length);
+    const chosen = beside.length ? beside : entries;
+    if (chosen.length) fields[key] = Math.max(...chosen.map((entry) => entry.value));
+  }
+  const brokerFee = readBrokerFee(lines);
+  if (brokerFee !== undefined) fields.brokerFee = brokerFee;
   return fields;
 }
 
