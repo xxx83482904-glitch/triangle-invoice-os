@@ -11,8 +11,10 @@ import { documentKindLabels } from "@/lib/documents";
 import type { UserRole } from "@/lib/types";
 
 const control = "h-11 w-full min-w-0 rounded-md border bg-background px-3 text-sm";
-export function SectionExportDialog({ scope, role, disabled = false }: { scope: ExportScope; role: UserRole; disabled?: boolean }) {
-  const [open, setOpen] = useState(false);
+export function SectionExportDialog({ scope, role, disabled = false, open: controlledOpen, onOpenChange }: { scope: ExportScope; role: UserRole; disabled?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); };
   const now = new Date();
   const year = now.getFullYear() + (now.getMonth() >= 8 ? 1 : 0);
   const [range, setRange] = useState(() => fiscalRange(scope === "all" ? year - 1 : year));
@@ -67,7 +69,7 @@ export function SectionExportDialog({ scope, role, disabled = false }: { scope: 
     finally { setBusy(false); downloadController.current = null; }
   }
   return <Dialog open={open} onOpenChange={(value) => { if (!busy) { if (value) setResponse(null); setOpen(value); } }}>
-    <DialogTrigger asChild><Button type="button" variant="outline" disabled={disabled} className="min-h-11"><Download className="size-4" />書き出し</Button></DialogTrigger>
+    {controlledOpen === undefined ? <DialogTrigger asChild><Button type="button" variant="outline" disabled={disabled} className="min-h-11"><Download className="size-4" />書き出し</Button></DialogTrigger> : null}
     <DialogContent className="flex max-h-[90dvh] w-[calc(100%-1rem)] min-w-0 flex-col overflow-y-auto sm:max-w-4xl" onPointerDownOutside={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>{exportScopes[scope]}の書き出し</DialogTitle><DialogDescription>保存済みデータ / 8月末決算{scope === "banking" ? " / 全口座・カード" : ""}</DialogDescription></DialogHeader>
       <fieldset disabled={busy} className="grid min-w-0 shrink-0 grid-cols-2 gap-3 sm:grid-cols-3">

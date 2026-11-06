@@ -1,0 +1,64 @@
+/* BoardUI aliases follow the app's light and dark surfaces. */
+@theme inline {
+  --color-background-full: var(--page-end);
+  --color-background-primary-default: var(--popover);
+  --color-background-primary-hover: var(--selected);
+  --color-background-primary-active: var(--accent);
+  --color-background-secondary-default: var(--tile);
+  --color-background-secondary-hover: var(--muted);
+  --color-background-tertiary-default: var(--chip);
+  --color-background-tertiary-hover: var(--input);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--body);
+  --color-text-tertiary: var(--muted-foreground);
+  --color-text-placeholder: var(--muted-foreground);
+  --color-text-white: var(--primary-foreground);
+  --color-foreground-icon-primary: var(--foreground);
+  --color-foreground-icon-secondary: var(--muted-foreground);
+  --color-foreground-icon-tertiary: var(--muted-foreground);
+  --color-border-button-default: var(--border);
+  --color-border-button-white: var(--edge);
+  --color-separator-border: var(--rule);
+  --color-border-focus-ring: var(--ring);
+  --color-accent-400: var(--primary);
+  --color-accent-500: var(--primary);
+  --color-accent-600: var(--primary);
+  --color-segmented-control-background: var(--track);
+  --color-segmented-control-selected-background: var(--card);
+  --color-kbd-background: var(--chip);
+  --color-kbd-foreground: var(--muted-foreground);
+  --color-badge-neutral-background: var(--chip);
+  --shadow-sidebar: var(--shadow-raised);
+  --shadow-dropdown: var(--shadow-lift);
+  --shadow-2xs: var(--shadow-soft);
+  --radius-2lg: 10px;
+}
+
+@theme {
+  --text-body-regular: 0.875rem;
+  --text-body-regular--line-height: 1.25rem;
+  --text-body-regular--letter-spacing: 0.03em;
+  --text-body-regular--font-weight: 400;
+  --text-body-medium: 0.875rem;
+  --text-body-medium--line-height: 1.25rem;
+  --text-body-medium--letter-spacing: 0.03em;
+  --text-body-medium--font-weight: 500;
+  --text-body-2-medium: 0.8125rem;
+  --text-body-2-medium--line-height: 1.125rem;
+  --text-body-2-medium--letter-spacing: 0.03em;
+  --text-body-2-medium--font-weight: 500;
+  --text-caption-1-regular: 0.75rem;
+  --text-caption-1-regular--line-height: 1rem;
+  --text-caption-1-regular--letter-spacing: 0.04em;
+  --text-caption-1-regular--font-weight: 400;
+  --text-caption-1-medium: 0.75rem;
+  --text-caption-1-medium--line-height: 1rem;
+  --text-caption-1-medium--letter-spacing: 0.04em;
+  --text-caption-1-medium--font-weight: 500;
+  --text-caption-1-semibold: 0.75rem;
+  --text-caption-1-semibold--line-height: 1rem;
+  --text-caption-1-semibold--letter-spacing: 0.04em;
+  --text-caption-1-semibold--font-weight: 500;
+}
+
+/* These primitives use Tailwind transitions; no source keyframes are needed. */

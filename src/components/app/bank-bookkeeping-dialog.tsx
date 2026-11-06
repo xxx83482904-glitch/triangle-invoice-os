@@ -22,6 +22,7 @@ type Props = {
   transaction: BankTransaction;
   categories: AccountingCategory[];
   disabled?: boolean;
+  showLabel?: boolean;
   onSaved?: (transaction: BookkeepingTransaction) => void;
 };
 const money = (amount: number) => new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" }).format(amount);
@@ -30,7 +31,7 @@ const holdLabels: Record<BankHoldReason, string> = {
   MISSING_DOCUMENT: "資料不足", CATEGORY_UNCLEAR: "科目の確認", AMOUNT_MISMATCH: "金額の確認", DUPLICATE_REVIEW: "重複の確認", OTHER: "その他",
 };
 
-export function BankBookkeepingDialog({ company, transaction, categories, disabled, onSaved }: Props) {
+export function BankBookkeepingDialog({ company, transaction, categories, disabled, showLabel = false, onSaved }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<BankBookkeepingDetail | null>(null);
@@ -55,7 +56,7 @@ export function BankBookkeepingDialog({ company, transaction, categories, disabl
     if (next) load();
   }
   return <Dialog open={open} onOpenChange={changeOpen}>
-    <DialogTrigger asChild><Button type="button" size="icon" variant="ghost" className="size-11 shrink-0" disabled={disabled} title="記帳詳細" aria-label={`${transaction.content || "明細"}の記帳詳細`}><ClipboardList className="size-4" /></Button></DialogTrigger>
+    <DialogTrigger asChild><Button type="button" size={showLabel ? "default" : "icon"} variant={showLabel ? "outline" : "ghost"} className={showLabel ? "shrink-0" : "size-11 shrink-0"} disabled={disabled} title="記帳詳細" aria-label={`${transaction.content || "明細"}の記帳詳細`}><ClipboardList className="size-4" />{showLabel ? "記帳詳細" : null}</Button></DialogTrigger>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" showCloseButton={!loading && !saving} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => { if (loading || saving || dirty) event.preventDefault(); }}>
       <DialogHeader><DialogTitle>記帳詳細</DialogTitle><DialogDescription className="break-words pr-6">{transaction.transactionDate} / {transaction.content || "摘要なし"}</DialogDescription></DialogHeader>
       {company === "JAPAN" && detail ? <section className="space-y-2 rounded-lg border bg-muted/30 p-3" aria-label="分類の根拠と状態"><h3 className="text-sm font-semibold">分類の根拠と状態</h3><BankClassificationState row={detail.transaction} /><p className="whitespace-pre-wrap break-words text-sm">根拠の理由: {bankClassificationPresentation(detail.transaction).reason}</p></section> : null}

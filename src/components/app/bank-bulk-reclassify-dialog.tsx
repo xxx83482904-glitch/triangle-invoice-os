@@ -19,8 +19,8 @@ import { operationErrorMessage } from "@/lib/operation-feedback";
 const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
 
 // 取引先単位の一括変更: every row with this description gets one category after a preview. Reviewed rows stay reviewed.
-export function BankBulkReclassifyDialog({ company, row, accountName, categories, disabled, onApplied }: {
-  company: CompanyScope; row: Pick<BankTransaction, "content" | "side" | "bankAccountId" | "officeCode">; accountName?: string; categories: AccountingCategory[]; disabled?: boolean; onApplied: () => void;
+export function BankBulkReclassifyDialog({ company, row, accountName, categories, disabled, showLabel = false, onApplied }: {
+  company: CompanyScope; row: Pick<BankTransaction, "content" | "side" | "bankAccountId" | "officeCode">; accountName?: string; categories: AccountingCategory[]; disabled?: boolean; showLabel?: boolean; onApplied: () => void;
 }) {
   const [open, setOpen] = useState(false), [pending, startTransition] = useTransition();
   const [sameSide, setSameSide] = useState(true), [sameAccount, setSameAccount] = useState(false), [includeReviewed, setIncludeReviewed] = useState(true);
@@ -63,7 +63,7 @@ export function BankBulkReclassifyDialog({ company, row, accountName, categories
     });
   }
   return <>
-    <Button variant="ghost" size="icon" className="size-7 min-h-7" title="同じ摘要の明細をまとめて同じ科目に変更" aria-label={`${row.content}と同じ摘要の明細をまとめて変更`} disabled={disabled} onClick={() => setOpen(true)}><Layers className="size-3.5" /></Button>
+    <Button variant={showLabel ? "outline" : "ghost"} size={showLabel ? "default" : "icon"} className={showLabel ? "" : "size-7 min-h-7"} title="同じ摘要の明細をまとめて同じ科目に変更" aria-label={`${row.content}と同じ摘要の明細をまとめて変更`} disabled={disabled} onClick={() => setOpen(true)}><Layers className="size-3.5" />{showLabel ? "同じ摘要をまとめて変更" : null}</Button>
     <Dialog open={open} onOpenChange={(value) => { if (!pending) { setOpen(value); if (!value) setError(""); } }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()}>
         <DialogHeader><DialogTitle>同じ摘要の明細をまとめて変更</DialogTitle><DialogDescription className="break-words">「{row.content || "摘要なし"}」の明細に同じ勘定科目を付けます。確認済みの行も含めて変更でき、確認状態はそのまま残ります。振替・対象外・科目分割・保留の行は対象外です。</DialogDescription></DialogHeader>

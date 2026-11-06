@@ -2,31 +2,20 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Building2, Ellipsis, FileText, Files, LayoutGrid, LoaderCircle, Mail, Receipt, ReceiptText, Ship, Users, UserCheck, WalletCards } from "lucide-react";
+import { Ellipsis, LoaderCircle } from "lucide-react";
+import { navigationIcon } from "@/components/app/navigation-icon";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { companyForUser, defaultPathForRole } from "@/lib/rbac";
-import { mobileNavigation, navigationActive, navigationCompany, navigationGroups, workflowNavigation } from "@/lib/app-navigation";
-import { navigationIconNames } from "@/lib/navigation-icons";
+import { mobileNavigation, navHref, navigationActive, navigationCompany, workflowNavigation } from "@/lib/app-navigation";
 import type { UserRole } from "@/lib/types";
-
-const iconComponents: Record<string, typeof Files> = { BarChart3, Building2, FileText, Files, LayoutGrid, Mail, Receipt, ReceiptText, Ship, Users, UserCheck, WalletCards };
-
-// A destination without an icon of its own still renders; rendering undefined took the whole shell down on phones.
-function navigationIcon(href: string) {
-  return iconComponents[navigationIconNames[href] ?? ""] ?? LayoutGrid;
-}
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {
   const params = new URLSearchParams(searchParams.toString());
   if (pathname.startsWith("/banking") && params.get("company") !== company) { params.delete("account"); params.delete("transaction"); params.delete("analysisThrough"); params.delete("invoice"); params.delete("page"); }
   params.set("company", company);
   return `${pathname}?${params.toString()}`;
-}
-
-function navHref(href: string, company: CompanyScope) {
-  return `${href === "/banking" ? "/banking/accounts" : href}?company=${href === "/mail-sorter" ? mailSorterCompany : company}`;
 }
 
 function optionsForPath(pathname: string, role?: UserRole) {
@@ -113,7 +102,7 @@ export function MobileAppNav({ role }: { role: UserRole }) {
             }`}
           >
             <Icon className="h-4 w-4" />
-            <span className="max-w-full truncate text-[10px] leading-tight">{item.href === "/banking" ? "口座・カード" : item.label}</span>
+            <span className="max-w-full truncate text-[10px] leading-tight">{item.label}</span>
             <NavLinkPending className="absolute right-1 top-1" />
           </Link>
         );
@@ -151,56 +140,11 @@ export function MobileAppNav({ role }: { role: UserRole }) {
   );
 }
 
-export function AppNav({ role }: { role: UserRole }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const company = navigationCompany(role, searchParams.get("company"));
-
-  return (
-    <nav aria-label="メインメニュー" className="flex w-full flex-col gap-4 pb-3">
-      {navigationGroups(role).map((group) => <div key={group.label}>
-        <p className="mb-1 px-3 text-xs font-medium text-muted-foreground">{group.label}</p>
-        <div className="space-y-0.5">{group.items.map((item) => {
-        const Icon = navigationIcon(item.href);
-        const active = navigationActive(pathname, item.href);
-        return (
-          <Link
-            key={item.href}
-            href={navHref(item.href, company)}
-            prefetch={false}
-            title={item.label}
-            aria-current={active ? "page" : undefined}
-            className={`flex min-h-9 w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition focus-visible:outline-2 focus-visible:outline-ring ${
-              active
-                ? "bg-selected font-semibold text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">{item.label}</span>
-            <NavLinkPending className="ml-auto" />
-          </Link>
-        );
-      })}</div></div>)}
-    </nav>
-  );
-}
-
-export function DesktopAppNav({ role }: { role: UserRole }) {
-  const pathname = usePathname(), searchParams = useSearchParams();
-  const company = navigationCompany(role, searchParams.get("company"));
-  return <nav aria-label="メインメニュー" className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-    {navigationGroups(role).flatMap((group) => group.items).map((item) => <Link key={item.href} href={navHref(item.href, company)} prefetch={false}
-      aria-current={navigationActive(pathname, item.href) ? "page" : undefined}
-      className="inline-flex h-9 items-center whitespace-nowrap rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-[current=page]:bg-primary/10 aria-[current=page]:font-semibold aria-[current=page]:text-primary">{item.label}</Link>)}
-  </nav>;
-}
-
 export function WorkflowNav({ role, compact = false }: { role: UserRole; compact?: boolean }) {
   const pathname = usePathname(), searchParams = useSearchParams();
   const items = workflowNavigation(pathname, new URLSearchParams(searchParams.toString()), role);
   if (items.length < 2) return null;
-  return <nav aria-label="関連画面" className={`${compact ? "" : "mb-6"} flex min-w-0 flex-wrap gap-1 rounded-xl bg-muted p-1`}>
+  return <nav aria-label="関連画面" className={`${compact ? "" : "mb-6"} flex min-w-0 flex-wrap gap-1 rounded-xl bg-muted p-1 lg:hidden`}>
     {items.map((item) => <Link key={item.href} href={item.href} prefetch={false} aria-current={item.active ? "page" : undefined}
       className={`relative inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm transition lg:min-h-9 focus-visible:outline-2 focus-visible:outline-ring ${item.active ? "bg-background font-semibold text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/60 hover:text-foreground"}`}>
       {item.label}<NavLinkPending />
@@ -214,7 +158,7 @@ export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; 
   const href = defaultPathForRole(role);
 
   return (
-    <Link href={navHref(href, company)} prefetch={false} className={compact ? "font-semibold" : "flex items-center gap-3 rounded-xl px-1"}>
+    <Link href={navHref(href, company)} prefetch={false} aria-label="TRIANGLE Invoice OS" title={compact ? "TRIANGLE Invoice OS" : undefined} className={compact ? "font-medium" : "flex items-center gap-3 rounded-xl px-1"}>
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-sm">T</div>
       {!compact ? (
         <div className="min-w-0">

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { History, LoaderCircle, Undo2 } from "lucide-react";
 import { loadBankAuditAction, undoBankAuditAction } from "@/app/banking/audit-actions";
@@ -8,15 +8,26 @@ import type { CompanyScope } from "@/lib/company";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export function BankAuditDialog({ company, disabled = false }: { company: CompanyScope; disabled?: boolean }) {
-  const [open, setOpen] = useState(false), [rows, setRows] = useState<BankAuditEntry[]>([]), [error, setError] = useState("");
+export function BankAuditDialog({ company, disabled = false, open: controlledOpen, onOpenChange }: { company: CompanyScope; disabled?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [localOpen, setLocalOpen] = useState(false), [rows, setRows] = useState<BankAuditEntry[]>([]), [error, setError] = useState("");
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); };
   const [confirm, setConfirm] = useState<string | null>(null), [pending, start] = useTransition();
   const router = useRouter();
-  const load = () => { setOpen(true); setError(""); start(async () => { try { const result = await loadBankAuditAction(company); if (!result.success) throw new Error(result.error); setRows(result.rows); } catch (e) { setError(e instanceof Error ? e.message : "履歴を読み込めませんでした"); } }); };
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    start(async () => {
+      setError("");
+      try { const result = await loadBankAuditAction(company); if (!result.success) throw new Error(result.error); if (active) setRows(result.rows); }
+      catch (e) { if (active) setError(e instanceof Error ? e.message : "履歴を読み込めませんでした"); }
+    });
+    return () => { active = false; };
+  }, [company, open]);
   function undo(id: string) {
     start(async () => { try { const result = await undoBankAuditAction(company, id); if (!result.success) throw new Error(result.error); setConfirm(null); const next = await loadBankAuditAction(company); if (next.success) setRows(next.rows); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "取り消せませんでした"); } });
   }
-  return <><Button variant="outline" size="sm" disabled={disabled} onClick={load}><History className="size-4" />変更履歴</Button><Dialog open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}><DialogContent className="max-h-[85dvh] overflow-y-auto rounded-lg sm:max-w-3xl" aria-describedby={undefined}><DialogHeader><DialogTitle>分類・確認の変更履歴</DialogTitle></DialogHeader>
+  return <>{controlledOpen === undefined ? <Button variant="outline" size="sm" disabled={disabled} onClick={() => setOpen(true)}><History className="size-4" />変更履歴</Button> : null}<Dialog open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}><DialogContent className="max-h-[85dvh] overflow-y-auto rounded-lg sm:max-w-3xl" aria-describedby={undefined}><DialogHeader><DialogTitle>分類・確認の変更履歴</DialogTitle></DialogHeader>
     {pending && <span role="status" className="flex items-center gap-2"><LoaderCircle className="size-4 animate-spin" />処理中</span>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {!pending && !rows.length && <p>表示できる変更履歴はありません</p>}
