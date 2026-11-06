@@ -55,7 +55,9 @@ Then rebuild/restart the project.
 For reliable maintenance from Codex, enable SSH on DSM and restart the app
 container from the local machine. The current live Synology container pulls the
 latest GitHub `main` branch and rebuilds the app when the container starts, so a
-container restart is enough to publish the newest pushed code.
+container restart is enough to publish the newest pushed code. After applying
+"Restart without rebuilding" below, a completed build for the same commit can
+be reused.
 
 1. In DSM, open **Control Panel** -> **Terminal & SNMP**.
 2. Enable **SSH service** on port `22`.
@@ -117,14 +119,56 @@ Check the latest deploy log:
 The endpoint fetches GitHub `main`, rebuilds the app, and then exits the app
 process so Docker's restart policy starts the fresh build. Keep the token secret.
 
+## Restart without rebuilding
+
+The NAS startup command currently installs dependencies and builds on every
+container start. After self-deploy has already completed a build and stopped the
+old process, Docker restarts the container and repeats that same build. The app
+does not listen while this second build runs, causing an outage for its duration.
+
+The postbuild step now writes `.next/triangle-build-sha` only after the standalone
+asset copies succeed. Next.js removes this marker when a new build starts.
+`deploy/synology/container-start.sh` starts the existing build when the marker
+matches the checkout's HEAD and both the standalone server and static assets are
+present. Otherwise it installs dependencies and builds before starting the app.
+
+The user makes this one-time change in **DSM** after this code is available on
+the branch fetched by the NAS:
+
+1. Edit `/volume1/docker/triangle-invoice-os/compose.yaml`, at
+   `services.app.command`.
+2. Keep the existing fetch/reset commands and their order. Replace only the
+   `npm ci && npm run build && npm start` tail with:
+
+   ```sh
+   sh deploy/synology/container-start.sh
+   ```
+
+   Keep the existing command structure and working directory. Fetch/reset must
+   finish before invoking this script, so Git cannot rewrite the script while
+   `sh` is reading it.
+3. In DSM Container Manager, apply the edited Compose configuration by recreating
+   only the `app` service.
+
+Order matters. Deploy this code first: that deploy still restarts with the old
+command and builds twice (one last outage of one build), but its build writes the
+marker. The source checkout and `.next` live on the bind mount, so they survive
+the recreate, and the first start with the new command then finds a matching
+marker and starts within seconds. If the command is changed before any build
+has written a marker, that first start does one full build instead. Later
+restarts reuse a completed build for the same HEAD; a changed HEAD or an
+incomplete build triggers a rebuild. `TRIANGLE_FORCE_REBUILD=1` forces one.
+
 ## Running Build Verification
 
 `GET /api/version` is public and returns only `{ "build": "<40-character SHA>" }`
 (or `{ "build": null }` when unknown), with `Cache-Control: no-store`. The SHA is
 embedded at build time and captured once at server startup, so overwriting the
 build on disk cannot make an old process claim to serve a new commit. Builds use
-`TRIANGLE_BUILD_SHA` when explicitly set (40 lowercase hex characters), otherwise
-`git rev-parse HEAD`; builds without Git metadata report an unknown SHA.
+`TRIANGLE_BUILD_SHA` when nonblank (trimmed and lowercased, then validated as 40 hex
+characters), otherwise `git rev-parse HEAD`; builds without Git metadata report an
+unknown SHA. Self-deploy clears the inherited build SHA before building, so it
+uses the checkout's HEAD after reset.
 
 The Deploy Synology workflow keeps the existing build-log wait, then waits up to
 15 minutes for `/api/version` to report the pushed commit or a descendant verified

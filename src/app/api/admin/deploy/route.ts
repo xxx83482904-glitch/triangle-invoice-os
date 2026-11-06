@@ -39,6 +39,7 @@ function deployEnvironment() {
   }
   delete env.NEXT_DEPLOYMENT_ID;
   delete env.NEXT_OTEL_FETCH_DISABLED;
+  delete env.TRIANGLE_BUILD_SHA;
   return env;
 }
 
