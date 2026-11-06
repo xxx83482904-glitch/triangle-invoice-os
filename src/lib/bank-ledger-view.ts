@@ -19,8 +19,8 @@ export function bankLedgerSort(sort: string, column: "date" | "amount") {
   return sort === `${column}-desc` ? `${column}-asc` : `${column}-desc`;
 }
 
-export function bankActionBarVisible(selectedCount: number, hasSaveOption: boolean) {
-  return selectedCount > 0 || hasSaveOption;
+export function bankActionBarVisible(selectedCount: number) {
+  return selectedCount > 0;
 }
 
 // The selectable scope already excludes unselected, excluded transactions.

@@ -6,7 +6,13 @@
 .bank-ledger .bank-ledger-header h1 { grid-column: 1; grid-row: 1; }
 .bank-ledger .bank-header-actions { display: flex; grid-column: 2; grid-row: 1; align-items: center; gap: 6px; }
 .bank-ledger .bank-account-filter { grid-column: 1 / -1; grid-row: 3; width: 100%; }
-.bank-ledger .bank-sync-status { display: flex; grid-column: 1 / -1; grid-row: 2; min-width: 0; flex-wrap: nowrap; align-items: center; gap: 0 8px; font-size: 11px; color: var(--muted-foreground); }
+.bank-ledger .bank-sync-status { display: flex; grid-column: 1 / -1; grid-row: 2; min-width: 0; flex-wrap: wrap; align-items: center; gap: 0 8px; font-size: 11px; color: var(--muted-foreground); }
+.bank-autosave-summary { flex: none; font-size: 11px; }
+.bank-autosave-state { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted-foreground); }
+.bank-autosave-error { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; font-size: 11px; line-height: 17px; color: var(--tone-amber-fg); }
+.bank-autosave-retry { min-height: 28px; padding-inline: 4px; border: 1px solid var(--input); border-radius: 5px; color: var(--foreground); }
+.bank-ledger-cards .bank-autosave-retry, .bank-ledger-detail .bank-autosave-retry { min-height: 44px; }
+.bank-autosave-error button:focus-visible, button.bank-autosave-summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .bank-ledger .bank-balance-trigger { padding-inline: 0; font-size: 11px; font-weight: 400; }
 .bank-ledger .bank-workflow-line { min-width: 0; }
 .bank-ledger .bank-workflow-line nav { flex-wrap: nowrap; overflow-x: auto; width: 100%; }
@@ -56,7 +62,11 @@
 
 /* Keep the fixed bar outside the width-query container so offsets remain viewport-relative. */
 .bank-ledger .bank-ledger-savebar.is-unified { container: bank-actions / inline-size; position: fixed; inset-inline: 8px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 25; display: block; min-height: 0; max-width: 1420px; margin-inline: auto; padding: 6px; border: 1px solid var(--edge); border-radius: 16px; background: var(--rail); box-shadow: var(--shadow-raised); backdrop-filter: blur(12px); }
-.bank-actions-content { display: flex; min-width: 0; flex-wrap: nowrap; align-items: center; gap: 4px; }
+.bank-actions-content { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4px; }
+.bank-actions-content .bank-adopt-candidates { padding-inline: 6px; font-size: 11px; }
+@media (max-width: 1023px) {
+  .bank-ledger[data-actions="true"]:has(.bank-adopt-candidates) { padding-bottom: 112px; }
+}
 .bank-actions-content > * { flex-shrink: 0; }
 .bank-selected-summary { display: flex; min-width: 0; flex: 0 1 auto; flex-direction: column; align-items: flex-start; font-size: 12px; }
 .bank-selected-summary .bank-selected-desktop, .bank-selected-summary .bank-selection-amount, .bank-selected-summary .bank-selection-snapshot, .bank-selected-summary .bank-select-matching { display: none; }
@@ -146,7 +156,8 @@
   .bank-ledger .bank-ledger-table-view { display: block; }
   .bank-ledger .bank-ledger-cards, .bank-ledger .bank-ledger-card-select { display: none; }
 }
-@container bank-ledger (min-width: 1400px) {
+/* Keep the sheet's 1088px content width: 1088 + 300 rail + 16 gap + 2 sheet borders = 1406px. */
+@container bank-ledger (min-width: 1406px) {
   .bank-ledger .bank-ledger-layout { grid-template-columns: minmax(0, 1fr) 300px; }
   .bank-ledger .bank-category-rail { display: flex; flex-direction: column; }
 }

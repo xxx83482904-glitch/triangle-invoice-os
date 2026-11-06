@@ -40,11 +40,10 @@ test("sortable headings toggle the same column and start another column descendi
   assert.equal(bankLedgerSort("amount-desc", "amount"), "amount-asc");
 });
 
-test("the action bar needs a selection or a saveable change", () => {
-  assert.equal(bankActionBarVisible(0, false), false);
-  assert.equal(bankActionBarVisible(1, false), true);
-  assert.equal(bankActionBarVisible(0, true), true);
-  assert.equal(bankActionBarVisible(1, true), true);
+test("the autosave action bar appears only while rows are selected", () => {
+  assert.equal(bankActionBarVisible(0), false);
+  assert.equal(bankActionBarVisible(1), true);
+  assert.equal(bankActionBarVisible(100), true);
 });
 
 test("the header checkbox covers none, some and all of the eligible loaded scope", () => {
