@@ -4,6 +4,12 @@ export const yen = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
 
+export function formatMoney(value: number, { sign = "negative" }: { sign?: "negative" | "always" | "never" } = {}) {
+  if (!Number.isFinite(value)) return "—";
+  const prefix = value === 0 || sign === "never" ? "" : value < 0 ? "−" : sign === "always" ? "+" : "";
+  return prefix + yen.format(Math.abs(value));
+}
+
 export const number = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });

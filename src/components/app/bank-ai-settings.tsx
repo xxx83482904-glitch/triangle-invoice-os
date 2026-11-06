@@ -8,8 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 
-export function BankAiSettings({ configured, model, keyFromEnv, modelFromEnv, disabled }: { configured: boolean; model: string; keyFromEnv: boolean; modelFromEnv: boolean; disabled?: boolean }) {
-  const router = useRouter(), [pending, startTransition] = useTransition(), [open, setOpen] = useState(false);
+export function BankAiSettings({ configured, model, keyFromEnv, modelFromEnv, disabled, open: controlledOpen, onOpenChange }: { configured: boolean; model: string; keyFromEnv: boolean; modelFromEnv: boolean; disabled?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const router = useRouter(), [pending, startTransition] = useTransition(), [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); };
   const [apiKey, setApiKey] = useState(""), [nextModel, setNextModel] = useState(model), [error, setError] = useState("");
   function save() {
     startTransition(async () => {
@@ -22,7 +24,7 @@ export function BankAiSettings({ configured, model, keyFromEnv, modelFromEnv, di
     });
   }
   return <>
-    <Button className="min-h-11 lg:min-h-11" variant="outline" disabled={disabled} onClick={() => { setApiKey(""); setNextModel(model); setError(""); setOpen(true); }}><Settings className="size-4" />AI設定</Button>
+    {controlledOpen === undefined ? <Button className="min-h-11 lg:min-h-11" variant="outline" disabled={disabled} onClick={() => { setApiKey(""); setNextModel(model); setError(""); setOpen(true); }}><Settings className="size-4" />AI設定</Button> : null}
     <Dialog open={open} onOpenChange={(value) => { if (!pending) { setOpen(value); if (!value) setApiKey(""); } }}>
       <DialogContent showCloseButton={!pending} className="max-h-[90dvh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
         <DialogHeader><DialogTitle>AI設定</DialogTitle><DialogDescription>OCRのAI分類と共通のOpenAI API設定です。保存だけでは分析データを送信しません。</DialogDescription></DialogHeader>

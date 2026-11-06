@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "./boardui-tokens.css";
+@import "./bank-ledger.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -421,7 +422,7 @@ html[data-sidebar="expanded"] body:has(.workspace-shell) { --app-sidebar-width: 
   .app-sidebar-link[data-active="true"][data-has-children="true"] { background: var(--primary); color: var(--primary-foreground); }
 }
 @media (min-width: 1024px) { .workspace-shell { display: flex; align-items: flex-start; } }
-@media (min-width: 1024px) { .workspace-main { padding: 20px 24px 28px; } .workspace-main.banking-main { padding-bottom: 88px; } }
+@media (min-width: 1024px) { .workspace-main { padding: 20px 24px 28px; } }
 .workspace-page-header { margin-bottom: 16px; padding-block: 4px; border-bottom: 0; }
 .workspace-main h1 { font-size: 20px; line-height: 1.4; font-weight: 500; }
 
@@ -492,7 +493,6 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
   .workspace-main :is([data-slot="input"], [data-slot="select-trigger"], select):not(.bank-ledger-table *) { height: 36px; min-height: 36px; }
 }
 .bank-account-filter { width: 270px; max-width: 100%; }
-.bank-ledger-header > div:first-child { flex: 1 1 450px; }
 .bank-toolbar-group + .bank-toolbar-group { border-inline-start: 1px solid var(--rule); padding-inline-start: 12px; }
 @media (width < 64rem) {
   .bank-ledger[data-company="JAPAN"] .bank-toolbar-group + .bank-toolbar-group { border-inline-start: 0; padding-inline-start: 0; }
@@ -500,7 +500,6 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .bank-workflow-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; }
 .bank-workflow-line > nav { border-bottom: 0; }
 .bank-ledger-totals { padding-block: 0; }
-.bank-ledger-layout { display: grid; min-width: 0; gap: 24px; padding-top: 0; }
 .month-tabs { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
 .month-tabs-year { min-width: 0; max-width: 145px; height: 36px; background: transparent; color: var(--foreground); font-size: 13px; font-weight: 400; }
 .month-tabs-row { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; gap: 4px; border-radius: 12px; padding: 4px; background: var(--track); }
@@ -526,29 +525,17 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .bank-review-tag { display: inline-flex; max-width: 100%; align-items: center; gap: 3px; border-radius: 6px; padding: 4px 6px; background: var(--tone-amber-bg); color: var(--tone-amber-fg); font-size: 11px; line-height: 1.4; }
 .bank-review-tag.is-reviewed { background: var(--tone-emerald-bg); color: var(--tone-emerald-fg); font-weight: 500; }
 .bank-review-tag.is-missing { background: var(--tone-red-bg); color: var(--tone-red-fg); }
-.bank-category-rail { position: sticky; top: 12px; min-width: 0; min-height: 360px; height: calc(100dvh - 272px); flex-direction: column; align-self: start; overflow: hidden; border-radius: 20px; background: var(--panel); }
 .bank-ledger-savebar { position: fixed; bottom: calc(64px + env(safe-area-inset-bottom)); left: 0; right: 0; z-index: 25; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; padding: 8px 12px; background: var(--rail); box-shadow: 0 -12px 28px -18px rgb(52 72 98 / 0.4); }
-.banking-main { padding-bottom: 160px; }
 .bank-ledger-table thead { background: var(--card); }
-.bank-ledger-table td { vertical-align: top; }
 .bank-classification-state [data-classification] { font-size: 10px; line-height: 15px; padding: 1px 4px; border-color: transparent; }
 .bank-ledger-table select, .bank-ledger-table input:not([type="checkbox"]) { height: 34px; background: transparent; border-color: transparent; border-radius: 5px; box-shadow: none; font-size: 12px; }
 .bank-ledger-table select:hover, .bank-ledger-table input:not([type="checkbox"]):hover, .bank-ledger-table input:focus { border-color: var(--input); background: var(--field); }
 .bank-category-cell { border-color: transparent; padding: 1px 6px; font-size: 13px; line-height: 18px; }
 .bank-ledger-table .bank-category-cell > span > span { margin-top: 0; font-size: 11px; line-height: 15px; }
-.bank-ledger-table .bank-classification-state { margin-top: 2px; }
 .bank-category-cell:hover, .bank-category-cell:focus-visible { border-color: var(--input); background: var(--field); }
 .bank-row-link { min-height: 44px; height: auto; }
 @media (min-width: 1024px) {
-  .bank-ledger-scroll { max-height: max(280px, calc(100dvh - 336px)); }
-  .bank-category-rail { height: calc(100dvh - 208px); }
-}
-@media (min-width: 768px) {
-  .bank-ledger-table td { height: 62px; padding-top: 6px; padding-bottom: 6px; }
-}
-@media (min-width: 1024px) {
   .month-tabs-row button, .month-tabs-all { min-width: 38px; min-height: 36px; }
-  .banking-main { padding-bottom: 80px; }
   .bank-ledger-savebar { bottom: 0; left: var(--app-sidebar-offset, 0px); padding-inline: 20px; }
   .bank-row-link { min-height: 32px; }
   .bank-source-note { min-width: 28px; min-height: 28px; }
@@ -564,7 +551,6 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
   .bank-ledger-toolbar button, .bank-ledger-toolbar select { min-height: 36px; height: 36px; font-size: 12px; }
 }
 @media (min-width: 1280px) {
-  .bank-ledger-layout { grid-template-columns: minmax(0, 1fr) 330px; }
   .bank-category-picker button { min-height: 32px; }
   .bank-category-picker input { height: 36px; }
   .bank-category-picker h3 button { background: transparent; border-left: 0; padding: 3px 0; }
@@ -572,9 +558,6 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
   .bank-category-picker [aria-label$="の補助科目"] { width: 30px; }
   .bank-category-picker [aria-label="大分類別の科目"] { padding: 8px 12px; }
   .bank-category-picker > div:first-child { padding-block: 8px; }
-}
-@media (min-width: 1440px) {
-  .bank-ledger-layout { grid-template-columns: minmax(0, 1fr) 360px; }
 }
 @media (max-width: 767px) {
   .bank-account-filter { max-width: 100%; }
@@ -601,9 +584,6 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
     min-width: 20px;
   }
 }
-
-/* Japan UX: one 44px action row; retain the existing China save bar. */
-.bank-ledger-savebar.is-unified { min-height: 60px; padding-block: 8px; }
 
 /* Items are cards: pressing anywhere on one selects it, and its controls keep their own action. */
 [data-selection-id], [data-card-press] { cursor: pointer; }

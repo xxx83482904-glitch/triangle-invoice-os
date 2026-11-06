@@ -41,12 +41,27 @@ const lists = [
   "src/components/app/estimates-list.tsx", "src/app/projects/projects-workspace.tsx", "src/components/app/banking-workspace.tsx", "src/components/app/records-table.tsx",
 ];
 for (const file of lists) {
-  test(`${file} shows its items as cards and has no select-all checkbox`, () => {
+  const ledger = file === "src/components/app/banking-workspace.tsx";
+  test(`${file} ${ledger ? "keeps mobile cards and a ledger header checkbox" : "shows its items as cards and has no select-all checkbox"}`, () => {
     const source = readFileSync(file, "utf8");
     assert.match(source, /record-cards?\b/);
-    assert.doesNotMatch(source, /SelectAllCheckbox/);
+    if (ledger) {
+      assert.match(source, /<th scope="col"><BankSelectAllCheckbox/);
+      assert.match(source, /onChange=\{selection\.selectAll\}/);
+      assert.match(readFileSync("src/components/app/bank-ledger-controls.tsx", "utf8"), /aria-checked=\{some \? "mixed" : all\}/);
+    } else assert.doesNotMatch(source, /SelectAllCheckbox/);
   });
 }
+
+test("bank ledger opens details before selection and keeps editing outside the cards", () => {
+  const source = readFileSync("src/components/app/banking-workspace.tsx", "utf8");
+  assert.match(source, /useListSelection\([^\n]+pickMode: false/);
+  assert.match(source, /<RecordDetail wide=\{false\}/);
+  assert.match(source, /selection\.rowProps\(row.id\)/);
+  const cards = source.slice(source.indexOf('className="bank-ledger-cards'), source.indexOf('<div ref={sentinel}'));
+  assert.doesNotMatch(cards, /<details|<Input|<select/);
+  assert.match(cards, /setDetailId\(row.id\)/);
+});
 
 for (const [file, labels] of [
   ["src/app/mail-sorter/ocr-documents-table.tsx", ["郵便物の分類で絞り込み"]],

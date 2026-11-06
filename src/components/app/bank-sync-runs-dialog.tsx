@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, RotateCcw, ScrollText } from "lucide-react";
 import { loadBankSyncRunsAction, restoreBankSyncReviewAction } from "@/app/banking/sync-review-actions";
@@ -12,12 +12,23 @@ const money = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY
 const when = (value?: string) => value ? new Date(value).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : "";
 const key = (runId: string, id: string) => `${runId}\u0000${id}`;
 
-export function BankSyncRunsDialog({ company, disabled = false, pending = 0 }: { company: CompanyScope; disabled?: boolean; pending?: number }) {
-  const [open, setOpen] = useState(false), [runs, setRuns] = useState<BankSyncRunView[]>([]), [error, setError] = useState(""), [notice, setNotice] = useState("");
+export function BankSyncRunsDialog({ company, disabled = false, pending = 0, open: controlledOpen, onOpenChange }: { company: CompanyScope; disabled?: boolean; pending?: number; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [localOpen, setLocalOpen] = useState(false), [runs, setRuns] = useState<BankSyncRunView[]>([]), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); };
   const [selected, setSelected] = useState<Set<string>>(new Set()), [confirm, setConfirm] = useState<string | null>(null), [busy, start] = useTransition();
   const router = useRouter();
   const reload = async () => { const result = await loadBankSyncRunsAction(company); if (!result.success) throw new Error(result.error); setRuns(result.rows); };
-  const load = () => { setOpen(true); setError(""); setNotice(""); setConfirm(null); setSelected(new Set()); start(async () => { try { await reload(); } catch (e) { setError(e instanceof Error ? e.message : "同期の記録を読み込めませんでした"); } }); };
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    start(async () => {
+      setError(""); setNotice(""); setConfirm(null); setSelected(new Set());
+      try { const result = await loadBankSyncRunsAction(company); if (!result.success) throw new Error(result.error); if (active) setRuns(result.rows); }
+      catch (e) { if (active) setError(e instanceof Error ? e.message : "同期の記録を読み込めませんでした"); }
+    });
+    return () => { active = false; };
+  }, [company, open]);
   const toggle = (runId: string, id: string, value: boolean) => setSelected((current) => { const next = new Set(current); if (value) next.add(key(runId, id)); else next.delete(key(runId, id)); return next; });
   const selectRun = (run: BankSyncRunView, value: boolean) => setSelected((current) => { const next = new Set(current); for (const change of run.changes) if (change.restorable) { if (value) next.add(key(run.runId, change.transactionId)); else next.delete(key(run.runId, change.transactionId)); } return next; });
   const selectedIn = (run: BankSyncRunView) => run.changes.filter((change) => change.restorable && selected.has(key(run.runId, change.transactionId))).map((change) => change.transactionId);
@@ -35,7 +46,7 @@ export function BankSyncRunsDialog({ company, disabled = false, pending = 0 }: {
     });
   }
   return <>
-    <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={load}><ScrollText className="size-4" />同期の影響{pending ? <span className="rounded-full bg-amber-500/15 px-1.5 text-amber-800 dark:text-amber-300">確認解除 {pending}件</span> : null}</Button>
+    {controlledOpen === undefined ? <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setOpen(true)}><ScrollText className="size-4" />同期の影響{pending ? <span className="rounded-full bg-amber-500/15 px-1.5 text-amber-800 dark:text-amber-300">確認解除 {pending}件</span> : null}</Button> : null}
     <Dialog open={open} onOpenChange={(value) => { if (!busy) setOpen(value); }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-lg sm:max-w-4xl" showCloseButton={!busy}>
         <DialogHeader><DialogTitle>Money Forward 同期の影響</DialogTitle><DialogDescription>同期ごとの追加・変更・確認解除の記録。金額・日付・摘要・口座が変わった明細と元明細がなくなった明細だけ確認が外れます。連携元の仕訳状態やメモだけの変化では確認状態・科目・メモ・分割・保留を維持します。</DialogDescription></DialogHeader>
