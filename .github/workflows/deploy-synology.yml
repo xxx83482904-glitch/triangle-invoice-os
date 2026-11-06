@@ -13,9 +13,15 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Trigger self deploy
         env:
           DEPLOY_URL: ${{ secrets.TRIANGLE_DEPLOY_URL }}
@@ -90,16 +96,5 @@ jobs:
             fi
           done
 
-          echo "Waiting for production to return..."
-          for attempt in $(seq 1 90); do
-            health_status="$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w "%{http_code}" "${DEPLOY_URL}/login" || true)"
-            if [ "$health_status" = "200" ]; then
-              echo "Production is healthy."
-              exit 0
-            fi
-            echo "Attempt ${attempt}: HTTP ${health_status}. Waiting..."
-            sleep 10
-          done
-
-          echo "Production did not return in time." >&2
-          exit 1
+          unset DEPLOY_TOKEN
+          node scripts/wait-for-live-build.mjs --url "$DEPLOY_URL" --expect "$GITHUB_SHA" --timeout-seconds 900

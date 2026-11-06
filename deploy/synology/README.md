@@ -117,6 +117,23 @@ Check the latest deploy log:
 The endpoint fetches GitHub `main`, rebuilds the app, and then exits the app
 process so Docker's restart policy starts the fresh build. Keep the token secret.
 
+## Running Build Verification
+
+`GET /api/version` is public and returns only `{ "build": "<40-character SHA>" }`
+(or `{ "build": null }` when unknown), with `Cache-Control: no-store`. The SHA is
+embedded at build time and captured once at server startup, so overwriting the
+build on disk cannot make an old process claim to serve a new commit. Builds use
+`TRIANGLE_BUILD_SHA` when explicitly set (40 lowercase hex characters), otherwise
+`git rev-parse HEAD`; builds without Git metadata report an unknown SHA.
+
+The Deploy Synology workflow keeps the existing build-log wait, then waits up to
+15 minutes for `/api/version` to report the pushed commit or a descendant verified
+with Git (a later deployed commit produces a workflow warning). An unknown or
+unrelated SHA never passes. It then checks `/login` = 200, `/api/section-export` =
+401, and an unauthenticated `/api/admin/deploy` = 403 with `Invalid deploy token`.
+The deploy probe runs only after the first two pass, with at most three rounds,
+10 seconds apart. The live-check script receives and sends no deploy token.
+
 ## Default Login
 
 - `admin@triangle.local`

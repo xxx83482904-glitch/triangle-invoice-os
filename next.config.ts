@@ -1,7 +1,29 @@
+import { execFileSync } from "node:child_process";
 import type { NextConfig } from "next";
+
+function buildSha(): string {
+  let value = process.env.TRIANGLE_BUILD_SHA;
+  if (value === undefined) {
+    try {
+      value = execFileSync("git", ["rev-parse", "HEAD"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 3000,
+        windowsHide: true,
+      }).trim();
+    } catch {
+      // Docker builds may have neither git nor a .git directory.
+      return "";
+    }
+  }
+  return /^[0-9a-f]{40}$/.test(value) ? value : "";
+}
+
+const triangleBuildSha = buildSha();
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  env: { TRIANGLE_BUILD_SHA: triangleBuildSha },
   async headers() {
     return [
       "/design-fee-calculator", "/design-fee-calculator/index.html",
