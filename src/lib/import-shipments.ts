@@ -1,4 +1,6 @@
-import type { ImportDocumentKind, ImportShipment, ImportShipmentStatus } from "@/lib/types";
+import type { ImportDocumentKind, ImportFillKey, ImportOrder, ImportOrderItemKind, ImportShipment, ImportShipmentStatus, ImportStage } from "@/lib/types";
+export type { ImportFillKey } from "@/lib/types";
+export { todayInJapan as importToday } from "@/lib/dates";
 
 // Client-safe part of the import board: labels, keyword detection and arithmetic. Store access lives in import-shipment-views.ts.
 export const importDocumentKinds = ["SUPPLIER_INVOICE", "PACKING_LIST", "WAYBILL", "IMPORT_PERMIT", "BROKER_INVOICE", "TAX_PAYMENT", "OTHER"] as const satisfies readonly ImportDocumentKind[];
@@ -12,6 +14,44 @@ export const importChecklistKinds: ImportDocumentKind[] = ["SUPPLIER_INVOICE", "
 export const customsDocumentKinds: ImportDocumentKind[] = ["IMPORT_PERMIT", "PACKING_LIST", "WAYBILL", "TAX_PAYMENT"];
 export const importShipmentStatuses = ["OPEN", "CLEARED", "CLOSED"] as const satisfies readonly ImportShipmentStatus[];
 export const importShipmentStatusLabels: Record<ImportShipmentStatus, string> = { OPEN: "書類待ち", CLEARED: "通関済み", CLOSED: "完了" };
+
+export const defaultImportStages = [
+  { key: "ORDER_RECEIVED", label: "発注受付" }, { key: "PRODUCTION", label: "製作" }, { key: "SHIPMENT", label: "出荷" },
+  { key: "CUSTOMS", label: "通関" }, { key: "DELIVERY", label: "納品" },
+] as const satisfies readonly ImportStage[];
+export const importOrderItemKinds = [
+  { value: "BAG", label: "袋" }, { value: "PRINTED", label: "印刷物" }, { value: "BOX", label: "箱" }, { value: "TEXTILE", label: "布製品" },
+  { value: "LIGHTING", label: "照明" }, { value: "FURNITURE", label: "家具" }, { value: "OTHER", label: "その他" },
+] as const satisfies readonly { value: ImportOrderItemKind; label: string }[];
+
+export function importStageTimeline(stages: ImportStage[] | undefined, today: string) {
+  const stored = new Map((stages ?? []).map((stage) => [stage.key, stage]));
+  const defaults = new Set<string>(defaultImportStages.map((stage) => stage.key));
+  const merged: ImportStage[] = [
+    ...defaultImportStages.map((stage) => ({ ...stage, ...stored.get(stage.key) })),
+    ...(stages ?? []).filter((stage) => !defaults.has(stage.key)),
+  ];
+  const entered = merged.some((stage) => Boolean(stage.startedAt || stage.plannedAt || stage.completedAt));
+  const current = entered ? merged.find((stage) => !stage.completedAt)?.key : undefined;
+  const scheduled = merged.find((stage) => !stage.completedAt && stage.plannedAt);
+  // ISO calendar dates are compared at UTC midnight; today itself is supplied in JST.
+  const daysLeft = scheduled ? Math.round((Date.parse(`${scheduled.plannedAt}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000) : 0;
+  return {
+    stages: merged.map((stage): ImportStage & { state: "DONE" | "CURRENT" | "UPCOMING" } => ({
+      ...stage, state: stage.completedAt ? "DONE" : stage.key === current ? "CURRENT" : "UPCOMING",
+    })),
+    entered, current, allDone: merged.every((stage) => Boolean(stage.completedAt)),
+    next: scheduled ? { key: scheduled.key, label: scheduled.label, date: scheduled.plannedAt!, daysLeft, overdue: daysLeft < 0 } : undefined,
+  };
+}
+
+export function importRequestedDates(orders: ImportOrder[] | undefined) {
+  const dates = [...new Set((orders ?? []).flatMap((order) => order.requestedDeliveryDate ? [order.requestedDeliveryDate] : []))].sort();
+  const itemOverrides = (orders ?? []).flatMap((order) => order.items.flatMap((item) =>
+    item.requestedDeliveryDate && item.requestedDeliveryDate !== order.requestedDeliveryDate
+      ? [{ orderId: order.id, itemId: item.id, date: item.requestedDeliveryDate }] : []));
+  return { dates, differs: new Set([...dates, ...itemOverrides.map((item) => item.date)]).size > 1, itemOverrides };
+}
 
 export type ImportLinkedDocument = {
   key: string; source: "mail" | "received"; id: string; title: string; party: string; date: string; amount?: number;
@@ -77,8 +117,7 @@ export function suggestsCustomsCategory(text = "", fileName = "") {
   return Boolean(detected && customsDocumentKinds.includes(detected.kind));
 }
 
-export type ImportShipmentFields = Partial<Pick<ImportShipment, "permitNumber" | "permitDate" | "arrivalDate" | "supplierName" | "goodsValue" | "dutyAmount" | "importTaxNational" | "importTaxLocal" | "brokerFee" | "blNumber" | "invoiceNumber">>;
-export type ImportFillKey = keyof ImportShipmentFields | "brokerVendorId";
+export type ImportShipmentFields = Partial<Pick<ImportShipment, Exclude<ImportFillKey, "brokerVendorId">>>;
 export const importFillLabels: Record<ImportFillKey, string> = {
   permitNumber: "許可番号", permitDate: "許可日", arrivalDate: "到着日", supplierName: "仕入先", goodsValue: "課税価格",
   dutyAmount: "関税", importTaxNational: "輸入消費税", importTaxLocal: "地方消費税", brokerFee: "通関手数料", brokerVendorId: "通関業者",
@@ -314,6 +353,7 @@ export function fillImportShipment(row: ImportShipment, fields: ImportShipmentFi
     const value = fields[key];
     if ((row[key] === undefined || row[key] === "") && value !== undefined && value !== "") {
       Object.assign(row, { [key]: value });
+      (row.fieldSources ??= {})[key] = "DOCUMENT";
       filled.push(key);
     }
   }

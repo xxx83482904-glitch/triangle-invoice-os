@@ -3,7 +3,7 @@ import "server-only";
 import { ZodError, z } from "zod";
 import { companyFromParam } from "@/lib/company";
 import { applyImportShipmentMutation, findImportShipmentByReferences } from "@/lib/import-shipment-views";
-import { detectImportDocument, extractImportShipmentFields, importDocumentKinds, importFillKeysByKind, importFillLabels, readImportReferences, type ImportFillKey, type ImportShipmentFields } from "@/lib/import-shipments";
+import { detectImportDocument, extractImportShipmentFields, importDocumentKinds, importFillKeysByKind, importFillLabels, importToday, readImportReferences, type ImportFillKey, type ImportShipmentFields } from "@/lib/import-shipments";
 import { intakeMailDocument, type MailIntakeInput, type MailIntakeResult } from "@/lib/mail-intake";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import { mutateData } from "@/lib/store";
@@ -41,11 +41,14 @@ export async function intakeImportDocument(input: ImportIntakeInput): Promise<Im
       let shipmentCreated: true | undefined;
       const filled = new Set<ImportFillKey>();
       if (!shipment && kind === "IMPORT_PERMIT") {
-        const title = `${fields.supplierName || "輸入便"} ${fields.permitDate || new Date().toISOString().slice(0, 10)}`;
+        const title = `${fields.supplierName || "輸入便"} ${fields.permitDate || importToday()}`;
         const created = applyImportShipmentMutation(data, actor, company, { action: "create", title, ...fields });
         shipment = data.importShipments!.find((row) => row.id === created.id)!;
         shipmentCreated = true;
-        for (const key of Object.keys(fields) as ImportFillKey[]) filled.add(key);
+        for (const key of Object.keys(fields) as ImportFillKey[]) {
+          filled.add(key);
+          (shipment.fieldSources ??= {})[key] = "DOCUMENT";
+        }
       }
       if (!shipment) return { filled: [] };
       const assigned = applyImportShipmentMutation(data, actor, company, { action: "assign", shipmentId: shipment.id, source, documentId, kind });

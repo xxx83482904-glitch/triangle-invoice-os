@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { todayInJapan } from "@/lib/dates";
 import type { CompanyScope } from "@/lib/company";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
@@ -27,7 +28,7 @@ export function isBankDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 }
 export function bankToday() {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return todayInJapan();
 }
 export function monthRanges(start: string, end: string) {
   if (!isBankDate(start) || !isBankDate(end) || start > end) throw new Error("取得期間が不正です");

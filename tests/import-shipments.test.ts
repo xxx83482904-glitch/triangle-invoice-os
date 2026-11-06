@@ -265,7 +265,7 @@ test("the import board sits beside received invoices for accounting roles only",
 
 function boardDocument(id: string, references: ImportReferences = {}, extra: Partial<ImportBoardDocument> = {}): ImportBoardDocument {
   return { key: `mail:${id}`, id, source: "mail", title: `${id}-saved.pdf`, displayName: `${id}.pdf`, party: "合成荷主", date: "2026-10-01",
-    kind: "OTHER", href: "/mail-sorter?company=JAPAN", updatedAt: timestamp, references, ...extra };
+    kind: "OTHER", href: "/mail-sorter?company=JAPAN", fileUrl: `/api/files/${id}.pdf`, fileName: `${id}.pdf`, mimeType: "application/pdf", updatedAt: timestamp, references, ...extra };
 }
 
 function matchingShipment(id: string, extra: Partial<ImportShipment> = {}): ImportShipment {
