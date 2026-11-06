@@ -400,11 +400,26 @@ body { background-color: var(--page-end); background-image: var(--page); backgro
 .workspace-mobile-header { border-color: transparent; background: var(--rail-glass); }
 .workspace-mobile-nav { border-color: transparent; background: var(--rail-glass); box-shadow: 0 -12px 28px -18px rgb(52 72 98 / 0.4); }
 /* Body also supplies the offset to selection bars and detail panes rendered in portals. */
-body:has(.workspace-shell) { --app-sidebar-width: 252px; --app-sidebar-offset: calc(var(--app-sidebar-width) + 12px); }
-body:has(.app-sidebar[data-collapsed="true"]) { --app-sidebar-width: 64px; }
+body:has(.workspace-shell) { --app-sidebar-width: 64px; --app-sidebar-padding: 11px; --app-sidebar-offset: calc(var(--app-sidebar-width) + 12px); }
+html[data-sidebar="expanded"] body:has(.workspace-shell) { --app-sidebar-width: 252px; --app-sidebar-padding: 12px; }
+@media (min-width: 1536px) {
+  html:not([data-sidebar]) body:has(.workspace-shell) { --app-sidebar-width: 252px; --app-sidebar-padding: 12px; }
+}
 .workspace-content { min-width: 0; flex: 1; }
-.app-sidebar { position: sticky; top: 12px; width: var(--app-sidebar-width); height: calc(100dvh - 24px); margin: 12px 0 12px 12px; padding: 12px; overflow: hidden; border: 1px solid var(--edge); border-radius: 24px; background: color-mix(in srgb, var(--rail) 72%, transparent); box-shadow: var(--shadow-raised); backdrop-filter: blur(14px); }
-.app-sidebar[data-collapsed="true"] { padding-inline: 11px; }
+.app-sidebar { container: app-sidebar / inline-size; position: sticky; top: 12px; width: var(--app-sidebar-width); height: calc(100dvh - 24px); margin: 12px 0 12px 12px; padding: 12px var(--app-sidebar-padding); overflow: hidden; border: 1px solid var(--edge); border-radius: 24px; background: color-mix(in srgb, var(--rail) 72%, transparent); box-shadow: var(--shadow-raised); backdrop-filter: blur(14px); }
+.app-sidebar [data-sidebar-collapsed] { display: none; }
+.app-sidebar-link[data-active="true"] { background: var(--primary); color: var(--primary-foreground); }
+.app-sidebar-link[data-active="true"][data-has-children="true"] { background: var(--tile); color: var(--foreground); }
+/* Internal controls follow the CSS width without waiting for hydration. */
+@container app-sidebar (max-width: 100px) {
+  .app-sidebar [data-sidebar-expanded] { display: none; }
+  .app-sidebar [data-sidebar-collapsed] { display: block; }
+  .app-sidebar-row { flex-direction: column; }
+  .app-sidebar-tools { margin-left: 0; gap: 4px; }
+  .app-sidebar-search { display: flex; justify-content: center; }
+  .app-sidebar-link { justify-content: center; }
+  .app-sidebar-link[data-active="true"][data-has-children="true"] { background: var(--primary); color: var(--primary-foreground); }
+}
 @media (min-width: 1024px) { .workspace-shell { display: flex; align-items: flex-start; } }
 @media (min-width: 1024px) { .workspace-main { padding: 20px 24px 28px; } .workspace-main.banking-main { padding-bottom: 88px; } }
 .workspace-page-header { margin-bottom: 16px; padding-block: 4px; border-bottom: 0; }

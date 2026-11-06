@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { companyForUser, defaultPathForRole } from "@/lib/rbac";
-import { mobileNavigation, navHref, navigationActive, navigationCompany, navigationGroups, workflowNavigation } from "@/lib/app-navigation";
+import { mobileNavigation, navHref, navigationActive, navigationCompany, workflowNavigation } from "@/lib/app-navigation";
 import type { UserRole } from "@/lib/types";
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {
@@ -138,51 +138,6 @@ export function MobileAppNav({ role }: { role: UserRole }) {
       ) : null}
     </nav>
   );
-}
-
-export function AppNav({ role }: { role: UserRole }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const company = navigationCompany(role, searchParams.get("company"));
-
-  return (
-    <nav aria-label="メインメニュー" className="flex w-full flex-col gap-4 pb-3">
-      {navigationGroups(role).map((group) => <div key={group.label}>
-        <p className="mb-1 px-3 text-xs font-medium text-muted-foreground">{group.label}</p>
-        <div className="space-y-0.5">{group.items.map((item) => {
-        const Icon = navigationIcon(item.href);
-        const active = navigationActive(pathname, item.href);
-        return (
-          <Link
-            key={item.href}
-            href={navHref(item.href, company)}
-            prefetch={false}
-            title={item.label}
-            aria-current={active ? "page" : undefined}
-            className={`flex min-h-9 w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition focus-visible:outline-2 focus-visible:outline-ring ${
-              active
-                ? "bg-selected font-semibold text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">{item.label}</span>
-            <NavLinkPending className="ml-auto" />
-          </Link>
-        );
-      })}</div></div>)}
-    </nav>
-  );
-}
-
-export function DesktopAppNav({ role }: { role: UserRole }) {
-  const pathname = usePathname(), searchParams = useSearchParams();
-  const company = navigationCompany(role, searchParams.get("company"));
-  return <nav aria-label="メインメニュー" className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-    {navigationGroups(role).flatMap((group) => group.items).map((item) => <Link key={item.href} href={navHref(item.href, company)} prefetch={false}
-      aria-current={navigationActive(pathname, item.href) ? "page" : undefined}
-      className="inline-flex h-9 items-center whitespace-nowrap rounded-lg px-3 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-[current=page]:bg-primary/10 aria-[current=page]:font-semibold aria-[current=page]:text-primary">{item.label}</Link>)}
-  </nav>;
 }
 
 export function WorkflowNav({ role, compact = false }: { role: UserRole; compact?: boolean }) {

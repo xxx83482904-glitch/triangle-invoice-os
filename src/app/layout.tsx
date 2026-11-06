@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Toaster } from "@/components/app/toaster";
 import { ThemeProvider, themeInitScript } from "@/components/app/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { sidebarInitScript } from "@/lib/sidebar-preference";
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/noto-sans-jp/wght.css";
 import "./globals.css";
@@ -26,6 +27,7 @@ export default function RootLayout({
     <html lang="ja" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: sidebarInitScript }} />
         <ThemeProvider>
           <TooltipProvider>
             {children}
