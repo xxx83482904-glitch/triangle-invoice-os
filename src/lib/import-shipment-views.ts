@@ -275,7 +275,7 @@ const fields = {
   blNumber: optionalText(100), invoiceNumber: optionalText(100),
   permitDate: isoDate, arrivalDate: isoDate, folderMonth: yearMonth, goodsValue: money, dutyAmount: money, importTaxNational: money, importTaxLocal: money,
   brokerFee: money, otherCost: money, status: z.enum(importShipmentStatuses).optional(), memo: optionalText(2000),
-  orders: z.array(orderSchema).max(20, "受注は20件までです").optional(),
+  orders: z.array(orderSchema).max(20, "注文は20件までです").optional(),
   stages: z.array(stageSchema).max(12, "工程は12件までです")
     .refine((stages) => new Set(stages.map((stage) => stage.key)).size === stages.length, "工程キーが重複しています").optional(),
 };

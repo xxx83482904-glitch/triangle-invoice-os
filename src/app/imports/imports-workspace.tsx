@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
-import { saveImportShipmentAction } from "@/app/imports/actions";
+import { useMemo, useState, type FormEvent } from "react";
+import { AttachForm } from "./attach-form";
+import { useShipmentSave } from "./use-shipment-save";
 import { ImportDropzone } from "@/app/imports/import-dropzone";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { cardPressProps } from "@/components/app/list-selection";
@@ -19,8 +19,8 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import { formatDate, yen } from "@/lib/format";
-import type { ImportBoardDocument, ImportDocumentGroup, ImportShipmentMutation, ImportShipmentView } from "@/lib/import-shipment-views";
-import { importChecklistKinds, importDocumentKindLabels, importDocumentKinds, importFillLabels, importShipmentStatusLabels, importShipmentStatuses } from "@/lib/import-shipments";
+import type { ImportBoardDocument, ImportDocumentGroup, ImportShipmentView } from "@/lib/import-shipment-views";
+import { importChecklistKinds, importDocumentKindLabels, importDocumentKinds, importShipmentStatusLabels, importShipmentStatuses } from "@/lib/import-shipments";
 import { countByMonth } from "@/lib/month-tabs";
 import { operationFailureToast } from "@/lib/operation-feedback";
 import type { ImportDocumentKind, ImportShipmentStatus } from "@/lib/types";
@@ -57,32 +57,6 @@ function shipmentFields(form: FormData) {
     blNumber: text("blNumber"), invoiceNumber: text("invoiceNumber"),
     permitDate: text("permitDate"), arrivalDate: text("arrivalDate"), folderMonth: text("folderMonth"), status: text("status") as ImportShipmentStatus, memo: text("memo"), ...amounts,
   };
-}
-
-function useShipmentSave(company: CompanyScope) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const inFlight = useRef(false);
-  type Result = Extract<Awaited<ReturnType<typeof saveImportShipmentAction>>, { success: true }>;
-  const run = (input: ImportShipmentMutation, done: string | ((result: Result) => string), after?: (result: Result) => void) => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    start(async () => {
-      try {
-        const result = await saveImportShipmentAction(company, input);
-        if (!result.success) { toast(operationFailureToast(result.error)); return; }
-        const read = (result.action === "assign" || result.action === "group") && result.filled.length ? `${result.filled.map((key) => importFillLabels[key]).join("・")}を読み取りました。` : "";
-        const title = result.action === "reread" ? result.changed.length
-          ? `${result.changed.map(({ key }) => importFillLabels[key]).join("・")}を書き直しました。元の値は画面右上の取り消しで戻せます。`
-          : "書類から読み直せる項目はありませんでした。" : `${typeof done === "function" ? done(result) : done}${read}`;
-        toast({ title, variant: "success" });
-        after?.(result);
-        router.refresh();
-      } catch (error) { toast(operationFailureToast(error)); }
-      finally { inFlight.current = false; }
-    });
-  };
-  return { pending, run };
 }
 
 export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned, groups, projects, vendors }: {
@@ -271,30 +245,6 @@ function ShipmentDetail({ canEdit, company, row, unassigned, projects, vendors, 
         if (window.confirm("この輸入便を削除しますか？付けていた書類は未割当に戻ります。")) run({ action: "delete", id: row.id, version: row.updatedAt }, "輸入便を削除しました。", onDeleted);
       }}><Trash2 className="size-4" />この便を削除</Button>
     </div> : null}
-  </div>;
-}
-
-function AttachForm({ company, shipmentId, candidates }: { company: CompanyScope; shipmentId: string; candidates: ImportBoardDocument[] }) {
-  const { pending, run } = useShipmentSave(company);
-  const [key, setKey] = useState("");
-  const [kind, setKind] = useState<ImportDocumentKind | "">("");
-  const chosen = candidates.find((document) => document.key === key) ?? candidates[0];
-  if (!chosen) return <p className="text-xs text-muted-foreground">追加できる未割当の書類はありません。郵便仕分けで分類を「輸入・通関」にするか、受領請求書を登録すると候補に出ます。</p>;
-  const effectiveKind = kind || chosen.suggestedKind || chosen.kind;
-  return <div className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed p-3">
-    <label className="min-w-0 flex-1 basis-48 space-y-1">
-      <span className="text-xs font-medium text-muted-foreground">書類を追加</span>
-      <select value={chosen.key} className={`${selectClass} w-full`} onChange={(event) => { setKey(event.target.value); setKind(""); }}>
-        {candidates.map((document) => <option key={document.key} value={document.key}>{document.displayName} / {document.party}</option>)}
-      </select>
-    </label>
-    <label className="space-y-1">
-      <span className="text-xs font-medium text-muted-foreground">種類</span>
-      <select value={effectiveKind} className={`${selectClass} w-full`} onChange={(event) => setKind(event.target.value as ImportDocumentKind)}>
-        {importDocumentKinds.map((value) => <option key={value} value={value}>{importDocumentKindLabels[value]}</option>)}
-      </select>
-    </label>
-    <Button type="button" size="sm" disabled={pending} onClick={() => run({ action: "assign", shipmentId, source: chosen.source, documentId: chosen.id, kind: effectiveKind }, "輸入便に追加しました。")}>追加</Button>
   </div>;
 }
 

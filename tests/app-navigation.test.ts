@@ -73,6 +73,15 @@ test("sales and receiving workflow tabs stay scoped and respect permissions", ()
   assert.deepEqual(workflowNavigation("/users", new URLSearchParams(), "ADMIN"), []);
 });
 
+test("shipment detail retains the receiving workflow with only imports active", () => {
+  const tabs = workflowNavigation("/imports/ship-1", new URLSearchParams("company=JAPAN&document=old"), "ADMIN");
+  assert.deepEqual(tabs.map((tab) => tab.label), ["郵便仕分け", "受領請求書", "輸入"]);
+  assert.deepEqual(tabs.filter((tab) => tab.active).map((tab) => tab.href), ["/imports?company=JAPAN"]);
+  assert.ok(tabs.every((tab) => !tab.href.includes("document=")));
+  assert.deepEqual(workflowNavigation("/imports-extra/ship-1", new URLSearchParams(), "ADMIN"), []);
+  assert.deepEqual(workflowNavigation("/imports/ship-1", new URLSearchParams(), "BILLING_EDITOR"), []);
+});
+
 test("mail search handles multiple terms, Japanese width, case and missing OCR without mutating data", () => {
   const row = { senderName: "株式会社テスト", fileName: "請求書ＡＢＣ.pdf", ocrPreview: "2026年9月 制作費", extracted: { vendorName: "Test Studio", projectName: "横浜ホテル" } };
   const before = structuredClone(row);
