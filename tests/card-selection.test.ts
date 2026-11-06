@@ -53,14 +53,19 @@ for (const file of lists) {
   });
 }
 
-test("bank ledger opens details before selection and keeps editing outside the cards", () => {
+test("bank ledger always selects on press and opens details with a button or Enter", () => {
   const source = readFileSync("src/components/app/banking-workspace.tsx", "utf8");
-  assert.match(source, /useListSelection\([^\n]+pickMode: false/);
+  assert.match(source, /useListSelection\([^\n]+pickMode: true/);
+  assert.doesNotMatch(source, /cardPressProps|selection\.picking/);
   assert.match(source, /<RecordDetail wide=\{false\}/);
-  assert.match(source, /selection\.rowProps\(row.id\)/);
+  const table = source.slice(source.indexOf('<table className="bank-ledger-table'), source.indexOf('className="bank-ledger-cards'));
   const cards = source.slice(source.indexOf('className="bank-ledger-cards'), source.indexOf('<div ref={sentinel}'));
+  for (const view of [table, cards]) {
+    assert.match(view, /selection\.rowProps\(row.id\)/);
+    assert.match(view, /<Button[^>]*aria-label=\{`\$\{row.content \|\| "摘要なし"\}の詳細`\}[^>]*onClick=\{\(\) => setDetailId\(row.id\)\}><ScrollText[^>]*\/>詳細<\/Button>/);
+    assert.match(view, /onKeyDown=\{\(event\) => \{ if \(event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture\(event\)\) \{ event.preventDefault\(\); setDetailId\(row.id\);/);
+  }
   assert.doesNotMatch(cards, /<details|<Input|<select/);
-  assert.match(cards, /setDetailId\(row.id\)/);
 });
 
 for (const [file, labels] of [

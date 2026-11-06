@@ -26,14 +26,16 @@
 .bank-ledger .bank-ledger-notice > span { min-width: 0; }
 .bank-ledger .bank-ledger-body { container: bank-ledger / inline-size; min-width: 0; }
 .bank-ledger .bank-ledger-layout { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 16px; padding: 0; }
-.bank-ledger .bank-ledger-sheet { min-width: 0; overflow: hidden; border: 1px solid var(--edge); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow-soft); }
+.bank-ledger .bank-ledger-sheet { container: bank-ledger-sheet / inline-size; min-width: 0; overflow: hidden; border: 1px solid var(--edge); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow-soft); }
 .bank-ledger .bank-ledger-totals { display: flex; min-width: 0; min-height: 40px; flex: none; align-items: center; gap: 12px; overflow-x: auto; padding: 0 12px; white-space: nowrap; font-size: 11px; color: var(--muted-foreground); }
 .bank-ledger .bank-ledger-totals > span { flex-shrink: 0; }
 .bank-ledger .bank-workflow-line nav, .bank-ledger .bank-ledger-totals { scrollbar-width: none; }
 .bank-ledger .bank-workflow-line nav::-webkit-scrollbar, .bank-ledger .bank-ledger-totals::-webkit-scrollbar { display: none; }
 .bank-ledger .bank-ledger-scroll { min-width: 0; max-width: 100%; }
-.bank-ledger .bank-ledger-cards { padding: 4px 8px 8px; }
+.bank-ledger .bank-ledger-table-view { display: none; }
+.bank-ledger .bank-ledger-cards { display: grid; grid-template-columns: minmax(0, 1fr); padding: 4px 8px 8px; }
 .bank-ledger .bank-ledger-cards .record-card { align-self: start; }
+.bank-ledger .bank-ledger-cards .bank-detail-button { min-width: 44px; height: 44px; min-height: 44px; }
 .bank-ledger .bank-category-rail { display: none; min-width: 0; min-height: 0; height: auto; position: static; align-self: stretch; overflow: hidden; border-radius: 18px; background: var(--panel); }
 .bank-row-state { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4px; }
 .bank-candidate-label { white-space: nowrap; font-size: 11px; color: var(--muted-foreground); }
@@ -80,7 +82,10 @@
   .bank-ledger .bank-sync-status { flex-wrap: nowrap; min-height: 24px; }
   .bank-ledger .bank-sync-status .bank-balance-trigger { min-height: 32px; height: 32px; padding-inline: 6px; }
   .bank-ledger .bank-ledger-controls { padding: 8px 10px; }
-  .bank-ledger .month-tabs, .bank-ledger .month-tabs-row { flex-wrap: nowrap; }
+  .bank-ledger .month-tabs { flex-wrap: wrap; }
+  .bank-ledger .month-tabs-row { flex: 1 1 max-content; flex-wrap: wrap; }
+  .bank-ledger .filter-panel-primary { flex-wrap: wrap; }
+  .bank-ledger .filter-panel-search { flex: 1 1 200px; }
   .bank-ledger .filter-panel-primary .workspace-segmented { flex-wrap: nowrap; }
   .bank-ledger .filter-panel-primary .option-tabs { flex: none; }
   .bank-ledger .filter-panel-primary .workspace-segmented > button { padding-inline: 8px; font-size: 12px; }
@@ -98,7 +103,7 @@
   .bank-ledger-table .bank-col-treatment { width: 100px; }
   .bank-ledger-table .bank-col-state { width: 236px; }
   .bank-ledger-table .bank-col-link { width: 84px; }
-  .bank-ledger-table .bank-col-detail { width: 36px; }
+  .bank-ledger-table .bank-col-detail { width: 64px; }
   .bank-ledger .bank-ledger-table thead { position: sticky; top: 0; z-index: 10; background: var(--card); }
   .bank-ledger .bank-ledger-table th { height: 38px; padding: 0 4px; border-bottom: 1px solid var(--rule); background: var(--card); text-align: left; font-size: 11px; font-weight: 400; white-space: nowrap; color: var(--muted-foreground); }
   .bank-ledger .bank-ledger-table th.text-right { text-align: right; }
@@ -124,7 +129,7 @@
   .bank-link-cell { position: relative; }
   .bank-ledger .bank-ledger-table .bank-row-link { min-width: 0; max-width: 100%; height: 32px; min-height: 32px; padding-inline: 3px; gap: 3px; white-space: nowrap; font-size: 11px; }
   .bank-link-warning { position: absolute; right: -2px; top: -3px; border-radius: 50%; background: var(--card); color: var(--tone-amber-fg); }
-  .bank-ledger-table td:last-child > button { width: 32px; height: 32px; min-height: 32px; }
+  .bank-ledger-table .bank-detail-button { width: 56px; height: 32px; min-height: 32px; gap: 3px; padding-inline: 3px; font-size: 12px; }
   .bank-ledger .bank-ledger-savebar.is-unified { left: calc(var(--app-sidebar-offset, 0px) + 16px); right: 16px; bottom: 16px; padding: 8px 10px; }
   .bank-actions-content { gap: 6px; }
   .bank-actions-content .bank-review-selected, .bank-actions-content .bank-change-category { padding-inline: 10px; }
@@ -133,6 +138,14 @@
   .bank-ledger-detail .bank-category-cell, .bank-ledger-detail .bank-row-link { min-height: 36px; }
 }
 
+@container bank-ledger-sheet (min-width: 700px) {
+  .bank-ledger .bank-ledger-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Reserve 888px for fixed columns, 180px for the description and 20px for a scrollbar. */
+@container bank-ledger-sheet (min-width: 1088px) {
+  .bank-ledger .bank-ledger-table-view { display: block; }
+  .bank-ledger .bank-ledger-cards, .bank-ledger .bank-ledger-card-select { display: none; }
+}
 @container bank-ledger (min-width: 1400px) {
   .bank-ledger .bank-ledger-layout { grid-template-columns: minmax(0, 1fr) 300px; }
   .bank-ledger .bank-category-rail { display: flex; flex-direction: column; }

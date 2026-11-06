@@ -7,11 +7,11 @@ import type { BankAccountOption } from "@/lib/bank-account-options";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useListSelection } from "@/hooks/use-list-selection";
-import { cardPressProps, RowSelectionCheckbox } from "@/components/app/list-selection";
+import { RowSelectionCheckbox } from "@/components/app/list-selection";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Bot, CheckCheck, ChevronDown, ChevronRight, CircleAlert, Download, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, RefreshCw, Save, ScrollText, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, CheckCheck, ChevronDown, CircleAlert, Download, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, RefreshCw, Save, ScrollText, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
 import { navigationIntentEvent, type NavigationIntent } from "@/lib/navigation-intent";
 import { BankCategoryControl, BankReviewTag, BankSelectAllCheckbox, BankSelectionReview } from "@/components/app/bank-ledger-controls";
@@ -123,7 +123,7 @@ export function BankingWorkspace(props: Props) {
   const rows = mergeBankWorkspaceRows(baseRows, baseRows.flatMap((row) => savedRows[row.id] ? [savedRows[row.id]] : []));
   if (!classificationPreview) rows.sort((a, b) => (filters.sort.endsWith("asc") ? 1 : -1) * (filters.sort.startsWith("amount") ? a.amount - b.amount : a.transactionDate.localeCompare(b.transactionDate)) || a.id.localeCompare(b.id));
   const filterDirty = search !== filters.query || Object.entries(filterEdits).some(([key, value]) => value !== String(filters[key as keyof BankFilters] ?? (key === "queryMode" ? "contains" : "")));
-  const listSelection = useListSelection(rows.map((row) => row.id), { disabled: pending || filterDirty, pickMode: false });
+  const listSelection = useListSelection(rows.map((row) => row.id), { disabled: pending || filterDirty, pickMode: true });
   const selection = { ...listSelection, selectAll: (checked: boolean) => {
     if (pending || filterDirty) return;
     listSelection.setSelected((current) => checked
@@ -591,10 +591,10 @@ export function BankingWorkspace(props: Props) {
         <div className="bank-ledger-totals" aria-label="表示条件の集計">
           <span className="font-medium text-foreground">{monthName(filters.month)} · {total.toLocaleString()}件</span>
           {!classificationPreview ? <><span>入金 <Money value={summary.income} tone="income" /></span><span>出金 <Money value={summary.expense} /></span><span>候補の保存待ち {summary.unclassified}件</span>{summary.excluded ? <span>集計対象外 {summary.excluded}件</span> : null}</> : null}
-          <span className="ml-auto lg:hidden"><BankSelectAllCheckbox {...loadedSelection} disabled={selection.disabled || !rows.length} onChange={selection.selectAll} /></span>
+          <span className="bank-ledger-card-select ml-auto"><BankSelectAllCheckbox {...loadedSelection} disabled={selection.disabled || !rows.length} onChange={selection.selectAll} /></span>
         </div>
         <div role="region" aria-label="口座・カード明細一覧" tabIndex={0} className="bank-ledger-scroll">
-          <div className="hidden lg:block">
+          <div className="bank-ledger-table-view">
             <table className="bank-ledger-table" aria-label="口座・カード明細" data-month={Boolean(filters.month)}>
               <colgroup><col className="bank-col-select" /><col className="bank-col-date" /><col /><col className="bank-col-amount" /><col className="bank-col-category" /><col className="bank-col-treatment" /><col className="bank-col-state" /><col className="bank-col-link" /><col className="bank-col-detail" /></colgroup>
               <thead><tr>
@@ -607,26 +607,26 @@ export function BankingWorkspace(props: Props) {
               <tbody>{rows.map((row) => {
                 const value = drafts[row.id] || editFrom(row), controls = fields(row, value);
                 const account = accountMap.get(row.bankAccountId) || "口座未取得";
-                return <tr key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 42px" }} onKeyDown={(event) => { if (!selection.picking && event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
+                return <tr key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 42px" }} onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
                   <td>{selectionBox(row)}</td>
                   <td><time dateTime={row.transactionDate} title={row.transactionDate} className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{bankLedgerDate(row.transactionDate, filters.month)}</time></td>
-                  <td {...(!selection.picking ? cardPressProps(() => setDetailId(row.id)) : {})} title={`${row.content || "摘要なし"} / ${account}`}><div className="bank-description"><span className="truncate font-medium">{matchedContent(row.content)}</span><span className="bank-row-account">{account}</span>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label={[value.memo ? "メモあり" : "", row.sourceMemo ? "元明細メモあり" : ""].filter(Boolean).join("・")} /> : null}</div></td>
+                  <td title={`${row.content || "摘要なし"} / ${account}`}><div className="bank-description"><span className="truncate font-medium">{matchedContent(row.content)}</span><span className="bank-row-account">{account}</span>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label={[value.memo ? "メモあり" : "", row.sourceMemo ? "元明細メモあり" : ""].filter(Boolean).join("・")} /> : null}</div></td>
                   <td className="text-right"><Money value={row.side === "INCOME" ? row.amount : -row.amount} sign="always" tone={row.side === "INCOME" ? "income" : "plain"} /></td>
                   <td>{controls[0]}</td><td>{controls[1]}</td><td>{status(row, value)}</td>
                   <td><div className="bank-link-cell">{linkButton(row)}{row.settlementConflict ? <span className="bank-link-warning" title={row.settlementConflict} aria-label={`要確認: ${row.settlementConflict}`}><CircleAlert className="size-3" /><span className="sr-only">要確認</span></span> : null}</div></td>
-                  <td><Button variant="ghost" size="icon-sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ChevronRight className="size-4" /></Button></td>
+                  <td><Button className="bank-detail-button" variant="ghost" size="sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ScrollText className="size-3.5" />詳細</Button></td>
                 </tr>;
               })}</tbody>
             </table>
           </div>
-          <div className="bank-ledger-cards grid gap-2 md:grid-cols-2 lg:hidden">{rows.map((row) => {
+          <div className="bank-ledger-cards grid gap-2">{rows.map((row) => {
             const value = drafts[row.id] || editFrom(row), category = categoryMap.get(value.categoryId || ""), child = categoryMap.get(value.subCategoryId || "");
-            return <article key={row.id} {...selection.rowProps(row.id)} {...(!selection.picking ? cardPressProps(() => setDetailId(row.id)) : {})} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 158px" }} className="record-card min-w-0 p-2">
+            return <article key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 158px" }} className="record-card min-w-0 p-2" onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
               <div className="flex items-center gap-1">{selectionBox(row)}<time className="text-xs tabular-nums text-muted-foreground" title={row.transactionDate}>{row.transactionDate}</time><Money className="ml-auto text-sm font-medium" value={row.side === "INCOME" ? row.amount : -row.amount} sign="always" tone={row.side === "INCOME" ? "income" : "plain"} /></div>
               <h3 className="line-clamp-2 break-words text-sm font-medium" title={row.content}>{matchedContent(row.content)}</h3>
               <p className="truncate text-xs text-muted-foreground">{accountMap.get(row.bankAccountId) || "口座未取得"}</p>
               <p className="truncate text-xs" title={`${category?.name || "科目未設定"}${child ? ` / ${child.name}` : ""}`}>{row.bookkeeping?.splits?.length ? `分割 ${row.bookkeeping.splits.length}科目` : category?.name || "科目未設定"}{child ? ` / ${child.name}` : ""}{value.treatment !== "NORMAL" ? ` · ${treatmentLabels[value.treatment]}` : ""}</p>
-              <div className="flex items-center gap-1"><div className="min-w-0 flex-1">{status(row, value)}{row.settlementConflict ? <p className="text-xs text-[var(--tone-amber-fg)]" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}</div>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label="メモあり（詳細で確認）" /> : null}<Button variant="ghost" size="icon" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ChevronRight className="size-4" /></Button></div>
+              <div className="flex items-center gap-1"><div className="min-w-0 flex-1">{status(row, value)}{row.settlementConflict ? <p className="text-xs text-[var(--tone-amber-fg)]" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}</div>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label="メモあり（詳細で確認）" /> : null}<Button className="bank-detail-button" variant="ghost" size="sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ScrollText className="size-4" />詳細</Button></div>
             </article>;
           })}</div>
           {!rows.length ? <p className="py-12 text-center text-sm text-muted-foreground">{!configured ? "接続待ち" : "該当する明細はありません"}</p> : null}
