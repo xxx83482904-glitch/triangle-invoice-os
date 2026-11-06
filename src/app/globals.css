@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./boardui-tokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -396,12 +397,15 @@ body { background-color: var(--page-end); background-image: var(--page); backgro
 [data-classification="MISSING"] { background: var(--tone-red-bg); color: var(--tone-red-fg); }
 
 /* Shell */
-.workspace-desktop-header { border-color: transparent; background: var(--rail); }
 .workspace-mobile-header { border-color: transparent; background: var(--rail-glass); }
 .workspace-mobile-nav { border-color: transparent; background: var(--rail-glass); box-shadow: 0 -12px 28px -18px rgb(52 72 98 / 0.4); }
-nav[aria-label="メインメニュー"] a { border-radius: 10px; color: var(--body); font-size: 13px; }
-nav[aria-label="メインメニュー"] a:hover { background: var(--tile); color: var(--foreground); }
-nav[aria-label="メインメニュー"] a[aria-current="page"] { background: var(--tile); color: var(--foreground); font-weight: 500; }
+/* Body also supplies the offset to selection bars and detail panes rendered in portals. */
+body:has(.workspace-shell) { --app-sidebar-width: 252px; --app-sidebar-offset: calc(var(--app-sidebar-width) + 12px); }
+body:has(.app-sidebar[data-collapsed="true"]) { --app-sidebar-width: 64px; }
+.workspace-content { min-width: 0; flex: 1; }
+.app-sidebar { position: sticky; top: 12px; width: var(--app-sidebar-width); height: calc(100dvh - 24px); margin: 12px 0 12px 12px; padding: 12px; overflow: hidden; border: 1px solid var(--edge); border-radius: 24px; background: color-mix(in srgb, var(--rail) 72%, transparent); box-shadow: var(--shadow-raised); backdrop-filter: blur(14px); }
+.app-sidebar[data-collapsed="true"] { padding-inline: 11px; }
+@media (min-width: 1024px) { .workspace-shell { display: flex; align-items: flex-start; } }
 @media (min-width: 1024px) { .workspace-main { padding: 20px 24px 28px; } .workspace-main.banking-main { padding-bottom: 88px; } }
 .workspace-page-header { margin-bottom: 16px; padding-block: 4px; border-bottom: 0; }
 .workspace-main h1 { font-size: 20px; line-height: 1.4; font-weight: 500; }
@@ -429,9 +433,6 @@ nav[aria-label="関連画面"] { background: var(--track); }
 nav[aria-label="関連画面"] a { color: var(--body); }
 nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card); color: var(--foreground); font-weight: 500; box-shadow: var(--shadow-soft); }
 
-.workspace-desktop-header { min-height: 64px; }
-.workspace-desktop-header > a { flex-shrink: 0; }
-.workspace-desktop-header > a > div:first-child { width: 32px; height: 32px; border-radius: 6px; box-shadow: none; }
 .workspace-main > nav[aria-label="関連画面"] { margin-bottom: 24px; }
 
 /* Presentation-only groupings; forms and their controls keep their own boundaries. */
@@ -463,18 +464,6 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .list-selection-toolbar + * { margin-block-start: 0; }
 .workspace-record-table :is(th, td):not(.p-0) { padding: 10px 12px; }
 .workspace-record-table tbody tr:not([data-selected="true"]):hover { background: var(--selected); }
-@media (min-width: 1024px) and (max-width: 1439px) {
-  /* Keep all menu labels at 13px; the brand name stays accessible beside the monogram. */
-  .workspace-desktop-header > a > div:nth-child(2) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    clip-path: inset(50%);
-    overflow: hidden;
-    white-space: nowrap;
-  }
-  .workspace-desktop-header > a { gap: 0; }
-}
 .workspace-shell [data-slot="table-header"] { background: transparent; }
 .workspace-shell [data-slot="table-header"] tr { background: transparent; }
 .workspace-shell [data-slot="table-row"] { border-color: var(--rule); }
@@ -536,7 +525,8 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .bank-category-cell:hover, .bank-category-cell:focus-visible { border-color: var(--input); background: var(--field); }
 .bank-row-link { min-height: 44px; height: auto; }
 @media (min-width: 1024px) {
-  .bank-ledger-scroll { max-height: max(280px, calc(100dvh - 400px)); }
+  .bank-ledger-scroll { max-height: max(280px, calc(100dvh - 336px)); }
+  .bank-category-rail { height: calc(100dvh - 208px); }
 }
 @media (min-width: 768px) {
   .bank-ledger-table td { height: 62px; padding-top: 6px; padding-bottom: 6px; }
@@ -544,7 +534,7 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 @media (min-width: 1024px) {
   .month-tabs-row button, .month-tabs-all { min-width: 38px; min-height: 36px; }
   .banking-main { padding-bottom: 80px; }
-  .bank-ledger-savebar { bottom: 0; padding-inline: 20px; }
+  .bank-ledger-savebar { bottom: 0; left: var(--app-sidebar-offset, 0px); padding-inline: 20px; }
   .bank-row-link { min-height: 32px; }
   .bank-source-note { min-width: 28px; min-height: 28px; }
   .bank-ledger-header [data-slot="button"], .bank-sync-status [data-slot="button"] { min-height: 36px; height: 36px; }
@@ -654,7 +644,9 @@ nav[aria-label="関連画面"] a[aria-current="page"] { background: var(--card);
 .selection-action-bar { position: fixed; inset-inline: 12px; inset-block-end: 84px; z-index: 40; display: flex; width: fit-content; max-width: calc(100vw - 24px); flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-inline: auto; padding: 10px 14px; border: 1px solid var(--primary); border-radius: 16px; background: var(--card); color: var(--foreground); box-shadow: var(--shadow-raised); }
 body:has(.record-savebar) .selection-action-bar { transform: translateY(-68px); }
 body.has-selection-bar .workspace-main { padding-bottom: 180px; }
-@media (min-width: 1024px) { .selection-action-bar { inset-block-end: 20px; } }
+@media (min-width: 1024px) {
+  .selection-action-bar { inset-block-end: 20px; inset-inline-start: calc(var(--app-sidebar-offset, 0px) + 12px); max-width: calc(100vw - var(--app-sidebar-offset, 0px) - 24px); }
+}
 @media (max-width: 767px) { .selection-action-bar { flex-wrap: nowrap; overflow-x: auto; } .selection-action-bar > * { flex: none; } }
 
 /* Fixed choices are tabs. Long lists of names stay searchable dropdowns. */
@@ -700,3 +692,4 @@ body.has-selection-bar .workspace-main { padding-bottom: 180px; }
 .record-detail-body { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 12px; }
 @media (min-width: 768px) { .record-detail-dialog { inset-inline-start: auto; width: min(680px, 90vw); box-shadow: var(--shadow-raised); } }
 @media (min-width: 1024px) { .record-detail-dialog { width: min(960px, 92vw); } .record-detail-body { padding: 16px; } }
+@media (min-width: 1024px) { body:has(.workspace-shell) .record-detail-dialog { width: min(960px, calc(100vw - var(--app-sidebar-offset) - 24px)); } }

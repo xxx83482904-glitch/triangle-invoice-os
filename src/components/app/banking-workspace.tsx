@@ -13,6 +13,7 @@ import { FilterPanel } from "@/components/app/filter-panel";
 import { useRouter } from "next/navigation";
 import { Bot, CheckCheck, CircleAlert, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, Pencil, RefreshCw, Save, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
+import { navigationIntentEvent, type NavigationIntent } from "@/lib/navigation-intent";
 import { BankReviewTag, BankSelectionReview } from "@/components/app/bank-ledger-controls";
 import { MonthTabs } from "@/components/app/month-tabs";
 import { bankSelectionAmount, reviewBankDrafts } from "@/lib/bank-ledger";
@@ -182,7 +183,18 @@ export function BankingWorkspace(props: Props) {
     };
     window.addEventListener("beforeunload", leave);
     document.addEventListener("click", followLink, true);
-    return () => { window.removeEventListener("beforeunload", leave); document.removeEventListener("click", followLink, true); };
+    const followCommand = (event: Event) => {
+      const url = new URL((event as NavigationIntent).detail.href, window.location.href);
+      if (url.href === window.location.href) return;
+      event.preventDefault();
+      if (!pending) setLeaveUrl(url.pathname + url.search + url.hash);
+    };
+    document.addEventListener(navigationIntentEvent, followCommand);
+    return () => {
+      window.removeEventListener("beforeunload", leave);
+      document.removeEventListener("click", followLink, true);
+      document.removeEventListener(navigationIntentEvent, followCommand);
+    };
   }, [dirty, pending]);
 
   useEffect(() => {

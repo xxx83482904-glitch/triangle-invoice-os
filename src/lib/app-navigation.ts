@@ -1,11 +1,12 @@
 import { companyForUser, canRole } from "@/lib/rbac";
-import type { CompanyScope } from "@/lib/company";
+import { mailSorterCompany, type CompanyScope } from "@/lib/company";
+import { navigationIconName } from "@/lib/navigation-icons";
 import type { UserRole } from "@/lib/types";
 
 export const appNavigation = [
   { label: "全体", items: [
     { href: "/dashboard", label: "ダッシュボード", permission: "view:dashboard" },
-    { href: "/banking", label: "口座一覧", permission: "view:banking" },
+    { href: "/banking", label: "口座・カード", permission: "view:banking" },
     { href: "/documents", label: "全書類", permission: "view:documents" },
   ] },
   { label: "案件・書類", items: [
@@ -37,6 +38,46 @@ export function navigationActive(pathname: string, href: string) {
 
 export function navigationCompany(role: UserRole, value: string | null): CompanyScope {
   return role === "MAIL_EDITOR" ? "JAPAN" : companyForUser({ role }, value);
+}
+
+export function navHref(href: string, company: CompanyScope) {
+  return `${href === "/banking" ? "/banking/accounts" : href}?company=${href === "/mail-sorter" ? mailSorterCompany : company}`;
+}
+
+export type SidebarNavigationItem = {
+  label: string;
+  href: string;
+  icon: string;
+  active: boolean;
+  children?: SidebarNavigationItem[];
+};
+
+export function sidebarNavigation(pathname: string, params: URLSearchParams, role: UserRole) {
+  const company = navigationCompany(role, params.get("company"));
+  const bank = navigationActive(pathname, "/banking");
+  return navigationGroups(role).map((group) => ({
+    label: group.label,
+    items: group.items.map((item): SidebarNavigationItem => ({
+      label: item.label,
+      href: navHref(item.href, company),
+      icon: navigationIconName(item.href),
+      active: navigationActive(pathname, item.href),
+      ...(item.href === "/banking" && bank ? {
+        children: workflowNavigation(pathname, params, role).map((child) => ({
+          ...child,
+          icon: navigationIconName(child.href),
+        })),
+      } : {}),
+    })),
+  }));
+}
+
+export function commandNavigation(pathname: string, params: URLSearchParams, role: UserRole) {
+  // The palette exposes bank screens even when the sidebar branch is closed.
+  const groups = sidebarNavigation(navigationActive(pathname, "/banking") ? pathname : "/banking", params, role);
+  return groups.flatMap((group) => group.items.flatMap((item) =>
+    (item.children ?? [item]).map(({ label, href, icon }) => ({ label, href, icon, group: item.children ? item.label : group.label })),
+  ));
 }
 
 export function mobileNavigation(role: UserRole) {

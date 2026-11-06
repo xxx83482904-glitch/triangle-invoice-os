@@ -46,6 +46,7 @@
     "prisma": "7.10.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
+    "react-aria-components": "^1.22.1",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
     "shadcn": "^4.7.0",
