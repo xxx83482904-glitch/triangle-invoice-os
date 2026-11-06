@@ -42,7 +42,7 @@ export function MailInvoiceReflectionForm({ company, mailDocumentId, mailUpdated
       <label className="grid gap-1 text-xs">状態<select name="status" value={fields.status} onChange={(event) => change("status", event.target.value)} className={selectClass}>{!statusOptions.some((row) => row.value === "REVIEWING") ? <option value="REVIEWING">確認中</option> : null}{statusOptions.map((row) => <option key={row.value} value={row.value}>{row.label}</option>)}</select></label>
       <label className="grid gap-1 text-xs">請求日<Input name="issueDate" type="date" value={fields.issueDate} onChange={(event) => change("issueDate", event.target.value)} /></label>
       <label className="grid gap-1 text-xs">支払期限<Input name="dueDate" type="date" value={fields.dueDate} onChange={(event) => change("dueDate", event.target.value)} /></label>
-      <label className="grid gap-1 text-xs">合計<Input name="total" type="number" min="0" step="1" value={fields.total} onChange={(event) => change("total", event.target.value)} className="font-mono" /></label>
+      <label className="grid gap-1 text-xs">合計<Input name="total" type="number" min="0" step="1" value={fields.total} onChange={(event) => change("total", event.target.value)} className="tabular-nums" /></label>
     </fieldset>
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
     <Button type="submit" disabled={disabled || pending} size="sm"><OperationPending pending={company === "JAPAN" && pending}>{pending ? "保存中…" : "反映"}</OperationPending></Button>

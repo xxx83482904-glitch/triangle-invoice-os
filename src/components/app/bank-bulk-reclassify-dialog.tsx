@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { useEffect, useState, useTransition } from "react";
 import { Layers, LoaderCircle } from "lucide-react";
@@ -16,7 +17,6 @@ import { useOperationError } from "@/hooks/use-operation-error";
 import { OperationPending } from "@/components/app/operation-feedback";
 import { operationErrorMessage } from "@/lib/operation-feedback";
 
-const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
 
 // 取引先単位の一括変更: every row with this description gets one category after a preview. Reviewed rows stay reviewed.
 export function BankBulkReclassifyDialog({ company, row, accountName, categories, disabled, showLabel = false, onApplied }: {
@@ -75,8 +75,8 @@ export function BankBulkReclassifyDialog({ company, row, accountName, categories
         {preview ? <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
           <p>対象 <strong>{preview.matched}</strong>件（確認済み {preview.reviewed} / 未確認 {preview.unreviewed}）{preview.skipped.length ? ` / 対象外 ${preview.skipped.length}件` : ""}</p>
           <p className="text-xs text-muted-foreground">現在の科目: {preview.categories.map((item) => `${item.name} ${item.count}件`).join(" / ") || "なし"}</p>
-          {preview.rows.length ? <ul className="max-h-40 divide-y overflow-auto border-y text-xs">{preview.rows.slice(0, 50).map((item) => <li key={item.id} className="flex flex-wrap justify-between gap-2 py-1"><span>{item.transactionDate} / {item.side === "INCOME" ? "+" : "-"}{money(item.amount)}</span><span className="text-muted-foreground">{item.categoryName} / {item.label}{item.reviewed ? " / 確認済み" : ""}</span></li>)}{preview.rows.length > 50 ? <li className="py-1 text-muted-foreground">ほか {preview.matched - 50}件</li> : null}</ul> : null}
-          {preview.skipped.length ? <details className="text-xs"><summary className="cursor-pointer">対象外の明細 {preview.skipped.length}件</summary><ul className="mt-1 space-y-0.5">{preview.skipped.slice(0, 20).map((item) => <li key={item.id}>{item.transactionDate} / {money(item.amount)} / {item.reason}</li>)}</ul></details> : null}
+          {preview.rows.length ? <ul className="max-h-40 divide-y overflow-auto border-y text-xs">{preview.rows.slice(0, 50).map((item) => <li key={item.id} className="flex flex-wrap justify-between gap-2 py-1"><span>{item.transactionDate} / <Money value={item.side === "INCOME" ? item.amount : -item.amount} sign="always" maximumFractionDigits={2} /></span><span className="text-muted-foreground">{item.categoryName} / {item.label}{item.reviewed ? " / 確認済み" : ""}</span></li>)}{preview.rows.length > 50 ? <li className="py-1 text-muted-foreground">ほか {preview.matched - 50}件</li> : null}</ul> : null}
+          {preview.skipped.length ? <details className="text-xs"><summary className="cursor-pointer">対象外の明細 {preview.skipped.length}件</summary><ul className="mt-1 space-y-0.5">{preview.skipped.slice(0, 20).map((item) => <li key={item.id}>{item.transactionDate} / <Money value={item.amount} maximumFractionDigits={2} /> / {item.reason}</li>)}</ul></details> : null}
         </div> : pending ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />対象を確認中...</p> : null}
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="grid min-w-0 gap-1 text-xs">変更後の勘定科目<select className={bankSelectClass} value={categoryId} disabled={pending} onChange={(e) => { setCategoryId(e.target.value); setSubCategoryId(""); }}><option value="">選択してください</option>{sections.map((section) => <optgroup key={section} label={section}>{parents.filter((item) => bankCategorySection(item.group).label === section).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>)}</select></label>

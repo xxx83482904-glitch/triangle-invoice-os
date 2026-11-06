@@ -12,10 +12,10 @@ export function FilterPanel({ label = "絞り込み", primary, activeCount = 0, 
   return <section aria-label={label} className="workspace-filter-panel filter-panel">
     <div className="filter-panel-primary">
       {primary}
-      <Button type="button" variant="outline" className="filter-panel-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <SlidersHorizontal className="size-4" />絞り込み{activeCount ? <span className="filter-panel-count">{activeCount}</span> : null}<ChevronDown className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      <Button type="button" variant="outline" className="filter-panel-toggle" aria-label={`${label}${activeCount ? `（${activeCount}件）` : ""}`} title={label} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <SlidersHorizontal className="size-4" /><span className="filter-panel-label">絞り込み</span>{activeCount ? <span className="filter-panel-count">{activeCount}</span> : null}<ChevronDown className={`filter-panel-chevron size-4 transition-transform ${open ? "rotate-180" : ""}`} />
       </Button>
-      {onReset ? <Button type="button" variant="ghost" className="filter-panel-toggle" aria-label={`${label}を解除`} title={`${label}を解除`} disabled={resetDisabled} onClick={onReset}><X className="size-4" />解除</Button> : null}
+      {onReset ? <Button type="button" variant="ghost" className="filter-panel-toggle" aria-label={`${label}を解除`} title={`${label}を解除`} disabled={resetDisabled} onClick={onReset}><X className="size-4" /><span className="filter-panel-label">解除</span></Button> : null}
     </div>
     {open ? <div className="filter-panel-more">{children}</div> : null}
   </section>;

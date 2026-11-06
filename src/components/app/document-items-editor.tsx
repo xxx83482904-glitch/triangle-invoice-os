@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
@@ -13,7 +14,6 @@ import type { TaxRate } from "@/lib/types";
 
 const defaultTaxOptions = [{ value: "10", label: "10%" }, { value: "8", label: "8%" }, { value: "0", label: "非課税" }, { value: "-1", label: "対象外" }];
 const blankItem = (): DocumentItemInput => ({ description: "", details: "", quantity: 1, unitPrice: 0, taxRate: 10 });
-const money = (value: number) => `¥${new Intl.NumberFormat("ja-JP").format(value)}`;
 
 // `onItemsChange` reports every edit; `lockAmounts` keeps the wording editable when the amounts may not change; `compact` suits a narrow panel.
 export function DocumentItemsEditor({ initialItems, taxOptions = defaultTaxOptions, company, disabled = false, onItemsChange, lockAmounts = false, compact = false }: {
@@ -58,7 +58,7 @@ export function DocumentItemsEditor({ initialItems, taxOptions = defaultTaxOptio
           <label className="min-w-0 space-y-1 text-xs">数量<Input name="itemQuantity" aria-label={`項目${index + 1} 数量`} required type="number" min="0.01" max="1000000" step="0.01" className="h-11 lg:h-11" value={item.quantity} onChange={(e) => change(item.rowKey, { quantity: Number(e.target.value) })} /></label>
           <label className="min-w-0 space-y-1 text-xs">単価<Input name="itemUnitPrice" aria-label={`項目${index + 1} 単価`} required type="number" min="0" max="1000000000" step="0.01" className="h-11 lg:h-11" value={item.unitPrice} onChange={(e) => change(item.rowKey, { unitPrice: Number(e.target.value) })} /></label>
           <div className="min-w-0 space-y-1 text-xs"><span>税区分</span><CreatableSelect name="itemTaxRate" ariaLabel={`項目${index + 1} 税区分`} className="[&>button]:h-11" options={taxOptions} defaultValue={String(item.taxRate)} clearable={false} create={company ? { kind: "select-option", company, group: "TAX_RATE" } : undefined} onValueChange={(value) => change(item.rowKey, { taxRate: Number(value) as TaxRate })} /></div>
-          <div className="min-w-0 space-y-1 text-right text-xs"><span>金額</span><output aria-label={`項目${index + 1} 金額`} className="flex min-h-11 items-center justify-end break-all text-sm tabular-nums">{money(Math.round(item.quantity * item.unitPrice))}</output></div>
+          <div className="min-w-0 space-y-1 text-right text-xs"><span>金額</span><output aria-label={`項目${index + 1} 金額`} className="flex min-h-11 items-center justify-end break-all text-sm tabular-nums"><Money value={Math.round(item.quantity * item.unitPrice)} maximumFractionDigits={3} /></output></div>
         </fieldset>
       </div>)}
     </div>
@@ -66,7 +66,7 @@ export function DocumentItemsEditor({ initialItems, taxOptions = defaultTaxOptio
       <Button type="button" variant="outline" className="min-h-11" disabled={items.length >= maxDocumentItems || lockAmounts} onClick={() => {
         const key = nextKey.current++; commit([...items, { ...blankItem(), rowKey: key }]); focusItem(key);
       }}><Plus className="size-4" />項目を追加</Button>
-      <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-right text-sm tabular-nums"><dt>税抜計</dt><dd className="break-all">{money(totals.subtotal)}</dd><dt>消費税</dt><dd className="break-all">{money(totals.taxTotal)}</dd><dt className="font-semibold">合計</dt><dd className="break-all font-semibold">{money(totals.total)}</dd></dl>
+      <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-right text-sm tabular-nums"><dt>税抜計</dt><dd className="break-all"><Money value={totals.subtotal} maximumFractionDigits={3} /></dd><dt>消費税</dt><dd className="break-all"><Money value={totals.taxTotal} maximumFractionDigits={3} /></dd><dt className="font-semibold">合計</dt><dd className="break-all font-medium"><Money value={totals.total} maximumFractionDigits={3} /></dd></dl>
     </div>
   </fieldset>;
 }

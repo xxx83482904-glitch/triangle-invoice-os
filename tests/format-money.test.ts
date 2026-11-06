@@ -30,3 +30,18 @@ test("large amounts retain grouped yen formatting", () => {
 test("non-finite amounts are unavailable", () => {
   for (const value of [NaN, Infinity, -Infinity]) assert.equal(formatMoney(value, { sign: "always" }), "—");
 });
+
+test("fractional monetary displays keep their previous precision without forcing trailing zeroes", () => {
+  assert.equal(formatMoney(1234.567, { maximumFractionDigits: 2 }), "￥1,234.57");
+  assert.equal(formatMoney(-1234.5, { maximumFractionDigits: 2 }), "−￥1,234.5");
+  assert.equal(formatMoney(12, { maximumFractionDigits: 2, sign: "always" }), "+￥12");
+  assert.equal(formatMoney(12.3456, { maximumFractionDigits: 3 }), "￥12.346");
+  assert.equal(formatMoney(12.3456), "￥12");
+  assert.equal(formatMoney(-0, { maximumFractionDigits: 2, sign: "always" }), "￥0");
+});
+
+test("compact chart scales keep their one-digit precision and monetary sign", () => {
+  assert.equal(formatMoney(12345, { notation: "compact", maximumFractionDigits: 1 }), "￥1.2万");
+  assert.equal(formatMoney(-12345, { notation: "compact", maximumFractionDigits: 1 }), "−￥1.2万");
+  assert.equal(formatMoney(12345), "￥12,345");
+});

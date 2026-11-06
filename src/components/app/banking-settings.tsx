@@ -1,7 +1,7 @@
 "use client";
 
 import { OptionTabs } from "@/components/app/option-tabs";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { deleteBankDefinitionAction, saveAccountingCategoryAction, saveBankRuleAction } from "@/app/banking/actions";
@@ -37,8 +37,9 @@ export function BankCategoryFields({ categories, categoryId = "", subCategoryId 
   </div>;
 }
 
-export function BankingSettings({ company, accounts, categories, rules, open, onOpenChange }: {
+export function BankingSettings({ company, accounts, categories, rules, open, onOpenChange, onCloseAutoFocus }: {
   company: CompanyScope; accounts: BankAccount[]; categories: AccountingCategory[]; rules: BankRule[]; open: boolean; onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: ComponentProps<typeof DialogContent>["onCloseAutoFocus"];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"categories" | "rules">("categories");
@@ -57,7 +58,7 @@ export function BankingSettings({ company, accounts, categories, rules, open, on
   }
   const parents = categories.filter((row) => !row.parentId && !row.deletedAt);
   return <Dialog open={open} onOpenChange={(value) => { if (!pending) onOpenChange(value); }}>
-    <DialogContent aria-describedby={undefined} showCloseButton={!pending} className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+    <DialogContent aria-describedby={undefined} showCloseButton={!pending} className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl" onCloseAutoFocus={onCloseAutoFocus} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>勘定科目・自動分類ルール</DialogTitle></DialogHeader>
       <Tabs value={tab} onValueChange={(value) => { setTab(value as typeof tab); setError(""); }}>
       <TabsList aria-label="明細設定" variant="line" className="min-h-11 max-w-full">

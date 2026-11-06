@@ -99,7 +99,7 @@
 .dash-row:hover { background-color: var(--selected); }
 .dash-row[data-active="true"] { background-color: var(--selected); background-image: var(--hatch); }
 .dash-row-main { min-width: 0; flex: 1 1 auto; text-align: left; }
-@media (min-width: 1024px) { .dash-row-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+@media (min-width: 1024px) { .dash-row { gap: 6px; } .dash-row-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 .dash-row-main::after { content: ""; position: absolute; inset: 0; border-radius: 12px; }
 .dash-row-main:focus-visible { outline: none; }
 .dash-row-main:focus-visible::after { outline: 2px solid var(--ring); outline-offset: -1px; }

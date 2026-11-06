@@ -1,8 +1,8 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import { yen } from "@/lib/format";
 import type { ReceivedInvoiceAmounts } from "@/lib/received-invoice-review";
 
 export function ReceivedAmountFields({ amounts }: { amounts?: ReceivedInvoiceAmounts }) {
@@ -19,10 +19,10 @@ export function ReceivedAmountFields({ amounts }: { amounts?: ReceivedInvoiceAmo
     <legend className="mb-2 text-sm font-medium">請求・支払内訳</legend>
     <div className="grid gap-3 sm:grid-cols-2">{fields.map(([name, label]) => <label key={name} className="min-w-0 space-y-1">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <Input name={name} type="number" min="0" step="1" required={name !== "grossAmount" && name !== "withholdingAmount"} value={values[name]} className="font-mono" onChange={(event) => setValues((current) => ({ ...current, [name]: event.target.value }))} />
+      <Input name={name} type="number" min="0" step="1" required={name !== "grossAmount" && name !== "withholdingAmount"} value={values[name]} className="tabular-nums" onChange={(event) => setValues((current) => ({ ...current, [name]: event.target.value }))} />
     </label>)}</div>
     <p role="status" className={`text-xs ${mismatch ? "text-amber-700" : "text-muted-foreground"}`}>
-      税抜＋消費税 {yen.format(expectedGross)} / 税込総額−源泉徴収 {yen.format(expectedNet)}{mismatch ? "（内訳と支払額が不一致）" : "（一致）"}
+      税抜＋消費税 <Money value={expectedGross} /> / 税込総額−源泉徴収 <Money value={expectedNet} />{mismatch ? "（内訳と支払額が不一致）" : "（一致）"}
     </p>
   </fieldset>;
 }

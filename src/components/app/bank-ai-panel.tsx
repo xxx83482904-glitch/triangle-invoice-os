@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
@@ -9,7 +10,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { BankAiPreview, BankAiResult } from "@/lib/bank-ai-types";
 import type { CompanyScope } from "@/lib/company";
 
-const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
 const touch = "min-h-11 lg:min-h-11";
 export function BankAiPanel({ company, preview, configured, model, onChooseInvoice }: {
   company: CompanyScope; preview: BankAiPreview; configured: boolean; model: string;
@@ -49,9 +49,9 @@ export function BankAiPanel({ company, preview, configured, model, onChooseInvoi
         <p className="break-words font-medium">{row.bank.date} / {row.bank.title}</p>
         <p className="break-words"><span className="font-medium">AIの推測: </span>{row.explanation}</p>
         <div className="grid grid-cols-1 gap-2 border-l-2 border-primary pl-3 sm:grid-cols-3">
-          <p>銀行未照合額<br /><strong className="tabular-nums">{money(row.bank.remaining)}</strong></p>
-          <p>候補の請求未照合額<br /><strong className="tabular-nums">{row.invoiceAmount === null ? "金額未確定" : money(row.invoiceAmount)}</strong></p>
-          <p>差額（銀行 − 請求）<br /><strong className="tabular-nums">{row.difference === null ? "算出不可" : money(row.difference)}</strong></p>
+          <p>銀行未照合額<br /><strong className="tabular-nums font-medium"><Money value={row.bank.remaining} maximumFractionDigits={2} /></strong></p>
+          <p>候補の請求未照合額<br /><strong className="tabular-nums font-medium">{row.invoiceAmount === null ? "金額未確定" : <Money value={row.invoiceAmount} maximumFractionDigits={2} />}</strong></p>
+          <p>差額（銀行 − 請求）<br /><strong className="tabular-nums font-medium">{row.difference === null ? "算出不可" : <Money value={row.difference} maximumFractionDigits={2} />}</strong></p>
         </div>
         <ul className="space-y-2">{row.invoices.map((invoice) => <li className="flex min-w-0 flex-wrap items-center justify-between gap-2" key={invoice.key}>
           <Link className="inline-flex min-h-11 min-w-0 items-center gap-1 break-words text-primary hover:underline underline-offset-4 hover:text-primary" href={invoice.href}><span className="min-w-0 break-words">{invoice.title}</span><ArrowUpRight className="size-4 shrink-0" /></Link>

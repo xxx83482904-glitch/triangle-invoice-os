@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 import { statusToneClass } from "@/lib/status-tone";
 import { OperationError, OperationPending } from "@/components/app/operation-feedback";
 
@@ -33,7 +34,6 @@ import { documentCounterpartKey, documentProjectOptions, groupDocuments, orderDo
 const selectClass = "h-11 max-w-full rounded-md border bg-background px-3 text-sm";
 const pageSize = 50;
 type ProjectOption = DocumentProjectOption;
-const number = new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 });
 const monthLabel = (month: string) => month === "undated" ? "日付未設定" : month.replace("-", "年") + "月";
 
 function editFrom(row: DocumentRow): IssuedEdit {
@@ -82,16 +82,16 @@ function DocumentStatusControl({ row, edit, onEdit, company, disabled }: { row: 
 function IssuedAmountsLine({ row }: { row: DocumentRow }) {
   const amounts = issuedRowAmounts(row);
   return <>
-    {amounts.paid ? <span className="tabular-nums text-emerald-700 dark:text-emerald-400">入金 {number.format(amounts.paid)}</span> : null}
-    {amounts.outstanding ? <span className="tabular-nums text-muted-foreground">未入金 {number.format(amounts.outstanding)}</span> : null}
+    {amounts.paid ? <span className="tabular-nums text-emerald-700 dark:text-emerald-400">入金 <Money value={amounts.paid} maximumFractionDigits={2} /></span> : null}
+    {amounts.outstanding ? <span className="tabular-nums text-muted-foreground">未入金 <Money value={amounts.outstanding} maximumFractionDigits={2} /></span> : null}
   </>;
 }
 
 function IssuedAmounts({ row }: { row: DocumentRow }) {
   const amounts = issuedRowAmounts(row);
   return <div className="space-y-1 text-xs tabular-nums" title="保存済みの入金記録">
-    <span className="block text-emerald-700 dark:text-emerald-400">入金 {number.format(amounts.paid)}</span>
-    <span className="block text-muted-foreground">未入金 {number.format(amounts.outstanding)}</span>
+    <span className="block text-emerald-700 dark:text-emerald-400">入金 <Money value={amounts.paid} maximumFractionDigits={2} /></span>
+    <span className="block text-muted-foreground">未入金 <Money value={amounts.outstanding} maximumFractionDigits={2} /></span>
   </div>;
 }
 
@@ -145,7 +145,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       <section className="workspace-detail-group space-y-3"><h3 className="text-sm font-semibold">金額・入金</h3>
       <label className="space-y-1 text-xs">請求金額<Input aria-label="請求金額" type="number" min="0" step="0.01" readOnly={!row.imported || (row.paidAmount || 0) > 0} value={current.total} onChange={(e) => update({ total: Number(e.target.value) })} /></label>
       <label className="grid gap-1 text-xs">状態<DocumentStatusControl row={row} edit={edit} onEdit={onEdit} company={company} disabled={disabled} /></label>
-      <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums" title="保存済みの入金記録"><span>入金額 {number.format(issuedRowAmounts(row).paid)}</span><span>未入金額 {number.format(issuedRowAmounts(row).outstanding)}</span></div>
+      <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums" title="保存済みの入金記録"><span>入金額 <Money value={issuedRowAmounts(row).paid} maximumFractionDigits={2} /></span><span>未入金額 <Money value={issuedRowAmounts(row).outstanding} maximumFractionDigits={2} /></span></div>
       </section>
       {row.imported ? <div className="flex min-h-11 flex-wrap items-center gap-2"><ReviewStatusTag reviewed={!current.needsReview} /><Button type="button" variant="outline" onClick={() => update({ needsReview: !current.needsReview })}>{current.needsReview ? <Check className="size-4" /> : <RotateCcw className="size-4" />}{current.needsReview ? "原本を確認" : "未確認に戻す"}</Button></div> : null}
     </fieldset> : <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2 text-sm">
@@ -154,7 +154,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       <dt className="text-muted-foreground">書類日</dt><dd>{row.date || "未設定"}</dd>
       <dt className="text-muted-foreground">分類</dt><dd>{documentCategoryLabels[row.category] || row.category}</dd>
       {row.kind === "estimate" ? <><dt className="text-muted-foreground">状態</dt><dd><DocumentStatusControl row={row} onEdit={onEdit} company={company} disabled={disabled} /></dd></> : null}
-      {row.total !== undefined ? <><dt className="text-muted-foreground">金額</dt><dd>{number.format(row.total)}</dd></> : null}
+      {row.total !== undefined ? <><dt className="text-muted-foreground">金額</dt><dd><Money value={row.total} maximumFractionDigits={2} /></dd></> : null}
     </dl> : null}
     {detail?.warnings.length ? <ul className="space-y-1 border-l-2 border-amber-500 pl-3 text-xs text-amber-800 dark:text-amber-300">{detail.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul> : null}
     {view !== "edit" ? <div className="workspace-detail-group space-y-3"><h3 className="text-sm font-medium">OCR本文</h3>
@@ -304,9 +304,9 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     {issuedOnly ? <>
       <div className="flex flex-wrap items-center gap-3 border-b pb-3"><h2 className="text-base font-semibold">{recordMonthLabel(month)}</h2><span role="status" className="text-sm text-muted-foreground">{filtered.length} / {rows.length}件</span>{changes ? <span className="text-xs text-amber-700 dark:text-amber-300">未保存 {changes}件</span> : null}</div>
       {showIssuedSummary ? <dl aria-label="保存済み請求書の集計" className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">請求額（下書き・取消除く）</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.total)}</dd></div>
-        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">入金済み</dt><dd className="break-all font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{number.format(summary.paid)}</dd></div>
-        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">未入金</dt><dd className="break-all font-semibold tabular-nums">{number.format(summary.outstanding)}</dd></div>
+        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">請求額（下書き・取消除く）</dt><dd className="break-all font-medium tabular-nums"><Money value={summary.total} maximumFractionDigits={2} /></dd></div>
+        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">入金済み</dt><dd className="break-all font-medium tabular-nums text-emerald-700 dark:text-emerald-400"><Money value={summary.paid} maximumFractionDigits={2} /></dd></div>
+        <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">未入金</dt><dd className="break-all font-medium tabular-nums"><Money value={summary.outstanding} maximumFractionDigits={2} /></dd></div>
         <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><dt className="text-xs text-muted-foreground">OCR要確認</dt><dd className="font-semibold text-amber-700 dark:text-amber-400">{summary.review}件</dd></div>
       </dl> : null}
       <FilterPanel activeCount={Number(counterpart !== "all") + Number(invoiceStatus !== "all")} onReset={hasFilters ? resetFilters : undefined} primary={<>
@@ -363,7 +363,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                   <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} />
                   <button data-selection-open onClick={() => open(r)} className="record-card-open break-words text-xs text-muted-foreground">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}{(edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart) ? ` · ${edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart}` : ""}</button>
                   {r.billingLabel ? <span className="break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}
-                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs"><span className="min-w-0 max-w-[50%]"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} /></span><span className="tabular-nums text-muted-foreground">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</span>{r.total === undefined ? null : <span className="ml-auto text-sm font-medium tabular-nums">{number.format(edits[r.id]?.total ?? r.total)}</span>}</span>
+                  <span className="flex min-w-0 items-center gap-x-0.5 text-xs sm:gap-x-2"><span className="min-w-0 max-w-[50%]"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} /></span><span className="min-w-0 truncate tabular-nums text-muted-foreground">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</span>{r.total === undefined ? null : <span className="ml-auto shrink-0 text-sm font-medium tabular-nums"><Money value={edits[r.id]?.total ?? r.total} maximumFractionDigits={2} /></span>}</span>
                   {issuedOnly || (edits[r.id]?.needsReview ?? r.needsReview) || edits[r.id] ? <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs">
                     {issuedOnly ? <IssuedAmountsLine row={r} /> : null}
                     {issuedOnly && r.imported ? <IssuedReviewStatus row={r} edit={edits[r.id]} /> : null}
@@ -386,7 +386,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                 <td className="p-0"><RowSelectionCheckbox selection={selection} id={r.id} label={r.title + "を選択"} /></td>
                 <td className="px-2 py-3"><DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button data-selection-open className="min-h-11 w-full text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary" onClick={() => open(r)}><span className="block break-words">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button>{r.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}</td>
                 <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span></td>
-                <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}{issuedOnly ? <span className="mt-1 block text-muted-foreground">{(edits[r.id]?.dueDate ?? r.dueDate) || "期限未設定"}</span> : null}</td><td className="space-y-1 px-2 py-3 text-right tabular-nums">{r.total === undefined ? "—" : number.format(edits[r.id]?.total ?? r.total)}{issuedOnly ? <IssuedAmounts row={r} /> : null}</td>
+                <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}{issuedOnly ? <span className="mt-1 block text-muted-foreground">{(edits[r.id]?.dueDate ?? r.dueDate) || "期限未設定"}</span> : null}</td><td className="space-y-1 px-2 py-3 text-right tabular-nums">{r.total === undefined ? "—" : <Money value={edits[r.id]?.total ?? r.total} maximumFractionDigits={2} />}{issuedOnly ? <IssuedAmounts row={r} /> : null}</td>
                 <td className="px-2 py-3"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />{(edits[r.id]?.needsReview ?? r.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}</td>
                 {issuedOnly ? <td><IssuedReviewStatus row={r} edit={edits[r.id]} /></td> : null}
                 <td className="py-2"><DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} /></td>
@@ -437,7 +437,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
     <Dialog open={paymentConfirm} onOpenChange={(open) => { if (!saving) { setPaymentConfirm(open); if (!open) setAfterSave(null); } }}>
       <DialogContent showCloseButton={!saving} className="max-h-[90dvh] overflow-y-auto sm:max-w-lg" onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
         <DialogHeader><DialogTitle>入金状態の変更を確認</DialogTitle><DialogDescription>入金完了は残額を入金記録に追加します。未完了へ戻す場合は、このステータス操作で追加した記録だけを取り消します。別途登録された入金は残ります。</DialogDescription></DialogHeader>
-        <ul className="max-h-48 space-y-2 overflow-auto text-sm">{paymentChanges.map((item) => <li key={item.id} className="flex flex-wrap justify-between gap-2"><span className="break-all">{item.title}</span><span className="tabular-nums">{item.reversal ? "取消" : "入金"} {number.format(item.amount)}</span></li>)}</ul>
+        <ul className="max-h-48 space-y-2 overflow-auto text-sm">{paymentChanges.map((item) => <li key={item.id} className="flex flex-wrap justify-between gap-2"><span className="break-all">{item.title}</span><span className="tabular-nums">{item.reversal ? "取消" : "入金"} <Money value={item.amount} maximumFractionDigits={2} /></span></li>)}</ul>
         <form onSubmit={(event) => { event.preventDefault(); save(String(new FormData(event.currentTarget).get("paymentDate") || "")); }} className="space-y-4">
           {paymentChanges.some((item) => !item.reversal) ? <label className="block space-y-1 text-sm">入金日<Input aria-label="入金日" name="paymentDate" type="date" required defaultValue={todayIso()} disabled={saving} /></label> : null}
           {company === "JAPAN" ? <OperationError message={operationError} /> : null}

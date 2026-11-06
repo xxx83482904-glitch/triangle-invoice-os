@@ -1,4 +1,6 @@
 "use client";
+import { Money } from "@/components/app/money";
+import type { ReactNode } from "react";
 
 import Link from "next/link";
 import { useFeedbackForm } from "@/hooks/use-feedback-form";
@@ -137,11 +139,6 @@ const monthFormatter = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
 });
 
-const moneyFormatter = new Intl.NumberFormat("ja-JP", {
-  currency: "JPY",
-  maximumFractionDigits: 0,
-  style: "currency",
-});
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -262,28 +259,28 @@ function memoRemainder(row: OcrDocumentListItem) {
 
 function summaryLines(row: OcrDocumentListItem) {
   const content = memoField(row, "内容") || row.ocrPreview || "内容確認待ち";
-  const amount = row.extracted ? moneyFormatter.format(row.extracted.total) : memoField(row, "金額");
+  const amount = row.extracted ? <Money value={row.extracted.total} /> : memoField(row, "金額");
   const paymentDestination = memoField(row, "振込先") || "記載なし / 未検出";
-  const lines = [
-    `発送元: ${memoField(row, "発送元") || shippingSenderName(row)}`,
-    `内容: ${content}`,
-    `金額: ${amount || "未検出"}`,
-    `振込先: ${paymentDestination}`,
-    `種別: ${categoryLabels[row.category]}`,
-    `保存先: ${row.savedAs}`,
+  const lines: Array<[string, ReactNode]> = [
+    ["発送元", memoField(row, "発送元") || shippingSenderName(row)],
+    ["内容", content],
+    ["金額", amount || "未検出"],
+    ["振込先", paymentDestination],
+    ["種別", categoryLabels[row.category]],
+    ["保存先", row.savedAs],
   ];
   if (row.extracted) {
-    lines.push(`案件: ${row.extracted.projectName}`);
-    lines.push(`請求日: ${formatDate(row.extracted.issueDate)}`);
-    lines.push(`支払期限: ${formatDate(row.extracted.dueDate)}`);
-    lines.push(`合計: ${moneyFormatter.format(row.extracted.total)}`);
+    lines.push(["案件", row.extracted.projectName]);
+    lines.push(["請求日", formatDate(row.extracted.issueDate)]);
+    lines.push(["支払期限", formatDate(row.extracted.dueDate)]);
+    lines.push(["合計", <Money key="total" value={row.extracted.total} />]);
   }
-  if (row.confidence) lines.push(`信頼度: ${row.confidence}%`);
-  if (row.linkBroken) lines.push("参照切れ: 反映先の受領請求書が削除されています");
-  if (row.fileMissing) lines.push("原本: ファイルが見つかりません");
-  if (isDuplicate(row)) lines.push(`重複: ${duplicateDescription(row)}`);
+  if (row.confidence) lines.push(["信頼度", `${row.confidence}%`]);
+  if (row.linkBroken) lines.push(["参照切れ", "反映先の受領請求書が削除されています"]);
+  if (row.fileMissing) lines.push(["原本", "ファイルが見つかりません"]);
+  if (isDuplicate(row)) lines.push(["重複", duplicateDescription(row)]);
   const remainder = memoRemainder(row);
-  if (remainder) lines.push(`メモ: ${remainder}`);
+  if (remainder) lines.push(["メモ", remainder]);
   return lines;
 }
 
@@ -475,7 +472,7 @@ function DocumentEditor({
               </div>
               <div className="col-span-2 space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">合計</label>
-                <Input form={editFormId} name="total" type="number" defaultValue={row.extracted.total} disabled={!canEdit} className="font-mono" />
+                <Input form={editFormId} name="total" type="number" defaultValue={row.extracted.total} disabled={!canEdit} className="tabular-nums" />
               </div>
             </div>
           ) : (
@@ -1210,7 +1207,7 @@ export function OcrDocumentsTable({
                                     <td className="px-3 py-2">{renderProcessingControl(row)}</td>
                                     <td className="px-3 py-2">{renderCategoryControl(row)}</td>
                                     <td data-card-sub="" className="whitespace-nowrap px-3 py-2">{row.extracted?.issueDate ? formatDate(row.extracted.issueDate) : formatDate(row.createdAt.slice(0, 10))}</td>
-                                    <td data-card-end="" data-card-hide={row.extracted?.total ? undefined : ""} className="whitespace-nowrap px-3 py-2 text-right font-mono">{row.extracted?.total ? moneyFormatter.format(row.extracted.total) : "-"}</td>
+                                    <td data-card-end="" data-card-hide={row.extracted?.total ? undefined : ""} className="whitespace-nowrap px-3 py-2 text-right">{row.extracted?.total ? <Money value={row.extracted.total} /> : "-"}</td>
                                     <td data-card-sub="" className="max-w-[200px] px-3 py-2"><span className="flex flex-wrap items-center gap-1"><span className="truncate">{row.savedAs}</span>{row.linkBroken ? <Badge variant="destructive">参照切れ</Badge> : null}{row.fileMissing ? <Badge variant="destructive">原本なし</Badge> : null}</span></td>
                                     <td data-card-hide="" className="px-3 py-2">
                                       {row.fileUrl ? (
@@ -1337,7 +1334,7 @@ export function OcrDocumentsTable({
                             </div>
                             <div className="flex justify-between gap-3">
                               <span className="text-muted-foreground">金額</span>
-                              <span className="font-mono">{listPreviewRow.extracted?.total ? moneyFormatter.format(listPreviewRow.extracted.total) : "-"}</span>
+                              <span>{listPreviewRow.extracted?.total ? <Money value={listPreviewRow.extracted.total} /> : "-"}</span>
                             </div>
                           </div>
                         </div>
@@ -1540,12 +1537,11 @@ export function OcrDocumentsTable({
                           要約
                         </div>
                         <dl className="space-y-2 text-sm">
-                          {summaryLines(activeRow).map((line) => {
-                            const [label, ...rest] = line.split(": ");
+                          {summaryLines(activeRow).map(([label, value]) => {
                             return (
-                              <div key={line} className="grid grid-cols-[72px_1fr] gap-3">
+                              <div key={label} className="grid grid-cols-[72px_1fr] gap-3">
                                 <dt className="text-muted-foreground">{label}</dt>
-                                <dd className="whitespace-pre-wrap break-words">{rest.join(": ")}</dd>
+                                <dd className="whitespace-pre-wrap break-words">{value}</dd>
                               </div>
                             );
                           })}
@@ -1690,7 +1686,7 @@ export function OcrDocumentsTable({
                               </div>
                               <div className="col-span-2 space-y-2">
                                 <label className="text-xs font-medium text-muted-foreground">合計</label>
-                                <Input form={`ocr-edit-${activeRow.id}`} name="total" type="number" defaultValue={activeRow.extracted.total} disabled={!canEdit} className="font-mono" />
+                                <Input form={`ocr-edit-${activeRow.id}`} name="total" type="number" defaultValue={activeRow.extracted.total} disabled={!canEdit} className="tabular-nums" />
                               </div>
                             </div>
                           ) : (
@@ -1772,12 +1768,11 @@ export function OcrDocumentsTable({
                     内容一覧
                   </div>
                   <dl className="space-y-2 text-sm">
-                    {summaryLines(dialogRow).map((line) => {
-                      const [label, ...rest] = line.split(": ");
+                    {summaryLines(dialogRow).map(([label, value]) => {
                       return (
-                        <div key={line} className="grid grid-cols-[80px_1fr] gap-3">
+                        <div key={label} className="grid grid-cols-[80px_1fr] gap-3">
                           <dt className="text-muted-foreground">{label}</dt>
-                          <dd className="whitespace-pre-wrap">{rest.join(": ")}</dd>
+                          <dd className="whitespace-pre-wrap">{value}</dd>
                         </div>
                       );
                     })}

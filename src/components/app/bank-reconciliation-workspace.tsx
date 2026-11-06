@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 import { MonthTabs } from "@/components/app/month-tabs";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { useOperationError } from "@/hooks/use-operation-error";
@@ -26,7 +27,6 @@ import { toast } from "@/hooks/use-toast";
 import type { ReconciliationBank, ReconciliationInvoice, ReconciliationOverview } from "@/lib/bank-reconciliation";
 import type { CompanyScope } from "@/lib/company";
 
-const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
 const stateLabels: Record<string, string> = { [RECONCILE_TODO_STATUS]: "直近2か月の未照合", unmatched: "未照合・一部照合", matched: "照合済み", conflict: "要再確認", not_required: "請求書不要（経費集計に残る）", excluded: "振替・対象外" };
 const touch = "min-h-11";
 type Props = {
@@ -56,7 +56,7 @@ function SyncStatusButton({ company, invoice }: { company: CompanyScope; invoice
     <Dialog open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}>
       <DialogContent showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
         <DialogHeader><DialogTitle>支払い記録に状態を揃えますか？</DialogTitle><DialogDescription>入金・支払いの追加や削除はせず、登録済みの金額に合わせて請求書と関連する郵便物の完了状態を更新します。</DialogDescription></DialogHeader>
-        <p className="break-words text-sm">{invoice.title} / 請求額 {money(invoice.total)} / 登録済み {money(invoice.paid)}</p>
+        <p className="break-words text-sm">{invoice.title} / 請求額 <Money value={invoice.total} maximumFractionDigits={2} /> / 登録済み <Money value={invoice.paid} maximumFractionDigits={2} /></p>
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
         <Button className={touch} disabled={pending} onClick={sync}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}状態を揃える</OperationPending></Button>
       </DialogContent>
@@ -118,10 +118,10 @@ export function BankReconciliationWorkspace({ company, today, months, filters, r
             {row.stateMismatch && !row.conflict && row.matched > 0 ? <SyncStatusButton company={company} invoice={row} /> : null}
           </div>
         </div>
-        <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">{[["請求額", row.total], ["入金・支払い登録済み", row.paid], ["銀行照合済み", row.matched], ["未入金・未払い", row.outstanding]].map(([label, amount]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="break-all font-medium tabular-nums">{money(Number(amount))}</dd></div>)}</dl>
+        <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">{[["請求額", row.total], ["入金・支払い登録済み", row.paid], ["銀行照合済み", row.matched], ["未入金・未払い", row.outstanding]].map(([label, amount]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="break-all font-medium tabular-nums"><Money value={Number(amount)} maximumFractionDigits={2} /></dd></div>)}</dl>
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs"><span>書類処理: {row.kind === "received" ? row.processed ? "処理済み" : "未処理" : row.status}</span><span>実際の入金・支払い: {row.paid >= row.total && row.total > 0 ? "全額登録済み" : row.paid > 0 ? "一部登録済み" : "未登録"}</span><span>銀行照合: {row.conflict ? "要再確認" : row.matched >= row.total && row.total > 0 ? "全額照合済み" : row.matched > 0 ? "一部照合" : "未照合"}</span></p>
         {row.kind === "issued" && row.eligible ? <BankReconciliationInstallments key={`${row.key}:${row.updatedAt}`} company={company} invoice={row} /> : null}
-        <p className="text-xs text-amber-800 dark:text-amber-300">{[row.conflict ? (row.reaffirmable > 0 ? "照合後に金額などが変わりました。内容を確認して維持するか、解除して見直してください" : "照合後にデータ変更あり。照合を解除して見直してください") : "", row.stateMismatch ? "支払記録と請求書の支払状態が不一致" : "", row.overpaid ? `請求額より多い支払い ${money(row.overpaid)}` : "", row.overdue ? "期限超過" : "", !row.eligible ? "下書き・保留・金額などを確認後に照合" : "", row.recordedUnmatched > 0 ? `登録済みのうち銀行未照合 ${money(row.recordedUnmatched)}` : ""].filter(Boolean).join(" / ")}</p>
+        <p className="text-xs text-amber-800 dark:text-amber-300">{[row.conflict ? (row.reaffirmable > 0 ? "照合後に金額などが変わりました。内容を確認して維持するか、解除して見直してください" : "照合後にデータ変更あり。照合を解除して見直してください") : "", row.stateMismatch ? "支払記録と請求書の支払状態が不一致" : "", row.overpaid ? <>請求額より多い支払い <Money value={row.overpaid} maximumFractionDigits={2} /></> : "", row.overdue ? "期限超過" : "", !row.eligible ? "下書き・保留・金額などを確認後に照合" : "", row.recordedUnmatched > 0 ? <>登録済みのうち銀行未照合 <Money value={row.recordedUnmatched} maximumFractionDigits={2} /></> : ""].filter(Boolean).map((note, index) => <span key={index}>{index ? " / " : ""}{note}</span>)}</p>
       </li>)}</ul>{!invoiceRows.length ? <p className="py-4 text-sm text-muted-foreground">該当する請求書はありません。</p> : null}
     </section>}
     <Dialog open={Boolean(removing)} onOpenChange={(open) => { if (!open && !pending) setRemoving(null); }}><DialogContent showCloseButton={!pending} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}><DialogHeader><DialogTitle>照合を解除しますか？</DialogTitle><DialogDescription>{removing?.createdPayment ? "この照合で追加した入金・支払い記録も取り消し、請求書・郵便物の完了状態を再計算します。" : "銀行との紐づけだけを解除します。もともと登録されていた入金・支払い記録は残します。"} 銀行の原明細は変更しません。</DialogDescription></DialogHeader>{error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}<div className="flex flex-wrap gap-2"><Button className={touch} variant="outline" disabled={pending} onClick={() => setRemoving(null)}>キャンセル</Button><Button className={touch} disabled={pending} onClick={remove}><OperationPending pending={company === "JAPAN" && pending}><Unlink className="size-4" />照合解除</OperationPending></Button></div></DialogContent></Dialog>

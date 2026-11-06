@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 import { useOperationError } from "@/hooks/use-operation-error";
 import { OperationPending } from "@/components/app/operation-feedback";
 import { useState, useTransition } from "react";
@@ -11,7 +12,6 @@ import { toast } from "@/hooks/use-toast";
 import type { ReconciliationInvoice, ReconciliationOverview } from "@/lib/bank-reconciliation";
 import type { CompanyScope } from "@/lib/company";
 
-const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value);
 type Target = { kind: "link"; link: ReconciliationOverview["links"][number]; title: string } | { kind: "invoice"; invoice: ReconciliationInvoice };
 
 // "内容を確認して照合を維持": re-records the evidence of a flagged link without touching payments or document statuses.
@@ -37,8 +37,8 @@ export function BankReconciliationReaffirm({ company, target, disabled = false }
         <DialogHeader><DialogTitle>現在の内容で照合を維持しますか？</DialogTitle><DialogDescription>銀行明細・請求書・入金/支払い記録の現在の値を照合の根拠として記録し直します。入金・支払い記録と書類の状態は変更しません。金額が合わない場合は維持できません。</DialogDescription></DialogHeader>
         <div className="space-y-1 text-sm">
           {target.kind === "link"
-            ? <><p className="break-words">{target.title} / 照合額 {money(target.link.amount)}</p><p className="break-words text-amber-800 dark:text-amber-300">{target.link.issue}</p></>
-            : <><p className="break-words">{target.invoice.title} / {target.invoice.party} / 請求額 {money(target.invoice.total)}</p><p className="text-xs text-muted-foreground">要再確認の照合 {count}件をまとめて維持します。1件でも維持できない場合は何も変更しません。</p></>}
+            ? <><p className="break-words">{target.title} / 照合額 <Money value={target.link.amount} maximumFractionDigits={2} /></p><p className="break-words text-amber-800 dark:text-amber-300">{target.link.issue}</p></>
+            : <><p className="break-words">{target.invoice.title} / {target.invoice.party} / 請求額 <Money value={target.invoice.total} maximumFractionDigits={2} /></p><p className="text-xs text-muted-foreground">要再確認の照合 {count}件をまとめて維持します。1件でも維持できない場合は何も変更しません。</p></>}
         </div>
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
         <Button type="button" className="min-h-11" disabled={pending} onClick={run}><OperationPending pending={company === "JAPAN" && pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}照合を維持</OperationPending></Button>

@@ -1,4 +1,6 @@
 "use client";
+import { Money } from "@/components/app/money";
+import { formatMoney } from "@/lib/format";
 
 import "./dashboard.css";
 import Link from "next/link";
@@ -10,10 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { DashboardDocument, DashboardSummary } from "@/lib/dashboard";
 import { dashboardReviewBreakdown, dashboardTimingBreakdown, dashboardWorkRows, type DashboardNextStep, type DashboardTimingKey, type DashboardWorkView } from "@/lib/dashboard-work";
-import { yen } from "@/lib/format";
 
-const money = (value: number) => yen.format(value).replace("￥", "¥");
-const compact = new Intl.NumberFormat("ja-JP", { notation: "compact", maximumFractionDigits: 1 });
 const monthLabel = (month: string) => `${month.slice(0, 4)}年${Number(month.slice(5))}月`;
 const timingLabels = { overdue: "期限超過", soon: "7日以内", later: "期限待ち", undated: "期限未設定" };
 const legendLabels: Record<DashboardTimingKey, string> = { overdue: "超過", soon: "7日内", later: "待ち", undated: "未設定", mismatch: "要確認" };
@@ -111,7 +110,7 @@ function CashCard({ summary: s, href }: { summary: DashboardSummary; href: strin
   const balances = s.accounts.map((row) => row.balanceCalculation?.amount ?? 0).filter((amount) => amount > 0);
   return <Link href={href} prefetch={false} className="dash-raised dash-kpi">
     <span className="dash-kpi-label"><Landmark /><span>銀行の計算残高</span><ChevronRight aria-hidden="true" className="dash-chevron" /></span>
-    <span className="dash-kpi-value">{s.cash.amount === null ? "残高未登録" : money(s.cash.amount)}</span>
+    <span className="dash-kpi-value">{s.cash.amount === null ? "残高未登録" : <Money value={s.cash.amount} />}</span>
     <span aria-hidden="true" className="dash-bar">{balances.map((amount, index) => <span key={index} style={{ flexGrow: amount, background: "var(--primary)", opacity: Math.max(0.3, 1 - index * 0.22) }} />)}</span>
     <span className="dash-legend">
       <span>登録済み <b>{s.cash.registered}</b>口座</span>
@@ -127,7 +126,7 @@ function MoneyCard({ flow, icon: Icon, label, total, rows, pressed, onOpen }: { 
   const anyAmount = breakdown.some((row) => row.amount > 0);
   return <button type="button" className="dash-raised dash-kpi" data-flow={flow} aria-pressed={pressed} onClick={onOpen}>
     <span className="dash-kpi-label"><Icon /><span>{label}</span><span className="dash-count" title={`全期間 ${total.count}件`}>{total.count}</span><ChevronRight aria-hidden="true" className="dash-chevron" /></span>
-    <span className="dash-kpi-value">{money(total.amount)}</span>
+    <span className="dash-kpi-value"><Money value={total.amount} /></span>
     <span aria-hidden="true" className="dash-bar">{breakdown.map((row) => <span key={row.key} className="dash-tone" data-tone={row.key} style={{ flexGrow: anyAmount ? row.amount : row.count }} />)}</span>
     <span className="dash-legend">{breakdown.length ? breakdown.map((row) => <span key={row.key} data-alert={row.key === "overdue" ? "" : undefined}><i aria-hidden="true" className="dash-tone" data-tone={row.key} />{legendLabels[row.key]} <b>{row.count}</b></span>) : <span>期限超過 <b>0</b>件</span>}</span>
   </button>;
@@ -156,7 +155,7 @@ function NextSteps({ steps, view, timing, openWork }: { steps: DashboardNextStep
 function NextStepRow({ step, group, active, openWork }: { step: DashboardNextStep; group: StepGroup; active: boolean; openWork: (view: WorkView, scroll: boolean, timing: string) => void }) {
   const target = step.target;
   const Icon = stepIcons[step.id] || ArrowRight;
-  const name = `${step.label}を開く / ${step.count}件${step.amount !== undefined ? ` / ${money(step.amount)}` : ""} / ${step.reason}`;
+  const name = `${step.label}を開く / ${step.count}件${step.amount !== undefined ? ` / ${formatMoney(step.amount)}` : ""} / ${step.reason}`;
   return <div className="dash-row" data-active={active}>
     <Icon aria-hidden="true" className="dash-row-icon" data-tone={group} />
     {"href" in target ? <Link className="dash-row-main" href={target.href} prefetch={false} title={step.reason} aria-label={name}>{step.label}</Link>
@@ -165,7 +164,7 @@ function NextStepRow({ step, group, active, openWork }: { step: DashboardNextSte
       <PopoverTrigger className="dash-note" aria-label={`${step.label}の件数について`} title={step.caveat}><Info aria-hidden="true" /></PopoverTrigger>
       <PopoverContent align="end" className="max-w-72 text-xs">{step.caveat}</PopoverContent>
     </Popover> : null}
-    {step.amount !== undefined ? <span className="dash-row-amount">{money(step.amount)}</span> : null}
+    {step.amount !== undefined ? <span className="dash-row-amount"><Money value={step.amount} /></span> : null}
     <span className="dash-count" data-tone={group}>{step.count.toLocaleString("ja-JP")}</span>
     <ChevronRight aria-hidden="true" className="dash-chevron" />
   </div>;
@@ -183,7 +182,7 @@ function WorkRow({ row, review }: { row: DashboardDocument; review: boolean }) {
       <span className="dash-doc-sub">{row.partner} / {row.title}{extras ? ` / ${extras}` : ""}</span>
     </span>
     <span className="dash-doc-right">
-      <span className="dash-doc-amount">{money(review ? row.amount : row.remaining)}</span>
+      <span className="dash-doc-amount"><Money value={review ? row.amount : row.remaining} /></span>
       <span className="dash-doc-sub">{row.dueDate ? row.dueDate : "期限なし"}</span>
     </span>
   </Link>;
@@ -193,7 +192,7 @@ function AccountRow({ row, query }: { row: DashboardSummary["accounts"][number];
   const calculation = row.balanceCalculation, balance = row.balance;
   const [bank, ...branch] = row.name.replace(/^【法人】/, "").split(" / ");
   const provisional = Boolean(calculation && !calculation.complete);
-  const detail = [row.name, calculation ? `計算残高 ${calculation.through}まで` : "", balance ? `基準: ${balance.asOf} 終日 / 手動登録 ${money(balance.amount)}` : "",
+  const detail = [row.name, calculation ? `計算残高 ${calculation.through}まで` : "", balance ? `基準: ${balance.asOf} 終日 / 手動登録 ${formatMoney(balance.amount)}` : "",
     provisional ? `取得データ未完備${calculation?.missing ? ` / 元明細なし ${calculation.missing}件` : ""}` : "", balance && !calculation ? "基準残高・確認日の再確認が必要" : ""].filter(Boolean).join("\n");
   return <Link href={`/banking?${query}&account=${encodeURIComponent(row.id)}`} prefetch={false} className="dash-doc" data-account="" title={detail}>
     <span className="min-w-0">
@@ -201,7 +200,7 @@ function AccountRow({ row, query }: { row: DashboardSummary["accounts"][number];
       <span className="dash-doc-sub">{branch.join(" / ") || " "}</span>
     </span>
     <span className="dash-doc-right flex-none">
-      <span className="dash-doc-amount" data-empty={calculation ? undefined : ""}>{calculation ? money(calculation.amount) : balance ? "計算不可" : "残高未登録"}</span>
+      <span className="dash-doc-amount" data-empty={calculation ? undefined : ""}>{calculation ? <Money value={calculation.amount} /> : balance ? "計算不可" : "残高未登録"}</span>
       <span className="dash-doc-sub">{provisional ? <span className="dash-provisional">暫定</span> : null}{balance ? `基準 ${balance.asOf.slice(5)}` : " "}</span>
     </span>
     <span className="sr-only">{detail}</span>
@@ -222,8 +221,8 @@ function MonthlyOverview({ summary: s, pending, changeYear }: { summary: Dashboa
       <h2 id="dashboard-months-title" className="dash-panel-title">月別の動き<small>{s.period.start} ～ {s.period.end} / 8月決算</small></h2>
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
         <div className="dash-key">
-          <span><i aria-hidden="true" className="dash-bar-in" />{leftLabel} <b>{money(values.reduce((sum, row) => sum + row.left, 0))}</b></span>
-          <span><i aria-hidden="true" className="dash-bar-out" />{rightLabel} <b>{money(values.reduce((sum, row) => sum + row.right, 0))}</b></span>
+          <span><i aria-hidden="true" className="dash-bar-in" />{leftLabel} <b><Money value={values.reduce((sum, row) => sum + row.left, 0)} /></b></span>
+          <span><i aria-hidden="true" className="dash-bar-out" />{rightLabel} <b><Money value={values.reduce((sum, row) => sum + row.right, 0)} /></b></span>
         </div>
         <div role="group" aria-label="月別集計の種類" className="dash-track" data-inline=""><button type="button" aria-pressed={mode === "bank"} onClick={() => setMode("bank")}>銀行の入出金</button><button type="button" aria-pressed={mode === "invoice"} onClick={() => setMode("invoice")}>請求額</button></div>
         <div className="dash-year">
@@ -239,8 +238,8 @@ function MonthlyOverview({ summary: s, pending, changeYear }: { summary: Dashboa
       <div className="dash-raised min-w-0">
         <div role="region" aria-label="9月から8月の月次グラフ" tabIndex={0} className="dash-chart">
           <div className="dash-chart-grid">
-            <span aria-hidden="true" className="dash-chart-scale">{compact.format(max)}</span>
-            {values.map((row) => <button key={row.month} type="button" className="dash-month" aria-pressed={month === row.month} disabled={row.future} aria-label={`${monthLabel(row.month)} ${row.future ? "未到来" : `${leftLabel} ${money(row.left)} ${rightLabel} ${money(row.right)}`}`} title={row.future ? "未到来" : `${monthLabel(row.month)} / ${leftLabel} ${money(row.left)} / ${rightLabel} ${money(row.right)}`} onClick={() => setMonth(row.month)}>
+            <span aria-hidden="true" className="dash-chart-scale"><Money value={max} notation="compact" maximumFractionDigits={1} /></span>
+            {values.map((row) => <button key={row.month} type="button" className="dash-month" aria-pressed={month === row.month} disabled={row.future} aria-label={`${monthLabel(row.month)} ${row.future ? "未到来" : `${leftLabel} ${formatMoney(row.left)} ${rightLabel} ${formatMoney(row.right)}`}`} title={row.future ? "未到来" : `${monthLabel(row.month)} / ${leftLabel} ${formatMoney(row.left)} / ${rightLabel} ${formatMoney(row.right)}`} onClick={() => setMonth(row.month)}>
               <span aria-hidden="true" className="dash-month-bars"><span className="dash-bar-in" style={{ height: `${row.left / max * 100}%`, minHeight: row.left > 0 ? 2 : 0 }} /><span className="dash-bar-out" style={{ height: `${row.right / max * 100}%`, minHeight: row.right > 0 ? 2 : 0 }} /></span>
               <span className="dash-month-label">{Number(row.month.slice(5))}月</span>
             </button>)}
@@ -249,9 +248,9 @@ function MonthlyOverview({ summary: s, pending, changeYear }: { summary: Dashboa
       </div>
       <div className="dash-raised dash-side" aria-live="polite">
         <p className="dash-side-month">{Number(month.slice(5))}月<small>{month.slice(0, 4)}年</small></p>
-        <p className="dash-side-row" data-flow="in"><span>{leftLabel}</span><b>{money(selectedLeft)}</b></p>
-        <p className="dash-side-row" data-flow="out"><span>{rightLabel}</span><b>{money(selectedRight)}</b></p>
-        <p className="dash-side-row" data-net=""><span>差額</span><b>{money(selectedLeft - selectedRight)}</b></p>
+        <p className="dash-side-row" data-flow="in"><span>{leftLabel}</span><b><Money value={selectedLeft} /></b></p>
+        <p className="dash-side-row" data-flow="out"><span>{rightLabel}</span><b><Money value={selectedRight} /></b></p>
+        <p className="dash-side-row" data-net=""><span>差額</span><b><Money value={selectedLeft - selectedRight} /></b></p>
         {mode === "bank" ? <p className="dash-side-note" data-warn={selected.covered ? undefined : ""}>{selected.count}件 / {selected.covered ? "取得範囲確認済み" : s.accounts.length ? "取得範囲未確認" : "銀行口座未登録"}</p> : null}
       </div>
     </div>

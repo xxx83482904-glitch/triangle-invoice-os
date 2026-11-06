@@ -26,7 +26,8 @@ test("advanced filters count category, match mode and excluded words, but not or
 
 test("ledger dates keep the year in all periods without timezone conversion", () => {
   assert.equal(bankLedgerDate("2026-10-30", "2026-10"), "10/30");
-  assert.equal(bankLedgerDate("2026-01-05", "2026-01"), "1/05");
+  assert.equal(bankLedgerDate("2026-01-05", "2026-01"), "1/5");
+  assert.equal(bankLedgerDate("2026-09-05", "2026-09"), "9/5");
   assert.equal(bankLedgerDate("2026-10-30", ""), "2026/10/30");
   assert.equal(bankLedgerDate("", ""), "");
   assert.equal(bankLedgerDate("unknown", "2026-10"), "unknown");

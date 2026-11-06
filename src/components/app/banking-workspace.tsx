@@ -80,7 +80,7 @@ export function BankingWorkspace(props: Props) {
   const [savePreview, setSavePreview] = useState<BankSavePreview | null>(null);
   const [guessReview, setGuessReview] = useState<{ guesses: BankTransaction[]; others: number } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saveResult, setSaveResult] = useState<{ saved: number; remaining: number; uncertain: boolean } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ saved: number; remaining: number; uncertain: boolean; confirmed?: boolean } | null>(null);
   const [savedRows, setSavedRows] = useState<Record<string, BankDisplayRow>>({});
   const [matchingSnapshot, setMatchingSnapshot] = useState<string[] | null>(null);
   const [error, setError] = useState("");
@@ -175,6 +175,12 @@ export function BankingWorkspace(props: Props) {
     observer.observe(target);
     return () => observer.disconnect();
   }, [hasMore, loadError, loadingMore, loadMore, pending]);
+
+  useEffect(() => {
+    if (!saveResult?.confirmed || saving) return;
+    const timer = setTimeout(() => setSaveResult((current) => current === saveResult ? null : current), 4000);
+    return () => clearTimeout(timer);
+  }, [saveResult, saving]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -349,6 +355,7 @@ export function BankingWorkspace(props: Props) {
           if (!verified.success) throw new Error(`保存済みですが最新状態を取得できませんでした: ${verified.error}`);
           setSavedRows((current) => ({ ...current, ...Object.fromEntries(verified.displayRows.map((row) => [row.id, row])) }));
         }
+        setSaveResult({ saved, remaining: 0, uncertain: false, confirmed: true });
         setLeaveUrl(null);
         if (preview.destination) router.push(preview.destination);
         toast({ title: `${saved}件を保存しました`, variant: "success" });
@@ -463,7 +470,7 @@ export function BankingWorkspace(props: Props) {
     const conflict = drafts[row.id] && drafts[row.id].updatedAt !== row.updatedAt;
     return <div className="bank-row-state bank-classification-state">
       {company === "JAPAN" ? <BankClassificationState row={{ ...row, ...value }} /> : <><BankClassificationBadge row={{ ...row, ...value }} /><BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} /></>}
-      {drafts[row.id] || row.predictionPending ? <span className="bank-unsaved-label" title={drafts[row.id] ? "編集・未保存" : "自動候補・未採用"}>未保存</span> : null}
+      {drafts[row.id] ? <span className="bank-unsaved-label" title="編集・未保存">未保存</span> : row.predictionPending ? <span className="bank-candidate-label" title="自動候補・未採用">自動候補</span> : null}
       {conflict ? <span className="bank-unsaved-label" title="元の明細が更新されています。保存前に競合を確認してください">競合</span> : null}
       {salesSuggestion(row, value) ? <span className="bank-sales-mark" title={row.salesSuggestion?.reason}>売上提案</span> : null}
     </div>;
@@ -547,7 +554,7 @@ export function BankingWorkspace(props: Props) {
       <div className="bank-sync-status">
         <span role="status" className="min-w-0 truncate" title={syncStatus}>{syncStatus}</span>
         {props.selectedBalance?.kind === "BANK" && !props.selectedBalance.unspecified ? <Popover><PopoverTrigger asChild><Button variant="ghost" size="sm" className="bank-balance-trigger">計算残高 {props.selectedBalance.balanceCalculation ? <Money value={props.selectedBalance.balanceCalculation.amount} /> : "未計算"}{props.selectedBalance.balanceCalculation && !props.selectedBalance.balanceCalculation.complete ? <span className="text-[var(--tone-amber-fg)]">暫定</span> : null}<ChevronDown className="size-3" /></Button></PopoverTrigger><PopoverContent className="bank-balance-details w-[min(480px,calc(100vw-24px))]" align="start"><section aria-label="選択口座の計算残高" className="space-y-3 text-sm">
-          <h2 className="font-medium">{props.selectedBalance.name}</h2><BankBalanceSummary row={props.selectedBalance} renderMoney={(value) => <Money value={value} />} />
+          <h2 className="font-medium">{props.selectedBalance.name}</h2><BankBalanceSummary row={props.selectedBalance} />
           {props.selectedBalance.balanceCalculation ? <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs"><dt>基準日後の入金</dt><dd className="text-right"><Money value={props.selectedBalance.balanceCalculation.income} sign="always" tone="income" /></dd><dt>基準日後の出金</dt><dd className="text-right"><Money value={-props.selectedBalance.balanceCalculation.expense} /></dd></dl> : null}
           <p className="text-xs text-muted-foreground">残高は全明細が対象・下の絞り込みとは別</p>
           <Button asChild variant="outline"><Link href={`/banking/accounts?company=${company}`}><Settings2 className="size-4" />基準残高を確認・変更</Link></Button>
@@ -600,7 +607,7 @@ export function BankingWorkspace(props: Props) {
               <tbody>{rows.map((row) => {
                 const value = drafts[row.id] || editFrom(row), controls = fields(row, value);
                 const account = accountMap.get(row.bankAccountId) || "口座未取得";
-                return <tr key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id] || row.predictionPending) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 42px" }} onKeyDown={(event) => { if (!selection.picking && event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
+                return <tr key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 42px" }} onKeyDown={(event) => { if (!selection.picking && event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
                   <td>{selectionBox(row)}</td>
                   <td><time dateTime={row.transactionDate} title={row.transactionDate} className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{bankLedgerDate(row.transactionDate, filters.month)}</time></td>
                   <td {...(!selection.picking ? cardPressProps(() => setDetailId(row.id)) : {})} title={`${row.content || "摘要なし"} / ${account}`}><div className="bank-description"><span className="truncate font-medium">{matchedContent(row.content)}</span><span className="bank-row-account">{account}</span>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label={[value.memo ? "メモあり" : "", row.sourceMemo ? "元明細メモあり" : ""].filter(Boolean).join("・")} /> : null}</div></td>
@@ -614,7 +621,7 @@ export function BankingWorkspace(props: Props) {
           </div>
           <div className="bank-ledger-cards grid gap-2 md:grid-cols-2 lg:hidden">{rows.map((row) => {
             const value = drafts[row.id] || editFrom(row), category = categoryMap.get(value.categoryId || ""), child = categoryMap.get(value.subCategoryId || "");
-            return <article key={row.id} {...selection.rowProps(row.id)} {...(!selection.picking ? cardPressProps(() => setDetailId(row.id)) : {})} tabIndex={0} data-unsaved={Boolean(drafts[row.id] || row.predictionPending) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 158px" }} className="record-card min-w-0 p-2">
+            return <article key={row.id} {...selection.rowProps(row.id)} {...(!selection.picking ? cardPressProps(() => setDetailId(row.id)) : {})} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 158px" }} className="record-card min-w-0 p-2">
               <div className="flex items-center gap-1">{selectionBox(row)}<time className="text-xs tabular-nums text-muted-foreground" title={row.transactionDate}>{row.transactionDate}</time><Money className="ml-auto text-sm font-medium" value={row.side === "INCOME" ? row.amount : -row.amount} sign="always" tone={row.side === "INCOME" ? "income" : "plain"} /></div>
               <h3 className="line-clamp-2 break-words text-sm font-medium" title={row.content}>{matchedContent(row.content)}</h3>
               <p className="truncate text-xs text-muted-foreground">{accountMap.get(row.bankAccountId) || "口座未取得"}</p>
@@ -717,7 +724,7 @@ export function BankingWorkspace(props: Props) {
         </div>
       </DialogContent>
     </Dialog>
-    <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} />
+    <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} onCloseAutoFocus={(event) => { event.preventDefault(); headerMenu.current?.focus(); }} />
     {linkData ? <BankLinksDialog key={linkData.bank.id} company={company} initial={linkData} onClose={() => setLinkData(null)} /> : null}
     <BankClassificationAiDialog key={aiOpen ? "ai-open" : "ai-closed"} company={company} open={aiOpen} onOpenChange={setAiOpen} rowIds={rows.map((row) => row.id)} selectedIds={rows.filter((row) => selected.has(row.id)).map((row) => row.id)} initialScope={aiScope} initialHistory={aiHistory} onResult={(result) => {
       setClassificationPreview(result.rows.map((row) => ({ ...row, predictionPending: true }))); setAiResult({ suggested: result.suggested, lowConfidence: result.lowConfidence, model: result.model });

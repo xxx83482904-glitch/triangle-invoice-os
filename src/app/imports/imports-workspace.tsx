@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
@@ -18,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
-import { formatDate, yen } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import type { ImportBoardDocument, ImportDocumentGroup, ImportShipmentMutation, ImportShipmentView } from "@/lib/import-shipment-views";
 import { importChecklistKinds, importDocumentKindLabels, importDocumentKinds, importFillLabels, importShipmentStatusLabels, importShipmentStatuses } from "@/lib/import-shipments";
 import { countByMonth } from "@/lib/month-tabs";
@@ -122,9 +123,9 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
           {canEdit ? <Button type="button" size="sm" className="gap-1" onClick={startCreate}><Plus className="size-4" />新しい便</Button> : null}
         </div>
         <section aria-label="輸入の集計" className="grid grid-cols-3 gap-2 text-xs text-muted-foreground sm:gap-3 lg:max-w-2xl">
-          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>関税</div><div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.duty)}</div><div className="mt-1 hidden sm:block">表示中{filtered.length}便</div></div>
-          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>輸入消費税</div><div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.tax)}</div><div className="mt-1 hidden sm:block">国税と地方消費税の合計</div></div>
-          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>諸費用合計</div><div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.cost)}</div><div className="mt-1 hidden sm:block">{totals.missing ? `書類不足 ${totals.missing}便` : "書類は揃っています"}</div></div>
+          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>関税</div><div className="break-all text-sm font-medium text-foreground"><Money value={totals.duty} /></div><div className="mt-1 hidden sm:block">表示中{filtered.length}便</div></div>
+          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>輸入消費税</div><div className="break-all text-sm font-medium text-foreground"><Money value={totals.tax} /></div><div className="mt-1 hidden sm:block">国税と地方消費税の合計</div></div>
+          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>諸費用合計</div><div className="break-all text-sm font-medium text-foreground"><Money value={totals.cost} /></div><div className="mt-1 hidden sm:block">{totals.missing ? `書類不足 ${totals.missing}便` : "書類は揃っています"}</div></div>
         </section>
       </CardHeader>
       <CardContent>
@@ -166,8 +167,8 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
                         <span className="block truncate text-xs font-normal text-muted-foreground">{[row.projectName || "案件未設定", row.supplierName].filter(Boolean).join(" / ")}</span>
                       </td>
                       <td data-label="許可日" data-card-sub="" className="whitespace-nowrap px-3 py-2">{row.permitDate ? formatDate(row.permitDate) : "未定"}</td>
-                      <td data-label="輸入消費税" data-card-sub="" className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(row.importTax)}</td>
-                      <td data-label="諸費用" data-card-end="" className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(row.costTotal)}</td>
+                      <td data-label="輸入消費税" data-card-sub="" className="whitespace-nowrap px-3 py-2 text-right"><Money value={row.importTax} /></td>
+                      <td data-label="諸費用" data-card-end="" className="whitespace-nowrap px-3 py-2 text-right"><Money value={row.costTotal} /></td>
                       <td data-label="書類" className="whitespace-nowrap px-3 py-2">
                         <span title={row.missing.map((kind) => importDocumentKindLabels[kind]).join("、")} className={row.missing.length ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}>
                           {row.documents.length}件{row.missing.length ? ` / 不足${row.missing.length}` : " / 揃い"}
@@ -208,7 +209,7 @@ export function ImportsWorkspace({ initialId, canEdit, company, rows, unassigned
 function DocumentLine({ document, canEdit, pending, onDetach }: { document: ImportBoardDocument; canEdit: boolean; pending: boolean; onDetach: () => void }) {
   return <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
     <Link href={document.href} prefetch={false} title={document.title} className="inline-flex min-w-0 max-w-full items-center gap-1 font-medium text-foreground hover:underline underline-offset-4"><span className="truncate">{document.displayName}</span><ExternalLink className="size-3 shrink-0" /></Link>
-    <span className="text-muted-foreground">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? ` / ${yen.format(document.amount)}` : ""}</span>
+    <span className="text-muted-foreground">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? <> / <Money value={document.amount} /></> : ""}</span>
     {document.source === "received" ? <Badge variant="outline" className={document.paid ? "border-emerald-200 text-emerald-700 dark:text-emerald-300" : "border-amber-200 text-amber-800 dark:text-amber-300"}>{document.paid ? "支払済" : "未払い"}</Badge> : null}
     {canEdit ? <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" disabled={pending} onClick={onDetach}>外す</Button> : null}
   </div>;
@@ -223,7 +224,7 @@ function ShipmentDetail({ canEdit, company, row, unassigned, projects, vendors, 
   return <div className="space-y-5 p-4">
     <section aria-label="輸入便の費用" className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
       {([["関税", row.dutyAmount], ["輸入消費税", row.importTax], ["諸費用合計", row.costTotal], ["着地原価", row.landedCost]] as const).map(([label, value]) => (
-        <div key={label} className="min-w-0 rounded-lg border bg-background/60 px-3 py-2"><div>{label}</div><div className="break-all font-mono text-sm font-medium text-foreground">{yen.format(value)}</div></div>
+        <div key={label} className="min-w-0 rounded-lg border bg-background/60 px-3 py-2"><div>{label}</div><div className="break-all text-sm font-medium text-foreground"><Money value={value} /></div></div>
       ))}
     </section>
     {canEdit ? <Button type="button" variant="ghost" size="sm" disabled={pending || !row.documents.length}
@@ -335,7 +336,7 @@ function ShipmentForm({ company, row, projects, vendors, onSaved }: { company: C
     </div>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {amountFields.map(([key, label]) => (
-        <label key={key} className="space-y-1"><span className={field}>{label}</span><Input name={key} type="number" inputMode="numeric" min="0" step="1" defaultValue={row?.recorded[key] ?? ""} className="font-mono" /></label>
+        <label key={key} className="space-y-1"><span className={field}>{label}</span><Input name={key} type="number" inputMode="numeric" min="0" step="1" defaultValue={row?.recorded[key] ?? ""} className="tabular-nums" /></label>
       ))}
     </div>
     <label className="block space-y-1"><span className={field}>メモ</span><Textarea name="memo" maxLength={2000} defaultValue={row?.memo ?? ""} className="min-h-20" /></label>
@@ -397,7 +398,7 @@ function ShipmentCandidate({ company, canEdit, group, shipments, onCreated }: {
         <div className="min-w-0 flex-1 text-xs text-muted-foreground">
           <Link href={document.href} prefetch={false} title={document.title} className="block break-all text-sm font-medium text-foreground hover:underline underline-offset-4">{document.displayName}</Link>
           {document.title !== document.displayName ? <p className="break-all">保存名: {document.title}</p> : null}
-          <p className="break-words">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? ` / ${yen.format(document.amount)}` : ""}</p>
+          <p className="break-words">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? <> / <Money value={document.amount} /></> : ""}</p>
         </div>
       </li>)}
     </ul>

@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -18,7 +19,7 @@ import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { ExpenseClaimView, ExpenseWorkflowMutation, expenseSettlementSummary } from "@/lib/expense-claim-edits";
 import { expenseActionLabels, expenseMonth, expensePaidWithLabels, expenseStatusLabels } from "@/lib/expense-claims";
-import { formatDate, yen } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { countByMonth } from "@/lib/month-tabs";
 import { operationFailureToast } from "@/lib/operation-feedback";
 import type { ExpenseClaimStatus, ExpensePaidWith } from "@/lib/types";
@@ -100,7 +101,7 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
     <div className="flex justify-end"><Button type="button" disabled={pending} onClick={create}><Plus className="size-4" />領収書を提出</Button></div>
     <section aria-label="経費精算の集計" className="grid grid-cols-3 gap-2 text-xs text-muted-foreground sm:gap-3">
       {[[`申請中 ${totals.submittedCount}件`, totals.submittedAmount], ["承認済み・未精算", totals.approvedAmount], ["今月の精算済み", totals.paidThisMonth]].map(([label, amount]) =>
-        <div key={label} className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>{label}</div><div className="mt-1 break-all font-mono text-sm font-medium text-foreground">{yen.format(Number(amount))}</div></div>)}
+        <div key={label} className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>{label}</div><div className="mt-1 break-all text-sm font-medium text-foreground"><Money value={Number(amount)} /></div></div>)}
     </section>
     {canManage ? <OptionTabs label="表示" caption="表示" value={view} options={[["all", "全員の申請"], ["mine", "自分の申請"]]} disabled={pending}
       onChange={(value) => { setView(value); close(); }} /> : null}
@@ -122,7 +123,7 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
               <tbody>{filtered.map((row) => <tr key={`${row.id}:${row.updatedAt}`} {...cardPressProps(() => { if (!pending) open(row.id); })} data-active={row.id === activeId ? "" : undefined}>
                 <td className="record-card-title"><button type="button" data-selection-open className="record-card-open" title="開く" disabled={pending} onClick={() => open(row.id)}>{row.payee}</button><div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.purpose}</div></td>
                 <td data-card-sub>{formatDate(row.spentOn)}</td>{view === "all" ? <td data-card-line>{row.submitterName}</td> : null}
-                <td data-card-hide className="text-muted-foreground">{row.categoryName}</td><td data-card-end className="text-right font-mono">{yen.format(row.amount)}</td><td><ExpenseBadge status={row.status} /></td>
+                <td data-card-hide className="text-muted-foreground">{row.categoryName}</td><td data-card-end className="text-right"><Money value={row.amount} /></td><td><ExpenseBadge status={row.status} /></td>
               </tr>)}</tbody>
             </table> : <div className="flex flex-col items-center gap-3 py-12 text-sm text-muted-foreground"><p>条件に合う申請がありません</p><Button type="button" variant="outline" onClick={reset}>条件をリセット</Button>{!scoped.length ? <Button type="button" disabled={pending} onClick={create}>最初の領収書を提出する</Button> : null}</div>}
           </div>
@@ -149,7 +150,7 @@ function SettlementQueue({ people, views, today, pending, run }: { people: Summa
   if (!waiting.length) return null;
   return <section aria-label="精算待ち" className="space-y-3 rounded-lg border bg-muted/20 p-3">
     <h2 className="text-sm font-medium">精算待ち</h2><p className="text-xs text-muted-foreground">人ごとの全期間の承認済み分をまとめて精算します。</p>
-    {waiting.map((person) => <div key={person.userId} className="flex flex-wrap items-center gap-2 text-sm"><span>{person.name}</span><span className="text-muted-foreground">承認済み {person.approvedCount}件</span><span className="font-mono">{yen.format(person.approvedAmount)}</span>
+    {waiting.map((person) => <div key={person.userId} className="flex flex-wrap items-center gap-2 text-sm"><span>{person.name}</span><span className="text-muted-foreground">承認済み {person.approvedCount}件</span><span><Money value={person.approvedAmount} /></span>
       <Button type="button" variant="outline" className="ml-auto" disabled={pending} onClick={() => setSelected({ userId: person.userId, name: person.name, items: views.filter((row) => row.submittedById === person.userId && row.status === "APPROVED").map((row) => ({ id: row.id, version: row.updatedAt })) })}>精算する</Button></div>)}
     {selected ? <div className="space-y-2 border-t pt-3"><p className="text-sm">{selected.name} の {selected.items.length}件を精算</p>
       <PaymentForm key={selected.userId} today={today} pending={pending} onCancel={() => setSelected(null)} onSubmit={(paidAt, memo) => run({ action: "pay", items: selected.items, paidAt, memo }, "精算済みにしました。", () => setSelected(null))} />
@@ -241,9 +242,9 @@ function ExpenseDetail({ row, company, today, projects, categories, actors, wide
     </section> : <p className="text-sm text-muted-foreground">領収書が添付されていません。</p>}
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
       <dt className="text-muted-foreground">状態</dt><dd><ExpenseBadge status={row.status} /></dd>
-      {[["支払日", formatDate(row.spentOn)], ["金額", yen.format(row.amount)], ["支払先", row.payee], ["用途", row.purpose], ["科目", row.categoryName], ["案件", row.projectName],
-        ["立替方法", row.paidWith ? expensePaidWithLabels[row.paidWith] : "未設定"], ["メモ", row.memo || "—"], ["申請者", row.submitterName]].map(([label, value]) =>
-        <div key={label} className="contents"><dt className="text-muted-foreground">{label}</dt><dd className={`min-w-0 whitespace-pre-wrap break-words ${label === "金額" ? "font-mono" : ""}`}>{value}</dd></div>)}
+      {([["支払日", formatDate(row.spentOn)], ["金額", <Money key="amount" value={row.amount} />], ["支払先", row.payee], ["用途", row.purpose], ["科目", row.categoryName], ["案件", row.projectName],
+        ["立替方法", row.paidWith ? expensePaidWithLabels[row.paidWith] : "未設定"], ["メモ", row.memo || "—"], ["申請者", row.submitterName]] as const).map(([label, value]) =>
+        <div key={label} className="contents"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 whitespace-pre-wrap break-words">{value}</dd></div>)}
       {row.reviewedAt ? <><dt className="text-muted-foreground">確認者</dt><dd>{row.reviewerName} / {dateTime(row.reviewedAt)}</dd></> : null}
       {row.paidAt ? <><dt className="text-muted-foreground">振込日</dt><dd>{formatDate(row.paidAt)}</dd><dt className="text-muted-foreground">精算者</dt><dd>{row.paidByName}</dd><dt className="text-muted-foreground">精算メモ</dt><dd className="whitespace-pre-wrap break-words">{row.paymentMemo || "—"}</dd></> : null}
     </dl>
