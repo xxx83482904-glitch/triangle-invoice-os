@@ -1,2 +1,5 @@
 # Keep the verified static export byte-for-byte identical on Windows and Synology.
 public/akira-kitchen/** -text
+
+# The NAS startup script must remain executable by POSIX sh after Windows checkouts.
+deploy/synology/container-start.sh text eol=lf
