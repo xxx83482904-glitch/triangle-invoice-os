@@ -3,6 +3,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { importConflictMessage } from "@/lib/import-reread";
 
 export function SaveBar({ dirtyCount, pending, error, onReset, onReload, rootRef }: {
   dirtyCount: number; pending: boolean; error: string; onReset: () => void; onReload: () => void; rootRef: RefObject<HTMLDivElement | null>;
@@ -21,7 +22,7 @@ export function SaveBar({ dirtyCount, pending, error, onReset, onReload, rootRef
       <p className="flex items-center gap-1.5">{pending ? <Loader2 aria-hidden className="size-3.5 shrink-0 animate-spin" /> : error || dirtyCount ? <AlertCircle aria-hidden className="size-3.5 shrink-0" /> : <CheckCircle2 aria-hidden className="size-3.5 shrink-0 text-[var(--tone-emerald-fg)]" />}
         {pending ? "保存中…" : error ? "保存できませんでした" : dirtyCount ? `未保存の変更 ${dirtyCount}件` : "保存済み"}</p>
       {error ? <p className="mt-1 break-words">{error}</p> : null}
-      {conflict ? <p className="mt-1 text-muted-foreground">ほかの人が先にこの便を更新しました。最新を読み込んで、入力内容と見比べてください。</p> : null}
+      {conflict ? <p className="mt-1 text-muted-foreground">{importConflictMessage}</p> : null}
     </div>
     <div className="ml-auto flex flex-wrap items-center gap-1">
       {conflict ? <Button type="button" variant="outline" size="sm" disabled={pending} onClick={onReload}><RefreshCw />最新を読み込む</Button> : null}

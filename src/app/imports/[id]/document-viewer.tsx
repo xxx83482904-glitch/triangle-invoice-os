@@ -11,6 +11,7 @@ import { useOriginalFilePreview } from "@/hooks/use-original-file-preview";
 import type { CompanyScope } from "@/lib/company";
 import { formatDate } from "@/lib/format";
 import type { ImportBoardDocument } from "@/lib/import-shipment-views";
+import { importPdfFragment } from "@/lib/original-file-preview";
 import { ImportDropzone } from "../import-dropzone";
 import { documentTabs, tabDocuments, type DocumentTab } from "./document-tabs";
 
@@ -77,7 +78,7 @@ function OriginalViewer({ document, canEdit, pending, onAdd, onDetach }: {
         <p className="max-w-md text-xs text-muted-foreground">{failed}</p><div className="flex flex-wrap justify-center gap-2">{openOriginal}
           {!unsupported ? <Button type="button" variant="outline" size="sm" onClick={retry}><RefreshCw />もう一度読み込む</Button> : null}</div>
       </div> : !preview.url ? <div role="status" className="flex min-h-56 h-full items-center justify-center gap-2 p-5 text-sm text-muted-foreground"><Loader2 aria-hidden className="size-4 animate-spin" />原本を読み込み中…</div>
-        : pdf ? <><div className="hidden h-full lg:block"><OnScreenPdfFrame key={`${page}:${zoom}:${fit}`} title={`原本: ${document.fileName}`} src={`${preview.url}#page=${page}&zoom=${fit ? "page-width" : zoom}`} className="h-full w-full" onError={() => setRenderFailed(true)} /></div>
+        : pdf ? <><div className="hidden h-full lg:block"><OnScreenPdfFrame key={`${page}:${zoom}:${fit}`} title={`原本: ${document.fileName}`} src={`${preview.url}${importPdfFragment(page, zoom, fit)}`} className="h-full w-full" onError={() => setRenderFailed(true)} /></div>
           <div className="flex min-h-56 flex-col items-center justify-center gap-3 p-4 text-center lg:hidden"><p className="text-xs text-muted-foreground">スマートフォンでは「別タブで開く」からPDFを表示してください。</p>{openOriginal}</div></>
           // Original images retain their document framing and can be zoomed without cropping.
           // eslint-disable-next-line @next/next/no-img-element

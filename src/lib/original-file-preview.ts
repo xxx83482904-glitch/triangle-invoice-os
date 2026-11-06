@@ -26,3 +26,7 @@ export function originalPdfPageCount(bytes: string): number | undefined {
     .flatMap((object) => [...object.matchAll(/\/Count\s+(\d+)\b/g)].map((match) => Number(match[1])));
   return pages > 0 && counts.length > 0 && Math.max(...counts) === pages ? pages : undefined;
 }
+
+export function importPdfFragment(page: number, zoom: number, fit: boolean) {
+  return `#toolbar=0&navpanes=0&page=${page}&${fit ? "view=FitH" : `zoom=${zoom}`}`;
+}

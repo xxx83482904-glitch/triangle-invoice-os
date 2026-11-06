@@ -32,13 +32,14 @@ function StageDates({ stage, today }: { stage: Timeline["stages"][number]; today
 
 export function RequestedDates({ requested, today, orderCount, compact = false }: { requested: Requested; today: string; orderCount: number; compact?: boolean }) {
   const dates = [...new Set([...requested.dates, ...requested.itemOverrides.map((item) => item.date)])].sort();
+  const caption = requested.differs ? requested.dates.length > 1 ? "注文ごとに異なる" : "品目ごとに異なる" : compact ? "クライアント指定" : "クライアントの指定";
   return <div className="min-w-0 space-y-1">
     <div className="flex items-center gap-1 text-xs text-muted-foreground">{!compact ? <CalendarDays aria-hidden className="size-3.5" /> : null}希望納期</div>
     <div className={`flex flex-wrap items-center gap-x-1 font-medium ${compact ? "text-xs" : "text-base"}`}>
-      {dates.length ? dates.map((date, index) => <span key={date}>{index ? "・" : ""}<DetailDate value={date} today={today} /></span>) : "未入力"}
+      {dates.length ? dates.map((date, index) => <span key={date} className={compact ? "whitespace-nowrap" : undefined}>{index ? "・" : ""}<DetailDate value={date} today={today} /></span>) : "未入力"}
     </div>
-    {dates.length ? <p className={`text-[11px] ${requested.differs ? amberText : "text-muted-foreground"}`}>
-      {requested.differs ? requested.dates.length > 1 ? `注文ごとに異なる（${orderCount}件）` : "品目ごとに異なる" : "クライアントの指定"}
+    {dates.length ? <p className={`text-[11px] ${compact ? "break-keep " : ""}${requested.differs ? amberText : "text-muted-foreground"}`}>
+      {caption}{requested.differs && requested.dates.length > 1 ? compact ? <span className="block whitespace-nowrap">（{orderCount}件）</span> : `（${orderCount}件）` : null}
       {requested.itemOverrides.length ? <span className="block">品目の指定 {requested.itemOverrides.length}件を含む</span> : null}
     </p> : null}
   </div>;
@@ -48,10 +49,13 @@ export function NextSchedule({ timeline, today, compact = false }: { timeline: T
   const next = timeline.next;
   return <div className={compact ? "min-w-0 space-y-1" : "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[var(--tone-blue-bg)] px-3 py-3 text-xs text-[var(--tone-blue-fg)]"}>
     <span className="flex items-center gap-1 text-xs">{!compact ? <CalendarDays aria-hidden className="size-3.5" /> : null}次の予定</span>
-    {next ? <><span className="text-xs font-medium"><DetailDate value={next.date} today={today} /> {next.label}</span>
-      <span className={`flex items-center gap-1 text-[11px] ${next.overdue ? amberText : ""}`}>
+    {next ? <>{compact ? <span className="block text-xs font-medium">
+      <span className="block whitespace-nowrap"><DetailDate value={next.date} today={today} /></span>
+      <span className="block break-keep">{next.label} 完了予定</span>
+    </span> : <span className="text-xs font-medium"><DetailDate value={next.date} today={today} /> {next.label}の完了予定</span>}
+      <span className={`flex items-center gap-1 text-[11px] ${compact ? "whitespace-nowrap " : ""}${next.overdue ? amberText : ""}`}>
         {next.overdue ? <AlertCircle aria-hidden className="size-3" /> : null}{next.overdue ? `${Math.abs(next.daysLeft)}日超過` : `あと${next.daysLeft}日`}
-      </span></> : <span className="text-xs">次の予定は未入力です</span>}
+      </span></> : <span className="text-xs">{compact ? "未入力" : "次の予定は未入力です"}</span>}
   </div>;
 }
 
@@ -60,8 +64,8 @@ export function MobileSchedule({ timeline, requested, orderCount, today }: { tim
   return <Card variant="section" className="grid grid-cols-3 gap-0 divide-x divide-[var(--rule)] p-3 lg:hidden">
     <div className="min-w-0 space-y-1 pr-2"><p className="text-xs text-muted-foreground">現在</p><p className="text-xs font-medium">{current?.label ?? (timeline.allDone ? "全工程完了" : "未入力")}</p>
       {current ? <p className="text-[11px] text-muted-foreground">開始 <DetailDate value={current.startedAt} today={today} /></p> : null}</div>
-    <div className="px-2"><NextSchedule timeline={timeline} today={today} compact /></div>
-    <div className="pl-2"><RequestedDates requested={requested} today={today} orderCount={orderCount} compact /></div>
+    <div className="min-w-0 px-2"><NextSchedule timeline={timeline} today={today} compact /></div>
+    <div className="min-w-0 pl-2"><RequestedDates requested={requested} today={today} orderCount={orderCount} compact /></div>
   </Card>;
 }
 

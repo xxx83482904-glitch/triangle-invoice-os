@@ -18,12 +18,12 @@ function intakeSummary(results: ImportIntakeResult[]) {
   const created = saved.filter((row) => row.shipmentCreated).length;
   const assigned = saved.filter((row) => row.shipmentId && !row.shipmentCreated).length;
   const unassigned = saved.filter((row) => !row.shipmentId).length;
-  const details = [created ? `便を${created}つ作成` : "", assigned ? `${assigned}件を既存の便に追加` : "", unassigned ? `${unassigned}件は未割当（下の「便の候補」にまとめています）` : ""].filter(Boolean);
+  const details = [created ? `便を${created}つ作成` : "", assigned ? `${assigned}件を既存の便に追加` : "", unassigned ? `${unassigned}件は未割当（「便の候補」にまとめています）` : ""].filter(Boolean);
   return `${saved.length}件を取り込みました。${details.length ? `${details.join("、")}。` : ""}`;
 }
 
-export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
-  company: CompanyScope; shipmentId?: string; compact?: boolean; onCreated?: (id: string) => void;
+export function ImportDropzone({ company, shipmentId, compact, layout, onCreated }: {
+  company: CompanyScope; shipmentId?: string; compact?: boolean; layout?: "list"; onCreated?: (id: string) => void;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null), inFlight = useRef(false);
@@ -82,10 +82,10 @@ export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
     });
   };
 
-  return <Card className="min-w-0">
-    <CardContent className="p-3">
+  return <Card variant={layout === "list" ? "section" : "card"} className={layout === "list" ? "min-w-0 py-0" : "min-w-0"}>
+    <CardContent className={layout === "list" ? "p-0" : "p-3"}>
       <div
-        className={`flex min-w-0 cursor-pointer flex-col justify-center gap-3 rounded-md border border-dashed p-4 transition ${compact ? "" : "md:flex-row md:items-center md:justify-between"} ${dragging ? "border-primary bg-muted" : "border-border bg-muted/20"}`}
+        className={`flex min-w-0 cursor-pointer flex-col justify-center gap-3 p-4 transition ${layout === "list" ? "rounded-xl sm:flex-row sm:flex-wrap sm:items-center" : "rounded-md border border-dashed"} ${compact ? "" : "md:flex-row md:items-center md:justify-between"} ${dragging ? "border-primary bg-muted" : layout === "list" ? "" : "border-border bg-muted/20"}`}
         onDragEnter={(event) => { event.preventDefault(); if (!inFlight.current) setDragging(true); }}
         onDragOver={(event) => event.preventDefault()}
         onDragLeave={(event) => { event.preventDefault(); if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
@@ -93,13 +93,14 @@ export function ImportDropzone({ company, shipmentId, compact, onCreated }: {
         aria-busy={pending}
         onClick={() => { if (!inFlight.current) inputRef.current?.click(); }}
       >
-        <div className="flex min-w-0 items-start gap-3">
-          {pending ? <Loader2 className="size-7 shrink-0 animate-spin text-muted-foreground" /> : <UploadCloud className="size-7 shrink-0 text-muted-foreground" />}
+        <div className={`flex min-w-0 items-start gap-3 ${layout === "list" ? "sm:flex-1 sm:basis-64" : ""}`}>
+          <span className={layout === "list" ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--tone-blue-bg)] text-[var(--tone-blue-fg)]" : "text-muted-foreground"}>{pending ? <Loader2 aria-hidden className="size-5 shrink-0 animate-spin" /> : <UploadCloud aria-hidden className="size-5 shrink-0" />}</span>
           <div className="min-w-0">
-            <h3 className="text-sm font-medium">{compact ? "この便に書類をドロップ" : "輸入書類をドロップ（OCR）"}</h3>
+            <h3 className="text-sm font-medium">{compact ? "この便に書類をドロップ" : "輸入書類をドロップ"}</h3>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{compact
               ? "読み取った許可番号や税額は、空欄の項目にだけ書き込みます。"
-              : "PDF/JPEG/PNGを読み取り、輸入許可通知書・パッキングリスト・AWB/B/L・通関業者の請求書などの種類を判定します。輸入許可通知書は便を自動で作り、許可番号・関税・輸入消費税を書き込みます。申告番号・B/L/AWB番号・インボイス番号が一致する便があればその便に付き、未割当の書類は下の「便の候補」にまとめます。"}</p>
+              : layout === "list" ? "PDF・画像を読み取り（OCR）、種類と番号で便に振り分けます。"
+                : "PDF/JPEG/PNGを読み取り、輸入許可通知書・パッキングリスト・AWB/B/L・通関業者の請求書などの種類を判定します。輸入許可通知書は便を自動で作り、許可番号・関税・輸入消費税を書き込みます。申告番号・B/L/AWB番号・インボイス番号が一致する便があればその便に付き、未割当の書類は「便の候補」にまとめます。"}</p>
             {pending ? <p role="status" className="mt-2 text-sm text-muted-foreground">OCR処理中… {progress.done}/{progress.total}件</p> : null}
           </div>
         </div>

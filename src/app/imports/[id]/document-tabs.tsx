@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { Files, FileCheck, FileText, Package, Plus, ReceiptText, Ship } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,14 @@ export function DocumentTabs({ documents, selected, onChange, canEdit, pending, 
   canEdit: boolean; pending: boolean; onAdd: () => void; className?: string;
 }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const reveal = () => refs.current[documentTabs.findIndex((tab) => tab.kind === selected)]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    reveal();
+    const observer = new ResizeObserver(reveal);
+    if (listRef.current) observer.observe(listRef.current);
+    return () => observer.disconnect();
+  }, [selected, className]);
   const move = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = event.key === "Home" ? 0 : event.key === "End" ? documentTabs.length - 1
       : event.key === "ArrowRight" ? (index + 1) % documentTabs.length : event.key === "ArrowLeft" ? (index + documentTabs.length - 1) % documentTabs.length : undefined;
@@ -36,7 +44,7 @@ export function DocumentTabs({ documents, selected, onChange, canEdit, pending, 
     refs.current[next]?.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
   return <div className={`min-w-0 items-center gap-2 rounded-2xl bg-[var(--track)] p-1 ${className ?? "flex"}`}>
-    <div role="tablist" aria-label="書類の種類" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+    <div ref={listRef} role="tablist" aria-label="書類の種類" className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {documentTabs.map(({ kind, label, formal, icon: Icon }, index) => {
         const count = tabDocuments(documents, kind).length;
         return <button key={kind} ref={(element) => { refs.current[index] = element; }} id={`document-tab-${kind}`} type="button" role="tab" aria-selected={selected === kind}

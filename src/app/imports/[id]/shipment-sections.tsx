@@ -1,6 +1,7 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
+import type { RefObject } from "react";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import { DetailField, DetailSection, detailSelectClass, FieldSource } from "./de
 
 type SectionProps = { draft: ShipmentDraft; baseline: ShipmentDraft; sources: ImportShipmentView["fieldSources"]; canEdit: boolean; onChange: (draft: ShipmentDraft) => void };
 
-export function CostsSection({ draft, baseline, sources, canEdit, onChange, onReread, canReread, dirty }: SectionProps & { onReread: () => void; canReread: boolean; dirty: boolean }) {
+export function CostsSection({ draft, baseline, sources, canEdit, onChange, onReread, canReread, dirty, rereadRef }: SectionProps & { onReread: () => void; canReread: boolean; dirty: boolean; rereadRef: RefObject<HTMLButtonElement | null> }) {
   const amounts = importShipmentAmounts(draftAmounts(draft));
   return <DetailSection title="費用・税額" badge="便全体" summary={<span className="flex flex-wrap gap-x-2">関税 <span className="whitespace-nowrap font-mono">{yen.format(amounts.dutyAmount)}</span>・輸入消費税 <span className="whitespace-nowrap font-mono">{yen.format(amounts.importTax)}</span></span>}>
     <p className="text-xs text-muted-foreground">この便全体の金額です（注文・品目ごとには分けません）</p>
@@ -32,8 +33,8 @@ export function CostsSection({ draft, baseline, sources, canEdit, onChange, onRe
     <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground">経理の確認</span>
       {canEdit ? <OptionTabs label="経理の確認" value={draft.status} options={importShipmentStatuses.map((value) => [value, importShipmentStatusLabels[value]] as const)} onChange={(status) => onChange({ ...draft, status })} />
         : <span className="text-xs">{importShipmentStatusLabels[draft.status]}</span>}</div><p className="text-xs text-muted-foreground">工程（物流）とは別に管理</p></div>
-    {canEdit ? <div className="space-y-1 border-t border-[var(--rule)] pt-3"><Button type="button" variant="outline" size="sm" disabled={!canReread || dirty} onClick={onReread}><RefreshCw />書類から読み直す</Button>
-      {dirty ? <p className="text-xs text-muted-foreground">未保存の変更を保存すると読み直せます</p> : null}</div> : null}
+    {canEdit ? <div className="space-y-1 border-t border-[var(--rule)] pt-3"><Button ref={rereadRef} type="button" variant="outline" size="sm" disabled={!canReread || dirty} aria-describedby={dirty ? "reread-disabled-reason" : undefined} onClick={onReread}><RefreshCw />書類から読み直す</Button>
+      {dirty ? <p id="reread-disabled-reason" className="text-xs text-muted-foreground">先に保存してください</p> : null}</div> : null}
   </DetailSection>;
 }
 

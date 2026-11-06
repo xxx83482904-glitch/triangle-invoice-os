@@ -14,11 +14,13 @@ import { dirtyFieldCount, draftOrders, initialShipmentDraft, reconcileShipmentDr
 import type { ImportBoardDocument, ImportShipmentMutation, ImportShipmentView } from "@/lib/import-shipment-views";
 import { importRequestedDates, importStageTimeline } from "@/lib/import-shipments";
 import { operationFailureToast } from "@/lib/operation-feedback";
-import { saveImportShipmentAction } from "../actions";
+import { rereadSuccessMessage } from "@/lib/import-reread";
+import { previewImportRereadAction, saveImportShipmentAction } from "../actions";
 import { AddDocumentsDialog, DocumentTabs, documentTabs, tabDocuments, type DocumentTab } from "./document-tabs";
 import { DocumentViewer } from "./document-viewer";
 import { OrderPanel } from "./order-panel";
 import { SaveBar } from "./save-bar";
+import { RereadDialog, type RereadPreview } from "./reread-dialog";
 import { CostsSection, ShipmentInfoSection } from "./shipment-sections";
 import { MobileSchedule, NextSchedule, StagePanel } from "./stage-panel";
 
@@ -32,10 +34,14 @@ export function ShipmentDetail({ view, today, company, canEdit, clients, project
   if (reconciled !== state) setState(reconciled);
   const { draft, baseline } = state;
   const dirtyCount = dirtyFieldCount(baseline, draft);
-  const [pending, start] = useTransition(), [error, setError] = useState("");
+  const [transitionPending, start] = useTransition(), [error, setError] = useState("");
+  const [rereadPending, setRereadPending] = useState(false);
+  const pending = transitionPending || rereadPending;
   const [mobile, setMobile] = useState<"documents" | "orders">("documents");
   const [selectedTab, setSelectedTab] = useState<DocumentTab>(() => documentTabs.find((tab) => tabDocuments(view.documents, tab.kind).length)?.kind ?? "SUPPLIER_INVOICE");
   const [addOpen, setAddOpen] = useState(false);
+  const [rereadPreview, setRereadPreview] = useState<RereadPreview | null>(null);
+  const rereadRef = useRef<HTMLButtonElement>(null);
   const timeline = importStageTimeline(draft.stages, today), requested = importRequestedDates(draftOrders(draft));
   const attachedKinds = view.checklist.filter((entry) => entry.documents.length).length;
   const itemCount = draft.orders.reduce((count, order) => count + order.items.length, 0);
@@ -49,13 +55,13 @@ export function ShipmentDetail({ view, today, company, canEdit, clients, project
   }, [dirtyCount]);
 
   const run = (input: ImportShipmentMutation, success: string) => {
-    if (inFlight.current || !canEdit) return;
+    if (inFlight.current || pending || !canEdit) return;
     inFlight.current = true; setError("");
     start(async () => {
       try {
         const result = await saveImportShipmentAction(company, input);
         if (!result.success) throw new Error(result.error);
-        if (result.action === "update" || result.action === "reread") setState((current) => ({ ...current, acceptedVersion: result.updatedAt }));
+        if (result.action === "update") setState((current) => ({ ...current, acceptedVersion: result.updatedAt }));
         toast({ title: success, variant: "success" });
         if (result.action === "delete") router.push(back);
         else router.refresh();
@@ -63,6 +69,19 @@ export function ShipmentDetail({ view, today, company, canEdit, clients, project
         setError(failure instanceof Error ? failure.message : "通信に失敗しました。もう一度お試しください。");
         toast(operationFailureToast(failure));
       } finally { inFlight.current = false; }
+    });
+  };
+  const previewReread = () => {
+    if (inFlight.current || pending || dirtyCount || !canEdit) return;
+    inFlight.current = true;
+    start(async () => {
+      try {
+        const result = await previewImportRereadAction(company, view.id);
+        if (!result.success) throw new Error(result.error);
+        if (!result.changes.length) toast({ title: rereadSuccessMessage([]), variant: "success" });
+        else setRereadPreview(result);
+      } catch (failure) { toast(operationFailureToast(failure)); }
+      finally { inFlight.current = false; }
     });
   };
   const reset = () => {
@@ -109,8 +128,8 @@ export function ShipmentDetail({ view, today, company, canEdit, clients, project
               <OrderPanel orders={draft.orders} clients={clients} project={projects.find((project) => project.value === draft.projectId)} today={today} canEdit={canEdit} onChange={(orders) => change({ ...draft, orders })} />
               <NextSchedule timeline={timeline} today={today} />
             </div></Card>
-            <CostsSection draft={draft} baseline={baseline} sources={view.fieldSources} canEdit={canEdit} onChange={change} dirty={Boolean(dirtyCount)} canReread={!pending && Boolean(view.documents.length)}
-              onReread={() => run({ action: "reread", id: view.id, version: state.version }, "書類から読み直しました")} />
+            <CostsSection draft={draft} baseline={baseline} sources={view.fieldSources} canEdit={canEdit} onChange={change} dirty={Boolean(dirtyCount)} canReread={!pending}
+              rereadRef={rereadRef} onReread={previewReread} />
             <ShipmentInfoSection draft={draft} baseline={baseline} sources={view.fieldSources} canEdit={canEdit} onChange={change} projects={projects} vendors={vendors} />
           </fieldset>
           {canEdit ? <SaveBar dirtyCount={dirtyCount} pending={pending} error={error} onReset={reset} onReload={reload} rootRef={rootRef} /> : null}
@@ -118,5 +137,8 @@ export function ShipmentDetail({ view, today, company, canEdit, clients, project
       </div>
     </form>
     {canEdit ? <AddDocumentsDialog open={addOpen} onOpenChange={setAddOpen} company={company} shipmentId={view.id} unassigned={unassigned} /> : null}
+    {canEdit && rereadPreview ? <RereadDialog company={company} id={view.id} preview={rereadPreview} vendors={vendors} triggerRef={rereadRef}
+      onRunningChange={(running) => { inFlight.current = running; setRereadPending(running); }}
+      onClose={() => setRereadPreview(null)} onReload={reload} onSaved={(version) => { setState((current) => ({ ...current, acceptedVersion: version })); setError(""); start(() => router.refresh()); }} /> : null}
   </div>;
 }
