@@ -3,7 +3,7 @@ import { todayInJapan } from "@/lib/dates";
 import type { CompanyScope } from "@/lib/company";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
-import { BANK_SYNC_IDENTITY_FIELDS, BANK_SYNC_META_FIELDS } from "@/lib/banking-types";
+import { BANK_RECEIPT_TYPE, BANK_SYNC_IDENTITY_FIELDS, BANK_SYNC_META_FIELDS } from "@/lib/banking-types";
 import type { AccountingCategory, BankClassificationConfidence, BankEdit, BankFilters, BankRule, BankRuleInput, BankSyncChange, BankSyncChangeKind, BankSyncReviewSnapshot, BankTransaction, CategoryInput } from "@/lib/banking-types";
 import { GUESS_REVIEW_BLOCKER, acknowledgedGuessReason, bankClassificationLabel, createBankSuggester, isGuessClassification, stripGuessAcknowledgement } from "@/lib/bank-classification";
 import { createBankSalesSuggester, type BankSalesSuggestion } from "@/lib/bank-sales-suggestion";
@@ -205,7 +205,7 @@ export function previewBankRules(data: AppData, user: Actor, company: CompanySco
   return { ...result, rows };
 }
 
-export type BankDisplayRow = BankTransaction & { predictionPending?: boolean; linkLabel?: string; settlementConflict?: string; salesSuggestion?: BankSalesSuggestion };
+export type BankDisplayRow = BankTransaction & { predictionPending?: boolean; linkLabel?: string; settlementConflict?: string; salesSuggestion?: BankSalesSuggestion; receiptCount?: number };
 
 // Display candidates never mutate the source records or count as confirmed history.
 export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDisplayRow[] {
@@ -214,6 +214,8 @@ export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDis
   const transfers = new Set((data.bankTransfers || []).filter((link) => !link.deletedAt).flatMap((link) => [link.outgoingId, link.incomingId]));
   const allocated = new Map<string, number>();
   for (const link of data.bankReconciliations) if (!link.deletedAt) allocated.set(link.transactionId, (allocated.get(link.transactionId) || 0) + link.amount + (link.fee?.borneBy === "bank" ? link.fee.amount : 0));
+  const receipts = new Map<string, number>();
+  for (const file of data.attachments || []) if (!file.deletedAt && file.relatedType === BANK_RECEIPT_TYPE) receipts.set(file.relatedId, (receipts.get(file.relatedId) || 0) + 1);
   return rows.map((row) => {
     const settlement = knownBankCardSettlement(data, row);
     if (row.classificationSource === "MANUAL" || row.reviewed || row.sourceMissing || row.sourceStatus === "excluded" || hasConfirmedBankLink(data, row)
@@ -228,7 +230,8 @@ export function bankDisplayRows(data: AppData, rows: BankTransaction[]): BankDis
   }).map((row) => ({ ...row, ...(knownBankCardSettlement(data, row)
     ? { linkLabel: APLUS_SETTLEMENT_LABEL, settlementConflict: bankCardSettlementConflict(data, row) }
     : transfers.has(row.id) ? { linkLabel: "資金移動" } : allocated.has(row.id) ? { linkLabel: Math.round(allocated.get(row.id)! * 100) >= Math.round(row.amount * 100) ? "請求書" : "一部照合" } : {}) }))
-    .map((row) => { const salesSuggestion = suggestSales(row); return salesSuggestion ? { ...row, salesSuggestion } : row; });
+    .map((row) => { const salesSuggestion = suggestSales(row); return salesSuggestion ? { ...row, salesSuggestion } : row; })
+    .map((row) => receipts.has(row.id) ? { ...row, receiptCount: receipts.get(row.id) } : row);
 }
 
 export type ImportedAccount = { id: string; subId?: string; name: string; serviceName: string; isManual: boolean };

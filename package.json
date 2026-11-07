@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-pdfjs-assets.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-pdfjs-assets.mjs",
     "build": "next build --webpack",
     "postbuild": "node scripts/copy-standalone-assets.mjs",
     "build:design-fees": "npm --prefix design-fee-calculator run build && node scripts/copy-design-fee-assets.mjs",
@@ -16,7 +18,7 @@
     "test:statuses": "node --conditions=react-server --import tsx --test tests/status-consistency.test.ts",
     "test:editing": "node --conditions=react-server --import tsx --test tests/document-editing.test.ts",
     "test:accounting": "node --conditions=react-server --import tsx --test tests/accounting-safety.test.ts tests/user-access.test.ts",
-    "test:banking": "node --conditions=react-server --import tsx --test tests/banking.test.ts tests/bank-classification.test.ts tests/bank-classification-ai.test.ts tests/bank-forecast.test.ts tests/bank-insights.test.ts tests/bank-reconciliation.test.ts tests/bank-ai.test.ts tests/moneyforward-client.test.ts tests/banking-sync.test.ts",
+    "test:banking": "node --conditions=react-server --import tsx --test tests/banking.test.ts tests/bank-classification.test.ts tests/bank-classification-ai.test.ts tests/bank-forecast.test.ts tests/bank-insights.test.ts tests/bank-reconciliation.test.ts tests/bank-ai.test.ts tests/moneyforward-client.test.ts tests/banking-sync.test.ts tests/bank-detail-documents.test.ts tests/document-zoom.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"
@@ -41,6 +43,7 @@
     "lucide-react": "^1.14.0",
     "next": "16.4.3",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "5.4.296",
     "pdfkit": "^0.18.0",
     "pg": "^8.21.0",
     "prisma": "7.10.0",

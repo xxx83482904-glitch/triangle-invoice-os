@@ -23,6 +23,17 @@ export function feeDifference(bank: ReconciliationBank, invoice: ReconciliationI
   return difference / 100;
 }
 
+export type AmountGap = { kind: "exact" | "fee" | "short" | "over"; amount: number; label: string };
+
+// How far the unreconciled bank amount is from what the invoice still expects, phrased for choosing a candidate.
+export function reconciliationAmountGap(bank: ReconciliationBank, invoice: ReconciliationInvoice): AmountGap {
+  const gap = cents(bank.remaining) - cents(invoice.outstanding), amount = Math.abs(gap) / 100;
+  if (!gap) return { kind: "exact", amount: 0, label: "金額一致" };
+  const fee = feeDifference(bank, invoice);
+  if (fee) return { kind: "fee", amount: fee, label: bank.side === "INCOME" ? "振込手数料の差引きの可能性" : "送金手数料込みの可能性" };
+  return gap < 0 ? { kind: "short", amount, label: "明細の方が少ない・一部入出金の可能性" } : { kind: "over", amount, label: "明細の方が多い・複数請求書の可能性" };
+}
+
 export function allocationPreview(bank: ReconciliationBank, invoices: ReconciliationInvoice[], rows: AllocationDraft[]) {
   const seen = new Set<string>();
   const invoiceTotals = new Map<string, number>();

@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { documentRows, visibleProjects } from "@/lib/documents";
+import { canViewBankReceiptFile } from "@/lib/bank-receipts";
 import { canViewExpenseFile } from "@/lib/expense-claim-edits";
 import { contentDispositionFileName, readUploadedFile, uploadedFileNameFromUrl } from "@/lib/files";
 import { canViewImportFile } from "@/lib/import-shipment-files";
@@ -18,7 +19,7 @@ export async function serveDocumentFile(name: string) {
   const projects = new Set(visibleProjects(data, user).map((p) => p.id));
   const designerUpload = user.role === "DESIGNER" && data.receivedInvoices.some((i) => !i.deletedAt && projects.has(i.projectId) && matches(i.fileUrl));
   const guestInvoice = user.role === "GUEST" && data.issuedInvoices.some((i) => !i.deletedAt && i.createdById === user.id && (matches(i.fileUrl) || matches(i.pdfUrl)));
-  if (!(rows.some((r) => matches(r.fileUrl)) || designerUpload || guestInvoice || canViewExpenseFile(data, user, name) || canViewImportFile(data, user, name))) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(rows.some((r) => matches(r.fileUrl)) || designerUpload || guestInvoice || canViewExpenseFile(data, user, name) || canViewBankReceiptFile(data, user, name) || canViewImportFile(data, user, name))) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const file = await readUploadedFile(name);
   if (!file) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return new NextResponse(new Uint8Array(file.data), { headers: {
