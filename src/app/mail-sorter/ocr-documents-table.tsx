@@ -18,6 +18,7 @@ import { OptionTabs } from "@/components/app/option-tabs";
 import { isCardPress, isSelectionControl } from "@/lib/list-selection";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { RecordDetail } from "@/components/app/record-detail";
+import { DocumentBankSection, type DocumentBankTarget } from "@/components/app/document-bank-section";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Fragment, type CSSProperties, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { MonthTabs } from "@/components/app/month-tabs";
@@ -296,6 +297,14 @@ function duplicateDescription(row: OcrDocumentListItem) {
 
 const isProcessed = isMailProcessed;
 
+// Mail links to bank rows as evidence; a row that is a received invoice without mail reconciles as that invoice.
+function MailBankSection({ company, row }: { company: CompanyScope; row: OcrDocumentListItem }) {
+  const target: DocumentBankTarget | undefined = row.mailDocumentId
+    ? { kind: "mail", id: row.mailDocumentId, hint: { amount: row.extracted?.total || undefined, date: row.extracted?.issueDate || undefined } }
+    : row.receivedInvoiceId ? { kind: "received", id: row.receivedInvoiceId } : undefined;
+  return target ? <DocumentBankSection key={`bank:${row.id}`} company={company} target={target} /> : null;
+}
+
 function DocumentPreview({ compact = false, row, company }: { compact?: boolean; row: OcrDocumentListItem; company: CompanyScope }) {
   if (company === "JAPAN") return <OriginalDocumentPreview company={company} fileUrl={row.fileUrl} fileName={row.fileName} mimeType={row.mimeType} sourceMissing={row.fileMissing} />;
   const frameClass = compact ? "h-[56vh] min-h-[360px]" : "h-[68vh] min-h-96";
@@ -501,6 +510,7 @@ function clamp(value: number, min: number, max: number) {
 
 export function OcrDocumentsTable({
   canEdit,
+  canReconcile = false,
   canExport = false,
   linkRequiredOnly = false,
   company,
@@ -513,6 +523,8 @@ export function OcrDocumentsTable({
   shipments = [],
 }: {
   canEdit: boolean;
+  // Bank reconciliation / evidence links from the mail detail (requires manage:banking).
+  canReconcile?: boolean;
   canExport?: boolean;
   linkRequiredOnly?: boolean;
   company: CompanyScope;
@@ -1352,6 +1364,7 @@ export function OcrDocumentsTable({
                         </div>
                         <DocumentPreview company={company} compact row={listPreviewRow} />
                       </div>
+                      {canReconcile ? <MailBankSection company={company} row={listPreviewRow} /> : null}
 
                       <div className="space-y-2 rounded-lg border p-3">
                         <div className="text-sm font-medium">OCR本文</div>
@@ -1577,6 +1590,7 @@ export function OcrDocumentsTable({
                           ) : null}
                         </div>
                         <DocumentPreview company={company} compact row={activeRow} />
+                        {canReconcile ? <MailBankSection company={company} row={activeRow} /> : null}
                       </div>
                     </div>
 

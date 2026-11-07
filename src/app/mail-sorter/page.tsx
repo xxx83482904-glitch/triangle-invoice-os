@@ -189,6 +189,7 @@ export default async function MailSorterPage({
           key={company + ":" + (linkRequiredOnly ? "link-required" : "all")}
           linkRequiredOnly={linkRequiredOnly}
           canEdit={mayEdit}
+          canReconcile={company === "JAPAN" && can(user, "manage:banking")}
           canExport={can(user, "export:csv") && (!linkRequiredOnly || rows.length > 0)}
           company={company}
           linkTargets={linkTargets}

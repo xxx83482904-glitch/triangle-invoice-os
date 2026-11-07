@@ -121,6 +121,7 @@ export default async function ReceivedInvoicesPage({
         <ReceivedInvoicesWorkspace
           key={`${company}:${params.document || ""}`}
           initialId={params.document}
+          canReconcile={can(user, "manage:banking")}
           showTotals={can(user, "view:dashboard")}
           canApprove={mayApprove}
           canEdit={mayEdit}

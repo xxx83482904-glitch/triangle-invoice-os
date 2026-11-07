@@ -42,7 +42,7 @@ export async function removeBankReceiptAction(company: CompanyScope, id: string)
   try {
     const before = (await readData()).attachments.find((row) => row.id === id);
     await mutateData(user.id, "BANK_RECEIPT_REMOVE", "Attachment", id, (data) => removeBankReceipt(data, actor(data, user.id, company), company, id), before);
-    revalidatePath("/banking");
+    for (const path of ["/banking", "/mail-sorter", "/documents"]) revalidatePath(path);
     return { success: true as const };
   } catch (error) { return { success: false as const, error: message(error, "添付を削除できませんでした") }; }
 }

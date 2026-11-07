@@ -398,6 +398,9 @@ export type Attachment = {
   uploadedById: string;
   createdAt: string;
   deletedAt?: string | null;
+  // Set when the attachment points at an existing record's file instead of an upload (e.g. a mail scan linked to a bank row).
+  sourceType?: "MailDocument";
+  sourceId?: string;
 };
 
 export type AuditLog = {

@@ -13,6 +13,7 @@ import { OperationError, OperationPending } from "@/components/app/operation-fee
 import { toast } from "@/hooks/use-toast";
 import { operationFailureToast } from "@/lib/operation-feedback";
 import { saveReceivedInvoiceStatus, saveReceivedInvoice } from "./actions";
+import { DocumentBankSection } from "@/components/app/document-bank-section";
 import { OriginalDocumentPreview } from "./original-document-preview";
 import { PaymentRecordsPanel } from "./payment-records-panel";
 import { DebtGroupPanel } from "./debt-group-panel";
@@ -126,6 +127,7 @@ export function ReceivedInvoicesWorkspace({
   canApprove,
   canEdit,
   canRecordPayments,
+  canReconcile = false,
   company,
   invoices,
   projects,
@@ -138,6 +140,8 @@ export function ReceivedInvoicesWorkspace({
   canApprove: boolean;
   canEdit: boolean;
   canRecordPayments: boolean;
+  // Bank reconciliation from the invoice detail (requires manage:banking).
+  canReconcile?: boolean;
   company: CompanyScope;
   invoices: ReceivedInvoiceWorkspaceItem[];
   projects: Option[];
@@ -382,6 +386,7 @@ export function ReceivedInvoicesWorkspace({
 
                   <PaymentRecordsPanel key={`${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.payments.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={{ ...activeInvoice, unpaidAmount: activeInvoice.debt.payable ? activeInvoice.paymentOutstandingAmount : 0 }} records={activeInvoice.payments} canRecord={canRecordPayments} />
                   </section>
+                  {canReconcile ? <DocumentBankSection key={`bank:${activeInvoice.id}`} company={company} target={{ kind: "received", id: activeInvoice.id }} /> : null}
                   <section className="workspace-detail-group"><h2 className="mb-3 text-sm font-semibold">連携</h2>
                   <DebtGroupPanel key={`debt:${activeInvoice.id}:${activeInvoice.updatedAt}:${activeInvoice.debt.members.map((row) => `${row.id}:${row.updatedAt}`).join()}`} company={company} invoice={activeInvoice} canManage={canApprove} />
                   </section>

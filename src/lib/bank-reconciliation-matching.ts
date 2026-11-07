@@ -76,3 +76,19 @@ export function reconciliationCandidates(bank: ReconciliationBank, invoices: Rec
 }
 
 export type ReconciliationCandidate = ReturnType<typeof reconciliationCandidates>[number];
+
+// The inverse of reconciliationCandidates: bank rows that could settle one invoice, for reconciling from the invoice side.
+// A row qualifies only if this invoice is among its own candidates against every peer invoice, so the same ambiguity
+// warnings (another invoice number in the description, equally strong peers) apply in both directions.
+export function invoiceBankCandidates(banks: ReconciliationBank[], invoices: ReconciliationInvoice[], key: string, limit = 8) {
+  const invoice = invoices.find((row) => row.key === key);
+  if (!invoice) return [];
+  const side = invoice.kind === "issued" ? "INCOME" : "EXPENSE";
+  const peers = invoices.filter((row) => row.kind === invoice.kind);
+  return banks.filter((bank) => bank.side === side && bank.state === "unmatched").flatMap((bank) => {
+    if (!reconciliationCandidates(bank, [invoice], 1).length) return [];
+    const match = reconciliationCandidates(bank, peers, peers.length).find((row) => row.key === key);
+    return match ? [{ ...match, bankId: bank.id, date: bank.date }] : [];
+  }).sort((a, b) => Number(b.confidence === "strong") - Number(a.confidence === "strong") || b.score - a.score || (a.distance ?? Infinity) - (b.distance ?? Infinity) || b.date.localeCompare(a.date))
+    .slice(0, limit);
+}
