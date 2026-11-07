@@ -105,7 +105,7 @@ export function BankDetailDocuments({ company, transactionId, disabled, onChange
           </div>
         </div>
         {removing === receipt.id ? <div className="flex flex-wrap items-center gap-2 border-l-2 border-destructive p-2"><p className="text-xs">この明細から添付を外します（操作履歴には残ります）。</p><Button variant="destructive" className="min-h-11" disabled={busy} onClick={() => remove(receipt.id)}>外す</Button><Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => setRemoving("")}>キャンセル</Button></div> : null}
-        {shown === receipt.id ? <OriginalDocumentPreview key={receipt.fileUrl} company={company} fileUrl={receipt.fileUrl} fileName={receipt.fileName} mimeType={receipt.mimeType} frameClassName="h-96" imageClassName="max-h-96" /> : null}
+        {shown === receipt.id ? <OriginalDocumentPreview key={receipt.fileUrl} company={company} fileUrl={receipt.fileUrl} fileName={receipt.fileName} mimeType={receipt.mimeType} frameClassName="h-[28rem]" /> : null}
       </li>)}</ul>}
       {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
     </section>

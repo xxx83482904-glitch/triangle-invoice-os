@@ -31,7 +31,7 @@ test("reconciliation originals prefer the invoice file, then a linked mail scan,
   assert.deepEqual(original("received:received-1"), ["mail", "/api/files/mail-scan.jpg", "image/jpeg"]);
   data.mailDocuments[0].deletedAt = timestamp;
   assert.deepEqual(original("received:received-1"), ["", "", ""]);
-  assert.deepEqual(original("issued:issued-1"), ["invoice", "/api/files/issued.pdf", ""]);
+  assert.deepEqual(original("issued:issued-1"), ["invoice", "/api/files/issued.pdf", "application/pdf"]);
   data.issuedInvoices[0].fileUrl = undefined;
   assert.deepEqual(original("issued:issued-1"), ["generated", "/api/issued-invoices/issued-1/pdf", "application/pdf"]);
 });

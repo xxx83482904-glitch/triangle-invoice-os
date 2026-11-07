@@ -13,12 +13,13 @@ import type { UserRole } from "../src/lib/types";
 
 // Synthetic data for the original previews, amount gaps, linked documents and receipts on /banking.
 // Start the server with DATA_DIR=<root> and UPLOAD_DIR=<root>/uploads. Never point this at production data.
-function pdf(lines: string[]) {
+function pdf(lines: string[], pages = 1) {
   return new Promise<Buffer>((resolve) => {
     const doc = new PDFDocument({ size: "A4", margin: 56 }), chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk)); doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.fontSize(26).text(lines[0]).moveDown();
     doc.fontSize(13); for (const line of lines.slice(1)) doc.text(line).moveDown(0.4);
+    if (pages > 1) for (let index = 2; index <= pages; index++) doc.addPage().fontSize(22).text(`${lines[0]} - page ${index}`).moveDown().fontSize(12).text("Breakdown of design work, materials and site supervision.".repeat(6));
     doc.end();
   });
 }
@@ -32,7 +33,7 @@ function receiptPng() {
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "triangle-bank-documents-preview-")), uploads = path.join(root, "uploads");
   await mkdir(uploads);
-  await writeFile(path.join(uploads, "issued.pdf"), await pdf(["INVOICE INV-001", "To: Test Design Co., Ltd.", "Project: Aoyama showroom", "Total: JPY 330,000", "Due: 2026-09-30"]));
+  await writeFile(path.join(uploads, "issued.pdf"), await pdf(["INVOICE INV-001", "To: Test Design Co., Ltd.", "Project: Aoyama showroom", "Total: JPY 330,000", "Due: 2026-09-30"], 3));
   await writeFile(path.join(uploads, "other.pdf"), await pdf(["INVOICE INV-002", "To: Test Design Co., Ltd.", "Total: JPY 110,000"]));
   await writeFile(path.join(uploads, "mail-scan.pdf"), await pdf(["INVOICE (scanned mail)", "From: Test Production Inc.", "Production fee September", "Total: JPY 88,000"]));
   await writeFile(path.join(uploads, "cafe-receipt.png"), receiptPng());

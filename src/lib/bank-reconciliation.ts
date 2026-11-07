@@ -39,7 +39,7 @@ function withholdingInfo(kind: Kind, invoice: IssuedInvoice | ReceivedInvoice) {
 
 // The original a reviewer should see: the invoice's own file, then a linked mail scan, then the generated PDF for issued invoices.
 function originalDocument(kind: Kind, invoice: IssuedInvoice | ReceivedInvoice, mail: AppData["mailDocuments"]) {
-  if (invoice.fileUrl) return { originalHref: invoice.fileUrl, originalName: kind === "received" ? (invoice as ReceivedInvoice).originalFileName || "原本" : "原本", originalMimeType: kind === "received" ? (invoice as ReceivedInvoice).mimeType || "" : "", originalSource: "invoice" as const };
+  if (invoice.fileUrl) return { originalHref: invoice.fileUrl, originalName: invoice.originalFileName || (kind === "issued" ? `${(invoice as IssuedInvoice).invoiceNumber || "請求書"}.pdf` : "原本"), originalMimeType: invoice.mimeType || "", originalSource: "invoice" as const };
   const scan = kind === "received" ? mail.find((row) => row.fileUrl) : undefined;
   if (scan) return { originalHref: scan.fileUrl, originalName: scan.originalFileName || scan.title || "郵便物", originalMimeType: scan.mimeType || "", originalSource: "mail" as const };
   if (kind === "issued") return { originalHref: `/api/issued-invoices/${encodeURIComponent(invoice.id)}/pdf`, originalName: `${(invoice as IssuedInvoice).invoiceNumber || "請求書"}.pdf`, originalMimeType: "application/pdf", originalSource: "generated" as const };

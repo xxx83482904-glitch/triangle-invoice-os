@@ -27,6 +27,7 @@
 /assets/invoice/triangle-seal.png
 /data/company-seal.png
 /public/uploads/*
+/public/pdfjs/
 !/public/uploads/.gitkeep
 
 # debug
