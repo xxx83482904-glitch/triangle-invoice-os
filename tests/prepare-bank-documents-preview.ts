@@ -52,6 +52,9 @@ async function main() {
   Object.assign(data.receivedInvoices[0], { status: "SCHEDULED", mailProcessed: false, total: 88000, subtotal: 80000, taxTotal: 8000, issueDate: "2026-09-01", dueDate: "2026-09-30", fileUrl: undefined, originalFileName: undefined });
   Object.assign(data.mailDocuments[0], { mailProcessed: false, fileUrl: "/api/files/mail-scan.pdf", originalFileName: "制作費_9月_郵便.pdf", title: "制作費 9月" });
   data.attachments = data.attachments.filter((row) => row.relatedType !== "MailDocument");
+  // A receipt that arrived by mail: not an invoice, so it links to a bank row as evidence only.
+  data.mailDocuments.push({ ...data.mailDocuments[0], id: "mail-receipt", company: "JAPAN", category: "RECEIPT", title: "カフェ 領収書 10月", senderName: "カフェサンプル", fileUrl: "/api/files/cafe-receipt.png", originalFileName: "カフェ領収書_郵送.png", mimeType: "image/png", relatedReceivedInvoiceId: undefined, mailProcessed: true, createdAt: "2026-10-10T01:00:00.000Z", updatedAt: "2026-10-10T01:00:00.000Z" });
+  data.mailDocuments[0].company = "JAPAN";
   mergeBankMasters(data, "JAPAN", office, [{ id: "bank", name: "テスト 三菱UFJ銀行 / 普通預金", serviceName: "三菱UFJ銀行", isManual: false }], [
     { id: "fees", name: "支払手数料", group: "EXPENSE", available: true }, { id: "outsourcing", name: "外注費", group: "EXPENSE", available: true }, { id: "meeting", name: "会議費", group: "EXPENSE", available: true }, { id: "sales", name: "売上高", group: "INCOME", available: true },
   ]);

@@ -14,7 +14,8 @@ export const BANK_RECEIPT_LIMIT = 20;
 export const bankReceiptMimeTypes = ["application/pdf", "image/jpeg", "image/png"] as const;
 
 export type BankReceiptInput = { transactionId: string; fileUrl: string; fileName: string; mimeType: string };
-export type BankReceiptView = { id: string; fileUrl: string; fileName: string; mimeType: string; createdAt: string; uploadedBy: string };
+export type BankReceiptView = { id: string; fileUrl: string; fileName: string; mimeType: string; createdAt: string; uploadedBy: string;
+  source?: { kind: "mail"; id: string; title: string; category: string; deleted: boolean; href: string } };
 
 function transactionFor(data: AppData, company: CompanyScope, id: string) {
   const row = data.bankTransactions.find((item) => item.id === id && item.company === company);
@@ -29,9 +30,13 @@ export function bankReceipts(data: AppData, company: CompanyScope, transactionId
 }
 
 export function bankReceiptViews(data: AppData, company: CompanyScope, transactionId: string): BankReceiptView[] {
-  const users = new Map(data.users.map((row) => [row.id, row.name]));
-  return bankReceipts(data, company, transactionId).map((row) => ({ id: row.id, fileUrl: row.fileUrl, fileName: row.fileName, mimeType: row.mimeType,
-    createdAt: row.createdAt, uploadedBy: users.get(row.uploadedById) || "" }));
+  const users = new Map(data.users.map((row) => [row.id, row.name])), mail = new Map(data.mailDocuments.map((row) => [row.id, row]));
+  return bankReceipts(data, company, transactionId).map((row) => {
+    const source = row.sourceType === "MailDocument" && row.sourceId ? mail.get(row.sourceId) : undefined;
+    return { id: row.id, fileUrl: row.fileUrl, fileName: row.fileName, mimeType: row.mimeType, createdAt: row.createdAt, uploadedBy: users.get(row.uploadedById) || "",
+      ...(row.sourceType === "MailDocument" && row.sourceId ? { source: { kind: "mail" as const, id: row.sourceId, title: source?.title || source?.originalFileName || row.fileName, category: source?.category || "",
+        deleted: !source || Boolean(source.deletedAt), href: `/documents?company=${company}&document=${encodeURIComponent(`mail:${row.sourceId}`)}` } } : {}) };
+  });
 }
 
 // Validates everything that does not need the stored file, so the route can reject before writing bytes.

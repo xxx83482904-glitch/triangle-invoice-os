@@ -1,5 +1,6 @@
 "use client";
 import { Money } from "@/components/app/money";
+import { DocumentBankSection, type DocumentBankTarget } from "@/components/app/document-bank-section";
 import { statusToneClass } from "@/lib/status-tone";
 import { OperationError, OperationPending } from "@/components/app/operation-feedback";
 
@@ -99,9 +100,9 @@ function IssuedReviewStatus({ row, edit }: { row: DocumentRow; edit?: IssuedEdit
   return row.imported ? <ReviewStatusTag reviewed={!(edit?.needsReview ?? row.needsReview)} /> : <span className="block p-2 text-center text-xs text-muted-foreground">作成済み</span>;
 }
 
-function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view = "all" }: {
+function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view = "all", canReconcile = false }: {
   row: DocumentRow; company: CompanyScope; edit?: IssuedEdit; onEdit: (value: IssuedEdit) => void;
-  projects: ProjectOption[]; disabled: boolean; view?: "all" | "edit" | "file";
+  projects: ProjectOption[]; disabled: boolean; view?: "all" | "edit" | "file"; canReconcile?: boolean;
 }) {
   const [detail, setDetail] = useState<{ ocrText: string; warnings: string[]; clientName: string; memo: string } | null>(null);
   const [error, setError] = useState("");
@@ -157,6 +158,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       {row.total !== undefined ? <><dt className="text-muted-foreground">金額</dt><dd><Money value={row.total} maximumFractionDigits={2} /></dd></> : null}
     </dl> : null}
     {detail?.warnings.length ? <ul className="space-y-1 border-l-2 border-amber-500 pl-3 text-xs text-amber-800 dark:text-amber-300">{detail.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul> : null}
+    {canReconcile && view !== "file" ? bankTarget(row) ? <DocumentBankSection key={`bank:${row.id}`} company={company} target={bankTarget(row)!} /> : null : null}
     {view !== "edit" ? <div className="workspace-detail-group space-y-3"><h3 className="text-sm font-medium">OCR本文</h3>
       {error ? <div role="alert" className="text-sm text-destructive">{error}<Button variant="ghost" size="sm" onClick={() => setAttempt((v) => v + 1)}>再読込</Button></div> :
         <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-5 text-muted-foreground">{detail ? detail.ocrText || "OCR本文なし" : "読込中..."}</pre>}
@@ -164,8 +166,15 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
   </div>;
 }
 
-export function DocumentsWorkspace({ rows, company, projects = [], canExport = false, initialId, issuedOnly = false, showIssuedSummary = false }: {
-  rows: DocumentRow[]; company: CompanyScope; projects?: ProjectOption[]; canExport?: boolean; initialId?: string; issuedOnly?: boolean; showIssuedSummary?: boolean;
+// Invoices reconcile against bank rows; mail links to them as evidence. Other kinds have no bank relation.
+function bankTarget(row: DocumentRow): DocumentBankTarget | undefined {
+  if (row.kind === "issued" || row.kind === "received") return { kind: row.kind, id: row.sourceId };
+  if (row.kind === "mail") return { kind: "mail", id: row.sourceId, hint: { amount: row.total || undefined, date: row.date || undefined } };
+  return undefined;
+}
+
+export function DocumentsWorkspace({ rows, company, projects = [], canExport = false, initialId, issuedOnly = false, showIssuedSummary = false, canReconcile = false }: {
+  rows: DocumentRow[]; company: CompanyScope; projects?: ProjectOption[]; canExport?: boolean; initialId?: string; issuedOnly?: boolean; showIssuedSummary?: boolean; canReconcile?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -400,7 +409,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       </div>
       {active && !issuedOnly ? <aside ref={preview} className="min-w-0 scroll-mt-28 border-t pt-3 xl:sticky xl:top-3 xl:max-h-[80vh] xl:overflow-auto xl:border-l xl:border-t-0 xl:pl-4">
         <div className="mb-3 flex items-start justify-between gap-2"><h2 className="break-all font-semibold">{active.title}</h2><Button variant="ghost" size="icon" className="shrink-0" title="プレビューを閉じる" aria-label="プレビューを閉じる" onClick={() => setActiveId("")}><X className="size-4" /></Button></div>
-        <DocumentDetails key={active.id} row={active} company={company} projects={projects} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} />
+        <DocumentDetails key={active.id} row={active} company={company} projects={projects} canReconcile={canReconcile} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} />
       </aside> : null}
     </div>
     </div>
@@ -411,7 +420,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
         <DialogHeader><DialogTitle className="break-words pr-8">{active?.title}</DialogTitle></DialogHeader>
         {active ? <Tabs key={active.id} defaultValue="edit" className="min-w-0">
           <TabsList className="min-h-12 w-full" aria-label="請求書の表示"><TabsTrigger value="edit" className="min-h-11">編集・入金状況</TabsTrigger><TabsTrigger value="file" className="min-h-11">原本・OCR</TabsTrigger></TabsList>
-          <TabsContent value="edit"><DocumentDetails row={active} company={company} projects={projects} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} view="edit" /></TabsContent>
+          <TabsContent value="edit"><DocumentDetails row={active} company={company} projects={projects} canReconcile={canReconcile} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} view="edit" /></TabsContent>
           <TabsContent value="file"><DocumentDetails row={active} company={company} projects={projects} edit={edits[active.id]} onEdit={(v) => setEdits((old) => ({ ...old, [active.id]: v }))} disabled={saving || deleting} view="file" /></TabsContent>
         </Tabs> : null}
         {company === "JAPAN" ? <OperationError message={operationError} /> : null}

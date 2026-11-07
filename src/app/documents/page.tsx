@@ -24,7 +24,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
       {can(user, "view:receivedInvoices") ? <Button variant="outline" asChild><Link prefetch={false} href={`/received-invoices?company=${company}`}>受領請求書</Link></Button> : null}
       {can(user, "view:issuedInvoices") ? <Button variant="outline" asChild><Link prefetch={false} href={`/issued-invoices?company=${company}`}>発行請求書</Link></Button> : null}
     </PageHeader>
-    <DocumentsWorkspace key={company} company={company} rows={documentRows(data, user, company)} initialId={params.document} canExport={can(user, "export:csv")}
+    <DocumentsWorkspace key={company} company={company} rows={documentRows(data, user, company)} initialId={params.document} canExport={can(user, "export:csv")} canReconcile={can(user, "manage:banking")}
       projects={visibleProjects(data, user).filter((p) => companyFromParam(p.company) === company).map((p) => ({ value: p.id, label: p.name, clientId: p.clientId, clientName: data.clients.find((c) => c.id === p.clientId)?.companyName }))} />
   </AppShell>;
 }
