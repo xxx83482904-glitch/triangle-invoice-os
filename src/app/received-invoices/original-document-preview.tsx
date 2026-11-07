@@ -8,7 +8,8 @@ import { originalSourceState } from "@/lib/original-file-preview";
 import { useOriginalFilePreview } from "@/hooks/use-original-file-preview";
 import type { CompanyScope } from "@/lib/company";
 
-type PreviewProps = { fileUrl?: string; fileName: string; mimeType?: string; company?: CompanyScope; sourceMissing?: boolean };
+// frameClassName / imageClassName override the PDF and image heights where the space is tighter than a full page (e.g. inside a dialog).
+type PreviewProps = { fileUrl?: string; fileName: string; mimeType?: string; company?: CompanyScope; sourceMissing?: boolean; frameClassName?: string; imageClassName?: string };
 
 export function OriginalDocumentPreview(props: PreviewProps) {
   return props.company === "JAPAN" ? <JapanOriginalPreview key={`${props.fileUrl}:${props.fileName}:${props.mimeType}:${props.sourceMissing}`} {...props} /> : <LegacyOriginalDocumentPreview {...props} />;
@@ -22,7 +23,7 @@ function PdfPreview({ title, src, className, onFailed }: { title: string; src: s
   </>;
 }
 
-function JapanOriginalPreview({ fileUrl, fileName, mimeType, sourceMissing }: PreviewProps) {
+function JapanOriginalPreview({ fileUrl, fileName, mimeType, sourceMissing, frameClassName = "h-[65vh] min-h-80", imageClassName = "max-h-[65vh]" }: PreviewProps) {
   const { preview, source, reload } = useOriginalFilePreview({ fileUrl, mimeType, sourceMissing });
   const [renderFailed, setRenderFailed] = useState(false);
   const failed = preview.error || (renderFailed ? "埋め込み表示を確認できません。原本を開くかダウンロードしてください。" : "");
@@ -37,14 +38,14 @@ function JapanOriginalPreview({ fileUrl, fileName, mimeType, sourceMissing }: Pr
       {failed ? <p role="alert" className="rounded-lg border border-destructive/40 bg-card p-3 text-sm text-destructive">{failed}</p> : null}
       {!preview.url && !failed ? <p role="status" className="p-4 text-sm">原本を読み込み中…</p> : null}
       {preview.url && !renderFailed ? preview.type === "application/pdf"
-        ? <PdfPreview title={`原本: ${fileName}`} src={preview.url} className="h-[65vh] min-h-80 w-full rounded border bg-muted" onFailed={() => setRenderFailed(true)} />
+        ? <PdfPreview title={`原本: ${fileName}`} src={preview.url} className={`${frameClassName} w-full rounded border bg-muted`} onFailed={() => setRenderFailed(true)} />
         // eslint-disable-next-line @next/next/no-img-element
-        : <img src={preview.url} alt={`原本: ${fileName}`} onError={() => setRenderFailed(true)} className="max-h-[65vh] w-full rounded border object-contain" /> : null}
+        : <img src={preview.url} alt={`原本: ${fileName}`} onError={() => setRenderFailed(true)} className={`${imageClassName} w-full rounded border object-contain`} /> : null}
     </>}
   </div>;
 }
 
-function LegacyOriginalDocumentPreview({ fileUrl, fileName, mimeType }: PreviewProps) {
+function LegacyOriginalDocumentPreview({ fileUrl, fileName, mimeType, frameClassName = "h-[65vh] min-h-80", imageClassName = "max-h-[65vh]" }: PreviewProps) {
   const { preview, reload } = useOriginalFilePreview({ fileUrl, mimeType, detectMissing: false });
   const [renderFailed, setRenderFailed] = useState(false);
 
@@ -59,9 +60,9 @@ function LegacyOriginalDocumentPreview({ fileUrl, fileName, mimeType }: PreviewP
     {failed ? <p role="alert" className="border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950">{failed}</p> : null}
     {!preview.url && !failed ? <p role="status" className="p-4 text-sm">原本を読み込み中…</p> : null}
     {preview.url && !renderFailed ? preview.type === "application/pdf"
-      ? <PdfPreview title={`原本: ${fileName}`} src={preview.url} className="h-[65vh] min-h-80 w-full border bg-white" onFailed={() => setRenderFailed(true)} />
+      ? <PdfPreview title={`原本: ${fileName}`} src={preview.url} className={`${frameClassName} w-full border bg-white`} onFailed={() => setRenderFailed(true)} />
       // Original images must retain their full document framing.
       // eslint-disable-next-line @next/next/no-img-element
-      : <img src={preview.url} alt={`原本: ${fileName}`} onError={() => setRenderFailed(true)} className="max-h-[65vh] w-full border object-contain" /> : null}
+      : <img src={preview.url} alt={`原本: ${fileName}`} onError={() => setRenderFailed(true)} className={`${imageClassName} w-full border object-contain`} /> : null}
   </div>;
 }

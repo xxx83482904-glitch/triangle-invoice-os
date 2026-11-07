@@ -14,7 +14,7 @@ import { RowSelectionCheckbox } from "@/components/app/list-selection";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Bot, CheckCheck, ChevronDown, CircleAlert, Download, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, RefreshCw, Save, ScrollText, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, CheckCheck, ChevronDown, CircleAlert, Download, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, Paperclip, RefreshCw, Save, ScrollText, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
 import { navigationIntentEvent, type NavigationIntent } from "@/lib/navigation-intent";
 import { BankCategoryControl, BankReviewTag, BankSelectAllCheckbox, BankSelectionReview } from "@/components/app/bank-ledger-controls";
@@ -54,6 +54,8 @@ import type { CompanyScope } from "@/lib/company";
 import type { UserRole } from "@/lib/types";
 import { Money } from "@/components/app/money";
 import { RecordDetail } from "@/components/app/record-detail";
+import { BankDetailDocuments } from "@/components/app/bank-detail-documents";
+import { invoiceAccountScopeIssue } from "@/lib/bank-reconciliation-accounts";
 import { bankActionBarVisible, bankAdvancedFilterCount, bankLedgerDate, bankLedgerSort, bankLoadedSelection, bankQuickStatus } from "@/lib/bank-ledger-view";
 import { isSelectionGesture } from "@/lib/list-selection";
 import { canExportSection } from "@/lib/section-export";
@@ -108,7 +110,7 @@ export function BankingWorkspace(props: Props) {
   const [classificationPreview, setClassificationPreview] = useState<BankTransaction[] | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiHistory, setAiHistory] = useState(false);
-  const [linkData, setLinkData] = useState<BankLinkData | null>(null);
+  const [linkData, setLinkData] = useState<BankLinkData | null>(null), [documentsVersion, setDocumentsVersion] = useState(0);
   const [aiScope, setAiScope] = useState<"page" | "selected" | "all">("page");
   const [aiResult, setAiResult] = useState<{ suggested: number; lowConfidence: number; model: string } | null>(null);
   const [stream, setStream] = useState({ revision: props.revision, baseRevision: props.revision, rows: [] as BankDisplayRow[], page: props.page, total: props.total });
@@ -575,6 +577,12 @@ export function BankingWorkspace(props: Props) {
   const detailValue = detailRow ? drafts[detailRow.id] || editFrom(detailRow) : undefined;
   const detailSales = detailRow && detailValue ? salesSuggestion(detailRow, detailValue) : undefined;
   const detailSave = detailRow ? autosave.entries[detailRow.id] : undefined;
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+  // Rows still waiting for an invoice match, in the order shown: no link yet (or partial), normal treatment, on an invoice account.
+  const awaitingMatch = (row: BankDisplayRow) => (!row.linkLabel || row.linkLabel === "一部照合") && row.treatment === "NORMAL" && !row.sourceMissing && row.sourceStatus !== "excluded"
+    && Boolean(accountById.get(row.bankAccountId)) && !invoiceAccountScopeIssue(accountById.get(row.bankAccountId)!);
+  const linkIndex = linkData ? rows.findIndex((row) => row.id === linkData.bank.id) : -1;
+  const nextMatch = linkIndex >= 0 ? rows.slice(linkIndex + 1).find(awaitingMatch) : undefined;
   const detailLatest = detailRow ? latestConflict[detailRow.id] : undefined;
   const classificationDisabled = pending || Boolean(dirty) || !months.length;
   const canExport = canExportSection({ role: props.role }, "banking");
@@ -673,7 +681,7 @@ export function BankingWorkspace(props: Props) {
                 return <tr key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 42px" }} onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
                   <td>{selectionBox(row)}</td>
                   <td><time dateTime={row.transactionDate} title={row.transactionDate} className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{bankLedgerDate(row.transactionDate, filters.month)}</time></td>
-                  <td title={`${row.content || "摘要なし"} / ${account}`}><div className="bank-description"><span className="truncate font-medium">{matchedContent(row.content)}</span><span className="bank-row-account">{account}</span>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label={[value.memo ? "メモあり" : "", row.sourceMemo ? "元明細メモあり" : ""].filter(Boolean).join("・")} /> : null}</div></td>
+                  <td title={`${row.content || "摘要なし"} / ${account}`}><div className="bank-description"><span className="truncate font-medium">{matchedContent(row.content)}</span><span className="bank-row-account">{account}</span>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label={[value.memo ? "メモあり" : "", row.sourceMemo ? "元明細メモあり" : ""].filter(Boolean).join("・")} /> : null}{row.receiptCount ? <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={`領収書${row.receiptCount}件添付`} /> : null}</div></td>
                   <td className="text-right"><Money value={row.side === "INCOME" ? row.amount : -row.amount} sign="always" tone={row.side === "INCOME" ? "income" : "plain"} /></td>
                   <td>{controls[0]}</td><td>{controls[1]}</td><td>{status(row, value)}</td>
                   <td><div className="bank-link-cell">{linkButton(row)}{row.settlementConflict ? <span className="bank-link-warning" title={row.settlementConflict} aria-label={`要確認: ${row.settlementConflict}`}><CircleAlert className="size-3" /><span className="sr-only">要確認</span></span> : null}</div></td>
@@ -689,7 +697,7 @@ export function BankingWorkspace(props: Props) {
               <h3 className="line-clamp-2 break-words text-sm font-medium" title={row.content}>{matchedContent(row.content)}</h3>
               <p className="truncate text-xs text-muted-foreground">{accountMap.get(row.bankAccountId) || "口座未取得"}</p>
               <p className="truncate text-xs" title={`${category?.name || "科目未設定"}${child ? ` / ${child.name}` : ""}`}>{row.bookkeeping?.splits?.length ? `分割 ${row.bookkeeping.splits.length}科目` : category?.name || "科目未設定"}{child ? ` / ${child.name}` : ""}{value.treatment !== "NORMAL" ? ` · ${treatmentLabels[value.treatment]}` : ""}</p>
-              <div className="flex items-center gap-1"><div className="min-w-0 flex-1">{status(row, value)}{row.settlementConflict ? <p className="text-xs text-[var(--tone-amber-fg)]" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}</div>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label="メモあり（詳細で確認）" /> : null}<Button className="bank-detail-button" variant="ghost" size="sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ScrollText className="size-4" />詳細</Button></div>
+              <div className="flex items-center gap-1"><div className="min-w-0 flex-1">{status(row, value)}{row.settlementConflict ? <p className="text-xs text-[var(--tone-amber-fg)]" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}</div>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label="メモあり（詳細で確認）" /> : null}{row.receiptCount ? <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={`領収書${row.receiptCount}件添付（詳細で確認）`} /> : null}<Button className="bank-detail-button" variant="ghost" size="sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ScrollText className="size-4" />詳細</Button></div>
             </article>;
           })}</div>
           {!rows.length ? <p className="py-12 text-center text-sm text-muted-foreground">{!configured ? "接続待ち" : "該当する明細はありません"}</p> : null}
@@ -763,6 +771,7 @@ export function BankingWorkspace(props: Props) {
         {company === "JAPAN" ? <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={pending || filterDirty || autosave.undoing.includes(detailRow.id)} onClick={() => reviewSelection(!detailValue.reviewed, undefined, [detailRow], false)}>{detailValue.reviewed ? "未確認に戻す" : "確認済みにする"}</Button>{detailRow.predictionPending && !drafts[detailRow.id] ? <Button variant="outline" disabled={pending || filterDirty} onClick={() => adoptCandidates([detailRow], false, false)}>候補を採用</Button> : null}</div> : null}
         {detailSales ? <section className="bank-sales-hint space-y-2 rounded-lg border p-3 text-sm"><p>請求書と照合済みの入金。{detailSales.categoryName ? `売上系の科目「${detailSales.categoryName}」を提案` : "売上系の科目を提案"}</p><p className="break-words text-xs text-muted-foreground">{detailSales.reason}</p><div className="flex flex-wrap gap-2">{detailSales.categoryId ? <Button variant="outline" disabled={pending || filterDirty || Boolean(detailRow.bookkeeping?.splits?.length)} aria-label={`${detailRow.content}に売上科目「${detailSales.categoryName}」を適用`} onClick={() => edit(detailRow, { categoryId: detailSales.categoryId, subCategoryId: undefined, classificationReason: "発行請求書と照合済みの入金（売上科目の提案を採用・未確定）" })}>提案を採用</Button> : null}<Button variant="outline" disabled={pending || filterDirty || Boolean(detailRow.bookkeeping?.splits?.length)} onClick={() => openCategories(detailRow)}>科目を選ぶ</Button></div></section> : null}
         <section className="space-y-2"><div className="flex flex-wrap items-center gap-2">{linkButton(detailRow)}<BankBookkeepingDialog key={`bookkeeping:${detailRow.id}`} company={company} transaction={detailRow} categories={categories} showLabel disabled={pending || Boolean(dirty)} onSaved={(saved) => setSavedRows((current) => ({ ...current, [saved.id]: { ...detailRow, ...saved, predictionPending: false } }))} /><BankBulkReclassifyDialog key={`bulk:${detailRow.id}`} company={company} row={detailRow} accountName={accountMap.get(detailRow.bankAccountId)} categories={categories} showLabel disabled={pending || Boolean(dirty) || detailRow.sourceMissing} onApplied={() => router.refresh()} /></div>{detailRow.settlementConflict ? <p className="break-words text-sm text-[var(--tone-amber-fg)]">既存分類・照合を要確認: {detailRow.settlementConflict}</p> : null}</section>
+        <BankDetailDocuments key={`documents:${detailRow.id}:${documentsVersion}`} company={company} transactionId={detailRow.id} disabled={pending} onChanged={() => router.refresh()} />
         {drafts[detailRow.id] ? <Button variant="ghost" aria-label={`${detailRow.content}の編集を破棄`} disabled={pending || detailSave?.status === "saving"} onClick={() => discardRow(detailRow)}><X className="size-4" />この変更を取り消す</Button> : null}
       </div> : null}
     </RecordDetail>
@@ -796,7 +805,8 @@ export function BankingWorkspace(props: Props) {
       </DialogContent>
     </Dialog>
     <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} onCloseAutoFocus={(event) => { event.preventDefault(); headerMenu.current?.focus(); }} />
-    {linkData ? <BankLinksDialog key={linkData.bank.id} company={company} initial={linkData} onClose={() => setLinkData(null)} /> : null}
+    {linkData ? <BankLinksDialog key={linkData.bank.id} company={company} initial={linkData} onClose={() => { setLinkData(null); setDocumentsVersion((value) => value + 1); }}
+      next={nextMatch ? { label: `${nextMatch.transactionDate} ${nextMatch.content || "摘要なし"}`, open: () => { setLinkData(null); setDocumentsVersion((value) => value + 1); if (detailId) setDetailId(nextMatch.id); openLinks(nextMatch); } } : undefined} /> : null}
     <BankClassificationAiDialog key={aiOpen ? "ai-open" : "ai-closed"} company={company} open={aiOpen} onOpenChange={setAiOpen} rowIds={rows.map((row) => row.id)} selectedIds={rows.filter((row) => selected.has(row.id)).map((row) => row.id)} initialScope={aiScope} initialHistory={aiHistory} onResult={(result) => {
       autosave.queue.clearCompleted();
       setClassificationPreview(result.rows.map((row) => ({ ...row, predictionPending: true }))); setAiResult({ suggested: result.suggested, lowConfidence: result.lowConfidence, model: result.model });

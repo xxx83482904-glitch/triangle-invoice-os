@@ -37,6 +37,15 @@ function withholdingInfo(kind: Kind, invoice: IssuedInvoice | ReceivedInvoice) {
   return { withholdingAmount, netPayable, withholdingMismatch: withholdingAmount > 0 && cents(netPayable) !== cents(invoice.total) };
 }
 
+// The original a reviewer should see: the invoice's own file, then a linked mail scan, then the generated PDF for issued invoices.
+function originalDocument(kind: Kind, invoice: IssuedInvoice | ReceivedInvoice, mail: AppData["mailDocuments"]) {
+  if (invoice.fileUrl) return { originalHref: invoice.fileUrl, originalName: kind === "received" ? (invoice as ReceivedInvoice).originalFileName || "原本" : "原本", originalMimeType: kind === "received" ? (invoice as ReceivedInvoice).mimeType || "" : "", originalSource: "invoice" as const };
+  const scan = kind === "received" ? mail.find((row) => row.fileUrl) : undefined;
+  if (scan) return { originalHref: scan.fileUrl, originalName: scan.originalFileName || scan.title || "郵便物", originalMimeType: scan.mimeType || "", originalSource: "mail" as const };
+  if (kind === "issued") return { originalHref: `/api/issued-invoices/${encodeURIComponent(invoice.id)}/pdf`, originalName: `${(invoice as IssuedInvoice).invoiceNumber || "請求書"}.pdf`, originalMimeType: "application/pdf", originalSource: "generated" as const };
+  return { originalHref: "", originalName: "", originalMimeType: "", originalSource: "" as const };
+}
+
 // Bank-borne fee: split the bank row into the invoice part and the fee category when the row allows it. Returns a note, never throws.
 function applyFeeSplit(data: AppData, bank: BankTransaction, feeYen: number, categoryId?: string) {
   if (!categoryId) return "手数料の科目が未指定のため、明細の科目分割はしていません";
@@ -417,7 +426,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
       bankAliases: (party?.bankAliases || []).filter((row) => row.company === company),
       installmentSchedule: kind === "issued" ? (invoice as IssuedInvoice).installmentSchedule || [] : [],
       processed: kind === "received" ? Boolean((invoice as ReceivedInvoice).mailProcessed) : undefined,
-      originalHref: invoice.fileUrl || (kind === "issued" ? `/api/issued-invoices/${encodeURIComponent(invoice.id)}/pdf` : ""),
+      ...originalDocument(kind, invoice, mail),
       project: project.name, total: invoice.total, date: invoice.issueDate, dueDate: invoice.dueDate,
       paid: paid / 100, outstanding: Math.max(0, cents(invoice.total) - paid) / 100, matched: matched / 100, unmatched: Math.max(0, cents(invoice.total) - matched) / 100,
       recordedUnmatched: Math.max(0, paid - matched) / 100, overpaid: Math.max(0, paid - cents(invoice.total)) / 100,

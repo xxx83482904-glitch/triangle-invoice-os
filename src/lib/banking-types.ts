@@ -1,6 +1,9 @@
 import type { CompanyScope } from "@/lib/company";
 import type { BankBookkeeping } from "@/lib/bank-bookkeeping";
 
+// Attachment.relatedType for receipts attached to a bank row.
+export const BANK_RECEIPT_TYPE = "BankTransaction";
+
 export type BankTreatment = "NORMAL" | "TRANSFER" | "EXCLUDED";
 export type BankClassificationSource = "UNASSIGNED" | "RULE" | "HISTORY" | "AUTO" | "MANUAL";
 export type BankClassificationConfidence = "GUESS" | "HISTORY" | "INFERRED";
