@@ -10,6 +10,7 @@ import type { AppData, IssuedInvoice, Payment, ReceivedInvoice, User } from "@/l
 import { normalizeReconciliationName } from "@/lib/bank-reconciliation-matching";
 import { bankSplitValidation } from "@/lib/bank-bookkeeping";
 import { DEBT_NOT_PAYABLE, isPayableReceivedInvoice } from "@/lib/debt-groups";
+import { expensePayoutsByTransaction, expensePayoutTransactionIds } from "@/lib/expense-payouts";
 export { reconciliationCandidates } from "@/lib/bank-reconciliation-matching";
 
 type Kind = "issued" | "received";
@@ -62,7 +63,7 @@ function applyFeeSplit(data: AppData, bank: BankTransaction, feeYen: number, cat
 
 function reconciliationIndex(data: AppData) {
   const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map((row) => [row.id, row]));
-  return { banks: byId(data.bankTransactions), accounts: byId(data.bankAccounts), projects: byId(data.projects), issued: byId(data.issuedInvoices), received: byId(data.receivedInvoices), payments: byId(data.payments) };
+  return { banks: byId(data.bankTransactions), accounts: byId(data.bankAccounts), projects: byId(data.projects), issued: byId(data.issuedInvoices), received: byId(data.receivedInvoices), payments: byId(data.payments), payouts: expensePayoutTransactionIds(data) };
 }
 type ReconciliationIndex = ReturnType<typeof reconciliationIndex>;
 
@@ -83,6 +84,7 @@ function bankIssue(data: AppData, company: CompanyScope, bank: BankTransaction, 
   if (bank.sourceMissing) return "元明細がなくなっています";
   if (bank.sourceStatus === "excluded") return "連携元で対象外の明細です";
   if ((data.bankTransfers || []).some((link) => !link.deletedAt && [link.outgoingId, link.incomingId].includes(bank.id))) return "口座間の資金移動と照合済みです";
+  if ((index?.payouts || expensePayoutTransactionIds(data)).has(bank.id)) return "経費精算の振込と照合済みです";
   if (bank.treatment !== "NORMAL") return "振替・対象外の明細です";
   if (bank.bookkeeping?.invoiceRequirement === "NOT_REQUIRED") return "請求書不要（経費集計には残ります）。照合する場合は明細の請求書要否を変更してください";
   if (!isBankDate(bank.transactionDate) || bank.transactionDate > today || !monetary(bank.amount)) return "取引日・金額を確認してください";
@@ -458,6 +460,7 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
   }
   for (const invoice of invoices) invoice.confirmedNames = namesByParty.get(`${invoice.kind}:${invoice.partyId}`) || [];
   const categoryNames = new Map(data.accountingCategories.map((row) => [row.id, row.name]));
+  const payouts = expensePayoutsByTransaction(data, company, today);
   const banks = data.bankTransactions.filter((row) => row.company === company).map((row) => {
     const allocated = (linkedBank.get(row.id) || 0) / 100, sourceIssue = bankIssue(data, company, row, today, index);
     const account = index.accounts.get(row.bankAccountId);
@@ -469,10 +472,12 @@ export function bankReconciliationOverview(data: AppData, company: CompanyScope,
     const counterpart = transfer && index.banks.get(transfer.outgoingId === row.id ? transfer.incomingId : transfer.outgoingId);
     const transferCounterpart = counterpart?.company === company ? { id: counterpart.id, date: counterpart.transactionDate, content: counterpart.content, amount: counterpart.amount, account: index.accounts.get(counterpart.bankAccountId)?.name || "" } : undefined;
     const settlement = bankCardSettlementDetail(data, row);
+    const payout = payouts.get(row.id);
+    const expensePayout = payout ? { submitterName: payout.submitterName, count: payout.claimIds.length, total: payout.total, claimId: payout.claimIds[0], issue: payout.issue } : undefined;
     return { id: row.id, updatedAt: row.updatedAt, accountId: row.bankAccountId, date: row.transactionDate, side: row.side, content: row.content, amount: row.amount,
-      invoiceRequirement: row.bookkeeping?.invoiceRequirement || "UNDECIDED", categoryName: categoryNames.get(row.categoryId || ""), transferCounterpart, settlement,
-      remaining: Math.max(0, cents(row.amount) - cents(allocated)) / 100, allocated, issue, conflict: conflictBank.has(row.id),
-      state: conflictBank.has(row.id) ? "conflict" : matched ? "matched" : row.treatment === "NORMAL" && !row.sourceMissing && row.bookkeeping?.invoiceRequirement === "NOT_REQUIRED" ? "not_required" : issue ? "excluded" : "unmatched" };
+      invoiceRequirement: row.bookkeeping?.invoiceRequirement || "UNDECIDED", categoryName: categoryNames.get(row.categoryId || ""), transferCounterpart, settlement, expensePayout,
+      remaining: Math.max(0, cents(row.amount) - cents(allocated)) / 100, allocated, issue: expensePayout?.issue || issue, conflict: conflictBank.has(row.id) || Boolean(expensePayout?.issue),
+      state: conflictBank.has(row.id) || expensePayout?.issue ? "conflict" : matched || expensePayout ? "matched" : row.treatment === "NORMAL" && !row.sourceMissing && row.bookkeeping?.invoiceRequirement === "NOT_REQUIRED" ? "not_required" : issue ? "excluded" : "unmatched" };
   });
   return { banks, invoices, unlinkedMailCount, links: links.map((row) => ({ id: row.id, updatedAt: row.updatedAt, transactionId: row.transactionId, invoiceKey: `${row.invoiceKind}:${row.invoiceId}`, amount: row.amount, createdPayment: row.createdPayment,
     fee: row.fee, issue: issues.get(row.id) || "", reaffirmable: Boolean(issues.get(row.id)) && !blockers.get(row.id), reaffirmBlocker: blockers.get(row.id) || "", reaffirmedAt: row.reaffirmedAt, note: row.note, createdAt: row.createdAt })) };

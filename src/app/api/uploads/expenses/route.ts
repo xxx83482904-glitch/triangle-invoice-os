@@ -16,6 +16,12 @@ function field(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+function taxBreakdown(formData: FormData) {
+  const amount = (key: string) => { const value = field(formData, key).replaceAll(",", ""); return value ? Number(value) : undefined; };
+  const rate10 = amount("tax10"), rate8 = amount("tax8");
+  return rate10 === undefined && rate8 === undefined ? undefined : { ...(rate10 !== undefined ? { rate10 } : {}), ...(rate8 !== undefined ? { rate8 } : {}) };
+}
+
 function liveActor(data: AppData, id: string) {
   const user = data.users.find((row) => row.id === id && isActiveUser(row));
   if (!user) throw new Error("利用者の権限が変わっています");
@@ -42,6 +48,8 @@ export async function POST(request: Request) {
     const contents = { spentOn, amount: Number(field(formData, "amount")), payee, purpose: field(formData, "purpose"),
       categoryId: field(formData, "categoryId") || undefined, projectId: field(formData, "projectId") || undefined,
       paidWith: (field(formData, "paidWith") || undefined) as ExpensePaidWith | undefined, memo: field(formData, "memo"),
+      registrationNumber: field(formData, "registrationNumber").normalize("NFKC").replace(/[\s-]/g, "").toUpperCase() || undefined,
+      taxBreakdown: taxBreakdown(formData),
       ...(file && name ? { file: { fileUrl: receivedInvoiceFileUrl(name), originalFileName: file.name, mimeType: file.type as ExpenseFile["mimeType"], ocrText: field(formData, "ocrText") } } : {}) };
     const input: ExpenseMutation = claimId ? { action: "update", id, version, ...contents } : { action: "submit", ...contents };
     const data = await readData();

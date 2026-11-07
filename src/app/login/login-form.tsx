@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginForm() {
+export function LoginForm({ next = "" }: { next?: string }) {
   const [state, action, pending] = useActionState(loginAction, { error: "" });
 
   return (
@@ -20,6 +20,7 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <form action={action} className="space-y-4">
+          {next ? <input type="hidden" name="next" value={next} /> : null}
           {state.error ? (
             <Alert variant="destructive">
               <AlertDescription>{state.error}</AlertDescription>

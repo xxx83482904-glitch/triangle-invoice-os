@@ -189,16 +189,20 @@ export type InvoicePdfText = Partial<Record<InvoicePdfTextKey, string>>;
 
 export type ExpenseClaimStatus = "SUBMITTED" | "RETURNED" | "APPROVED" | "PAID" | "WITHDRAWN";
 export type ExpensePaidWith = "CASH" | "PERSONAL_CARD" | "OTHER";
-export type ExpenseClaimAction = "SUBMIT" | "EDIT" | "RESUBMIT" | "WITHDRAW" | "APPROVE" | "RETURN" | "PAY" | "UNPAY";
+export type ExpenseClaimAction = "SUBMIT" | "EDIT" | "RESUBMIT" | "WITHDRAW" | "APPROVE" | "RETURN" | "PAY" | "UNPAY" | "LINK_BANK" | "UNLINK_BANK";
+// The bank row that paid a settled claim back. Claims settled together for one person share the row; the evidence detects later bank edits.
+export type ExpensePayoutLink = { transactionId: string; evidence: string; linkedAt: string; linkedById: string };
 // One receipt a staff member paid for and wants back: submitted, reviewed by accounting, then settled.
 export type ExpenseClaim = {
   id: string; company: "JAPAN" | "CHINA"; submittedById: string;
   spentOn: string; amount: number; payee: string; purpose: string;
   categoryId?: string; projectId?: string; paidWith?: ExpensePaidWith;
   fileUrl?: string; originalFileName?: string; mimeType?: string; ocrText?: string;
+  // 適格請求書の登録番号 (T + 13 digits) and the consumption tax printed per rate, as read from the receipt.
+  registrationNumber?: string; taxBreakdown?: { rate10?: number; rate8?: number };
   status: ExpenseClaimStatus;
   reviewedById?: string; reviewedAt?: string; reviewNote?: string;
-  paidAt?: string; paidById?: string; paymentMemo?: string;
+  paidAt?: string; paidById?: string; paymentMemo?: string; payout?: ExpensePayoutLink;
   memo?: string;
   history: Array<{ action: ExpenseClaimAction; at: string; byId: string; note?: string }>;
   createdAt: string; updatedAt: string; deletedAt?: string | null;

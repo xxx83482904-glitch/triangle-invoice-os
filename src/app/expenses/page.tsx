@@ -29,7 +29,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   return <AppShell>
     <PageHeader title="経費精算" description="立て替えた経費の領収書を提出し、承認と精算をここでまとめます。" />
     <ExpensesWorkspace key={`${company}:${initialStatus}:${initialView}:${param("claim") || ""}`} company={company} views={views} summary={summary}
-      projects={projects} categories={expenseCategoryOptions(data, company)} canManage={canManage} today={today} currentUserId={user.id}
+      projects={projects} categories={expenseCategoryOptions(data, company)} canManage={canManage} canReconcile={can(user, "manage:banking")} today={today} currentUserId={user.id}
       actors={actors} initialStatus={initialStatus} initialView={initialView} initialId={param("claim")} />
   </AppShell>;
 }
