@@ -7,19 +7,52 @@ import { cn } from "@/lib/utils";
 
 const ToastProvider = ToastPrimitive.Provider;
 
+function useToastBottom() {
+  const [bottom, setBottom] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const bars = new Set<Element>();
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      // Use the rendered top so wrapped bars, mobile navigation and transforms count.
+      setBottom(Math.max(0, ...[...bars].filter((bar) => bar.getClientRects().length).map((bar) => window.innerHeight - bar.getBoundingClientRect().top)));
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    const resize = new ResizeObserver(schedule);
+    const sync = () => {
+      const current = new Set(document.querySelectorAll(".bank-ledger-savebar, .selection-action-bar, .record-savebar"));
+      for (const bar of bars) if (!current.has(bar)) { resize.unobserve(bar); bars.delete(bar); }
+      for (const bar of current) if (!bars.has(bar)) { bars.add(bar); resize.observe(bar); }
+      schedule();
+    };
+    const mutations = new MutationObserver(sync);
+    mutations.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+    sync();
+    cancelAnimationFrame(frame);
+    measure();
+    window.addEventListener("resize", schedule);
+    return () => { mutations.disconnect(); resize.disconnect(); cancelAnimationFrame(frame); window.removeEventListener("resize", schedule); };
+  }, []);
+  return bottom;
+}
+
 const ToastViewport = React.forwardRef<
   React.ComponentRef<typeof ToastPrimitive.Viewport>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitive.Viewport>
->(({ className, ...props }, ref) => (
-  <ToastPrimitive.Viewport
-    ref={ref}
-    className={cn(
-      "fixed bottom-0 right-0 z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:max-w-[380px]",
-      className
-    )}
-    {...props}
-  />
-));
+>(({ className, style, ...props }, ref) => {
+  const bottom = useToastBottom();
+  return (
+    <ToastPrimitive.Viewport
+      ref={ref}
+      className={cn(
+        "pointer-events-none fixed right-0 z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:max-w-[380px]",
+        className
+      )}
+      style={{ ...style, bottom }}
+      {...props}
+    />
+  );
+});
 ToastViewport.displayName = ToastPrimitive.Viewport.displayName;
 
 const Toast = React.forwardRef<

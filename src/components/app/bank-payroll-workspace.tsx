@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { Button } from "@/components/ui/button";
 
@@ -13,7 +14,6 @@ import type { PayrollSettingsView } from "@/lib/payroll-settings";
 import { PayrollTargetSettings } from "@/components/app/payroll-target-settings";
 import { rememberPayrollYearAction } from "@/app/banking/payroll/actions";
 
-const money = (value: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(value);
 
 // Read-only table of payroll-like bank payments by payee and month for one fiscal year (September to August).
 export function BankPayrollWorkspace({ company, summary, years, settings, mayEdit, yearSource }: { company: CompanyScope; summary: PayrollSummary; years: number[]; settings: PayrollSettingsView; mayEdit: boolean; yearSource: PayrollYearSource }) {
@@ -43,8 +43,8 @@ export function BankPayrollWorkspace({ company, summary, years, settings, mayEdi
     {mayEdit ? <details className="min-w-0 rounded-md border p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-medium">対象科目の設定（{summary.categoryIds.length}科目）</summary><PayrollTargetSettings key={settings.updatedAt || "default"} company={company} settings={settings} onSaved={setMessage} /></details> : null}
     {summary.rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[960px] text-sm">
       <thead className="border-b text-xs text-muted-foreground"><tr><th scope="col" className="px-2 py-2 text-left">支払先（摘要）</th>{summary.months.map((month) => <th key={month} scope="col" className="px-2 py-2 text-right">{Number(month.slice(5))}月</th>)}<th scope="col" className="px-2 py-2 text-right">合計</th><th scope="col" className="px-2 py-2 text-left">科目</th></tr></thead>
-      <tbody>{summary.rows.map((row) => <tr key={row.payee} className="border-b"><th scope="row" className="max-w-[260px] break-words px-2 py-2 text-left font-medium"><Link className="text-primary hover:underline underline-offset-4 hover:text-primary" href={`/banking?${new URLSearchParams({ company, q: row.payee, queryMode: "contains" })}`}>{row.payee}</Link><span className="block text-xs font-normal text-muted-foreground">{row.count}件</span></th>{summary.months.map((month) => <td key={month} className="px-2 py-2 text-right tabular-nums">{row.months[month] ? money(row.months[month]) : <span className="text-muted-foreground">—</span>}</td>)}<td className="px-2 py-2 text-right font-medium tabular-nums">{money(row.total)}</td><td className="px-2 py-2 text-xs text-muted-foreground">{row.categories.join(" / ")}</td></tr>)}</tbody>
-      <tfoot className="border-t font-medium"><tr><th scope="row" className="px-2 py-2 text-left">合計</th>{summary.months.map((month) => <td key={month} className="px-2 py-2 text-right tabular-nums">{summary.monthTotals[month] ? money(summary.monthTotals[month]) : "—"}</td>)}<td className="px-2 py-2 text-right tabular-nums">{money(summary.total)}</td><td /></tr></tfoot>
+      <tbody>{summary.rows.map((row) => <tr key={row.payee} className="border-b"><th scope="row" className="max-w-[260px] break-words px-2 py-2 text-left font-medium"><Link className="text-primary hover:underline underline-offset-4 hover:text-primary" href={`/banking?${new URLSearchParams({ company, q: row.payee, queryMode: "contains" })}`}>{row.payee}</Link><span className="block text-xs font-normal text-muted-foreground">{row.count}件</span></th>{summary.months.map((month) => <td key={month} className="px-2 py-2 text-right tabular-nums">{row.months[month] ? <Money value={row.months[month]} /> : <span className="text-muted-foreground">—</span>}</td>)}<td className="px-2 py-2 text-right font-medium tabular-nums"><Money value={row.total} /></td><td className="px-2 py-2 text-xs text-muted-foreground">{row.categories.join(" / ")}</td></tr>)}</tbody>
+      <tfoot className="border-t font-medium"><tr><th scope="row" className="px-2 py-2 text-left">合計</th>{summary.months.map((month) => <td key={month} className="px-2 py-2 text-right tabular-nums">{summary.monthTotals[month] ? <Money value={summary.monthTotals[month]} /> : "—"}</td>)}<td className="px-2 py-2 text-right tabular-nums"><Money value={summary.total} /></td><td /></tr></tfoot>
     </table></div> : <p className="text-sm text-muted-foreground">この年度に対象科目が付いた明細はありません。年度と対象科目の設定を確認してください。</p>}
   </div>;
 }

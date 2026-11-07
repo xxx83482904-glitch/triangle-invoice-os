@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { AlertTriangle, FileCheck2, FolderArchive, Loader2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -10,7 +11,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { operationFailureToast, unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
 import type { CompanyScope } from "@/lib/company";
-import { yen } from "@/lib/format";
 import type { MailDocumentCategory } from "@/lib/types";
 
 type SortResult = {
@@ -242,7 +242,7 @@ export function MailSorterDropzone({ company }: { company: CompanyScope }) {
                     <div>案件: {result.invoice.projectName}</div>
                     <div>請求日: {result.invoice.issueDate}</div>
                     <div>支払期限: {result.invoice.dueDate}</div>
-                    <div>金額: {yen.format(result.invoice.total)}</div>
+                    <div>金額: <Money value={result.invoice.total} /></div>
                   </div>
                 ) : null}
                 {result.warnings?.length ? (

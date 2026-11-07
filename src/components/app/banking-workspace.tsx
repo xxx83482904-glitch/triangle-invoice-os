@@ -7,11 +7,14 @@ import type { BankAccountOption } from "@/lib/bank-account-options";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useListSelection } from "@/hooks/use-list-selection";
-import { cardPressProps, RowSelectionCheckbox } from "@/components/app/list-selection";
+import { useBankAutosave } from "@/hooks/use-bank-autosave";
+import { bankAutosaveSummary, bankAutosaveVisibleRows, bankBulkNeedsConfirmation, bankCandidateChanges, type BankAutosaveChange } from "@/lib/bank-autosave";
+import { BankAutosaveStatus } from "@/components/app/bank-autosave-status";
+import { RowSelectionCheckbox } from "@/components/app/list-selection";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Bot, CheckCheck, ChevronDown, ChevronRight, CircleAlert, Download, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, RefreshCw, Save, ScrollText, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, CheckCheck, ChevronDown, CircleAlert, Download, FileCheck2, History, ListTree, LoaderCircle, MessageSquareText, MoreHorizontal, RefreshCw, Save, ScrollText, Search, Settings2, ShieldCheck, WandSparkles, X } from "lucide-react";
 import { WorkflowNav } from "@/components/app/company-switch";
 import { navigationIntentEvent, type NavigationIntent } from "@/lib/navigation-intent";
 import { BankCategoryControl, BankReviewTag, BankSelectAllCheckbox, BankSelectionReview } from "@/components/app/bank-ledger-controls";
@@ -25,7 +28,6 @@ import { loadBankDraftRowsAction, loadBankTransactionsAction, previewBankRulesAc
 import { BankAuditDialog } from "@/components/app/bank-audit-dialog";
 import { BankSyncRunsDialog } from "@/components/app/bank-sync-runs-dialog";
 import { BankBookkeepingDialog } from "@/components/app/bank-bookkeeping-dialog";
-import { availableBankSaveOption, bankSaveOptions, type BankSaveChoice } from "@/lib/bank-save-options";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BankSavePreviewDialog, type BankSavePreview } from "@/components/app/bank-save-preview";
 import { bankEditFrom, bankMatchingSelection, bankSaveChanges, bankSaveIds, patchBankDraft, removeSavedBankDrafts, type BankDrafts, type BankSaveScope } from "@/lib/bank-workspace-drafts";
@@ -74,13 +76,21 @@ type Props = {
 export function BankingWorkspace(props: Props) {
   const { company, accounts, categories, rules, filters, months, summary, configured, admin } = props;
   const router = useRouter();
-  const [drafts, setDrafts] = useState<BankDrafts>({});
+  const [legacyDrafts, setDrafts] = useState<BankDrafts>({});
+  const autosave = useBankAutosave(company);
+  const drafts = company === "JAPAN" ? autosave.drafts : legacyDrafts;
+  const saveCounts = bankAutosaveSummary(autosave.entries, autosave.undoing.length);
+  const failedCount = saveCounts.failed + saveCounts.conflict;
+  const [bulkConfirmation, setBulkConfirmation] = useState<{ changes: BankAutosaveChange[]; label: string; description: string; notify: boolean } | null>(null);
+  const [unloadedSelection, setUnloadedSelection] = useState<Set<string>>(new Set());
+  const [latestConflict, setLatestConflict] = useState<Record<string, BankDisplayRow>>({});
+  const [leaving, setLeaving] = useState(false);
   const [search, setSearch] = useState(filters.query);
   const [filterEdits, setFilterEdits] = useState<Record<string, string>>({ queryMode: filters.queryMode || "contains", excludeQuery: filters.excludeQuery || "" });
   const [savePreview, setSavePreview] = useState<BankSavePreview | null>(null);
-  const [guessReview, setGuessReview] = useState<{ guesses: BankTransaction[]; others: number } | null>(null);
+  const [guessReview, setGuessReview] = useState<{ guesses: BankTransaction[]; others: number; targets: BankTransaction[]; confirmUnloaded: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saveResult, setSaveResult] = useState<{ saved: number; remaining: number; uncertain: boolean } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ saved: number; remaining: number; uncertain: boolean; confirmed?: boolean } | null>(null);
   const [savedRows, setSavedRows] = useState<Record<string, BankDisplayRow>>({});
   const [matchingSnapshot, setMatchingSnapshot] = useState<string[] | null>(null);
   const [error, setError] = useState("");
@@ -118,13 +128,14 @@ export function BankingWorkspace(props: Props) {
   const [start, setStart] = useState(`${bankToday().slice(0, 7)}-01`);
   const [end, setEnd] = useState(bankToday());
   const dirty = Object.keys(drafts).length;
+  const leaveBlocked = company === "JAPAN" ? saveCounts.saving + failedCount > 0 : dirty > 0;
   const total = classificationPreview?.length ?? activeStream.total;
   const baseRows = classificationPreview ? classificationPreview as BankDisplayRow[] : mergeBankWorkspaceRows(props.rows, activeStream.rows);
-  const rows = mergeBankWorkspaceRows(baseRows, baseRows.flatMap((row) => savedRows[row.id] ? [savedRows[row.id]] : []));
+  const rows = mergeBankWorkspaceRows(company === "JAPAN" ? bankAutosaveVisibleRows(baseRows, autosave.rows, autosave.entries) : [], baseRows, baseRows.flatMap((row) => savedRows[row.id] ? [savedRows[row.id]] : []));
   if (!classificationPreview) rows.sort((a, b) => (filters.sort.endsWith("asc") ? 1 : -1) * (filters.sort.startsWith("amount") ? a.amount - b.amount : a.transactionDate.localeCompare(b.transactionDate)) || a.id.localeCompare(b.id));
   const filterDirty = search !== filters.query || Object.entries(filterEdits).some(([key, value]) => value !== String(filters[key as keyof BankFilters] ?? (key === "queryMode" ? "contains" : "")));
-  const listSelection = useListSelection(rows.map((row) => row.id), { disabled: pending || filterDirty, pickMode: false });
-  const selection = { ...listSelection, selectAll: (checked: boolean) => {
+  const listSelection = useListSelection(rows.map((row) => row.id), { disabled: pending || filterDirty, pickMode: true });
+  const selection = { ...listSelection, clear: () => { listSelection.clear(); setMatchingSnapshot(null); setUnloadedSelection(new Set()); }, selectAll: (checked: boolean) => {
     if (pending || filterDirty) return;
     listSelection.setSelected((current) => checked
       ? new Set([...current, ...bankMatchingSelection(rows, current)])
@@ -136,8 +147,7 @@ export function BankingWorkspace(props: Props) {
   const candidates = rows.filter((row) => row.predictionPending && !drafts[row.id]);
   const selectedSaveCount = bankSaveIds(rows, drafts, selected, "selected").length;
   const reviewedSaveCount = bankSaveIds(rows, drafts, selected, "reviewed").length;
-  const saveOptions = bankSaveOptions(rows, drafts, selected);
-  const defaultSaveOption = availableBankSaveOption(saveOptions);
+  const selectedCandidates = candidates.filter((row) => selected.has(row.id));
   const hasMore = !classificationPreview && loadedPage * BANK_PAGE_SIZE < total;
   const syncWasRunning = useRef(props.busy);
   const accountMap = new Map(accounts.map((row) => [row.id, row.name]));
@@ -177,7 +187,13 @@ export function BankingWorkspace(props: Props) {
   }, [hasMore, loadError, loadingMore, loadMore, pending]);
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!saveResult?.confirmed || saving) return;
+    const timer = setTimeout(() => setSaveResult((current) => current === saveResult ? null : current), 4000);
+    return () => clearTimeout(timer);
+  }, [saveResult, saving]);
+
+  useEffect(() => {
+    if (!leaveBlocked) return;
     const leave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     const followLink = (event: globalThis.MouseEvent) => {
       if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -202,7 +218,7 @@ export function BankingWorkspace(props: Props) {
       document.removeEventListener("click", followLink, true);
       document.removeEventListener(navigationIntentEvent, followCommand);
     };
-  }, [dirty, pending]);
+  }, [leaveBlocked, pending]);
 
   useEffect(() => {
     if (!configured) return;
@@ -233,16 +249,36 @@ export function BankingWorkspace(props: Props) {
     const params = new URLSearchParams({ company, month: filters.month, account: filters.account, category: filters.category, side: filters.side, status: filters.status, q: search, sort: filters.sort, transaction: filters.transaction || "", analysisThrough: keepAnalysis ? filters.analysisThrough || "" : "", page: "1", ...filterEdits, ...values });
     for (const [key, value] of Array.from(params.entries())) if (!value) params.delete(key);
     const destination = `/banking?${params}`;
-    if (dirty) { setLeaveUrl(destination); return; }
+    if (leaveBlocked) { setLeaveUrl(destination); return; }
+    if (classificationPreview) autosave.queue.clearCompleted();
     setClassificationPreview(null); setAiResult(null);
     setSelected(new Set()); startTransition(() => router.push(destination));
   }
-  function edit(row: BankTransaction, patch: Partial<BankEdit>) {
+  function edit(row: BankTransaction, patch: Partial<BankEdit>, memo = false) {
     if (pending || filterDirty) return;
-    setDrafts((current) => ({ ...current, [row.id]: patchBankDraft(current, row, { ...("categoryId" in patch || "treatment" in patch ? { ...manualClassification, reviewed: false } : {}), ...patch }) }));
+    const change = { ...("categoryId" in patch || "treatment" in patch ? { ...manualClassification, reviewed: false } : {}), ...patch };
+    if (company === "JAPAN") { autosave.queue.enqueue([{ row, patch: change }], undefined, false, memo); return; }
+    setDrafts((current) => ({ ...current, [row.id]: patchBankDraft(current, row, change) }));
+  }
+  function submitChanges(changes: BankAutosaveChange[], label: string, description: string, notify = changes.length > 1, confirmUnloaded = true) {
+    if (!changes.length) return;
+    if (confirmUnloaded && bankBulkNeedsConfirmation(changes.map(({ row }) => row.id), unloadedSelection)) {
+      setBulkConfirmation({ changes, label, description, notify }); return;
+    }
+    autosave.queue.enqueue(changes, label, notify);
+  }
+  function adoptCandidates(targets: BankDisplayRow[], all = false, confirmUnloaded = true) {
+    if (pending || filterDirty) return;
+    const changes = bankCandidateChanges(targets, drafts);
+    submitChanges(changes, "の候補を採用しました", "表示されている科目・補助科目・扱いの候補を採用", all || changes.length > 1, confirmUnloaded);
   }
   function bulk(patch: Partial<BankEdit>) {
     if (pending || filterDirty) return;
+    if (company === "JAPAN") {
+      submitChanges(rows.filter((row) => selected.has(row.id)).map((row) => ({ row, patch: { ...manualClassification, reviewed: false, ...patch } })),
+        `の扱いを「${treatmentLabels[patch.treatment!]}」に変更しました`, `扱いを「${treatmentLabels[patch.treatment!]}」に変更`);
+      return;
+    }
     if (("categoryId" in patch || "treatment" in patch) && categoryTargets.some((row) => row.bookkeeping?.splits?.length)) { setError("科目分割の明細を選択から外して、扱い・単一科目を変更してください"); return; }
     setDrafts((current) => {
       const next = { ...current };
@@ -250,16 +286,24 @@ export function BankingWorkspace(props: Props) {
       return next;
     });
   }
-  function reviewSelection(reviewed: boolean, decision?: { acknowledgeGuesses: boolean }) {
-    if (pending || filterDirty || !selected.size) return;
+  function reviewSelection(reviewed: boolean, decision?: { acknowledgeGuesses: boolean }, explicitTargets?: BankTransaction[], confirmUnloaded = true) {
+    if (pending || filterDirty || (!selected.size && !explicitTargets?.length)) return;
     try {
-      let targets = rows.filter((row) => selected.has(row.id));
+      let targets = explicitTargets || rows.filter((row) => selected.has(row.id));
       // Guessed categories need a person to look at them before they count as reviewed.
       const guesses = new Set(reviewed ? targets.filter((row) => { const value = drafts[row.id] || editFrom(row); return !value.reviewed && isGuessClassification({ ...row, ...value }); }).map((row) => row.id) : []);
-      if (guesses.size && !decision) { setGuessReview({ guesses: targets.filter((row) => guesses.has(row.id)).map((row) => ({ ...row, ...drafts[row.id] })), others: targets.length - guesses.size }); return; }
+      if (guesses.size && !decision) { setGuessReview({ guesses: targets.filter((row) => guesses.has(row.id)).map((row) => ({ ...row, ...drafts[row.id] })), others: targets.length - guesses.size, targets, confirmUnloaded }); return; }
       if (decision && !decision.acknowledgeGuesses) targets = targets.filter((row) => !guesses.has(row.id));
       setGuessReview(null);
       if (!targets.length) { setError("推測のままの明細だけが選択されています。科目を選び直すか、内容を確認して確定してください"); return; }
+      if (company === "JAPAN") {
+        const changes = targets.filter((row) => (drafts[row.id] || row).reviewed !== reviewed).map((row) => {
+          const value = drafts[row.id] || editFrom(row);
+          return { row, patch: reviewed ? { ...editFrom(value), reviewed, acknowledgeGuess: guesses.has(row.id) || undefined } : { reviewed, acknowledgeGuess: undefined } };
+        });
+        submitChanges(changes, `を${reviewed ? "確認済み" : "未確認"}にしました`, reviewed ? "確認済みにする" : "未確認に戻す", changes.length > 1, confirmUnloaded);
+        setError(""); return;
+      }
       const reviewedDrafts = reviewBankDrafts(targets, drafts, reviewed);
       setDrafts((current) => {
         const next = { ...current };
@@ -275,7 +319,7 @@ export function BankingWorkspace(props: Props) {
     } catch (error) { setError(error instanceof Error ? error.message : "確認状態を変更できませんでした"); }
   }
   function openCategories(row?: BankTransaction) {
-    if (row && !selected.has(row.id)) setSelected(new Set([row.id]));
+    if (row) { setSelected(new Set([row.id])); setMatchingSnapshot(null); setUnloadedSelection(new Set()); }
     // A modal detail cannot move focus to the rail behind its focus trap.
     if (!detailId && categoryRail.current?.getClientRects().length) {
       categoryRail.current?.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true });
@@ -283,6 +327,11 @@ export function BankingWorkspace(props: Props) {
   }
   function applyCategory(category: AccountingCategory, child?: AccountingCategory) {
     if (pending || filterDirty || !categoryTargets.length) return;
+    if (company === "JAPAN") {
+      const name = `${category.name}${child ? ` / ${child.name}` : ""}`;
+      submitChanges(categoryTargets.map((row) => ({ row, patch: { categoryId: category.id, subCategoryId: child?.id, reviewed: false, ...manualClassification } })), `の科目を「${name}」に変更しました`, `科目を「${name}」に変更`);
+      setCategoryPickerOpen(false); return;
+    }
     if (categoryTargets.some((row) => row.bookkeeping?.splits?.length)) { setError("科目分割の明細は内訳画面から変更してください"); return; }
     try {
       const applied = applyBankCategoryDrafts(categoryTargets, drafts, category, child);
@@ -295,8 +344,8 @@ export function BankingWorkspace(props: Props) {
     setCategoryPickerOpen(false);
     toast({ title: `${categoryTargets.length}件を「${category.name}${child ? ` / ${child.name}` : ""}」に変更（未保存）` });
   }
-  function prepareSave(scope: BankSaveScope, destination?: string, choice?: BankSaveChoice) {
-    if (pending) return;
+  function prepareSave(scope: BankSaveScope, destination?: string) {
+    if (pending || company === "JAPAN") return;
     setError("");
     startTransition(async () => {
       try {
@@ -313,13 +362,9 @@ export function BankingWorkspace(props: Props) {
         setDrafts((current) => removeSavedBankDrafts(current, unchanged.map(editFrom)));
         setSavedRows((current) => ({ ...current, ...Object.fromEntries(unchanged.map((row) => [row.id, { ...rows.find((item) => item.id === row.id), ...row, predictionPending: false }])) }));
         if (!changes.length && destination) { setLeaveUrl(null); router.push(destination); return; }
-        setSavePreview({ scope, choice, changes, destination, omitted: (scope === "selected" ? selected.size : ids.length) - changes.length, unselected: matchingSnapshot?.filter((id) => !selected.has(id)).length || 0 });
-      } catch (error) { const message = error instanceof Error ? error.message : "保存内容を取得できませんでした。編集内容は保持されています"; setError(message); if (company === "JAPAN") { setSaveResult({ saved: 0, remaining: bankSaveIds(rows, drafts, selected, scope).length, uncertain: false }); toast(operationFailureToast(message)); } }
+        setSavePreview({ scope, changes, destination, omitted: (scope === "selected" ? selected.size : ids.length) - changes.length, unselected: matchingSnapshot?.filter((id) => !selected.has(id)).length || 0 });
+      } catch (error) { setError(error instanceof Error ? error.message : "保存内容を取得できませんでした。編集内容は保持されています"); }
     });
-  }
-  function chooseSave(value?: string) {
-    const option = availableBankSaveOption(saveOptions, value);
-    if (option) prepareSave(option.scope, undefined, option.value);
   }
   function save() {
     if (!savePreview || pending) return;
@@ -349,6 +394,7 @@ export function BankingWorkspace(props: Props) {
           if (!verified.success) throw new Error(`保存済みですが最新状態を取得できませんでした: ${verified.error}`);
           setSavedRows((current) => ({ ...current, ...Object.fromEntries(verified.displayRows.map((row) => [row.id, row])) }));
         }
+        setSaveResult({ saved, remaining: 0, uncertain: false, confirmed: true });
         setLeaveUrl(null);
         if (preview.destination) router.push(preview.destination);
         toast({ title: `${saved}件を保存しました`, variant: "success" });
@@ -369,6 +415,8 @@ export function BankingWorkspace(props: Props) {
         const result = classificationPreview ? { success: true as const, rows: classificationPreview as BankDisplayRow[], total: classificationPreview.length, page: 1, revision: effectiveRevision } : await loadBankTransactionsAction(company, { ...filters, page: "1", q: filters.query }, effectiveRevision, true);
         if (!result.success) { setLoadStale(result.code === "STALE"); throw new Error(result.error); }
         if (!classificationPreview) setStream({ revision: result.revision, baseRevision: props.revision, rows: result.rows, page: Math.ceil(result.total / BANK_PAGE_SIZE), total: result.total });
+        const loadedIds = new Set(rows.map((row) => row.id));
+        setUnloadedSelection(new Set(result.rows.filter((row) => !loadedIds.has(row.id)).map((row) => row.id)));
         setMatchingSnapshot(result.rows.map((row) => row.id));
         setSelected(bankMatchingSelection(result.rows, selected));
         setLoadStale(false);
@@ -388,9 +436,10 @@ export function BankingWorkspace(props: Props) {
         }
         if (!result.rows.length) { setClassificationEmpty(result.unclassified); return; }
         if (result.rows.length) {
+          autosave.queue.clearCompleted();
           setClassificationPreview(result.rows.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || a.id.localeCompare(b.id)));
           setAiResult(null);
-          setMatchingSnapshot(null); setSelected(new Set());
+          setMatchingSnapshot(null); setUnloadedSelection(new Set()); setSelected(new Set());
         }
         setClassifyOpen(false);
         toast({ title: `${result.count}件の分類候補（未保存）` });
@@ -460,24 +509,42 @@ export function BankingWorkspace(props: Props) {
     return row.salesSuggestion && value.treatment === "NORMAL" && (!value.categoryId || !row.salesSuggestion.acceptedIds.includes(value.categoryId)) ? row.salesSuggestion : undefined;
   }
   function status(row: BankDisplayRow, value: BankEdit) {
+    const entry = autosave.entries[row.id];
+    if (company === "JAPAN" && (entry || autosave.undoing.includes(row.id))) return <BankAutosaveStatus entry={autosave.undoing.includes(row.id) ? { status: "saving", composing: false, dueAt: 0 } : entry} onRetry={() => autosave.queue.retry(row.id)} onDetails={() => setDetailId(row.id)} />;
     const conflict = drafts[row.id] && drafts[row.id].updatedAt !== row.updatedAt;
     return <div className="bank-row-state bank-classification-state">
       {company === "JAPAN" ? <BankClassificationState row={{ ...row, ...value }} /> : <><BankClassificationBadge row={{ ...row, ...value }} /><BankReviewTag reviewed={value.reviewed} missing={row.sourceMissing} /></>}
-      {drafts[row.id] || row.predictionPending ? <span className="bank-unsaved-label" title={drafts[row.id] ? "編集・未保存" : "自動候補・未採用"}>未保存</span> : null}
+      {drafts[row.id] ? <span className="bank-unsaved-label" title="編集・未保存">未保存</span> : row.predictionPending ? <span className="bank-candidate-label" title="自動候補・未採用">自動候補</span> : null}
       {conflict ? <span className="bank-unsaved-label" title="元の明細が更新されています。保存前に競合を確認してください">競合</span> : null}
       {salesSuggestion(row, value) ? <span className="bank-sales-mark" title={row.salesSuggestion?.reason}>売上提案</span> : null}
     </div>;
   }
   function discardRow(row: BankTransaction) {
-    if (window.confirm("この明細の未保存の編集を破棄しますか？")) setDrafts((current) => { const next = { ...current }; delete next[row.id]; return next; });
+    if (!window.confirm("この明細の未保存の編集を破棄しますか？")) return;
+    if (company === "JAPAN") { autosave.queue.discard(row.id); reloadConflict(row.id); return; }
+    setDrafts((current) => { const next = { ...current }; delete next[row.id]; return next; });
+  }
+  function reloadConflict(id: string) {
+    startTransition(async () => {
+      try {
+        const result = await loadBankDraftRowsAction(company, [id]);
+        if (!result.success) throw new Error(result.error);
+        autosave.queue.receive(result.displayRows);
+        setLatestConflict((current) => ({ ...current, [id]: result.rows[0] }));
+      } catch (error) { setError(error instanceof Error ? error.message : "最新の内容を取得できませんでした"); }
+    });
   }
   function fields(row: BankTransaction, value: BankEdit) {
     const category = categoryMap.get(value.categoryId || "");
     const child = categoryMap.get(value.subCategoryId || "");
     return [
-      <BankCategoryControl key="category" row={row} category={category} child={child} disabled={pending || filterDirty} onChoose={openCategories} />,
-      <select key="treatment" className={bankSelectClass} aria-label={`${row.content}の扱い`} title={treatmentLabels[value.treatment]} value={value.treatment} disabled={pending || filterDirty || Boolean(row.bookkeeping?.splits?.length)} onChange={(e) => edit(row, { treatment: e.target.value as BankEdit["treatment"], reviewed: false })}>{Object.entries(treatmentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>,
-      <Input key="memo" className="h-11" aria-label={`${row.content}のメモ`} placeholder="メモ" value={value.memo} disabled={pending || filterDirty} maxLength={2000} onChange={(e) => edit(row, { memo: e.target.value })} />,
+      <BankCategoryControl key="category" row={row} category={category} child={child} disabled={pending || filterDirty || autosave.undoing.includes(row.id)} onChoose={openCategories} />,
+      <select key="treatment" className={bankSelectClass} aria-label={`${row.content}の扱い`} title={treatmentLabels[value.treatment]} value={value.treatment} disabled={pending || filterDirty || autosave.undoing.includes(row.id) || Boolean(row.bookkeeping?.splits?.length)} onChange={(e) => edit(row, { treatment: e.target.value as BankEdit["treatment"], reviewed: false })}>{Object.entries(treatmentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>,
+      <Input key="memo" className="h-11" aria-label={`${row.content}のメモ`} placeholder="メモ" value={value.memo} disabled={pending || filterDirty || autosave.undoing.includes(row.id)} maxLength={2000}
+        onChange={(e) => edit(row, { memo: e.target.value }, true)}
+        onCompositionStart={() => autosave.queue.setComposing(row.id, true)}
+        onCompositionEnd={(e) => { edit(row, { memo: e.currentTarget.value }, true); autosave.queue.setComposing(row.id, false); }}
+        onBlur={() => autosave.queue.flushMemo(row.id)} />,
     ];
   }
   function openClassification() {
@@ -499,14 +566,16 @@ export function BankingWorkspace(props: Props) {
   }
   const reviewPanel = <BankSelectionReview count={categoryTargets.length} amount={bankSelectionAmount(categoryTargets)} reviewedCount={reviewedCount} disabled={pending || filterDirty} onClear={selection.clear} onReview={reviewSelection} />;
   const matchedContent = (text: string) => bankSearchHighlights(text || "摘要なし", filters.query).map((part, index) => part.matched ? <mark key={index} className="bg-yellow-200 text-black">{part.text}</mark> : part.text);
-  const categoryDisabled = pending || filterDirty || categoryTargets.some((row) => Boolean(row.bookkeeping?.splits?.length));
+  const categoryDisabled = pending || filterDirty || categoryTargets.some((row) => autosave.undoing.includes(row.id)) || (company !== "JAPAN" && categoryTargets.some((row) => Boolean(row.bookkeeping?.splits?.length)));
 
   const loadedSelection = bankLoadedSelection(bankMatchingSelection(rows, selected), selected);
-  const showActions = bankActionBarVisible(selected.size, Boolean(defaultSaveOption));
+  const showActions = bankActionBarVisible(selected.size);
   const detailIndex = rows.findIndex((row) => row.id === detailId);
   const detailRow = rows[detailIndex];
   const detailValue = detailRow ? drafts[detailRow.id] || editFrom(detailRow) : undefined;
   const detailSales = detailRow && detailValue ? salesSuggestion(detailRow, detailValue) : undefined;
+  const detailSave = detailRow ? autosave.entries[detailRow.id] : undefined;
+  const detailLatest = detailRow ? latestConflict[detailRow.id] : undefined;
   const classificationDisabled = pending || Boolean(dirty) || !months.length;
   const canExport = canExportSection({ role: props.role }, "banking");
   const syncStatus = !configured ? "Money Forward 未接続（連携キー・事業者番号が未設定）" : syncing ? `同期中${sync?.completedThrough ? ` / ${sync.completedThrough}まで取得済み` : ""}` : sync?.lastSuccessAt ? `最終同期 ${new Date(sync.lastSuccessAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}` : "Money Forward 接続設定済み・初回同期前";
@@ -546,8 +615,9 @@ export function BankingWorkspace(props: Props) {
       </div>
       <div className="bank-sync-status">
         <span role="status" className="min-w-0 truncate" title={syncStatus}>{syncStatus}</span>
+        {company === "JAPAN" ? failedCount ? <button type="button" className="bank-autosave-summary text-[var(--tone-amber-fg)]" onClick={() => setDetailId(Object.entries(autosave.entries).find(([, entry]) => entry.status === "failed" || entry.status === "conflict")?.[0] || null)}>保存できなかった明細 {failedCount}件{saveCounts.saving ? `・保存中 ${saveCounts.saving}件` : ""}</button> : <span role="status" className="bank-autosave-summary">{saveCounts.saving ? `保存中 ${saveCounts.saving}件` : "すべて保存済み"}</span> : null}
         {props.selectedBalance?.kind === "BANK" && !props.selectedBalance.unspecified ? <Popover><PopoverTrigger asChild><Button variant="ghost" size="sm" className="bank-balance-trigger">計算残高 {props.selectedBalance.balanceCalculation ? <Money value={props.selectedBalance.balanceCalculation.amount} /> : "未計算"}{props.selectedBalance.balanceCalculation && !props.selectedBalance.balanceCalculation.complete ? <span className="text-[var(--tone-amber-fg)]">暫定</span> : null}<ChevronDown className="size-3" /></Button></PopoverTrigger><PopoverContent className="bank-balance-details w-[min(480px,calc(100vw-24px))]" align="start"><section aria-label="選択口座の計算残高" className="space-y-3 text-sm">
-          <h2 className="font-medium">{props.selectedBalance.name}</h2><BankBalanceSummary row={props.selectedBalance} renderMoney={(value) => <Money value={value} />} />
+          <h2 className="font-medium">{props.selectedBalance.name}</h2><BankBalanceSummary row={props.selectedBalance} />
           {props.selectedBalance.balanceCalculation ? <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs"><dt>基準日後の入金</dt><dd className="text-right"><Money value={props.selectedBalance.balanceCalculation.income} sign="always" tone="income" /></dd><dt>基準日後の出金</dt><dd className="text-right"><Money value={-props.selectedBalance.balanceCalculation.expense} /></dd></dl> : null}
           <p className="text-xs text-muted-foreground">残高は全明細が対象・下の絞り込みとは別</p>
           <Button asChild variant="outline"><Link href={`/banking/accounts?company=${company}`}><Settings2 className="size-4" />基準残高を確認・変更</Link></Button>
@@ -573,21 +643,21 @@ export function BankingWorkspace(props: Props) {
       </FilterPanel>
     </div>
     {filterDirty ? <div role="status" className="bank-ledger-notice text-[var(--tone-amber-fg)]">検索条件は未適用<Button variant="ghost" size="icon-sm" title="条件の変更を取り消す" aria-label="条件の変更を取り消す" disabled={pending} onClick={() => { setSearch(filters.query); setFilterEdits({ queryMode: filters.queryMode || "contains", excludeQuery: filters.excludeQuery || "" }); }}><X className="size-4" /></Button></div> : null}
-    {classificationPreview ? <div role="status" className="bank-ledger-notice border-l-2 border-[var(--tone-amber-fg)] bg-[var(--tone-amber-bg)] px-2"><span>{aiResult ? `AI判定結果 ${total.toLocaleString()}件・未保存 ${dirty}件` : `分類候補 ${total.toLocaleString()}件・未保存`}{aiResult ? <span className="ml-2 text-muted-foreground">候補 {aiResult.suggested}件・うち低確度の推定 {aiResult.lowConfidence}件 / {aiResult.model}</span> : null}</span><Button variant="ghost" size="sm" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
+    {classificationPreview ? <div role="status" className="bank-ledger-notice border-l-2 border-[var(--tone-amber-fg)] bg-[var(--tone-amber-bg)] px-2"><span>{aiResult ? `AI判定結果 ${total.toLocaleString()}件` : `分類候補 ${total.toLocaleString()}件`}{aiResult ? <span className="ml-2 text-muted-foreground">候補 {aiResult.suggested}件・うち低確度の推定 {aiResult.lowConfidence}件 / {aiResult.model}</span> : null}</span>{company === "JAPAN" ? <Button variant="outline" size="sm" disabled={pending || filterDirty || !candidates.length} onClick={() => adoptCandidates(candidates, true)}>表示中の候補をすべて採用（{candidates.length}件）</Button> : null}<Button variant="ghost" size="sm" disabled={pending} onClick={() => navigate({})}><X className="size-4" />候補を閉じる</Button></div> : <>
       {filters.analysisThrough ? <div className="bank-ledger-notice border-l-2 border-primary bg-selected px-2"><span>出金分析の対象明細（{filters.analysisThrough}まで）</span><Button variant="ghost" size="sm" disabled={pending} onClick={() => navigate({ analysisThrough: "" })}><X className="size-4" />分析条件を解除</Button></div> : null}
       {filters.transaction ? <div className="bank-ledger-notice border-l-2 border-primary bg-selected px-2"><span>指定された明細を表示中</span><Button variant="ghost" size="sm" disabled={pending} onClick={() => navigate({ transaction: "" })}><X className="size-4" />指定を解除</Button></div> : null}
     </>}
     {(error || sync?.error) && !(company === "JAPAN" && error && saveResult && showActions) ? <div role="alert" className="bank-ledger-notice border-l-2 border-destructive bg-destructive/5 px-2"><CircleAlert className="size-4 shrink-0 text-destructive" /><span className="min-w-0 break-words">{error || sync?.error}</span>{error ? <Button size="icon-sm" variant="ghost" className="ml-auto shrink-0" aria-label="エラーを閉じる" title="閉じる" onClick={() => setError("")}><X className="size-4" /></Button> : null}</div> : null}
-    {!showActions && (saveResult || saving) ? <p role="status" className="text-xs text-muted-foreground">{saving ? `保存中… / ${savedCount}件保存済み` : saveFeedback}</p> : null}
+    {company !== "JAPAN" && !showActions && (saveResult || saving) ? <p role="status" className="text-xs text-muted-foreground">{saving ? `保存中… / ${savedCount}件保存済み` : saveFeedback}</p> : null}
     <div className="bank-ledger-body"><div className="bank-ledger-layout">
       <section className="bank-ledger-sheet">
         <div className="bank-ledger-totals" aria-label="表示条件の集計">
           <span className="font-medium text-foreground">{monthName(filters.month)} · {total.toLocaleString()}件</span>
           {!classificationPreview ? <><span>入金 <Money value={summary.income} tone="income" /></span><span>出金 <Money value={summary.expense} /></span><span>候補の保存待ち {summary.unclassified}件</span>{summary.excluded ? <span>集計対象外 {summary.excluded}件</span> : null}</> : null}
-          <span className="ml-auto lg:hidden"><BankSelectAllCheckbox {...loadedSelection} disabled={selection.disabled || !rows.length} onChange={selection.selectAll} /></span>
+          <span className="bank-ledger-card-select ml-auto"><BankSelectAllCheckbox {...loadedSelection} disabled={selection.disabled || !rows.length} onChange={selection.selectAll} /></span>
         </div>
         <div role="region" aria-label="口座・カード明細一覧" tabIndex={0} className="bank-ledger-scroll">
-          <div className="hidden lg:block">
+          <div className="bank-ledger-table-view">
             <table className="bank-ledger-table" aria-label="口座・カード明細" data-month={Boolean(filters.month)}>
               <colgroup><col className="bank-col-select" /><col className="bank-col-date" /><col /><col className="bank-col-amount" /><col className="bank-col-category" /><col className="bank-col-treatment" /><col className="bank-col-state" /><col className="bank-col-link" /><col className="bank-col-detail" /></colgroup>
               <thead><tr>
@@ -600,26 +670,26 @@ export function BankingWorkspace(props: Props) {
               <tbody>{rows.map((row) => {
                 const value = drafts[row.id] || editFrom(row), controls = fields(row, value);
                 const account = accountMap.get(row.bankAccountId) || "口座未取得";
-                return <tr key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id] || row.predictionPending) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 42px" }} onKeyDown={(event) => { if (!selection.picking && event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
+                return <tr key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 42px" }} onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
                   <td>{selectionBox(row)}</td>
                   <td><time dateTime={row.transactionDate} title={row.transactionDate} className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{bankLedgerDate(row.transactionDate, filters.month)}</time></td>
-                  <td {...(!selection.picking ? cardPressProps(() => setDetailId(row.id)) : {})} title={`${row.content || "摘要なし"} / ${account}`}><div className="bank-description"><span className="truncate font-medium">{matchedContent(row.content)}</span><span className="bank-row-account">{account}</span>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label={[value.memo ? "メモあり" : "", row.sourceMemo ? "元明細メモあり" : ""].filter(Boolean).join("・")} /> : null}</div></td>
+                  <td title={`${row.content || "摘要なし"} / ${account}`}><div className="bank-description"><span className="truncate font-medium">{matchedContent(row.content)}</span><span className="bank-row-account">{account}</span>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label={[value.memo ? "メモあり" : "", row.sourceMemo ? "元明細メモあり" : ""].filter(Boolean).join("・")} /> : null}</div></td>
                   <td className="text-right"><Money value={row.side === "INCOME" ? row.amount : -row.amount} sign="always" tone={row.side === "INCOME" ? "income" : "plain"} /></td>
                   <td>{controls[0]}</td><td>{controls[1]}</td><td>{status(row, value)}</td>
                   <td><div className="bank-link-cell">{linkButton(row)}{row.settlementConflict ? <span className="bank-link-warning" title={row.settlementConflict} aria-label={`要確認: ${row.settlementConflict}`}><CircleAlert className="size-3" /><span className="sr-only">要確認</span></span> : null}</div></td>
-                  <td><Button variant="ghost" size="icon-sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ChevronRight className="size-4" /></Button></td>
+                  <td><Button className="bank-detail-button" variant="ghost" size="sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ScrollText className="size-3.5" />詳細</Button></td>
                 </tr>;
               })}</tbody>
             </table>
           </div>
-          <div className="bank-ledger-cards grid gap-2 md:grid-cols-2 lg:hidden">{rows.map((row) => {
+          <div className="bank-ledger-cards grid gap-2">{rows.map((row) => {
             const value = drafts[row.id] || editFrom(row), category = categoryMap.get(value.categoryId || ""), child = categoryMap.get(value.subCategoryId || "");
-            return <article key={row.id} {...selection.rowProps(row.id)} {...(!selection.picking ? cardPressProps(() => setDetailId(row.id)) : {})} tabIndex={0} data-unsaved={Boolean(drafts[row.id] || row.predictionPending) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 158px" }} className="record-card min-w-0 p-2">
+            return <article key={row.id} {...selection.rowProps(row.id)} tabIndex={0} data-unsaved={Boolean(drafts[row.id]) || undefined} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 158px" }} className="record-card min-w-0 p-2" onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter" && !isSelectionGesture(event)) { event.preventDefault(); setDetailId(row.id); } }}>
               <div className="flex items-center gap-1">{selectionBox(row)}<time className="text-xs tabular-nums text-muted-foreground" title={row.transactionDate}>{row.transactionDate}</time><Money className="ml-auto text-sm font-medium" value={row.side === "INCOME" ? row.amount : -row.amount} sign="always" tone={row.side === "INCOME" ? "income" : "plain"} /></div>
               <h3 className="line-clamp-2 break-words text-sm font-medium" title={row.content}>{matchedContent(row.content)}</h3>
               <p className="truncate text-xs text-muted-foreground">{accountMap.get(row.bankAccountId) || "口座未取得"}</p>
               <p className="truncate text-xs" title={`${category?.name || "科目未設定"}${child ? ` / ${child.name}` : ""}`}>{row.bookkeeping?.splits?.length ? `分割 ${row.bookkeeping.splits.length}科目` : category?.name || "科目未設定"}{child ? ` / ${child.name}` : ""}{value.treatment !== "NORMAL" ? ` · ${treatmentLabels[value.treatment]}` : ""}</p>
-              <div className="flex items-center gap-1"><div className="min-w-0 flex-1">{status(row, value)}{row.settlementConflict ? <p className="text-xs text-[var(--tone-amber-fg)]" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}</div>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label="メモあり（詳細で確認）" /> : null}<Button variant="ghost" size="icon" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ChevronRight className="size-4" /></Button></div>
+              <div className="flex items-center gap-1"><div className="min-w-0 flex-1">{status(row, value)}{row.settlementConflict ? <p className="text-xs text-[var(--tone-amber-fg)]" title={row.settlementConflict}>既存分類・照合を要確認</p> : null}</div>{value.memo || row.sourceMemo ? <MessageSquareText className="size-3 shrink-0 text-muted-foreground" aria-label="メモあり（詳細で確認）" /> : null}<Button className="bank-detail-button" variant="ghost" size="sm" aria-label={`${row.content || "摘要なし"}の詳細`} title="詳細" onClick={() => setDetailId(row.id)}><ScrollText className="size-4" />詳細</Button></div>
             </article>;
           })}</div>
           {!rows.length ? <p className="py-12 text-center text-sm text-muted-foreground">{!configured ? "接続待ち" : "該当する明細はありません"}</p> : null}
@@ -635,15 +705,15 @@ export function BankingWorkspace(props: Props) {
       <aside ref={categoryRail} aria-label="勘定科目の選択" className="bank-category-rail">{reviewPanel}<div className="min-h-0 flex-1"><BankCategoryPicker categories={categories} targets={categoryTargets} disabled={categoryDisabled} onApply={applyCategory} /></div></aside>
     </div>
     </div>
-    {company === "JAPAN" ? showActions ? <footer className="bank-ledger-savebar is-unified" aria-label="明細の保存と選択の操作">
-      {error && saveResult ? <div className="absolute inset-x-0 bottom-full mb-2 flex max-h-36 items-start gap-2 overflow-y-auto rounded-lg border border-destructive/40 bg-card p-3 shadow-sm"><div className="min-w-0 flex-1"><OperationError message={error} /><p role="status" className="mt-1 text-xs">{saveFeedback}</p></div><Button type="button" size="icon" variant="ghost" aria-label="保存エラーを閉じる" onClick={() => setError("")}><X className="size-4" /></Button></div> : null}
+    {company === "JAPAN" ? showActions ? <footer className="bank-ledger-savebar is-unified" aria-label="明細の選択の操作">
       <div className="bank-actions-content">
         {selected.size ? <>
           <div className="bank-selected-summary" role="status"><div className="flex items-baseline gap-2"><span className="whitespace-nowrap">{selected.size}件<span className="bank-selected-desktop">を選択中</span></span><Money className="bank-selection-amount text-xs" value={bankSelectionAmount(categoryTargets)} tone="muted" /></div>
             {loadedSelection.all && total > rows.length ? <button type="button" className="bank-select-matching" disabled={pending || filterDirty} onClick={selectMatching}>検索結果の全 {total.toLocaleString()}件を選択</button> : null}
             {matchingSnapshot ? <span className="bank-selection-snapshot" title={`検索結果の確定範囲 ${matchingSnapshot.length}件 / 選択 ${selected.size}件 / 選択解除 ${matchingSnapshot.filter((id) => !selected.has(id)).length}件（対象外は自動選択しません）`}>確定範囲 {matchingSnapshot.length}件</span> : null}
           </div>
-          <Button className="bank-review-selected" variant={defaultSaveOption ? "outline" : "default"} size="sm" aria-label="確認済みにする" disabled={pending || filterDirty} onClick={() => reviewSelection(true)}><CheckCheck className="size-4" /><span className="hidden lg:inline">確認済みにする</span><span className="lg:hidden">確認</span></Button>
+          <Button className="bank-review-selected" size="sm" aria-label="確認済みにする" disabled={pending || filterDirty} onClick={() => reviewSelection(true)}><CheckCheck className="size-4" /><span className="hidden lg:inline">確認済みにする</span><span className="lg:hidden">確認</span></Button>
+          {selectedCandidates.length ? <Button className="bank-adopt-candidates" variant="outline" size="sm" disabled={pending || filterDirty} onClick={() => adoptCandidates(selectedCandidates)}>候補を採用（{selectedCandidates.length}件）</Button> : null}
           {reviewedCount ? <Button className="bank-unreview-selected" variant="ghost" size="sm" disabled={pending || filterDirty} onClick={() => reviewSelection(false)}>未確認に戻す</Button> : null}
           <Button className="bank-change-category" variant="outline" size="sm" aria-label="科目を変更" disabled={categoryDisabled} onClick={() => openCategories()}><ListTree className="size-4" /><span>科目<span className="hidden lg:inline">を変更</span></span></Button>
           <div className="bank-extra-actions">
@@ -663,9 +733,7 @@ export function BankingWorkspace(props: Props) {
           </DropdownMenuContent></DropdownMenu>
           <Button className="bank-clear-selection" variant="ghost" size="icon-sm" title="選択解除" aria-label="選択解除" disabled={pending} onClick={selection.clear}><X className="size-4" /></Button>
         </> : null}
-        {defaultSaveOption ? <div className="bank-save-actions"><span className="bank-save-counts">未保存 {dirty}件・自動候補 {candidates.length}件</span><Button size="sm" disabled={pending} onClick={() => chooseSave()}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{saving ? "保存中…" : pending ? "処理中…" : `保存…（${defaultSaveOption.count}件）`}</Button></div> : null}
       </div>
-      {!error && (saving || saveResult) ? <span role="status" className="bank-save-feedback">{saving ? `保存中… / ${savedCount}件保存済み` : saveFeedback}</span> : null}
     </footer> : null : <footer className="bank-ledger-savebar shadow-sm" aria-label="明細の保存">
       <div className="grid w-full min-w-0 gap-2 rounded-xl border border-primary/20 bg-selected p-2">
         <div className="flex flex-wrap items-center gap-2 text-xs"><span role="status">選択 {selected.size}件 / 確認済み {reviewedCount}件 / 編集未保存 {dirty}件 / 自動候補 {candidates.length}件</span><Button variant="ghost" size="icon" className="size-9" title="選択解除" aria-label="選択解除" disabled={pending || !selected.size} onClick={selection.clear}><X className="size-4" /></Button>{pending ? <span role="status" className="flex items-center gap-1"><LoaderCircle className="size-4 animate-spin" />処理中{savedCount ? ` / ${savedCount}件保存済み` : ""}</span> : null}{saveResult ? <span role="status">保存済み {saveResult.saved}件 / 残り {saveResult.remaining}件{saveResult.uncertain ? "（結果未確認あり）" : ""}</span> : null}</div>
@@ -686,10 +754,16 @@ export function BankingWorkspace(props: Props) {
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm"><dt className="text-muted-foreground">日付</dt><dd>{detailRow.transactionDate}</dd><dt className="text-muted-foreground">口座</dt><dd className="break-words">{accountMap.get(detailRow.bankAccountId) || "口座未取得"}</dd><dt className="text-muted-foreground">金額</dt><dd><Money className="text-lg font-medium" value={detailRow.side === "INCOME" ? detailRow.amount : -detailRow.amount} sign="always" tone={detailRow.side === "INCOME" ? "income" : "plain"} /></dd></dl>
         {detailRow.sourceMemo ? <section className="space-y-1"><h3 className="text-xs text-muted-foreground">元明細メモ</h3><p className="whitespace-pre-wrap break-words text-sm">{detailRow.sourceMemo}</p></section> : null}
         <div className="grid gap-3 text-sm"><div className="space-y-1"><span className="text-xs text-muted-foreground">勘定科目</span>{fields(detailRow, detailValue)[0]}</div><label className="grid gap-1"><span className="text-xs text-muted-foreground">扱い</span>{fields(detailRow, detailValue)[1]}</label><label className="grid gap-1"><span className="text-xs text-muted-foreground">メモ</span>{fields(detailRow, detailValue)[2]}</label></div>
-        <section className="space-y-2">{status(detailRow, detailValue)}<p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">根拠の理由: {detailValue.classificationReason || "分類の理由は記録されていません"}</p>{drafts[detailRow.id] && drafts[detailRow.id].updatedAt !== detailRow.updatedAt ? <p className="text-sm text-[var(--tone-amber-fg)]">編集が競合しています。元の明細が更新されたため、保存前に変更内容を確認してください。</p> : null}</section>
+        <section className="space-y-2">{company === "JAPAN" && detailSave?.error ? null : status(detailRow, detailValue)}<p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">根拠の理由: {detailValue.classificationReason || "分類の理由は記録されていません"}</p></section>
+        {company === "JAPAN" && detailSave?.error ? <section role="alert" className="space-y-2 rounded-lg border border-[var(--tone-amber-fg)] p-3 text-sm">
+          <p className="font-medium">{detailSave.status === "conflict" ? "競合" : "保存できませんでした"}</p><p className="whitespace-pre-wrap break-words">{detailSave.error}</p>
+          {detailSave.status === "conflict" ? <><p>自分の変更を保持しています。最新の内容を確認し、変更を取り消してから編集し直してください。</p><Button variant="outline" disabled={pending} onClick={() => reloadConflict(detailRow.id)}>最新の内容を読み込む</Button></> : <Button variant="outline" onClick={() => autosave.queue.retry(detailRow.id)}>この明細を再試行</Button>}
+          {detailLatest ? <div className="space-y-1 border-t pt-2"><p className="font-medium">保存済みの最新内容</p><p>{categoryMap.get(detailLatest.categoryId || "")?.name || "科目未設定"}{detailLatest.subCategoryId ? ` / ${categoryMap.get(detailLatest.subCategoryId)?.name || "補助科目"}` : ""}・{treatmentLabels[detailLatest.treatment]}・{detailLatest.reviewed ? "確認済み" : "未確認"}</p><p className="whitespace-pre-wrap break-words">メモ: {detailLatest.memo || "なし"}</p></div> : null}
+        </section> : null}
+        {company === "JAPAN" ? <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={pending || filterDirty || autosave.undoing.includes(detailRow.id)} onClick={() => reviewSelection(!detailValue.reviewed, undefined, [detailRow], false)}>{detailValue.reviewed ? "未確認に戻す" : "確認済みにする"}</Button>{detailRow.predictionPending && !drafts[detailRow.id] ? <Button variant="outline" disabled={pending || filterDirty} onClick={() => adoptCandidates([detailRow], false, false)}>候補を採用</Button> : null}</div> : null}
         {detailSales ? <section className="bank-sales-hint space-y-2 rounded-lg border p-3 text-sm"><p>請求書と照合済みの入金。{detailSales.categoryName ? `売上系の科目「${detailSales.categoryName}」を提案` : "売上系の科目を提案"}</p><p className="break-words text-xs text-muted-foreground">{detailSales.reason}</p><div className="flex flex-wrap gap-2">{detailSales.categoryId ? <Button variant="outline" disabled={pending || filterDirty || Boolean(detailRow.bookkeeping?.splits?.length)} aria-label={`${detailRow.content}に売上科目「${detailSales.categoryName}」を適用`} onClick={() => edit(detailRow, { categoryId: detailSales.categoryId, subCategoryId: undefined, classificationReason: "発行請求書と照合済みの入金（売上科目の提案を採用・未確定）" })}>提案を採用</Button> : null}<Button variant="outline" disabled={pending || filterDirty || Boolean(detailRow.bookkeeping?.splits?.length)} onClick={() => openCategories(detailRow)}>科目を選ぶ</Button></div></section> : null}
         <section className="space-y-2"><div className="flex flex-wrap items-center gap-2">{linkButton(detailRow)}<BankBookkeepingDialog key={`bookkeeping:${detailRow.id}`} company={company} transaction={detailRow} categories={categories} showLabel disabled={pending || Boolean(dirty)} onSaved={(saved) => setSavedRows((current) => ({ ...current, [saved.id]: { ...detailRow, ...saved, predictionPending: false } }))} /><BankBulkReclassifyDialog key={`bulk:${detailRow.id}`} company={company} row={detailRow} accountName={accountMap.get(detailRow.bankAccountId)} categories={categories} showLabel disabled={pending || Boolean(dirty) || detailRow.sourceMissing} onApplied={() => router.refresh()} /></div>{detailRow.settlementConflict ? <p className="break-words text-sm text-[var(--tone-amber-fg)]">既存分類・照合を要確認: {detailRow.settlementConflict}</p> : null}</section>
-        {drafts[detailRow.id] ? <Button variant="ghost" aria-label={`${detailRow.content}の編集を破棄`} disabled={pending} onClick={() => discardRow(detailRow)}><X className="size-4" />この明細の編集を破棄</Button> : null}
+        {drafts[detailRow.id] ? <Button variant="ghost" aria-label={`${detailRow.content}の編集を破棄`} disabled={pending || detailSave?.status === "saving"} onClick={() => discardRow(detailRow)}><X className="size-4" />この変更を取り消す</Button> : null}
       </div> : null}
     </RecordDetail>
     {headerDialog === "audit" ? <BankAuditDialog company={company} open onOpenChange={closeHeaderDialog} /> : null}
@@ -697,8 +771,12 @@ export function BankingWorkspace(props: Props) {
     {headerDialog === "ai-settings" && props.aiSettings ? <BankAiSettings {...props.aiSettings} open onOpenChange={closeHeaderDialog} /> : null}
     {headerDialog === "export" ? <SectionExportDialog scope="banking" role={props.role} open onOpenChange={closeHeaderDialog} /> : null}
 
-    {savePreview ? <BankSavePreviewDialog preview={savePreview} categories={categories} busy={pending} onClose={() => setSavePreview(null)} onSave={save} options={company === "JAPAN" && savePreview.choice ? saveOptions : undefined} onChoice={chooseSave} error={error} /> : null}
-    {guessReview ? <BankGuessReviewDialog guesses={guessReview.guesses} others={guessReview.others} categories={categories} busy={pending} onClose={() => setGuessReview(null)} onConfirm={(acknowledgeGuesses) => reviewSelection(true, { acknowledgeGuesses })} /> : null}
+    {company !== "JAPAN" && savePreview ? <BankSavePreviewDialog preview={savePreview} categories={categories} busy={pending} onClose={() => setSavePreview(null)} onSave={save} error={error} /> : null}
+    {guessReview ? <BankGuessReviewDialog guesses={guessReview.guesses} others={guessReview.others} categories={categories} busy={pending} onClose={() => setGuessReview(null)} onConfirm={(acknowledgeGuesses) => reviewSelection(true, { acknowledgeGuesses }, guessReview.targets, guessReview.confirmUnloaded)} /> : null}
+    <Dialog open={Boolean(bulkConfirmation)} onOpenChange={(open) => { if (!open) setBulkConfirmation(null); }}><DialogContent>
+      <DialogHeader><DialogTitle>{bulkConfirmation?.changes.length}件の明細を変更します</DialogTitle><DialogDescription>「検索結果の全件を選択」で読み込み済みの範囲を超えて選択した明細を含みます。</DialogDescription></DialogHeader>
+      <p className="break-words text-sm">変更内容: {bulkConfirmation?.description}</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setBulkConfirmation(null)}>キャンセル</Button><Button disabled={pending || filterDirty} onClick={() => { if (bulkConfirmation) autosave.queue.enqueue(bulkConfirmation.changes, bulkConfirmation.label, bulkConfirmation.notify); setBulkConfirmation(null); }}>変更して保存</Button></div>
+    </DialogContent></Dialog>
     <Dialog open={categoryPickerOpen} onOpenChange={setCategoryPickerOpen}>
       <DialogContent aria-describedby={undefined} showCloseButton={false} className="top-0 left-auto right-0 h-dvh max-h-dvh w-full max-w-sm translate-x-0 translate-y-0 grid-rows-[auto_minmax(0,1fr)] gap-0 rounded-none p-0 sm:max-w-sm" onInteractOutside={(event) => event.preventDefault()}>
         <DialogHeader className="border-b py-4 pl-3 pr-14"><DialogTitle>科目・確認</DialogTitle></DialogHeader>
@@ -706,22 +784,23 @@ export function BankingWorkspace(props: Props) {
         <div className="min-h-0 flex flex-col">{reviewPanel}<div className="min-h-0 flex-1"><BankCategoryPicker categories={categories} targets={categoryTargets} disabled={categoryDisabled} onApply={applyCategory} /></div></div>
       </DialogContent>
     </Dialog>
-    <Dialog open={Boolean(leaveUrl)} onOpenChange={(open) => { if (!open && !pending) setLeaveUrl(null); }}>
-      <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
-        <DialogHeader><DialogTitle>未保存の変更があります</DialogTitle><DialogDescription>{dirty}件の編集内容が未保存です。</DialogDescription></DialogHeader>
+    <Dialog open={Boolean(leaveUrl)} onOpenChange={(open) => { if (!open && !pending && !leaving) setLeaveUrl(null); }}>
+      <DialogContent showCloseButton={!pending && !leaving} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
+        <DialogHeader><DialogTitle>{company !== "JAPAN" ? "未保存の変更があります" : failedCount ? `保存できなかった変更が ${failedCount}件あります` : saveCounts.saving ? "保存中の変更があります" : "すべて保存済みです"}</DialogTitle><DialogDescription>{company !== "JAPAN" ? `${dirty}件の編集内容が未保存です。` : saveCounts.saving ? "保存が終わるまで待つか、未送信の変更を捨てて移動できます。送信済みの変更は完了を待って移動します。" : failedCount ? "変更内容はこの画面に保持されています。" : "変更は保存されました。そのまま移動できます。"}</DialogDescription></DialogHeader>
         {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button className="min-h-11" variant="outline" disabled={pending} onClick={() => setLeaveUrl(null)}>キャンセル</Button>
-          <Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => { const destination = leaveUrl; setDrafts({}); setClassificationPreview(null); setAiResult(null); setSelected(new Set()); setLeaveUrl(null); if (destination) startTransition(() => router.push(destination)); }}>破棄して移動</Button>
-          <Button className="min-h-11" disabled={pending} onClick={() => { const destination = leaveUrl || undefined; setLeaveUrl(null); prepareSave("edited", destination); }}><Save className="size-4" />保存内容を確認して移動</Button>
+          <Button className="min-h-11" variant="outline" disabled={pending || leaving} onClick={() => setLeaveUrl(null)}>{company === "JAPAN" ? saveCounts.saving ? "待つ" : "この画面に残る" : "キャンセル"}</Button>
+          <Button className="min-h-11" variant="ghost" disabled={pending || leaving || Boolean(autosave.undoing.length)} onClick={async () => { const destination = leaveUrl; setLeaving(true); if (company === "JAPAN") await autosave.queue.discardAll(); setDrafts({}); setClassificationPreview(null); setAiResult(null); setSelected(new Set()); setLeaveUrl(null); setLeaving(false); if (destination) startTransition(() => router.push(destination)); }}>{leaving ? "送信済みの変更を確認中…" : company === "JAPAN" ? leaveBlocked ? "変更を捨てて移動" : "移動する" : "破棄して移動"}</Button>
+          {company !== "JAPAN" ? <Button className="min-h-11" disabled={pending} onClick={() => { const destination = leaveUrl || undefined; setLeaveUrl(null); prepareSave("edited", destination); }}><Save className="size-4" />保存内容を確認して移動</Button> : null}
         </div>
       </DialogContent>
     </Dialog>
-    <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} />
+    <BankingSettings key={settings ? "open" : "closed"} company={company} accounts={accounts} categories={categories} rules={rules} open={settings} onOpenChange={setSettings} onCloseAutoFocus={(event) => { event.preventDefault(); headerMenu.current?.focus(); }} />
     {linkData ? <BankLinksDialog key={linkData.bank.id} company={company} initial={linkData} onClose={() => setLinkData(null)} /> : null}
     <BankClassificationAiDialog key={aiOpen ? "ai-open" : "ai-closed"} company={company} open={aiOpen} onOpenChange={setAiOpen} rowIds={rows.map((row) => row.id)} selectedIds={rows.filter((row) => selected.has(row.id)).map((row) => row.id)} initialScope={aiScope} initialHistory={aiHistory} onResult={(result) => {
+      autosave.queue.clearCompleted();
       setClassificationPreview(result.rows.map((row) => ({ ...row, predictionPending: true }))); setAiResult({ suggested: result.suggested, lowConfidence: result.lowConfidence, model: result.model });
-      setError(""); setMatchingSnapshot(null); setSelected(new Set());
+      setError(""); setMatchingSnapshot(null); setUnloadedSelection(new Set()); setSelected(new Set());
     }} />
     <Dialog open={classifyOpen} onOpenChange={(value) => { if (!pending) setClassifyOpen(value); }}>
       <DialogContent showCloseButton={!pending} onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>

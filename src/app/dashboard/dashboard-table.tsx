@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronsUpDown, FilePlus2, Pencil, X } from "lucide-react";
@@ -11,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { yen } from "@/lib/format";
 
 type Company = "CHINA" | "JAPAN";
 
@@ -116,7 +116,7 @@ export function DashboardTable({
                   <TableCell>
                     <StageBadge stage={row.stage} />
                   </TableCell>
-                  <TableCell className="text-right font-mono text-xs">{yen.format(row.billingTotal)}</TableCell>
+                  <TableCell className="text-right text-xs"><Money value={row.billingTotal} /></TableCell>
                   <TableCell className="text-right">{row.billingCount}回</TableCell>
                   <TableCell>
                     <InstallmentButtons canEdit={canEdit} row={row} />
@@ -301,7 +301,7 @@ function SortableHead({
     <TableHead className={className}>
       <button
         type="button"
-        className="inline-flex w-full items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        className={`inline-flex w-full items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground ${className?.includes("text-right") ? "justify-end" : ""}`}
         onClick={() => onSort(sortKey)}
       >
         <span>{label}</span>

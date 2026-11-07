@@ -1,3 +1,4 @@
+import { Money } from "@/components/app/money";
 import { redirect } from "next/navigation";
 import { BankReconciliationLink } from "@/components/app/bank-reconciliation-link";
 import { isBillableIssuedInvoice } from "@/lib/documents";
@@ -14,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
-import { formatDate, todayIso, yen } from "@/lib/format";
+import { formatDate, todayIso } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { paidForIssued, paidForReceived, readDataForRequest as readData } from "@/lib/store";
 
@@ -51,8 +52,8 @@ export default async function PaymentsPage({
           <CardHeader><CardTitle>未入金一覧</CardTitle></CardHeader>
           <CardContent>
             <Table className="record-cards record-cards-stack record-cards-compact">
-              <TableHeader><TableRow><TableHead>請求書</TableHead><TableHead>クライアント</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>入金済み</TableHead><TableHead>状態</TableHead></TableRow></TableHeader>
-              <TableBody>{unpaidIssued.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell>{data.clients.find((client) => client.id === invoice.clientId)?.companyName}</TableCell><TableCell data-label="期限" data-card-sub="">{formatDate(invoice.dueDate)}</TableCell><TableCell data-card-sub="" data-card-end="">{yen.format(invoice.total)}</TableCell><TableCell data-label="入金済み" data-card-sub="" data-card-hide={paidForIssued(data, invoice.id) ? undefined : ""}>{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell data-card-end=""><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell></TableRow>)}</TableBody>
+              <TableHeader><TableRow><TableHead>請求書</TableHead><TableHead>クライアント</TableHead><TableHead>期限</TableHead><TableHead className="text-right">合計</TableHead><TableHead className="text-right">入金済み</TableHead><TableHead>状態</TableHead></TableRow></TableHeader>
+              <TableBody>{unpaidIssued.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell>{data.clients.find((client) => client.id === invoice.clientId)?.companyName}</TableCell><TableCell data-label="期限" data-card-sub="">{formatDate(invoice.dueDate)}</TableCell><TableCell className="lg:text-right" data-card-sub="" data-card-end=""><Money value={invoice.total} /></TableCell><TableCell className="lg:text-right" data-label="入金済み" data-card-sub="" data-card-hide={paidForIssued(data, invoice.id) ? undefined : ""}><Money value={paidForIssued(data, invoice.id)} /></TableCell><TableCell data-card-end=""><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell></TableRow>)}</TableBody>
             </Table>
           </CardContent>
         </Card>
@@ -60,8 +61,8 @@ export default async function PaymentsPage({
           <CardHeader><CardTitle>未払い・支払い予定</CardTitle></CardHeader>
           <CardContent>
             <Table className="record-cards record-cards-stack record-cards-compact">
-              <TableHeader><TableRow><TableHead>支払先</TableHead><TableHead>案件</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>支払済み</TableHead><TableHead>状態</TableHead></TableRow></TableHeader>
-              <TableBody>{unpaidReceived.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{data.projects.find((project) => project.id === invoice.projectId)?.name}</TableCell><TableCell data-label="期限" data-card-sub="">{formatDate(invoice.dueDate)}</TableCell><TableCell data-card-sub="" data-card-end="">{yen.format(invoice.total)}</TableCell><TableCell data-label="支払済み" data-card-sub="" data-card-hide={paidForReceived(data, invoice.id) ? undefined : ""}>{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell data-card-end=""><StatusBadge kind="received" status={invoice.status} /></TableCell></TableRow>)}</TableBody>
+              <TableHeader><TableRow><TableHead>支払先</TableHead><TableHead>案件</TableHead><TableHead>期限</TableHead><TableHead className="text-right">合計</TableHead><TableHead className="text-right">支払済み</TableHead><TableHead>状態</TableHead></TableRow></TableHeader>
+              <TableBody>{unpaidReceived.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell>{data.projects.find((project) => project.id === invoice.projectId)?.name}</TableCell><TableCell data-label="期限" data-card-sub="">{formatDate(invoice.dueDate)}</TableCell><TableCell className="lg:text-right" data-card-sub="" data-card-end=""><Money value={invoice.total} /></TableCell><TableCell className="lg:text-right" data-label="支払済み" data-card-sub="" data-card-hide={paidForReceived(data, invoice.id) ? undefined : ""}><Money value={paidForReceived(data, invoice.id)} /></TableCell><TableCell data-card-end=""><StatusBadge kind="received" status={invoice.status} /></TableCell></TableRow>)}</TableBody>
             </Table>
           </CardContent>
         </Card>
@@ -73,7 +74,7 @@ export default async function PaymentsPage({
             <CardHeader><CardTitle>入金登録</CardTitle></CardHeader>
             <CardContent>
               <form action={recordIncomePayment} className="space-y-4">
-                <div className="space-y-2"><Label>対象請求書</Label><Select name="issuedInvoiceId" required><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{unpaidIssued.map((invoice) => <SelectItem key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} / {yen.format(invoice.total - paidForIssued(data, invoice.id))}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>対象請求書</Label><Select name="issuedInvoiceId" required><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{unpaidIssued.map((invoice) => <SelectItem key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} / <Money value={invoice.total - paidForIssued(data, invoice.id)} /></SelectItem>)}</SelectContent></Select></div>
                 <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><Label>入金日</Label><Input name="paymentDate" type="date" defaultValue={todayIso()} required /></div><div className="space-y-2"><Label>入金額</Label><Input name="amount" type="number" required /></div></div>
                 <div className="space-y-2"><Label>方法</Label><Input name="method" defaultValue="銀行振込" /></div>
                 <div className="space-y-2"><Label>メモ</Label><Textarea name="memo" /></div>
@@ -87,7 +88,7 @@ export default async function PaymentsPage({
             <CardHeader><CardTitle>支払い登録</CardTitle></CardHeader>
             <CardContent>
               <form action={recordExpensePayment} className="space-y-4">
-                <div className="space-y-2"><Label>対象受領請求書</Label><Select name="receivedInvoiceId" required><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{unpaidReceived.map((invoice) => <SelectItem key={invoice.id} value={invoice.id}>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName} / {yen.format(invoice.total - paidForReceived(data, invoice.id))}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>対象受領請求書</Label><Select name="receivedInvoiceId" required><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{unpaidReceived.map((invoice) => <SelectItem key={invoice.id} value={invoice.id}>{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName} / <Money value={invoice.total - paidForReceived(data, invoice.id)} /></SelectItem>)}</SelectContent></Select></div>
                 <div className="grid gap-3 md:grid-cols-2"><div className="space-y-2"><Label>支払日</Label><Input name="paymentDate" type="date" defaultValue={todayIso()} required /></div><div className="space-y-2"><Label>支払額</Label><Input name="amount" type="number" required /></div></div>
                 <div className="space-y-2"><Label>支払方法</Label><Input name="method" defaultValue="銀行振込" /></div>
                 <div className="space-y-2"><Label>メモ</Label><Textarea name="memo" /></div>

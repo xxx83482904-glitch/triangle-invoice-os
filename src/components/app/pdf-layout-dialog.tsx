@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -25,7 +26,6 @@ type Preview = { url?: string; key?: string; pages?: number; applied?: AppliedPd
 type TextValues = Record<InvoicePdfTextKey, string>;
 const base = (kind: Props["kind"]) => kind === "estimate" ? "/api/estimates" : "/api/issued-invoices";
 const checkClass = "flex min-h-11 items-center gap-3 text-sm lg:min-h-9";
-const money = (value: number) => `¥${new Intl.NumberFormat("ja-JP").format(value)}`;
 const shortLabel = (value: string) => { const label = value.trim().replace(/\s+/g, " "); return label.length > 18 ? `${label.slice(0, 18)}…` : label; };
 
 // The preview, the download and the save all go through one builder, so what is shown is what gets written.
@@ -181,7 +181,7 @@ function PdfLayoutEditor({ kind, id, title, company, canSave, updatedAt, listEdi
       </fieldset>
       {meta.amountsLocked ? <p role="status" className="text-xs text-amber-700 dark:text-amber-300">入金記録があるため金額は変更できません。品名・内訳は変更できます。</p> : null}
       <DocumentItemsEditor key={itemsKey} initialItems={content.items} disabled={contentLocked || saving} lockAmounts={meta.amountsLocked} compact onItemsChange={(items) => changeContent({ items })} />
-      {amountsChanged && content ? <p role="status" className="text-xs text-amber-700 dark:text-amber-300">合計 {money(savedTotal)} → {money(documentItemTotals(content.items).total)}。保存すると売上と未入金の集計も変わります。</p> : null}
+      {amountsChanged && content ? <p role="status" className="text-xs text-amber-700 dark:text-amber-300">合計 <Money value={savedTotal} maximumFractionDigits={3} /> → <Money value={documentItemTotals(content.items).total} maximumFractionDigits={3} />。保存すると売上と未入金の集計も変わります。</p> : null}
       <label className="block min-w-0 space-y-1 text-xs">備考<Textarea aria-label="備考" maxLength={10000} rows={3} disabled={contentLocked || saving} value={content.notes} onChange={(event) => changeContent({ notes: event.target.value })} /></label>
     </section>
     <section className="workspace-detail-group min-w-0 space-y-3" aria-label="PDFの文言">

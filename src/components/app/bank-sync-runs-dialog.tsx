@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, RotateCcw, ScrollText } from "lucide-react";
@@ -8,7 +9,6 @@ import type { CompanyScope } from "@/lib/company";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-const money = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const when = (value?: string) => value ? new Date(value).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : "";
 const key = (runId: string, id: string) => `${runId}\u0000${id}`;
 
@@ -67,7 +67,7 @@ export function BankSyncRunsDialog({ company, disabled = false, pending = 0, ope
               {run.changes.map((change) => { const id = key(run.runId, change.transactionId), checked = selected.has(id); return <label key={change.transactionId} className={`flex gap-2 py-2 text-xs ${change.restorable ? "cursor-pointer" : ""}`}>
                 <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" aria-label={`${change.date} ${change.content || "摘要なし"} を選択`} checked={checked} disabled={busy || !change.restorable} onChange={(e) => toggle(run.runId, change.transactionId, e.target.checked)} />
                 <span className="min-w-0 flex-1 space-y-0.5">
-                  <span className="block break-words font-medium">{change.date} / {change.account} / {change.content || "摘要なし"} / <span className={`tabular-nums ${change.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{money.format(change.amount)}</span></span>
+                  <span className="block break-words font-medium">{change.date} / {change.account} / {change.content || "摘要なし"} / <span className={`tabular-nums ${change.side === "INCOME" ? "text-emerald-700 dark:text-emerald-400" : ""}`}><Money value={change.amount} /></span></span>
                   <span className="block break-words text-muted-foreground">{change.kindLabel}{change.fields.length ? `：${change.fields.map((field) => `${field.label} ${field.before} → ${field.after}`).join("、")}` : ""}</span>
                   {change.before ? <span className="block break-words">同期前：{change.before} → 現在：{change.current}</span> : null}
                   {change.restoredAt ? <span className="block text-emerald-700 dark:text-emerald-400">復元済み {when(change.restoredAt)}</span> : change.reviewCleared && change.blocked ? <span className="block text-amber-700 dark:text-amber-300">{change.blocked}</span> : null}

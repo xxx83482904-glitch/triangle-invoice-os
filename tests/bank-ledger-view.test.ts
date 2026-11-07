@@ -26,7 +26,8 @@ test("advanced filters count category, match mode and excluded words, but not or
 
 test("ledger dates keep the year in all periods without timezone conversion", () => {
   assert.equal(bankLedgerDate("2026-10-30", "2026-10"), "10/30");
-  assert.equal(bankLedgerDate("2026-01-05", "2026-01"), "1/05");
+  assert.equal(bankLedgerDate("2026-01-05", "2026-01"), "1/5");
+  assert.equal(bankLedgerDate("2026-09-05", "2026-09"), "9/5");
   assert.equal(bankLedgerDate("2026-10-30", ""), "2026/10/30");
   assert.equal(bankLedgerDate("", ""), "");
   assert.equal(bankLedgerDate("unknown", "2026-10"), "unknown");
@@ -39,11 +40,10 @@ test("sortable headings toggle the same column and start another column descendi
   assert.equal(bankLedgerSort("amount-desc", "amount"), "amount-asc");
 });
 
-test("the action bar needs a selection or a saveable change", () => {
-  assert.equal(bankActionBarVisible(0, false), false);
-  assert.equal(bankActionBarVisible(1, false), true);
-  assert.equal(bankActionBarVisible(0, true), true);
-  assert.equal(bankActionBarVisible(1, true), true);
+test("the autosave action bar appears only while rows are selected", () => {
+  assert.equal(bankActionBarVisible(0), false);
+  assert.equal(bankActionBarVisible(1), true);
+  assert.equal(bankActionBarVisible(100), true);
 });
 
 test("the header checkbox covers none, some and all of the eligible loaded scope", () => {

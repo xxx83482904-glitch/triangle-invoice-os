@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronsUpDown, FileText, Pencil, Upload, X } from "lucide-react";
@@ -11,7 +12,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDate, yen } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ProjectStatus } from "@/lib/types";
 
@@ -105,8 +106,8 @@ export function ProjectsTable({
           <SortableHead className={showFinancials ? "w-[13%]" : "w-[18%]"} label="クライアント" sortKey="clientName" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <SortableHead className={showFinancials ? "w-[10%]" : "w-[14%]"} label="会社/状態" sortKey="company" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <SortableHead className="w-[12%] text-right" label="請求設定" sortKey="billingTotal" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
-          {showFinancials ? <SortableHead className="w-[15%]" label="入金状況" sortKey="unpaidIncomeAmount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
-          {showFinancials ? <SortableHead className="w-[12%]" label="支払・請求差額" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
+          {showFinancials ? <SortableHead className="w-[15%] text-right" label="入金状況" sortKey="unpaidIncomeAmount" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
+          {showFinancials ? <SortableHead className="w-[12%] text-right" label="支払・請求差額" sortKey="grossProfit" activeKey={sortKey} direction={sortDirection} onSort={changeSort} /> : null}
           <TableHead className={showFinancials ? "w-[10%]" : "w-[16%]"}>契約書</TableHead>
           <SortableHead className={showFinancials ? "w-[6%]" : "w-[8%]"} label="更新" sortKey="updatedAt" activeKey={sortKey} direction={sortDirection} onSort={changeSort} />
           <TableHead className="w-12 text-right">編集</TableHead>
@@ -134,19 +135,19 @@ export function ProjectsTable({
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                <div className="font-mono text-xs">{yen.format(row.billingTotal)}</div>
+                <div className="text-xs"><Money value={row.billingTotal} /></div>
                 <div className="text-xs text-muted-foreground">{row.billingCount}回請求</div>
               </TableCell>
-              {showFinancials ? <TableCell>
-                <div className="text-xs">請求 {yen.format(row.invoicedAmount)}</div>
-                <div className="text-xs">入金 {yen.format(row.paidIncomeAmount)}</div>
+              {showFinancials ? <TableCell className="text-right">
+                <div className="text-xs">請求 <Money value={row.invoicedAmount} /></div>
+                <div className="text-xs">入金 <Money value={row.paidIncomeAmount} /></div>
                 <div className={row.unpaidIncomeAmount > 0 ? "text-xs font-medium text-amber-700" : "text-xs text-muted-foreground"}>
-                  未入金 {yen.format(row.unpaidIncomeAmount)}
+                  未入金 <Money value={row.unpaidIncomeAmount} />
                 </div>
               </TableCell> : null}
-              {showFinancials ? <TableCell>
-                <div className="text-xs">支払済 {yen.format(row.paidExpenseAmount)}</div>
-                <div className="text-xs font-medium">請求差額（税込） {yen.format(row.grossProfit)}</div>
+              {showFinancials ? <TableCell className="text-right">
+                <div className="text-xs">支払済 <Money value={row.paidExpenseAmount} /></div>
+                <div className="text-xs font-medium">請求差額（税込） <Money value={row.grossProfit} /></div>
               </TableCell> : null}
               <TableCell>
                 <ContractUpload canEdit={canEdit} row={row} />
@@ -278,7 +279,7 @@ function ContractUpload({ canEdit, row }: { canEdit: boolean; row: ProjectListRo
       )}
       {row.contractExtractedAmount || row.contractExtractedBillingCount ? (
         <div className="text-[11px] leading-tight text-muted-foreground">
-          {row.contractExtractedAmount ? yen.format(row.contractExtractedAmount) : "-"} / {row.contractExtractedBillingCount ?? row.billingCount}回
+          {row.contractExtractedAmount ? <Money value={row.contractExtractedAmount} /> : "-"} / {row.contractExtractedBillingCount ?? row.billingCount}回
         </div>
       ) : null}
       {canEdit ? (
@@ -345,7 +346,7 @@ function SortableHead({
     <TableHead className={className}>
       <button
         type="button"
-        className="inline-flex w-full items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        className={`inline-flex w-full items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground ${className?.includes("text-right") ? "justify-end" : ""}`}
         onClick={() => onSort(sortKey)}
       >
         <span>{label}</span>

@@ -14,6 +14,8 @@ import { isActiveUser } from "@/lib/user-access";
 import type { CompanyScope } from "@/lib/company";
 import { mutateData, readData } from "@/lib/store";
 import { bankingDataRevision } from "@/lib/banking-revision";
+import { saveBankAutosaveEdits } from "@/lib/bank-autosave-server";
+import type { BankAutosaveEdit } from "@/lib/bank-autosave";
 
 function errorMessage(error: unknown) {
   return error instanceof ZodError ? "入力内容を確認してください" : error instanceof Error ? error.message : "保存に失敗しました";
@@ -46,6 +48,19 @@ export async function saveBankEditsAction(company: CompanyScope, edits: BankEdit
       return saveBankEdits(data, live, company, edits);
     });
     revalidateBanking(); return { ...result, success: true as const };
+  } catch (error) { return { success: false as const, error: errorMessage(error) }; }
+}
+export async function saveBankAutosaveAction(company: CompanyScope, edits: BankAutosaveEdit[]) {
+  const user = await requireUser();
+  try {
+    const auditLogId = crypto.randomUUID();
+    const result = await mutateData(user.id, "BANK_CLASSIFY", "BankTransaction", company, (data) => {
+      const live = data.users.find((row) => row.id === user.id && isActiveUser(row));
+      if (!live) throw new Error("利用者の権限を確認してください");
+      return saveBankAutosaveEdits(data, live, company, edits, auditLogId);
+    }, undefined, { auditLogId });
+    revalidateBanking();
+    return { ...result, success: true as const };
   } catch (error) { return { success: false as const, error: errorMessage(error) }; }
 }
 export async function saveBankRuleAction(company: CompanyScope, input: BankRuleInput) {

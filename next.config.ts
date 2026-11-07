@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
+import { resolveBuildSha } from "./scripts/build-sha.mjs";
+
+const triangleBuildSha = resolveBuildSha();
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  env: { TRIANGLE_BUILD_SHA: triangleBuildSha },
   async headers() {
     return [
       "/design-fee-calculator", "/design-fee-calculator/index.html",

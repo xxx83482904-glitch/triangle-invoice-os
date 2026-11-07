@@ -1,3 +1,4 @@
+import { Money } from "@/components/app/money";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -9,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { companyFromParam } from "@/lib/company";
-import { formatDate, percent, yen } from "@/lib/format";
+import { formatDate, percent } from "@/lib/format";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
@@ -52,7 +53,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           ].map(([label, value]) => (
             <Card variant="section" key={label as string}>
               <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
-              <CardContent className="text-xl font-semibold">{value === null ? "—" : yen.format(value as number)}</CardContent>
+              <CardContent className="text-xl font-medium">{value === null ? "—" : <Money value={value as number} />}</CardContent>
             </Card>
           ))}
           <Card variant="section">
@@ -68,8 +69,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardHeader><CardTitle>発行請求書一覧</CardTitle></CardHeader>
             <CardContent>
               <Table className="record-cards record-cards-stack record-cards-compact">
-                <TableHeader><TableRow><TableHead>番号</TableHead><TableHead>発行日</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>入金</TableHead><TableHead>状態</TableHead><TableHead>PDF</TableHead></TableRow></TableHeader>
-                <TableBody>{issued.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell data-label="発行日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell data-label="合計">{yen.format(invoice.total)}</TableCell><TableCell data-label="入金">{yen.format(paidForIssued(data, invoice.id))}</TableCell><TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell><TableCell data-label="PDF"><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell></TableRow>)}</TableBody>
+                <TableHeader><TableRow><TableHead>番号</TableHead><TableHead>発行日</TableHead><TableHead>期限</TableHead><TableHead className="text-right">合計</TableHead><TableHead className="text-right">入金</TableHead><TableHead>状態</TableHead><TableHead>PDF</TableHead></TableRow></TableHeader>
+                <TableBody>{issued.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell data-label="発行日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell className="lg:text-right" data-label="合計"><Money value={invoice.total} /></TableCell><TableCell className="lg:text-right" data-label="入金"><Money value={paidForIssued(data, invoice.id)} /></TableCell><TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell><TableCell data-label="PDF"><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
           </Card>
@@ -77,8 +78,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardHeader><CardTitle>受領請求書・支払い状況</CardTitle></CardHeader>
             <CardContent>
               <Table className="record-cards record-cards-stack record-cards-compact">
-                <TableHeader><TableRow><TableHead>請求元</TableHead><TableHead>請求日</TableHead><TableHead>期限</TableHead><TableHead>合計</TableHead><TableHead>支払済み</TableHead><TableHead>状態</TableHead><TableHead>ファイル</TableHead></TableRow></TableHeader>
-                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell data-label="請求日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell data-label="合計">{yen.format(invoice.total)}</TableCell><TableCell data-label="支払済み">{yen.format(paidForReceived(data, invoice.id))}</TableCell><TableCell data-label="状態"><StatusBadge kind="received" status={invoice.status} /></TableCell><TableCell data-label="ファイル">{invoice.fileUrl ? <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank">表示<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></a></Button> : "-"}</TableCell></TableRow>)}</TableBody>
+                <TableHeader><TableRow><TableHead>請求元</TableHead><TableHead>請求日</TableHead><TableHead>期限</TableHead><TableHead className="text-right">合計</TableHead><TableHead className="text-right">支払済み</TableHead><TableHead>状態</TableHead><TableHead>ファイル</TableHead></TableRow></TableHeader>
+                <TableBody>{received.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{data.vendors.find((vendor) => vendor.id === invoice.vendorId)?.companyName}</TableCell><TableCell data-label="請求日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell className="lg:text-right" data-label="合計"><Money value={invoice.total} /></TableCell><TableCell className="lg:text-right" data-label="支払済み"><Money value={paidForReceived(data, invoice.id)} /></TableCell><TableCell data-label="状態"><StatusBadge kind="received" status={invoice.status} /></TableCell><TableCell data-label="ファイル">{invoice.fileUrl ? <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><a href={invoice.fileUrl} target="_blank">表示<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></a></Button> : "-"}</TableCell></TableRow>)}</TableBody>
               </Table>
             </CardContent>
           </Card> : null}
@@ -105,7 +106,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <div className="flex justify-between gap-4">
                   <span className="text-muted-foreground">契約書読取</span>
                   <span>
-                    {project.contractExtractedAmount ? yen.format(project.contractExtractedAmount) : "-"} /{" "}
+                    {project.contractExtractedAmount ? <Money value={project.contractExtractedAmount} /> : "-"} /{" "}
                     {project.contractExtractedBillingCount ?? project.billingCount ?? 1}回
                   </span>
                 </div>

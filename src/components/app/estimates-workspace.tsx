@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { OptionTabs } from "@/components/app/option-tabs";
 import { useState, useTransition } from "react";
@@ -85,7 +86,7 @@ export function EstimatesWorkspace({ company, estimates, rows, projects, clients
     </DialogContent></Dialog>
     <Dialog open={convertTarget !== null} onOpenChange={(open) => { if (!open && !pending) setConvertTarget(null); }}><DialogContent aria-describedby={undefined} showCloseButton={!pending} className="max-h-[90dvh] overflow-y-auto rounded-lg sm:max-w-lg" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
       <DialogHeader><DialogTitle>請求書に変換</DialogTitle></DialogHeader>
-      <p className="break-words text-sm">{convertTarget?.estimateNumber} / {new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" }).format(convertTarget?.total || 0)}</p>
+      <p className="break-words text-sm">{convertTarget?.estimateNumber} / <Money value={convertTarget?.total || 0} /></p>
       <p className="text-sm text-muted-foreground">請求書は下書きで作成されます。変換後、元の見積書は編集・削除できません。</p>
       <form className="space-y-3" onSubmit={(e) => {
         e.preventDefault(); if (!convertTarget) return;

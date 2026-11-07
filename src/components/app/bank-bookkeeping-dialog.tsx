@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { useOperationError } from "@/hooks/use-operation-error";
 import { OperationPending } from "@/components/app/operation-feedback";
@@ -25,7 +26,6 @@ type Props = {
   showLabel?: boolean;
   onSaved?: (transaction: BookkeepingTransaction) => void;
 };
-const money = (amount: number) => new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" }).format(amount);
 const selectClass = "min-h-11 w-full min-w-0 rounded-md border bg-background px-2 text-sm disabled:opacity-50";
 const holdLabels: Record<BankHoldReason, string> = {
   MISSING_DOCUMENT: "資料不足", CATEGORY_UNCLEAR: "科目の確認", AMOUNT_MISMATCH: "金額の確認", DUPLICATE_REVIEW: "重複の確認", OTHER: "その他",
@@ -123,7 +123,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
     });
   }
   return <form className="min-w-0 space-y-4" onSubmit={(event) => { event.preventDefault(); if (!locked && !busy && !validation.issue && !holdInvalid && !reviewInvalid) save(); }}>
-    <div className="flex flex-wrap justify-between gap-2 border-b pb-3"><span>{row.side === "INCOME" ? "入金" : "出金"}</span><strong className="break-all tabular-nums">{money(row.amount)}</strong></div>
+    <div className="flex flex-wrap justify-between gap-2 border-b pb-3"><span>{row.side === "INCOME" ? "入金" : "出金"}</span><strong className="break-all tabular-nums font-medium"><Money value={row.amount} /></strong></div>
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs"><dt className="text-muted-foreground">元明細ID</dt><dd className="break-all">{row.sourceId}</dd><dt className="text-muted-foreground">事業者</dt><dd className="break-all">{row.officeCode}</dd></dl>
     {detail.lockedReason ? <p role="alert" className="border-l-2 border-amber-500 p-3">{detail.lockedReason}</p> : null}
     <fieldset disabled={locked || busy} className="min-w-0 space-y-4 disabled:opacity-60">
@@ -135,7 +135,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
             <CategorySelection categories={available} categoryId={split.categoryId} subCategoryId={split.subCategoryId} disabled={locked || busy} label={`分割${index + 1}`} onChange={(categoryId, subCategoryId) => changeSplit(split.id, { categoryId: categoryId || "", subCategoryId })} />
             <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"><label className="min-w-0 space-y-1"><span className="text-xs text-muted-foreground">金額 (円)</span><Input type="number" inputMode="numeric" min={1} max={row.amount} step={1} className="min-h-11" aria-label={`分割${index + 1}の金額`} value={split.amount || ""} onChange={(event) => changeSplit(split.id, { amount: Number(event.target.value) })} /></label><label className="min-w-0 space-y-1"><span className="text-xs text-muted-foreground">メモ</span><Input className="min-h-11" maxLength={2000} aria-label={`分割${index + 1}のメモ`} value={split.memo} onChange={(event) => changeSplit(split.id, { memo: event.target.value })} /></label></div>
           </li>)}</ol>
-          <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" className="min-h-11" disabled={draft.splits.length >= 50} onClick={() => change({ splits: [...draft.splits, newSplit(Math.max(0, validation.remaining))], reviewed: false })}><Plus className="size-4" />分割行を追加</Button><p className="text-sm tabular-nums" role="status">合計 {money(validation.total)} / 差額 {money(validation.remaining)}</p></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" className="min-h-11" disabled={draft.splits.length >= 50} onClick={() => change({ splits: [...draft.splits, newSplit(Math.max(0, validation.remaining))], reviewed: false })}><Plus className="size-4" />分割行を追加</Button><p className="text-sm tabular-nums" role="status">合計 <Money value={validation.total} /> / 差額 <Money value={validation.remaining} /></p></div>
           {validation.issue ? <p role="alert" className="text-sm text-destructive">{validation.issue}</p> : <p className="text-sm text-emerald-700" role="status">分割合計と明細金額が一致</p>}
         </>}
       </section>
@@ -152,7 +152,7 @@ function BookkeepingEditor({ company, detail, categories, onDirty, onBusy, onSav
     <section className="min-w-0 space-y-2 border-t pt-3" aria-label="重複候補と根拠">
       <h3 className="text-sm font-semibold">重複候補 <span className="tabular-nums">{detail.duplicates.length}件</span></h3>
       {detail.duplicates.length ? <><p className="text-xs text-amber-700">未確定・元明細を保持</p><ul className="max-h-64 divide-y overflow-y-auto">{detail.duplicates.map((candidate) => <li key={candidate.id} className="min-w-0 space-y-1 py-3 text-xs">
-        <p className="break-words font-medium">{candidate.accountName} / {candidate.transactionDate} / {money(candidate.amount)}</p><p className="break-words">{candidate.content}</p>
+        <p className="break-words font-medium">{candidate.accountName} / {candidate.transactionDate} / <Money value={candidate.amount} /></p><p className="break-words">{candidate.content}</p>
         <p className="break-words text-amber-700">{candidate.evidence.map((evidence) => evidence === "SOURCE_ID" ? "元明細IDが一致" : "日付・金額・入出金・摘要が一致").join(" / ")}{candidate.sourceMissing ? " / 元明細なし" : ""}</p>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1"><dt>この元明細ID</dt><dd className="break-all">{candidate.comparedSourceId || "未設定"}</dd><dt>候補の元明細ID</dt><dd className="break-all">{candidate.sourceId || "未設定"}</dd><dt>候補の記録ID</dt><dd className="break-all">{candidate.id}</dd><dt>事業者</dt><dd className="break-all">{candidate.officeCode}</dd></dl>
       </li>)}</ul></> : <p className="text-xs text-muted-foreground">一致する重複候補はありません</p>}

@@ -1,3 +1,4 @@
+import { formatMoney } from "@/lib/format";
 import { importShipmentOptions } from "@/lib/import-shipment-views";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,7 @@ export default async function MailSorterPage({
   const linkTargets = data.receivedInvoices
     .filter((invoice) => !invoice.deletedAt && projectIds.has(invoice.projectId))
     .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.createdAt.localeCompare(a.createdAt))
-    .map((invoice) => ({ value: invoice.id, label: `${vendorName(invoice.vendorId)} / ${invoice.issueDate || "日付なし"} / ¥${invoice.total.toLocaleString("ja-JP")}${invoice.originalFileName ? ` / ${invoice.originalFileName}` : ""}` }));
+    .map((invoice) => ({ value: invoice.id, label: `${vendorName(invoice.vendorId)} / ${invoice.issueDate || "日付なし"} / ${formatMoney(invoice.total, { maximumFractionDigits: 3 })}${invoice.originalFileName ? ` / ${invoice.originalFileName}` : ""}` }));
   const targetLabels = new Map(linkTargets.map((target) => [target.value, target.label]));
   const integrity = mailIntegrityReport(data, company, uploadedFileExists);
 

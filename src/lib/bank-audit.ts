@@ -1,3 +1,4 @@
+import { formatMoney } from "@/lib/format";
 import { createHash } from "node:crypto";
 import { assertBankAccess } from "@/lib/banking";
 import { assertCan } from "@/lib/rbac";
@@ -30,7 +31,7 @@ export function bankAuditEntries(data: AppData, user: Pick<User, "id" | "role">,
   assertBankAccess(user, company);
   const category = new Map(data.accountingCategories.filter((row) => row.company === company).map((row) => [row.id, row.name]));
   const describe = (row: BankTransaction) => {
-    const splits = row.bookkeeping?.splits?.map((part) => `${category.get(part.categoryId) || "不明な科目"} ${part.amount.toLocaleString("ja-JP")}円${part.memo ? ` (${part.memo})` : ""}`).join(" + ");
+    const splits = row.bookkeeping?.splits?.map((part) => `${category.get(part.categoryId) || "不明な科目"} ${formatMoney(part.amount, { maximumFractionDigits: 3 })}${part.memo ? ` (${part.memo})` : ""}`).join(" + ");
     return [splits || category.get(row.categoryId || "") || "科目なし",
       { NORMAL: "通常", TRANSFER: "振替", EXCLUDED: "対象外" }[row.treatment],
       row.reviewed ? "確認済み" : "未確認", row.memo,

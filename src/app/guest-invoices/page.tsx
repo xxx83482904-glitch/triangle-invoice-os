@@ -1,3 +1,4 @@
+import { Money } from "@/components/app/money";
 import { redirect } from "next/navigation";
 import { FileText, LogOut } from "lucide-react";
 import { createGuestIssuedInvoice, logoutAction } from "@/app/actions";
@@ -15,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
-import { formatDate, todayIso, yen } from "@/lib/format";
+import { formatDate, todayIso } from "@/lib/format";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
 
@@ -106,7 +107,7 @@ export default async function GuestInvoicesPage({
                       <TableCell data-label="案件">{data.projects.find((project) => project.id === invoice.projectId)?.name}</TableCell>
                       <TableCell data-label="発行日">{formatDate(invoice.issueDate)}</TableCell>
                       <TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell>
-                      <TableCell data-label="合計" className="text-right">{yen.format(invoice.total)}</TableCell>
+                      <TableCell data-label="合計" className="text-right"><Money value={invoice.total} /></TableCell>
                       <TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell>
                       <TableCell data-label="PDF">
                         <Button asChild size="sm" variant="outline">

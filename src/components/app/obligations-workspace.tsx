@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { ArrowUpRight } from "lucide-react";
 
@@ -15,7 +16,6 @@ import type { CompanyScope } from "@/lib/company";
 import type { ObligationMutation } from "@/lib/obligation-edits";
 import type { ObligationSummary } from "@/lib/tax-obligations";
 
-const money = (amount: number) => new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(amount);
 const dateTime = (value: string) => new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 const actionLabels = { exclude: "対象外にする", restoreExclusion: "対象外を元に戻す", pay: "支払済みにする", reopen: "支払済みを取り消す", cancel: "登録を取り消す", restoreManual: "登録を元に戻す" };
 type Selection = { action: keyof typeof actionLabels; id: string; version: string; title: string };
@@ -40,7 +40,7 @@ export function ObligationsWorkspace({ company, today, summary, mayEdit, actors 
   const activeManual = summary.items.filter((row) => row.source === "manual").length;
   return <div className="min-w-0 space-y-6">
     <p className="text-sm text-muted-foreground">支払先の「税金・社会保険」区分を優先し、未設定の場合だけ支払先・差出人の名前から推定します。ファイル名・メモ・OCR本文は判定に使いません。<Link href={`/partners?company=${company}&tab=vendors`} className="ml-1 hover:underline underline-offset-4 hover:text-primary">支払先の区分を設定</Link></p>
-    <p className="text-sm" data-obligation-summary>未払い {summary.items.length}件（期限超過 {summary.overdue} / 14日以内 {summary.dueSoon}）/ 金額判明分の合計 ¥{money(summary.outstandingTotal)} / 金額未登録 {summary.unpriced}件 / うち手入力 {activeManual}件</p>
+    <p className="text-sm" data-obligation-summary>未払い {summary.items.length}件（期限超過 {summary.overdue} / 14日以内 {summary.dueSoon}）/ 金額判明分の合計 <Money value={summary.outstandingTotal} /> / 金額未登録 {summary.unpriced}件 / うち手入力 {activeManual}件</p>
     {message ? <p role="status" className="rounded-md border p-3 text-sm">{message}</p> : null}
     {error && !selection ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
     {mayEdit ? <details className="rounded-md border p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-medium">書類のない未納を追加</summary>
@@ -62,7 +62,7 @@ export function ObligationsWorkspace({ company, today, summary, mayEdit, actors 
         {row.dueDate ? <time className="tabular-nums text-muted-foreground">期限 {row.dueDate}</time> : null}
       </div>
       <h2 className="break-words text-sm font-medium">{row.title} <span className="font-normal text-muted-foreground">/ {row.party}</span></h2>
-      <p className="text-sm">{row.amount !== undefined ? <>請求 ¥{money(row.amount)} / 支払済 ¥{money(row.paid)} / <strong>未払い ¥{money(row.outstanding || 0)}</strong></> : "金額未登録"}</p>
+      <p className="text-sm">{row.amount !== undefined ? <>請求 <Money value={row.amount} /> / 支払済 <Money value={row.paid} /> / <strong className="font-medium">未払い <Money value={row.outstanding || 0} /></strong></> : "金額未登録"}</p>
       <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{row.note}</p>
       <div className="flex flex-wrap items-center gap-2">
         {row.href ? <Button asChild variant="soft" size="sm" className="h-auto max-w-full whitespace-normal break-words py-2 text-left lg:h-auto lg:min-h-8 lg:py-1.5"><Link href={row.href}>{row.source === "received" ? "受領請求書を開く" : "郵便物フォルダーを開く"}<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /></Link></Button> : null}
@@ -82,13 +82,13 @@ export function ObligationsWorkspace({ company, today, summary, mayEdit, actors 
     </details>
     {summary.manualInactive.length ? <details className="rounded-md border p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-medium">手入力の支払済み・登録取消 {summary.manualInactive.length}件</summary>
       <ul className="divide-y">{summary.manualInactive.map((row) => <li key={row.id} data-manual-history-id={row.id} className="space-y-2 py-3 text-sm">
-        <p className="break-words font-medium">{row.title} / {row.party} / ¥{money(row.amount)}</p>
+        <p className="break-words font-medium">{row.title} / {row.party} / <Money value={row.amount} /></p>
         <p>{row.status === "PAID" ? `支払済み（手入力） / ${row.paidAt}` : "登録取消"}</p>
         <ul className="space-y-1 text-xs text-muted-foreground">{row.history.map((event, index) => <li key={index} className="break-words">{dateTime(event.at)} / {actors[event.byId] || event.byId} / {({ CREATE: "登録", PAY: "支払済み", REOPEN: "支払済み取消", CANCEL: "登録取消", RESTORE: "登録復元" })[event.action]} / {event.reason}{event.paymentDate ? ` / 支払日 ${event.paymentDate}` : ""}</li>)}</ul>
         {operationButton({ action: row.status === "PAID" ? "reopen" : "restoreManual", id: row.id, version: row.updatedAt, title: row.title })}
       </li>)}</ul>
     </details> : null}
-    {summary.paidRecently.length ? <details className="text-sm"><summary className="min-h-11 cursor-pointer content-center font-medium">支払済みの受領請求書 {summary.paidRecently.length}件（直近20件まで）</summary><ul className="divide-y">{summary.paidRecently.map((row) => <li key={row.id} className="flex flex-wrap justify-between gap-2 py-2"><span className="break-words">{row.title}</span><span className="tabular-nums text-muted-foreground">{row.paidAt} / ¥{money(row.amount)}</span></li>)}</ul></details> : null}
+    {summary.paidRecently.length ? <details className="text-sm"><summary className="min-h-11 cursor-pointer content-center font-medium">支払済みの受領請求書 {summary.paidRecently.length}件（直近20件まで）</summary><ul className="divide-y">{summary.paidRecently.map((row) => <li key={row.id} className="flex flex-wrap justify-between gap-2 py-2"><span className="break-words">{row.title}</span><span className="tabular-nums text-muted-foreground">{row.paidAt} / <Money value={row.amount} /></span></li>)}</ul></details> : null}
     <Dialog open={Boolean(selection)} onOpenChange={(open) => { if (!open && !pending) { setSelection(null); setError(""); } }}><DialogContent className="max-h-[90dvh] overflow-y-auto">
       <DialogHeader><DialogTitle>{selection ? actionLabels[selection.action] : "操作"}</DialogTitle><DialogDescription className="break-words">{selection?.title}。理由を記録して保存します。</DialogDescription></DialogHeader>
       <form className="min-w-0 space-y-3" onSubmit={async (event) => { event.preventDefault(); if (!selection) return; const { title: _title, ...input } = selection; void _title; if (await save({ ...input, reason, ...(input.action === "pay" ? { paymentDate } : {}) })) setSelection(null); }}>

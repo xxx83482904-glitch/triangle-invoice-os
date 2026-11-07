@@ -4,10 +4,24 @@ export const yen = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
 
-export function formatMoney(value: number, { sign = "negative" }: { sign?: "negative" | "always" | "never" } = {}) {
+export type MoneyFormatOptions = {
+  sign?: "negative" | "always" | "never";
+  maximumFractionDigits?: number;
+  notation?: "standard" | "compact";
+};
+
+const moneyFormats = new Map<string, Intl.NumberFormat>([["standard:0", yen]]);
+
+export function formatMoney(value: number, { sign = "negative", maximumFractionDigits = 0, notation = "standard" }: MoneyFormatOptions = {}) {
   if (!Number.isFinite(value)) return "—";
+  const key = `${notation}:${maximumFractionDigits}`;
+  let formatter = moneyFormats.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", minimumFractionDigits: 0, maximumFractionDigits, notation });
+    moneyFormats.set(key, formatter);
+  }
   const prefix = value === 0 || sign === "never" ? "" : value < 0 ? "−" : sign === "always" ? "+" : "";
-  return prefix + yen.format(Math.abs(value));
+  return prefix + formatter.format(Math.abs(value));
 }
 
 export const number = new Intl.NumberFormat("ja-JP", {

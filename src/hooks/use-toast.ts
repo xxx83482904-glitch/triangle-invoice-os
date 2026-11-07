@@ -25,7 +25,7 @@ export function toast(input: ToastInput) {
   dispatch([...memoryToasts, entry]);
   setTimeout(() => {
     dispatch(memoryToasts.filter((t) => t.id !== id));
-  }, 4000);
+  }, input.duration ?? 4000);
   return id;
 }
 

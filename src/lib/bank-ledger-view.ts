@@ -12,15 +12,15 @@ export function bankAdvancedFilterCount(filters: Pick<BankFilters, "category" | 
 export function bankLedgerDate(date: string, month: string) {
   const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!parts) return date;
-  return month ? `${Number(parts[2])}/${parts[3]}` : `${parts[1]}/${parts[2]}/${parts[3]}`;
+  return month ? `${Number(parts[2])}/${Number(parts[3])}` : `${parts[1]}/${parts[2]}/${parts[3]}`;
 }
 
 export function bankLedgerSort(sort: string, column: "date" | "amount") {
   return sort === `${column}-desc` ? `${column}-asc` : `${column}-desc`;
 }
 
-export function bankActionBarVisible(selectedCount: number, hasSaveOption: boolean) {
-  return selectedCount > 0 || hasSaveOption;
+export function bankActionBarVisible(selectedCount: number) {
+  return selectedCount > 0;
 }
 
 // The selectable scope already excludes unselected, excluded transactions.

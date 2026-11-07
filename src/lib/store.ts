@@ -602,7 +602,7 @@ export function mutateData<T>(
   targetId: string,
   mutator: (data: AppData) => T,
   beforeJson?: unknown,
-  options?: { undoable?: boolean; origin?: AuditOrigin },
+  options?: { undoable?: boolean; origin?: AuditOrigin; auditLogId?: string },
 ) {
   return withDataMutationLock(async () => {
     const data = await readData();
@@ -610,7 +610,7 @@ export function mutateData<T>(
     const result = mutator(data);
     const beforeStateJson = beforeState ? buildUndoPatch(beforeState, data) : { changes: [] };
     const audit: AuditLog = {
-      id: newId(),
+      id: options?.auditLogId ?? newId(),
       userId,
       action,
       targetType,

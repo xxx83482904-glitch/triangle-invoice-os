@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 import { statusToneClass } from "@/lib/status-tone";
 import { cardPressProps } from "@/components/app/list-selection";
 import { RecordDetail } from "@/components/app/record-detail";
@@ -26,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { CompanyScope } from "@/lib/company";
-import { formatDate, yen } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import type { ReceivedInvoiceStatus } from "@/lib/types";
 import { MonthTabs } from "@/components/app/month-tabs";
 import { countByMonth } from "@/lib/month-tabs";
@@ -195,17 +196,17 @@ export function ReceivedInvoicesWorkspace({
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
               <div>合計</div>
-              <div className="break-all font-mono text-sm font-semibold text-foreground">{yen.format(totals.total)}</div>
+              <div className="break-all text-sm font-medium text-foreground"><Money value={totals.total} /></div>
               <div className="mt-1 hidden sm:block">表示中{totals.count}件の差引支払額</div>
             </div>
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
               <div>支払済</div>
-              <div className="break-all font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">{yen.format(totals.paid)}</div>
+              <div className="break-all text-sm font-medium text-emerald-700 dark:text-emerald-300"><Money value={totals.paid} /></div>
               <div className="mt-1 hidden sm:block">表示中の支払記録（一部支払を含む）</div>
             </div>
             <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2">
               <div>未払い</div>
-              <div className="break-all font-mono text-sm font-semibold text-amber-700 dark:text-amber-300">{yen.format(totals.unpaid)}</div>
+              <div className="break-all text-sm font-medium text-amber-700 dark:text-amber-300"><Money value={totals.unpaid} /></div>
               <div className="mt-1 hidden sm:block">支払対象{totals.unpaidCount}件の残額</div>
             </div>
           </div>
@@ -262,7 +263,7 @@ export function ReceivedInvoicesWorkspace({
                             <div className="flex w-full items-center justify-between gap-3">
                               <span className="min-w-0 text-sm font-medium">{monthLabel(month)}</span>
                               <span className="shrink-0 text-xs text-muted-foreground">
-                                {monthInvoices.length}件{showTotals ? ` / ${yen.format(monthTotal)} / 未払い ${yen.format(Math.max(0, monthUnpaid))}` : ""}
+                                {monthInvoices.length}件{showTotals ? <> / <Money value={monthTotal} /> / 未払い <Money value={Math.max(0, monthUnpaid)} /></> : ""}
                               </span>
                             </div>
                           </td>
@@ -288,8 +289,8 @@ export function ReceivedInvoicesWorkspace({
                                   {formatDate(invoice.dueDate)}
                                 </span>
                               </td>
-                              <td data-label="差引" data-card-sub="" data-card-hide={invoice.total === invoice.unpaidAmount ? "" : undefined} className="whitespace-nowrap px-3 py-2 text-right font-mono">{yen.format(invoice.total)}</td>
-                              <td data-label="未払い" data-card-end="" className="whitespace-nowrap px-3 py-2 text-right font-mono">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : yen.format(invoice.unpaidAmount)}</td>
+                              <td data-label="差引" data-card-sub="" data-card-hide={invoice.total === invoice.unpaidAmount ? "" : undefined} className="whitespace-nowrap px-3 py-2 text-right"><Money value={invoice.total} /></td>
+                              <td data-label="未払い" data-card-end="" className="whitespace-nowrap px-3 py-2 text-right">{invoice.unpaidExclusion ? <span className="font-sans text-xs text-muted-foreground" title={invoice.unpaidExclusion}>対象外</span> : <Money value={invoice.unpaidAmount} />}</td>
                               <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                                 {canApprove ? (
                                   <form id={`received-status-${invoice.id}`} action={updateReceivedInvoiceStatus} onSubmit={statusSave.onSubmit}>
@@ -347,12 +348,12 @@ export function ReceivedInvoicesWorkspace({
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Badge variant="outline">{activeInvoice.mailProcessed ? "処理済み" : "未処理"}</Badge>
-                      <Badge variant="outline">支払登録 {yen.format(activeInvoice.paidAmount)}</Badge>
+                      <Badge variant="outline">支払登録 <Money value={activeInvoice.paidAmount} /></Badge>
                       <Badge variant={activeInvoice.total > 0 && activeInvoice.bankReconciledAmount >= activeInvoice.total ? "secondary" : "outline"}>
-                        {activeInvoice.total > 0 && activeInvoice.bankReconciledAmount >= activeInvoice.total ? "銀行照合済み" : activeInvoice.bankReconciledAmount > 0 ? "銀行一部照合" : "銀行未照合"} {yen.format(activeInvoice.bankReconciledAmount)}
+                        {activeInvoice.total > 0 && activeInvoice.bankReconciledAmount >= activeInvoice.total ? "銀行照合済み" : activeInvoice.bankReconciledAmount > 0 ? "銀行一部照合" : "銀行未照合"} <Money value={activeInvoice.bankReconciledAmount} />
                       </Badge>
                       <Badge className="h-auto max-w-full whitespace-normal break-words" variant={activeInvoice.unpaidAmount > 0 ? "secondary" : "outline"}>
-                        {activeInvoice.unpaidExclusion ? "未払い集計対象外（" + activeInvoice.unpaidExclusion + "）" : "未払い " + yen.format(activeInvoice.unpaidAmount)}
+                        {activeInvoice.unpaidExclusion ? "未払い集計対象外（" + activeInvoice.unpaidExclusion + "）" : <>未払い <Money value={activeInvoice.unpaidAmount} /></>}
                       </Badge>
                       <Badge variant="outline">請求月 {monthLabel(monthKey(activeInvoice))}</Badge>
                       {activeInvoice.debt.groupId ? <Badge variant={activeInvoice.debt.payable ? "outline" : "secondary"}>債務グループ / {debtRoles[activeInvoice.debt.role]} / {activeInvoice.debt.payable ? "支払対象" : "支払対象外"}</Badge> : null}
@@ -375,7 +376,7 @@ export function ReceivedInvoicesWorkspace({
                     </div>
                     <div className="rounded-lg border p-3">
                       <div className="text-xs text-muted-foreground">差引支払額 / 支払登録済み</div>
-                      <div className="mt-1 text-sm font-medium">{yen.format(activeInvoice.total)} / {yen.format(activeInvoice.paidAmount)}</div>
+                      <div className="mt-1 text-sm font-medium"><Money value={activeInvoice.total} /> / <Money value={activeInvoice.paidAmount} /></div>
                     </div>
                   </div>
 

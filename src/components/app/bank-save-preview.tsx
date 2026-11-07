@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import { useState } from "react";
 import { ArrowLeft, ArrowRight, LoaderCircle, Save } from "lucide-react";
@@ -31,7 +32,7 @@ export function BankSavePreviewDialog({ preview, categories, busy, onClose, onSa
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm"><span>摘要 {counterparties.size}種類</span><span>選択解除 {preview.unselected}件</span><span>変更なし {preview.omitted}件</span><span>保留 {preview.changes.filter((row) => row.before.bookkeeping?.hold).length}件</span><span>科目分割 {preview.changes.filter((row) => row.before.bookkeeping?.splits?.length).length}件</span><span>対象外のまま保存 {preview.changes.filter((row) => row.after.treatment === "EXCLUDED").length}件</span><span>対象外から変更 {preview.changes.filter((row) => row.before.treatment === "EXCLUDED" && row.after.treatment !== "EXCLUDED").length}件</span><span>推測を内容確認のうえ確定 {preview.changes.filter((row) => row.after.reviewed && row.after.acknowledgeGuess).length}件</span></div>
       <div className="max-h-[48dvh] overflow-auto divide-y border-y">
         {window.rows.map(({ before, after, prediction }) => <section key={before.id} className="space-y-1 py-3 text-sm">
-          <h3 className="break-words font-medium">{before.transactionDate} / {before.content || "摘要なし"} / {before.amount.toLocaleString()}円</h3>
+          <h3 className="break-words font-medium">{before.transactionDate} / {before.content || "摘要なし"} / <Money value={before.amount} maximumFractionDigits={3} /></h3>
           {before.bookkeeping?.splits?.length ? <p>分割 {before.bookkeeping.splits.length}科目（内訳変更なし）</p> : null}
           {before.bookkeeping?.hold ? <p className="break-words text-amber-700 dark:text-amber-300">保留: {before.bookkeeping.hold.question}</p> : null}
           {prediction ? <p className="text-amber-700 dark:text-amber-300">自動候補を採用（未確認）</p> : null}

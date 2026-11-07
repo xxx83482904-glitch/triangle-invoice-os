@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/app/money";
 
 import Link from "next/link";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
@@ -29,7 +30,6 @@ type Props = { company: CompanyScope; estimates: Estimate[]; rows: DocumentRow[]
   canEdit: boolean; pending: boolean; activeId: string; onOpen: (id: string) => void; onEdit: (estimate: Estimate | "new") => void; onConvert: (estimate: Estimate) => void };
 type RowAction = { label: string; icon: typeof Pencil; action: () => void; destructive?: boolean };
 const selectClass = "h-11 min-w-0 max-w-full rounded-md border bg-background px-2 text-sm";
-const money = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" });
 const monthLabel = (month: string) => month === "undated" ? "日付未設定" : month.replace("-", "年") + "月";
 const gridClass = "md:grid-cols-[44px_minmax(140px,2fr)_minmax(100px,1fr)_124px_90px_140px_44px]";
 
@@ -202,7 +202,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
                   <span className="hidden break-words md:block md:pt-3">{counterpart(e)}</span>
                   <span className="col-span-2 col-start-2 text-xs tabular-nums text-muted-foreground md:col-span-1 md:col-start-auto md:pt-3 md:text-foreground">{edit?.issueDate || e.issueDate}<span className="md:block md:text-muted-foreground"><span className="md:hidden"> 〜 </span>{edit?.validUntil || e.validUntil}</span></span>
                   <div className="col-start-2 row-start-3 min-w-0 md:col-start-auto md:row-start-auto md:order-1">{statusControl(e)}</div>
-                  <span className="col-start-3 row-start-3 self-center break-words text-right font-medium tabular-nums md:col-start-auto md:row-start-auto md:pt-3 md:font-normal">{money.format(e.total)}</span>
+                  <span className="col-start-3 row-start-3 self-center break-words text-right font-medium tabular-nums md:col-start-auto md:row-start-auto md:pt-3 md:font-normal"><Money value={e.total} /></span>
                   <div className="col-start-4 row-start-1 md:col-start-auto md:row-start-auto md:order-2"><EstimateActions label={e.estimateNumber} actions={actions(e)} disabled={busy} /></div>
                 </div>
               </EstimateActions>;
@@ -223,7 +223,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
         <fieldset disabled={busy || !editable(active)} className="grid min-w-0 gap-3 text-xs">
           <label className="grid min-w-0 gap-1">案件{projectControl(active)}</label><div className="break-words text-muted-foreground">取引先: {counterpart(active)}</div>
           <div className="grid min-w-0 grid-cols-2 gap-3"><label className="min-w-0 space-y-1">見積日<Input aria-label="見積日" type="date" value={activeEdit.issueDate} onChange={(event) => stage(active, { issueDate: event.target.value })} /></label><label className="min-w-0 space-y-1">有効期限<Input aria-label="有効期限" type="date" min={activeEdit.issueDate} value={activeEdit.validUntil} onChange={(event) => stage(active, { validUntil: event.target.value })} /></label></div>
-          <label className="grid gap-1">状態{statusControl(active)}</label><div className="flex justify-between gap-2 text-sm"><span>見積金額</span><span className="tabular-nums">{money.format(active.total)}</span></div>
+          <label className="grid gap-1">状態{statusControl(active)}</label><div className="flex justify-between gap-2 text-sm"><span>見積金額</span><span className="tabular-nums"><Money value={active.total} /></span></div>
         </fieldset>
         {active.notes ? <div className="border-t pt-3 text-sm"><h3 className="font-medium">備考</h3><p className="whitespace-pre-wrap break-words text-muted-foreground">{active.notes}</p></div> : null}
         {active.internalMemo ? <div className="border-t pt-3 text-sm"><h3 className="font-medium">社内メモ</h3><p className="whitespace-pre-wrap break-words text-muted-foreground">{active.internalMemo}</p></div> : null}

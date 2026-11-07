@@ -1,4 +1,6 @@
 "use client";
+import type { ReactNode } from "react";
+import { Money } from "@/components/app/money";
 import { cardPressProps } from "@/components/app/list-selection";
 import { RecordDetail } from "@/components/app/record-detail";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -30,7 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, percent, yen } from "@/lib/format";
+import { formatDate, percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { projectAttentionPriority, projectContractSummary, projectNeedsAction, projectStageLabel, projectStageOptions, projectUninvoiced } from "@/lib/project-display";
 import type { ProjectAttention } from "@/lib/project-attention";
@@ -134,8 +136,8 @@ export function ProjectsWorkspace({
         <SummaryTile icon={AlertTriangle} label="要対応" value={`${summary.needsAction}件`} tone={summary.needsAction > 0 ? "warn" : "neutral"} />
         {showFinancials ? (
           <>
-            <SummaryTile icon={ReceiptText} label="未請求" value={summary.total > 0 && summary.unsetContractCount === summary.total ? "—" : yen.format(summary.uninvoicedAmount)} tone={summary.uninvoicedAmount > 0 ? "warn" : "neutral"} note={company === "JAPAN" && summary.unsetContractCount ? "契約金額未設定 " + summary.unsetContractCount + "件を除く" : undefined} />
-            <SummaryTile icon={WalletCards} label="未入金" value={yen.format(summary.unpaidIncomeAmount)} tone={summary.unpaidIncomeAmount > 0 ? "danger" : "neutral"} />
+            <SummaryTile icon={ReceiptText} label="未請求" value={summary.total > 0 && summary.unsetContractCount === summary.total ? "—" : <Money className="font-medium" value={summary.uninvoicedAmount} />} tone={summary.uninvoicedAmount > 0 ? "warn" : "neutral"} note={company === "JAPAN" && summary.unsetContractCount ? "契約金額未設定 " + summary.unsetContractCount + "件を除く" : undefined} />
+            <SummaryTile icon={WalletCards} label="未入金" value={<Money className="font-medium" value={summary.unpaidIncomeAmount} />} tone={summary.unpaidIncomeAmount > 0 ? "danger" : "neutral"} />
           </>
         ) : (
           <>
@@ -482,11 +484,11 @@ function ProjectDetailPanel({
             <ProgressLine label="支払い" done={row.paidExpenseAmount} remaining={row.unpaidExpenseAmount} total={row.receivedInvoiceTotal} doneLabel="支払済み" remainingLabel="未払い" />
             <Separator />
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <InfoLine label="契約金額" value={row.contractAmount === null ? "—" : yen.format(row.contractAmount)} />
+              <InfoLine label="契約金額" value={row.contractAmount === null ? "—" : <Money value={row.contractAmount} />} />
               <InfoLine label="請求回数" value={`${row.billingCount}回`} />
-              <InfoLine label="請求差額（税込）" value={yen.format(row.grossProfit)} strong={row.grossProfit < 0} />
+              <InfoLine label="請求差額（税込）" value={<Money value={row.grossProfit} />} strong={row.grossProfit < 0} />
               <InfoLine label="差額率" value={row.invoicedAmount > 0 ? percent(row.grossProfitRate) : "-"} strong={row.grossProfitRate < 0} />
-              <InfoLine label="入出金差額" value={yen.format(row.paidIncomeAmount - row.paidExpenseAmount)} />
+              <InfoLine label="入出金差額" value={<Money value={row.paidIncomeAmount - row.paidExpenseAmount} />} />
             </div>
           </CardContent>
         </Card>
@@ -510,7 +512,7 @@ function ProjectDetailPanel({
           )}
           {row.contractExtractedAmount || row.contractExtractedBillingCount ? (
             <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-              OCR: {row.contractExtractedAmount ? yen.format(row.contractExtractedAmount) : "-"} / {row.contractExtractedBillingCount ?? row.billingCount}回
+              OCR: {row.contractExtractedAmount ? <Money value={row.contractExtractedAmount} /> : "-"} / {row.contractExtractedBillingCount ?? row.billingCount}回
             </div>
           ) : null}
           {canEdit ? (
@@ -649,21 +651,21 @@ function ProgressLine({
   remainingLabel: string;
   total: number | null;
 }) {
-  if (total === null || remaining === null) return <div className="space-y-1 text-xs"><div className="font-medium">{label}: 契約金額未設定</div><div>{doneLabel}: {yen.format(done)} / {remainingLabel}: —</div></div>;
+  if (total === null || remaining === null) return <div className="space-y-1 text-xs"><div className="font-medium">{label}: 契約金額未設定</div><div>{doneLabel}: <Money value={done} /> / {remainingLabel}: —</div></div>;
   const donePercent = progressPercent(done, total);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="font-medium">{label}</span>
-        <span className="text-muted-foreground">{yen.format(total)}</span>
+        <span className="text-muted-foreground"><Money value={total} /></span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-primary" style={{ width: `${donePercent}%` }} />
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <span>{doneLabel}: {yen.format(done)}</span>
+        <span>{doneLabel}: <Money value={done} /></span>
         <span className={remaining > 0 ? "text-right font-medium text-amber-700" : "text-right text-muted-foreground"}>
-          {remainingLabel}: {yen.format(remaining)}
+          {remainingLabel}: <Money value={remaining} />
         </span>
       </div>
     </div>
@@ -680,7 +682,7 @@ function SummaryTile({
   icon: typeof FolderKanban;
   label: string;
   tone?: "neutral" | "warn" | "danger";
-  value: string;
+  value: ReactNode;
   note?: string;
 }) {
   const toneClass =
@@ -707,12 +709,12 @@ function MiniAmount({ hot, label, value }: { hot?: boolean; label: string; value
   return (
     <div className={cn("min-w-0 rounded-lg border px-2 py-1.5", hot ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" : "bg-muted/30")}>
       <div className="truncate text-[11px] text-muted-foreground">{label}</div>
-      <div className="truncate font-mono font-medium">{value === null ? "—" : yen.format(value)}</div>
+      <div className="truncate font-medium">{value === null ? "—" : <Money value={value} />}</div>
     </div>
   );
 }
 
-function InfoLine({ label, strong, value }: { label: string; strong?: boolean; value: string }) {
+function InfoLine({ label, strong, value }: { label: string; strong?: boolean; value: ReactNode }) {
   return (
     <div className="min-w-0">
       <div className="text-xs text-muted-foreground">{label}</div>
