@@ -16,3 +16,17 @@ export async function originalPreviewBlob(response: Response, mimeType?: string)
   if (!["application/pdf", "image/png", "image/jpeg"].includes(type)) throw new Error("この原本は埋め込み表示に対応していません。");
   return new Blob([blob], { type });
 }
+
+// A deliberately conservative count for small, plain PDFs. Compressed/incremental page trees stay unknown.
+export function originalPdfPageCount(bytes: string): number | undefined {
+  if (!bytes.startsWith("%PDF-") || /\/ObjStm\b|\/Encrypt\b|\/Prev\b/.test(bytes)) return;
+  const objects = bytes.replace(/stream\r?\n[\s\S]*?\r?\nendstream/g, "").match(/\d+\s+\d+\s+obj\b[\s\S]*?endobj/g) ?? [];
+  const pages = objects.filter((object) => /\/Type\s*\/Page\b/.test(object)).length;
+  const counts = objects.filter((object) => /\/Type\s*\/Pages\b/.test(object))
+    .flatMap((object) => [...object.matchAll(/\/Count\s+(\d+)\b/g)].map((match) => Number(match[1])));
+  return pages > 0 && counts.length > 0 && Math.max(...counts) === pages ? pages : undefined;
+}
+
+export function importPdfFragment(page: number, zoom: number, fit: boolean) {
+  return `#toolbar=0&navpanes=0&page=${page}&${fit ? "view=FitH" : `zoom=${zoom}`}`;
+}

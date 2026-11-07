@@ -448,6 +448,18 @@ export type InvoiceNumberSetting = {
 
 export type ImportDocumentKind = "SUPPLIER_INVOICE" | "PACKING_LIST" | "WAYBILL" | "IMPORT_PERMIT" | "BROKER_INVOICE" | "TAX_PAYMENT" | "OTHER";
 export type ImportShipmentStatus = "OPEN" | "CLEARED" | "CLOSED";
+export type ImportOrderItemKind = "BAG" | "PRINTED" | "BOX" | "TEXTILE" | "LIGHTING" | "FURNITURE" | "OTHER";
+export type ImportOrderItem = {
+  id: string; name: string; quantity?: number; unit?: string; note?: string; requestedDeliveryDate?: string; kind?: ImportOrderItemKind;
+};
+export type ImportOrder = {
+  id: string; clientId?: string; orderNumber?: string; orderedAt?: string; requestedDeliveryDate?: string; memo?: string; items: ImportOrderItem[];
+};
+export type ImportStage = { key: string; label: string; startedAt?: string; plannedAt?: string; completedAt?: string; memo?: string };
+export type ImportFieldSource = "DOCUMENT" | "MANUAL";
+// Shared here so provenance and the client-safe fill helpers use the same keys without a circular import.
+export type ImportFillKey = "permitNumber" | "permitDate" | "arrivalDate" | "supplierName" | "goodsValue" | "dutyAmount"
+  | "importTaxNational" | "importTaxLocal" | "brokerFee" | "blNumber" | "invoiceNumber" | "brokerVendorId";
 // One import (便): the customs figures of a shipment plus the paper trail attached from mail and received invoices.
 export type ImportShipment = {
   id: string; company: "JAPAN" | "CHINA"; title: string; projectId?: string; supplierName?: string; brokerVendorId?: string;
@@ -455,6 +467,7 @@ export type ImportShipment = {
   blNumber?: string; invoiceNumber?: string;   // reference numbers shared by the papers of one shipment
   goodsValue?: number; dutyAmount?: number; importTaxNational?: number; importTaxLocal?: number; brokerFee?: number; otherCost?: number;
   status: ImportShipmentStatus; memo?: string;
+  orders?: ImportOrder[]; stages?: ImportStage[]; fieldSources?: Partial<Record<ImportFillKey, ImportFieldSource>>;
   createdById: string; createdAt: string; updatedAt: string; deletedAt?: string | null;
 };
 

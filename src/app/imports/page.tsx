@@ -3,6 +3,8 @@ import { AppShell, PageHeader } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { groupImportDocuments, importShipmentViews, unassignedImportDocuments } from "@/lib/import-shipment-views";
+import { legacyImportShipmentHref } from "@/lib/import-list";
+import { importToday } from "@/lib/import-shipments";
 import { can, defaultPathForRole } from "@/lib/rbac";
 import { readDataForRequest as readData } from "@/lib/store";
 import { ImportsWorkspace } from "./imports-workspace";
@@ -10,13 +12,16 @@ import { ImportsWorkspace } from "./imports-workspace";
 export default async function ImportsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const company = companyFromParam(params.company);
+  const company = companyFromParam(Array.isArray(params.company) ? params.company[0] : params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!can(user, "view:imports")) redirect(defaultPathForRole(user.role));
+  const legacyHref = legacyImportShipmentHref(company, params.shipment);
+  if (legacyHref) redirect(legacyHref);
+  const today = importToday();
   const data = await readData();
   const unassigned = unassignedImportDocuments(data, company);
   const groups = groupImportDocuments(unassigned, (data.importShipments ?? []).filter((row) => companyFromParam(row.company) === company));
@@ -31,14 +36,13 @@ export default async function ImportsPage({
 
   return (
     <AppShell>
-      <PageHeader title="輸入" description="1回の輸入（便）ごとに、仕入先インボイス・パッキングリスト・AWB/B/L・輸入許可通知書・通関業者の請求書をまとめ、関税と輸入消費税を記録します。書類をドロップすると OCR で種類を判定し、許可番号・関税・輸入消費税を便に書き込みます。" />
+      <PageHeader title="輸入" description="1回の輸入（便）ごとに、注文・工程・書類・税額をまとめます。" />
       <ImportsWorkspace
-        key={`${company}:${params.shipment || ""}`}
-        initialId={params.shipment}
+        key={company}
         canEdit={can(user, "manage:imports")}
         company={company}
-        rows={importShipmentViews(data, company)}
-        unassigned={unassigned}
+        rows={importShipmentViews(data, company, today)}
+        today={today}
         groups={groups}
         projects={projects}
         vendors={vendors}

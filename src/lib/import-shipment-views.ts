@@ -1,21 +1,27 @@
 import { z } from "zod";
 import { companyFromParam, matchesCompany, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
-import { detectImportDocument, documentDisplayName, extractImportShipmentFields, fillImportShipment, importChecklist, importDocumentKinds, importFillKeysByKind, importFillLabels, importShipmentAmounts, importShipmentMonth, importShipmentStatuses, missingImportDocuments, normalizeReference, readImportReferences, type ImportFillKey, type ImportLinkedDocument, type ImportReferences, type ImportShipmentAmounts } from "@/lib/import-shipments";
+import { detectImportDocument, documentDisplayName, extractImportShipmentFields, fillImportShipment, importChecklist, importDocumentKinds, importFillKeysByKind, importFillLabels, importOrderItemKinds, importRequestedDates, importShipmentAmounts, importShipmentMonth, importShipmentStatuses, importStageTimeline, importToday, missingImportDocuments, normalizeReference, readImportReferences, type ImportFillKey, type ImportLinkedDocument, type ImportReferences, type ImportShipmentAmounts } from "@/lib/import-shipments";
 import { receivedPaymentSummary } from "@/lib/payment-records";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
-import type { AppData, ImportDocumentKind, ImportShipment, MailDocument, ReceivedInvoice, User } from "@/lib/types";
+import type { AppData, ImportDocumentKind, ImportFieldSource, ImportOrder, ImportShipment, MailDocument, ReceivedInvoice, User } from "@/lib/types";
 
 type Actor = Pick<User, "id" | "role">;
 
-export type ImportBoardDocument = ImportLinkedDocument & { displayName: string; references: ImportReferences };
+export type ImportBoardDocument = ImportLinkedDocument & {
+  displayName: string; references: ImportReferences; fileUrl: string | undefined; mimeType: string | undefined; fileName: string;
+};
+export type ImportOrderView = ImportOrder & { clientName: string; clientSource: "ORDER" | "PROJECT" | "NONE" };
 
 const recordedAmountKeys = ["goodsValue", "dutyAmount", "importTaxNational", "importTaxLocal", "brokerFee", "otherCost"] as const;
-export type ImportShipmentView = ImportShipment & ImportShipmentAmounts & {
+export type ImportShipmentView = Omit<ImportShipment, "orders"> & ImportShipmentAmounts & {
   // The amounts above are normalized to 0 for totals; these are the figures as recorded, empty when nobody has entered them.
   recorded: Pick<ImportShipment, (typeof recordedAmountKeys)[number]>;
   month: string; projectName: string; brokerName: string; documents: ImportBoardDocument[];
   checklist: Array<Omit<ReturnType<typeof importChecklist>[number], "documents"> & { documents: ImportBoardDocument[] }>;
   missing: ImportDocumentKind[]; unpaidCount: number;
+  orders: ImportOrderView[]; projectClient?: { id: string; name: string };
+  timeline: ReturnType<typeof importStageTimeline>; requestedDates: ReturnType<typeof importRequestedDates>;
+  fieldSources: NonNullable<ImportShipment["fieldSources"]>;
 };
 
 function scopedProjectIds(data: AppData, company: CompanyScope) {
@@ -37,6 +43,7 @@ function mailDocumentView(company: CompanyScope, mail: MailDocument): ImportBoar
   return {
     key: `mail:${mail.id}`, source: "mail", id: mail.id, title, party: mail.senderName || "差出人不明",
     displayName: documentDisplayName(mail.ocrText, title), references: readImportReferences(mail.ocrText, mail.originalFileName),
+    fileUrl: mail.fileUrl, mimeType: mail.mimeType, fileName: mail.originalFileName || title,
     date: mail.folderMonth ? `${mail.folderMonth}-01` : mail.createdAt.slice(0, 10), kind: mail.importDocumentKind ?? detected?.kind ?? "OTHER",
     suggestedKind: mail.importDocumentKind ?? detected?.kind, evidence: detected?.evidence, href: `/mail-sorter?company=${company}`, updatedAt: mail.updatedAt,
   };
@@ -49,25 +56,40 @@ function receivedInvoiceView(data: AppData, company: CompanyScope, invoice: Rece
   return {
     key: `received:${invoice.id}`, source: "received", id: invoice.id, title, party: vendorName(data, invoice.vendorId),
     displayName: documentDisplayName(invoice.ocrText, title), references: readImportReferences(invoice.ocrText, invoice.originalFileName),
+    fileUrl: invoice.fileUrl, mimeType: invoice.mimeType, fileName: invoice.originalFileName || title,
     date: invoice.issueDate, amount: invoice.total, kind: invoice.importDocumentKind ?? detected?.kind ?? fallback, suggestedKind: invoice.importDocumentKind ?? detected?.kind ?? fallback, evidence: detected?.evidence,
     href: `/received-invoices?company=${company}&document=${encodeURIComponent(invoice.id)}`, updatedAt: invoice.updatedAt,
     paid: invoice.status === "PAID" || receivedPaymentSummary(data, invoice).complete,
   };
 }
 
-export function importShipmentViews(data: AppData, company: CompanyScope): ImportShipmentView[] {
+function shipmentDocumentViews(data: AppData, company: CompanyScope, row: ImportShipment, projects: Set<string>) {
+  const received = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && invoice.importShipmentId === row.id && projects.has(invoice.projectId))
+    .map((invoice) => receivedInvoiceView(data, company, invoice, row.brokerVendorId));
+  const mails = data.mailDocuments.filter((mail) => !mail.deletedAt && mail.importShipmentId === row.id && companyFromParam(mail.company) === company && !hasLiveInvoice(data, mail))
+    .map((mail) => mailDocumentView(company, mail));
+  return { received, documents: [...received, ...mails].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "ja")) };
+}
+
+export function importShipmentViews(data: AppData, company: CompanyScope, today = importToday()): ImportShipmentView[] {
   const projects = scopedProjectIds(data, company);
+  const clients = new Map(data.clients.filter((client) => !client.deletedAt && partnerMatchesCompany(client, company)).map((client) => [client.id, client]));
   return (data.importShipments || [])
     .filter((row) => !row.deletedAt && companyFromParam(row.company) === company)
     .map((row) => {
-      const received = data.receivedInvoices.filter((invoice) => !invoice.deletedAt && invoice.importShipmentId === row.id && projects.has(invoice.projectId))
-        .map((invoice) => receivedInvoiceView(data, company, invoice, row.brokerVendorId));
-      const mails = data.mailDocuments.filter((mail) => !mail.deletedAt && mail.importShipmentId === row.id && companyFromParam(mail.company) === company && !hasLiveInvoice(data, mail))
-        .map((mail) => mailDocumentView(company, mail));
-      const documents = [...received, ...mails].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "ja"));
+      const { received, documents } = shipmentDocumentViews(data, company, row, projects);
+      const project = data.projects.find((project) => project.id === row.projectId && projects.has(project.id));
+      const client = project ? clients.get(project.clientId) : undefined;
+      const projectClient = client ? { id: client.id, name: client.companyName } : undefined;
+      const orders = (row.orders ?? []).map((order): ImportOrderView => {
+        const client = order.clientId ? clients.get(order.clientId) : undefined;
+        return { ...order, clientName: client?.companyName ?? (!order.clientId ? projectClient?.name : undefined) ?? "",
+          clientSource: client ? "ORDER" : !order.clientId && projectClient ? "PROJECT" : "NONE" };
+      });
       return {
         ...row, ...importShipmentAmounts(row), recorded: Object.fromEntries(recordedAmountKeys.map((key) => [key, row[key]])), month: importShipmentMonth(row),
-        projectName: data.projects.find((project) => project.id === row.projectId)?.name ?? "", brokerName: row.brokerVendorId ? vendorName(data, row.brokerVendorId) : "",
+        projectName: project?.name ?? "", brokerName: row.brokerVendorId ? vendorName(data, row.brokerVendorId) : "",
+        orders, projectClient, timeline: importStageTimeline(row.stages, today), requestedDates: importRequestedDates(row.orders), fieldSources: { ...row.fieldSources },
         documents, checklist: importChecklist(documents).map((entry) => ({ ...entry, documents: documents.filter((document) => document.kind === entry.kind) })),
         missing: missingImportDocuments(documents), unpaidCount: received.filter((document) => !document.paid).length,
       };
@@ -228,14 +250,34 @@ const required = (label: string, max = 200) => z.string().trim().min(1, `${label
 const reference = z.string().min(1).max(1000);
 const version = z.string().min(1).max(100);
 const optionalText = (max: number) => z.string().trim().max(max).optional();
+const detailText = (max: number) => z.string().trim().max(max).transform((value) => value || undefined).optional();
 const money = z.number().finite().min(0, "金額は0以上で入力してください").max(1e12, "金額が大きすぎます").optional();
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日付の形式が正しくありません").or(z.literal("")).optional();
+const isoDate = z.string().refine((value) => value === "" || (/^\d{4}-\d{2}-\d{2}$/.test(value)
+  && Number.isFinite(Date.parse(value)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value), "日付の形式が正しくありません")
+  .transform((value) => value || undefined).optional();
 const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "月の形式が正しくありません").or(z.literal("")).optional();
+const orderItemSchema = z.object({
+  id: detailText(1000), name: required("品名", 200), quantity: z.number().finite().min(0).max(1e9).optional(),
+  unit: detailText(20), note: detailText(200), requestedDeliveryDate: isoDate, kind: z.enum(importOrderItemKinds.map((kind) => kind.value)).optional(),
+}).strict();
+const orderSchema = z.object({
+  id: detailText(1000), clientId: detailText(1000), orderNumber: detailText(100), orderedAt: isoDate, requestedDeliveryDate: isoDate,
+  memo: detailText(1000), items: z.array(orderItemSchema).max(100, "品目は100件までです"),
+}).strict();
+const stageSchema = z.object({
+  key: z.string().regex(/^[A-Z0-9_]{1,40}$/, "工程キーの形式が正しくありません"), label: required("工程名", 40),
+  startedAt: isoDate, plannedAt: isoDate, completedAt: isoDate, memo: detailText(500),
+}).strict().refine((stage) => !stage.startedAt || !stage.completedAt || stage.completedAt >= stage.startedAt,
+  { message: "完了日が開始日より前です", path: ["completedAt"] });
+const fillKeys = Object.keys(importFillLabels) as ImportFillKey[];
 const fields = {
   title: required("便名"), projectId: optionalText(1000), supplierName: optionalText(200), brokerVendorId: optionalText(1000), permitNumber: optionalText(100),
   blNumber: optionalText(100), invoiceNumber: optionalText(100),
   permitDate: isoDate, arrivalDate: isoDate, folderMonth: yearMonth, goodsValue: money, dutyAmount: money, importTaxNational: money, importTaxLocal: money,
   brokerFee: money, otherCost: money, status: z.enum(importShipmentStatuses).optional(), memo: optionalText(2000),
+  orders: z.array(orderSchema).max(20, "注文は20件までです").optional(),
+  stages: z.array(stageSchema).max(12, "工程は12件までです")
+    .refine((stages) => new Set(stages.map((stage) => stage.key)).size === stages.length, "工程キーが重複しています").optional(),
 };
 const mutationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create"), ...fields }).strict(),
@@ -245,22 +287,46 @@ const mutationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("group"), shipmentId: reference.nullable(), title: fields.title.optional(), projectId: optionalText(1000), documents: z.array(
     z.object({ source: z.enum(["mail", "received"]), documentId: reference, kind: z.enum(importDocumentKinds).optional() }).strict(),
   ).min(1, "書類を選んでください").max(50, "一度に付けられるのは50件までです") }).strict(),
-  z.object({ action: z.literal("reread"), id: reference, version }).strict(),
+  z.object({ action: z.literal("reread"), id: reference, version, keys: z.array(z.enum(fillKeys)).max(20).optional() }).strict(),
 ]);
 export type ImportShipmentMutation = z.input<typeof mutationSchema>;
 type ShipmentFields = z.infer<typeof mutationSchema> & { action: "create" };
 
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
 
+function definedFields<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, value]) => value !== undefined)) as T;
+}
+
+function shipmentOrders(data: AppData, company: CompanyScope, row: ImportShipment, orders: NonNullable<ShipmentFields["orders"]>): ImportOrder[] {
+  const existing = new Map((row.orders ?? []).map((order) => [order.id, order]));
+  const used = new Set<string>();
+  return orders.map((order) => {
+    if (order.clientId && !data.clients.some((client) => client.id === order.clientId && !client.deletedAt && partnerMatchesCompany(client, company))) {
+      throw new Error("クライアントが見つかりません");
+    }
+    const previous = order.id && !used.has(order.id) ? existing.get(order.id) : undefined;
+    const id = previous?.id ?? globalThis.crypto.randomUUID();
+    used.add(id);
+    const itemIds = new Set(previous?.items.map((item) => item.id));
+    const usedItems = new Set<string>();
+    const items = order.items.map((item) => {
+      const id = item.id && itemIds.has(item.id) && !usedItems.has(item.id) ? item.id : globalThis.crypto.randomUUID();
+      usedItems.add(id);
+      return definedFields({ ...item, id, requestedDeliveryDate: item.requestedDeliveryDate === order.requestedDeliveryDate ? undefined : item.requestedDeliveryDate });
+    });
+    return definedFields({ ...order, id, items });
+  });
+}
+
 function applyShipmentFields(data: AppData, company: CompanyScope, row: ImportShipment, value: Omit<ShipmentFields, "action">) {
-  if (value.projectId) {
-    if (!data.projects.some((project) => project.id === value.projectId && !project.deletedAt && matchesCompany(project, company))) throw new Error("案件が見つかりません");
-    row.projectId = value.projectId;
-  } else delete row.projectId;
-  if (value.brokerVendorId) {
-    if (!data.vendors.some((vendor) => vendor.id === value.brokerVendorId && !vendor.deletedAt && partnerMatchesCompany(vendor, company))) throw new Error("通関業者（支払先）が見つかりません");
-    row.brokerVendorId = value.brokerVendorId;
-  } else delete row.brokerVendorId;
+  // Validate references before changing the row, including when this mutation is called outside the store.
+  if (value.projectId && !data.projects.some((project) => project.id === value.projectId && !project.deletedAt && matchesCompany(project, company))) throw new Error("案件が見つかりません");
+  if (value.brokerVendorId && !data.vendors.some((vendor) => vendor.id === value.brokerVendorId && !vendor.deletedAt && partnerMatchesCompany(vendor, company))) throw new Error("通関業者（支払先）が見つかりません");
+  const orders = value.orders === undefined ? undefined : shipmentOrders(data, company, row, value.orders);
+  const before = Object.fromEntries(fillKeys.map((key) => [key, row[key]]));
+  if (value.projectId) row.projectId = value.projectId; else delete row.projectId;
+  if (value.brokerVendorId) row.brokerVendorId = value.brokerVendorId; else delete row.brokerVendorId;
   row.title = value.title;
   for (const key of ["supplierName", "permitNumber", "blNumber", "invoiceNumber", "permitDate", "arrivalDate", "folderMonth", "memo"] as const) {
     if (value[key]) row[key] = value[key]; else delete row[key];
@@ -269,10 +335,21 @@ function applyShipmentFields(data: AppData, company: CompanyScope, row: ImportSh
     if (value[key] === undefined) delete row[key]; else row[key] = value[key];
   }
   if (value.status) row.status = value.status;
+  if (orders !== undefined) {
+    if (orders.length) row.orders = orders; else delete row.orders;
+  }
+  if (value.stages !== undefined) {
+    if (value.stages.length) row.stages = value.stages.map(definedFields); else delete row.stages;
+  }
+  for (const key of fillKeys) {
+    if (before[key] === row[key]) continue;
+    if (row[key] === undefined || row[key] === "") { if (row.fieldSources) delete row.fieldSources[key]; }
+    else (row.fieldSources ??= {})[key] = "MANUAL";
+  }
+  if (row.fieldSources && !Object.keys(row.fieldSources).length) delete row.fieldSources;
 }
 
 const trustOrder: ImportDocumentKind[] = ["IMPORT_PERMIT", "TAX_PAYMENT", "BROKER_INVOICE", "SUPPLIER_INVOICE", "PACKING_LIST", "WAYBILL", "OTHER"];
-const fillKeys = Object.keys(importFillLabels) as ImportFillKey[];
 
 function assignmentTarget(data: AppData, company: CompanyScope, source: "mail" | "received", documentId: string): MailDocument | ReceivedInvoice {
   const target = source === "mail"
@@ -290,6 +367,39 @@ function documentKind(target: MailDocument | ReceivedInvoice, kind?: ImportDocum
 function brokerVendor(data: AppData, company: CompanyScope, target: MailDocument | ReceivedInvoice) {
   if (!("vendorId" in target) || target.vendorId.startsWith("ocr-review-vendor-")) return undefined;
   return data.vendors.find((row) => row.id === target.vendorId && !row.deletedAt && partnerMatchesCompany(row, company));
+}
+
+export type ImportRereadChange = {
+  key: ImportFillKey; label: string; before: string | number | undefined; after: string | number;
+  source: ImportFieldSource | "UNKNOWN" | "EMPTY"; document: { kind: ImportDocumentKind; displayName: string };
+};
+
+// Shared by the read-only preview and the version-checked write; neither path guesses missing OCR values.
+export function importRereadChanges(data: AppData, company: CompanyScope, row: ImportShipment): ImportRereadChange[] {
+  if (row.deletedAt || companyFromParam(row.company) !== company
+    || !data.importShipments?.some((stored) => stored.id === row.id && !stored.deletedAt && companyFromParam(stored.company) === company)) throw new Error("輸入便が見つかりません");
+  const { documents } = shipmentDocumentViews(data, company, row, scopedProjectIds(data, company));
+  documents.sort((a, b) => trustOrder.indexOf(a.kind) - trustOrder.indexOf(b.kind));
+  const candidates = new Map<ImportFillKey, { after: string | number; document: ImportRereadChange["document"] }>();
+  for (const document of documents) {
+    const target = assignmentTarget(data, company, document.source, document.id);
+    const fields = extractImportShipmentFields(target.ocrText, target.originalFileName, document.kind);
+    for (const key of importFillKeysByKind[document.kind]) {
+      const next = key === "brokerVendorId"
+        ? document.kind === "BROKER_INVOICE" && !row.brokerVendorId ? brokerVendor(data, company, target)?.id : undefined
+        : fields[key];
+      if (!candidates.has(key) && next !== undefined && next !== "") {
+        candidates.set(key, { after: next, document: { kind: document.kind, displayName: document.displayName } });
+      }
+    }
+  }
+  return fillKeys.flatMap((key): ImportRereadChange[] => {
+    const candidate = candidates.get(key), before = row[key];
+    return !candidate || candidate.after === before ? [] : [{
+      key, label: importFillLabels[key], before, ...candidate,
+      source: before === undefined || before === "" ? "EMPTY" : row.fieldSources?.[key] ?? "UNKNOWN",
+    }];
+  });
 }
 
 function assignDocument(data: AppData, company: CompanyScope, target: MailDocument | ReceivedInvoice, shipment: ImportShipment | null, kind: ImportDocumentKind | undefined, fill: boolean) {
@@ -350,25 +460,11 @@ export function applyImportShipmentMutation(data: AppData, actor: Actor, company
   if (!row) throw new Error("輸入便が見つかりません");
   if (row.updatedAt !== value.version) throw new Error("輸入便が更新されています。再読込してください");
   if (value.action === "reread") {
-    const documents = importShipmentViews(data, company).find((view) => view.id === row.id)!.documents
-      .sort((a, b) => trustOrder.indexOf(a.kind) - trustOrder.indexOf(b.kind));
-    const candidates: Partial<Pick<ImportShipment, ImportFillKey>> = {};
-    for (const document of documents) {
-      const target = assignmentTarget(data, company, document.source, document.id);
-      const fields = extractImportShipmentFields(target.ocrText, target.originalFileName, document.kind);
-      for (const key of importFillKeysByKind[document.kind]) {
-        const next = key === "brokerVendorId"
-          ? document.kind === "BROKER_INVOICE" && !row.brokerVendorId ? brokerVendor(data, company, target)?.id : undefined
-          : fields[key];
-        if (candidates[key] === undefined && next !== undefined && next !== "") Object.assign(candidates, { [key]: next });
-      }
-    }
-    const changed: Array<{ key: ImportFillKey; before?: string | number; after?: string | number }> = [];
-    for (const key of fillKeys) {
-      const after = candidates[key];
-      if (after === undefined || row[key] === after) continue;
-      changed.push({ key, before: row[key], after });
+    const changed = importRereadChanges(data, company, row).filter((change) => value.keys === undefined || value.keys.includes(change.key))
+      .map(({ key, before, after }) => ({ key, before, after }));
+    for (const { key, after } of changed) {
       Object.assign(row, { [key]: after });
+      (row.fieldSources ??= {})[key] = "DOCUMENT";
     }
     if (changed.length) row.updatedAt = stamp(row.updatedAt);
     return { id: row.id, action: value.action, updatedAt: row.updatedAt, changed };

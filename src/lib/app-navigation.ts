@@ -94,7 +94,7 @@ export function workflowNavigation(pathname: string, params: URLSearchParams, ro
   const sales = ["/projects", "/estimates", "/issued-invoices"];
   const receiving = ["/mail-sorter", "/received-invoices", "/imports"];
   const bank = pathname === "/banking" || pathname.startsWith("/banking/");
-  const paths = sales.some((path) => navigationActive(pathname, path)) ? sales : receiving.includes(pathname) ? receiving : [];
+  const paths = sales.some((path) => navigationActive(pathname, path)) ? sales : receiving.some((path) => navigationActive(pathname, path)) ? receiving : [];
   const items = bank ? [
     { href: "/banking/accounts", label: "口座一覧", permission: "view:banking" },
     { href: "/banking", label: "明細", permission: "view:banking" },

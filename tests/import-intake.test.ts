@@ -62,6 +62,8 @@ test("permit intake saves a CUSTOMS original and creates and fills a shipment in
   assert.equal(data.importShipments!.length, 1); assert.equal(row.id, result.shipmentId); assert.equal(row.title, "合成海外家具廠 2026-10-05"); assert.equal(result.shipmentTitle, row.title); assert.equal(row.status, "OPEN");
   assert.equal(row.permitNumber, "SYN-0001"); assert.equal(row.permitDate, "2026-10-05"); assert.equal(row.arrivalDate, "2026-10-01");
   assert.equal(row.goodsValue, 500000); assert.equal(row.dutyAmount, 15000); assert.equal(row.importTaxNational, 40000); assert.equal(row.importTaxLocal, 11000);
+  assert.deepEqual(row.fieldSources, { permitNumber: "DOCUMENT", permitDate: "DOCUMENT", arrivalDate: "DOCUMENT", supplierName: "DOCUMENT",
+    goodsValue: "DOCUMENT", dutyAmount: "DOCUMENT", importTaxNational: "DOCUMENT", importTaxLocal: "DOCUMENT" });
   assert.equal(data.auditLogs.filter((log) => log.action === "SORT_MAIL_DOCUMENT").length, 1);
   const imports = data.auditLogs.filter((log) => log.action === "INTAKE_IMPORT_DOCUMENT");
   assert.equal(imports.length, 1);
