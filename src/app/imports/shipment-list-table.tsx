@@ -2,8 +2,8 @@
 
 import { ChevronRight } from "lucide-react";
 import { cardPressProps } from "@/components/app/list-selection";
+import { Money } from "@/components/app/money";
 import { Badge } from "@/components/ui/badge";
-import { yen } from "@/lib/format";
 import { importListSummary } from "@/lib/import-list";
 import type { ImportShipmentView } from "@/lib/import-shipment-views";
 import { importDocumentKindLabels } from "@/lib/import-shipments";
@@ -11,11 +11,11 @@ import { importDocumentKindLabels } from "@/lib/import-shipments";
 const segmentTone = { DONE: "bg-[var(--tone-emerald-bar)]", CURRENT: "bg-primary", UPCOMING: "bg-input" };
 
 export function ShipmentListTable({ rows, today, onOpen }: { rows: ImportShipmentView[]; today: string; onOpen: (id: string) => void }) {
-  return <table className="record-cards record-cards-stack workspace-record-table w-full text-sm lg:min-w-[1080px] lg:table-fixed">
-    <colgroup><col className="w-[20%]" /><col className="w-[17%]" /><col className="w-[16%]" /><col className="w-[16%]" /><col className="w-[11%]" /><col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[2%]" /></colgroup>
+  return <table className="record-cards record-cards-stack workspace-record-table w-full text-sm [overflow-wrap:anywhere] lg:table-fixed">
+    <colgroup><col className="w-[17%] xl:w-[20%]" /><col className="w-[17%]" /><col className="w-[16%]" /><col className="w-[16%]" /><col className="w-[11%]" /><col className="w-[12%] xl:w-[9%]" /><col className="w-36" /><col className="w-8" /></colgroup>
     <thead className="text-xs text-muted-foreground"><tr>
-      {["便名・仕入先", "クライアント・注文", "工程", "次の予定", "希望納期", "書類"].map((label) => <th key={label} scope="col" className="px-3 py-2 text-left font-normal">{label}</th>)}
-      <th scope="col" className="px-3 py-2 text-right font-normal">諸費用</th><th scope="col"><span className="sr-only">詳細</span></th>
+      {["便名・仕入先", "クライアント・注文", "工程", "次の予定", "希望納期", "書類"].map((label) => <th key={label} scope="col" className="whitespace-normal! px-3 py-2 text-left font-normal">{label}</th>)}
+      <th scope="col" className="px-3 py-2 text-right font-normal">諸費用</th><th scope="col" className="p-0"><span className="sr-only">詳細</span></th>
     </tr></thead>
     <tbody>{rows.map((row) => {
       const summary = importListSummary(row, today);
@@ -29,7 +29,7 @@ export function ShipmentListTable({ rows, today, onOpen }: { rows: ImportShipmen
           <p className="break-words text-xs text-muted-foreground">{summary.order}</p>
         </div></td>
         <td data-label="工程" data-card-sub="" data-card-line="" className="px-3 py-3"><div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2"><span aria-hidden className="flex w-20 shrink-0 gap-1">{summary.segments.map((state, index) => <span key={index} className={`h-1 w-full rounded-full ${segmentTone[state]}`} />)}</span><span className="text-xs text-foreground">{summary.stage}</span></div>
+          <div className="flex flex-wrap items-center gap-2"><span aria-hidden className="flex w-20 max-w-full shrink-0 gap-1">{summary.segments.map((state, index) => <span key={index} className={`h-1 w-full rounded-full ${segmentTone[state]}`} />)}</span><span className="text-xs text-foreground">{summary.stage}</span></div>
           {summary.actual ? <p className="text-[11px] text-muted-foreground">{summary.actual}</p> : null}
         </div></td>
         <td data-label="次の予定" data-card-sub="" data-card-line="" className="px-3 py-3"><div className="min-w-0 space-y-1">
@@ -37,10 +37,10 @@ export function ShipmentListTable({ rows, today, onOpen }: { rows: ImportShipmen
         </div></td>
         <td data-label="希望納期" data-card-sub="" data-card-line="" className="px-3 py-3 text-xs"><span className="break-words">{summary.requested}</span></td>
         <td data-label="書類" data-card-sub="" className="px-3 py-3"><div className="flex flex-wrap items-center gap-1" title={row.missing.map((kind) => importDocumentKindLabels[kind]).join("、")}>
-          <span className="whitespace-nowrap text-xs text-foreground">{summary.documents}</span>{row.missing.length ? <Badge variant="outline" className="border-transparent bg-[var(--tone-amber-bg)] text-[10px] font-normal text-[var(--tone-amber-fg)]">不足</Badge> : null}
+          <span className="text-xs text-foreground">{summary.documents}</span>{row.missing.length ? <Badge variant="outline" className="border-transparent bg-[var(--tone-amber-bg)] text-[10px] font-normal text-[var(--tone-amber-fg)]">不足</Badge> : null}
         </div></td>
-        <td data-label="諸費用" data-card-sub="" data-card-end="" className="whitespace-nowrap px-3 py-3 text-right font-mono"><span className="whitespace-nowrap">{yen.format(row.costTotal)}</span></td>
-        <td data-card-hide="" className="py-3 pr-2 text-muted-foreground"><ChevronRight aria-hidden className="size-4" /></td>
+        <td data-label="諸費用" data-card-sub="" data-card-end="" className="whitespace-nowrap px-3 py-3 text-right"><Money value={row.costTotal} /></td>
+        <td data-card-hide="" className="p-0 text-muted-foreground"><ChevronRight aria-hidden className="mx-auto size-4" /></td>
       </tr>;
     })}</tbody>
   </table>;

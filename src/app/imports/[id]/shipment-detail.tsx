@@ -91,7 +91,7 @@ export function ShipmentDetail({ view, today, company, canEdit, clients, project
     if (dirtyCount && !window.confirm("未保存の変更を破棄して最新の便を読み込みますか？")) return;
     setState(initialShipmentDraft(view)); setError(""); start(() => router.refresh());
   };
-  return <div ref={rootRef} className={`min-w-0 space-y-4 ${canEdit ? "pb-[var(--import-savebar-height,96px)] lg:pb-0" : ""}`}>
+  return <div ref={rootRef} className={`min-w-0 space-y-4 ${canEdit ? "pb-[calc(var(--import-savebar-height,96px)+12px)] lg:pb-0" : ""}`}>
     <header className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 px-1">
       <Link href={back} prefetch={false} className="inline-flex w-full items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring lg:w-auto"><ArrowLeft aria-hidden className="size-3.5" />輸入便一覧</Link>
       <h1 className="min-w-0 flex-1 break-words lg:max-w-[40%] lg:flex-initial lg:border-l lg:border-[var(--rule)] lg:pl-4">{draft.title || view.title}</h1>
@@ -121,7 +121,7 @@ export function ShipmentDetail({ view, today, company, canEdit, clients, project
           </div>)}
           {canEdit ? <Button type="button" size="sm" variant="outline" disabled={pending} className="lg:hidden" onClick={() => setAddOpen(true)}><Plus />書類を追加</Button> : null}
         </div>
-        <Card variant="section" className="min-w-0 gap-4 p-4 max-lg:contents">
+        <Card variant="section" className="min-w-0 gap-4 p-4 max-lg:contents lg:overflow-visible">
           <fieldset disabled={pending} className={`min-w-0 space-y-4 ${mobile === "documents" ? "hidden lg:block" : ""}`}>
             <legend className="sr-only">注文と便の情報</legend>
             <Card variant="section" className="min-w-0 p-4 lg:contents"><div className="min-w-0 space-y-4 lg:mb-4">

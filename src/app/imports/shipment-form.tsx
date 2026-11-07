@@ -68,7 +68,7 @@ export function ShipmentForm({ company, row, projects, vendors, onSaved }: { com
     </div>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {amountFields.map(([key, label]) => (
-        <label key={key} className="space-y-1"><span className={field}>{label}</span><Input name={key} type="number" inputMode="numeric" min="0" step="1" defaultValue={row?.recorded[key] ?? ""} className="font-mono" /></label>
+        <label key={key} className="space-y-1"><span className={field}>{label}</span><Input name={key} type="number" inputMode="numeric" min="0" step="1" defaultValue={row?.recorded[key] ?? ""} className="tabular-nums" /></label>
       ))}
     </div>
     <label className="block space-y-1"><span className={field}>メモ</span><Textarea name="memo" maxLength={2000} defaultValue={row?.memo ?? ""} className="min-h-20" /></label>

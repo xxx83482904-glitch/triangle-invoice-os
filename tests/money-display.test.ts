@@ -10,7 +10,8 @@ const identifierFonts: Record<string, RegExp> = {
   "app/partners/page.tsx": /\{option\.value\}/,
   "app/users/agent-tokens.tsx": /value=\{state\.plain\}/,
   // Permit, shipment and invoice identifiers, including the grouped import candidates.
-  "app/imports/imports-workspace.tsx": /\{row\.(?:permitNumber|blNumber|invoiceNumber)\}|name="(?:permitNumber|blNumber|invoiceNumber)"|\{group\.declarationNumber\}/,
+  "app/imports/shipment-form.tsx": /name="(?:permitNumber|blNumber|invoiceNumber)"/,
+  "app/imports/shipment-candidates.tsx": /\{group\.(?:declarationNumber|blNumber|invoiceNumber)\}/,
 };
 
 const numberFormatExceptions: Record<string, string> = {

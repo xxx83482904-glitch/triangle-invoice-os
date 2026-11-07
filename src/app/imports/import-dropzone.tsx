@@ -122,7 +122,7 @@ export function ImportDropzone({ company, shipmentId, compact, layout, onCreated
             <Badge variant="outline">{importDocumentKindLabels[result.kind]}</Badge>
             {result.savedAs ? <Badge variant="outline">{result.savedAs === "received-invoice" ? "受領請求書" : "郵便物"}</Badge> : null}
             {result.shipmentCreated ? <Badge variant="outline">新しい便を作成</Badge> : null}
-            {result.duplicate ? <Badge variant="outline" className="border-amber-200 text-amber-800 dark:border-amber-900 dark:text-amber-200">重複候補</Badge> : null}
+            {result.duplicate ? <Badge variant="outline" className="border-transparent bg-[var(--tone-amber-bg)] text-[var(--tone-amber-fg)]">重複候補</Badge> : null}
           </div>
           <p className="break-words">{result.shipmentId ? `便: ${result.shipmentTitle}` : result.savedAs ? "未割当" : "未保存"}</p>
           {result.filled.length ? <p>読み取り: {result.filled.join("・")}</p> : null}

@@ -1,4 +1,4 @@
-import { yen } from "./format";
+import { formatMoney } from "./format";
 import type { DetailOption } from "./import-detail-draft";
 import type { ImportRereadChange } from "./import-shipment-views";
 import { importFillLabels } from "./import-shipments";
@@ -14,7 +14,7 @@ export function defaultRereadKeys(changes: ImportRereadChange[]) {
 
 export function formatRereadValue(key: ImportFillKey, value: string | number | undefined, vendors: DetailOption[]) {
   if (value === undefined || value === "") return "未入力";
-  if (amountKeys.has(key)) return yen.format(Number(value));
+  if (amountKeys.has(key)) return formatMoney(Number(value));
   if (key === "permitDate" || key === "arrivalDate") return String(value).replaceAll("-", "/");
   if (key === "brokerVendorId") return vendors.find((vendor) => vendor.value === value)?.label ?? "登録済みの通関業者（現在選択不可）";
   return String(value);

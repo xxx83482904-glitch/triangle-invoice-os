@@ -58,8 +58,8 @@ export function RereadDialog({ company, id, preview, vendors, triggerRef, onClos
               <td className="p-3 align-top"><input id={`reread-${change.key}`} type="checkbox" className="size-4 cursor-pointer accent-primary focus-visible:outline-2 focus-visible:outline-ring" disabled={pending} checked={keys.includes(change.key)}
                 onChange={(event) => setKeys(event.target.checked ? [...keys, change.key] : keys.filter((key) => key !== change.key))} /></td>
               <th scope="row" className="max-w-40 p-3 align-top font-medium"><label htmlFor={`reread-${change.key}`} className="cursor-pointer">{change.label}<span className="sr-only">を書類の値に置き換える</span></label></th>
-              <td className="max-w-44 p-3 align-top"><div className="flex flex-wrap items-center gap-1.5"><span className={`break-words [overflow-wrap:anywhere] ${typeof change.before === "number" ? "font-mono" : ""}`}>{formatRereadValue(change.key, change.before, vendors)}</span><SourceBadge source={change.source} /></div></td>
-              <td className="max-w-52 p-3 align-top"><span className={`break-words [overflow-wrap:anywhere] ${typeof change.after === "number" ? "font-mono" : ""}`}>{formatRereadValue(change.key, change.after, vendors)}</span><p className="mt-1 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{change.document.displayName}から</p></td>
+              <td className="max-w-44 p-3 align-top"><div className="flex flex-wrap items-center gap-1.5"><span className={`break-words [overflow-wrap:anywhere] ${typeof change.before === "number" ? "tabular-nums" : ""}`}>{formatRereadValue(change.key, change.before, vendors)}</span><SourceBadge source={change.source} /></div></td>
+              <td className="max-w-52 p-3 align-top"><span className={`break-words [overflow-wrap:anywhere] ${typeof change.after === "number" ? "tabular-nums" : ""}`}>{formatRereadValue(change.key, change.after, vendors)}</span><p className="mt-1 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{change.document.displayName}から</p></td>
             </tr>)}
           </tbody>
         </table>

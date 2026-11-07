@@ -92,12 +92,12 @@ function ItemRow({ item, orderDate, today, canEdit, editing, onToggle, onChange,
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--tone-blue-bg)] text-[var(--tone-blue-fg)]"><Icon aria-hidden className="size-4" /></span>
       <div className="min-w-0 flex-1"><p className="break-words text-sm font-medium">{item.name || "品名未入力"}</p>{item.note ? <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{item.note}</p> : null}
         {item.requestedDeliveryDate && item.requestedDeliveryDate !== orderDate ? <p className={`text-xs ${amberText}`}>希望納期 <DetailDate value={item.requestedDeliveryDate} today={today} />（注文と別）</p> : null}</div>
-      <span className="shrink-0 whitespace-nowrap text-right text-xs"><span className="font-mono">{item.quantity === "" ? "—" : Number(item.quantity).toLocaleString("ja-JP", { maximumFractionDigits: 6 })}</span> {item.unit}</span>
+      <span className="shrink-0 whitespace-nowrap text-right text-xs"><span className="tabular-nums">{item.quantity === "" ? "—" : Number(item.quantity).toLocaleString("ja-JP", { maximumFractionDigits: 6 })}</span> {item.unit}</span>
       {canEdit ? <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={`${item.name || "品目"}の${editing ? "編集を閉じる" : "編集"}`} aria-expanded={editing} onClick={onToggle}>{editing ? <X /> : <Pencil />}</Button> : null}
     </div>
     {canEdit && editing ? <div className="mt-3 grid min-w-0 grid-cols-2 gap-3 rounded-xl bg-[var(--field)] p-3">
       {([["name", "品名", "text", 200], ["quantity", "数量", "number", undefined], ["unit", "単位", "text", 20]] as const).map(([key, label, type, maxLength]) => <label key={key} className={`min-w-0 space-y-1 text-xs ${key === "name" ? "col-span-2" : ""}`}>
-        <span className="text-muted-foreground">{label}</span><Input type={type} value={item[key] ?? ""} maxLength={maxLength} min={type === "number" ? 0 : undefined} max={type === "number" ? 1e9 : undefined} step={type === "number" ? "any" : undefined} inputMode={type === "number" ? "decimal" : undefined}
+        <span className="text-muted-foreground">{label}</span><Input type={type} className={type === "number" ? "tabular-nums" : undefined} value={item[key] ?? ""} maxLength={maxLength} min={type === "number" ? 0 : undefined} max={type === "number" ? 1e9 : undefined} step={type === "number" ? "any" : undefined} inputMode={type === "number" ? "decimal" : undefined}
           onChange={(event) => onChange({ ...item, [key]: event.target.value })} />
       </label>)}
       <label className="col-span-2 min-w-0 space-y-1 text-xs"><span className="text-muted-foreground">種類</span>

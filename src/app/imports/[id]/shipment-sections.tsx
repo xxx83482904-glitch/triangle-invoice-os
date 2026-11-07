@@ -2,11 +2,12 @@
 
 import { RefreshCw } from "lucide-react";
 import type { RefObject } from "react";
+import { Money } from "@/components/app/money";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, yen } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { detailAmountFields, draftAmounts, type DetailOption, type ShipmentDraft } from "@/lib/import-detail-draft";
 import type { ImportShipmentView } from "@/lib/import-shipment-views";
 import { importShipmentAmounts, importShipmentStatusLabels, importShipmentStatuses } from "@/lib/import-shipments";
@@ -17,18 +18,18 @@ type SectionProps = { draft: ShipmentDraft; baseline: ShipmentDraft; sources: Im
 
 export function CostsSection({ draft, baseline, sources, canEdit, onChange, onReread, canReread, dirty, rereadRef }: SectionProps & { onReread: () => void; canReread: boolean; dirty: boolean; rereadRef: RefObject<HTMLButtonElement | null> }) {
   const amounts = importShipmentAmounts(draftAmounts(draft));
-  return <DetailSection title="費用・税額" badge="便全体" summary={<span className="flex flex-wrap gap-x-2">関税 <span className="whitespace-nowrap font-mono">{yen.format(amounts.dutyAmount)}</span>・輸入消費税 <span className="whitespace-nowrap font-mono">{yen.format(amounts.importTax)}</span></span>}>
+  return <DetailSection title="費用・税額" badge="便全体" summary={<span className="flex flex-wrap gap-x-2">関税 <Money value={amounts.dutyAmount} />・輸入消費税 <Money value={amounts.importTax} /></span>}>
     <p className="text-xs text-muted-foreground">この便全体の金額です（注文・品目ごとには分けません）</p>
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
       {detailAmountFields.map(([key, label]) => <label key={key} className="min-w-0 space-y-1 text-xs">
         <span className="flex flex-wrap items-center justify-between gap-1 text-muted-foreground">{label}<FieldSource value={draft[key]} source={key === "otherCost" ? undefined : sources[key]} changed={baseline[key] !== draft[key]} /></span>
-        {canEdit ? <Input aria-label={label} type="number" inputMode="decimal" min="0" max="1000000000000" step="any" className="text-right font-mono" value={draft[key]} onChange={(event) => onChange({ ...draft, [key]: event.target.value })} />
-          : <span className="block whitespace-nowrap py-2 text-right font-mono text-sm">{draft[key] ? yen.format(Number(draft[key])) : "未入力"}</span>}
+        {canEdit ? <Input aria-label={label} type="number" inputMode="decimal" min="0" max="1000000000000" step="any" className="text-right tabular-nums" value={draft[key]} onChange={(event) => onChange({ ...draft, [key]: event.target.value })} />
+          : <span className="block whitespace-nowrap py-2 text-right text-sm">{draft[key] ? <Money value={Number(draft[key])} /> : "未入力"}</span>}
       </label>)}
     </div>
     <div className="flex flex-wrap justify-between gap-3 rounded-lg bg-[var(--track)] p-3 text-xs">
-      <span>諸費用合計 <span className="whitespace-nowrap font-mono font-medium">{yen.format(amounts.costTotal)}</span></span>
-      <span>着地原価 <span className="whitespace-nowrap font-mono font-medium">{yen.format(amounts.landedCost)}</span></span>
+      <span>諸費用合計 <Money value={amounts.costTotal} className="font-medium" /></span>
+      <span>着地原価 <Money value={amounts.landedCost} className="font-medium" /></span>
     </div>
     <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground">経理の確認</span>
       {canEdit ? <OptionTabs label="経理の確認" value={draft.status} options={importShipmentStatuses.map((value) => [value, importShipmentStatusLabels[value]] as const)} onChange={(status) => onChange({ ...draft, status })} />

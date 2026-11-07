@@ -8,6 +8,7 @@ import { ShipmentCandidates } from "./shipment-candidates";
 import { ShipmentForm } from "./shipment-form";
 import { ShipmentListTable } from "./shipment-list-table";
 import { FilterPanel } from "@/components/app/filter-panel";
+import { Money } from "@/components/app/money";
 import { MonthTabs } from "@/components/app/month-tabs";
 import { OptionTabs } from "@/components/app/option-tabs";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { CompanyScope } from "@/lib/company";
-import { yen } from "@/lib/format";
 import type { DetailOption } from "@/lib/import-detail-draft";
 import { importShipmentHref, matchesImportSearch } from "@/lib/import-list";
 import type { ImportDocumentGroup, ImportShipmentView } from "@/lib/import-shipment-views";
@@ -54,9 +54,9 @@ export function ImportsWorkspace({ canEdit, company, rows, groups, projects, ven
           {canEdit ? <Button ref={createRef} type="button" size="sm" className="gap-1" onClick={() => setCreating(true)}><Plus aria-hidden className="size-4" />新しい便</Button> : null}
         </div>
         <section aria-label="輸入の集計" className="grid grid-cols-3 gap-2 text-xs text-muted-foreground sm:gap-3 lg:max-w-2xl">
-          <div className="min-w-0 rounded-lg bg-[var(--tile)] px-3 py-2"><div>関税</div><div className="break-all font-mono text-sm font-medium text-foreground">{yen.format(totals.duty)}</div><div className="mt-1 hidden sm:block">表示中{filtered.length}便</div></div>
-          <div className="min-w-0 rounded-lg bg-[var(--tile)] px-3 py-2"><div>輸入消費税</div><div className="break-all font-mono text-sm font-medium text-foreground">{yen.format(totals.tax)}</div><div className="mt-1 hidden sm:block">国税と地方消費税の合計</div></div>
-          <div className="min-w-0 rounded-lg bg-[var(--tile)] px-3 py-2"><div>諸費用合計</div><div className="break-all font-mono text-sm font-medium text-foreground">{yen.format(totals.cost)}</div><div className="mt-1 hidden sm:block">{totals.missing ? `書類不足 ${totals.missing}便` : "書類は揃っています"}</div></div>
+          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>関税</div><div className="break-all text-sm font-medium text-foreground"><Money value={totals.duty} /></div><div className="mt-1 hidden sm:block">表示中{filtered.length}便</div></div>
+          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>輸入消費税</div><div className="break-all text-sm font-medium text-foreground"><Money value={totals.tax} /></div><div className="mt-1 hidden sm:block">国税と地方消費税の合計</div></div>
+          <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>諸費用合計</div><div className="break-all text-sm font-medium text-foreground"><Money value={totals.cost} /></div><div className="mt-1 hidden sm:block">{totals.missing ? `書類不足 ${totals.missing}便` : "書類は揃っています"}</div></div>
         </section>
       </CardHeader>
       <CardContent className="min-w-0">

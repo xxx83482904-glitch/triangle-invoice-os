@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 import { ChevronDown, Inbox } from "lucide-react";
+import { Money } from "@/components/app/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { CompanyScope } from "@/lib/company";
-import { formatDate, yen } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import type { ImportBoardDocument, ImportDocumentGroup, ImportShipmentView } from "@/lib/import-shipment-views";
 import { importDocumentKindLabels, importDocumentKinds } from "@/lib/import-shipments";
 import type { ImportDocumentKind } from "@/lib/types";
@@ -74,7 +75,7 @@ function ShipmentCandidate({ company, canEdit, group, shipments, onCreated }: {
         <div className="min-w-0 flex-1 text-xs text-muted-foreground">
           <Link href={document.href} prefetch={false} title={document.title} className="block break-all text-sm font-medium text-foreground hover:underline underline-offset-4">{document.displayName}</Link>
           {document.title !== document.displayName ? <p className="break-all">保存名: {document.title}</p> : null}
-          <p className="break-words">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? ` / ${yen.format(document.amount)}` : ""}</p>
+          <p className="break-words">{document.party} / {formatDate(document.date)}{document.amount !== undefined ? <> / <Money value={document.amount} /></> : null}</p>
         </div>
       </li>)}
     </ul>
