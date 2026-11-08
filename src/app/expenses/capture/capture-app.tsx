@@ -361,7 +361,7 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
   }
 
   const withdrawClaim = sheet?.kind === "withdraw" ? claims.find((row) => row.id === sheet.id) : undefined;
-  return <main className="mx-auto w-full max-w-xl">
+  return <div className="capture-ui min-h-dvh"><main className="mx-auto w-full max-w-xl">
     <input ref={camera} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
     <input ref={library} type="file" accept="image/*,application/pdf" multiple className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
     <input ref={retake} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => { onRetake(event.target.files); event.target.value = ""; }} />
@@ -377,7 +377,7 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
     {sheet?.kind === "removeCard" ? <DangerSheet title="領収書を削除しますか？" body="この領収書を削除します。カード明細に付いていた場合は、明細からも外れます。" action="削除する" pendingLabel="削除しています…"
       pending={withdrawing} onConfirm={() => void removeCard(sheet.id)} onClose={closeSheet} /> : null}
     {withdrawClaim ? <WithdrawSheet payee={withdrawClaim.payee} amount={yen(withdrawClaim.amount)} pending={withdrawing} onConfirm={() => void withdraw(withdrawClaim.id)} onClose={closeSheet} /> : null}
-  </main>;
+  </main></div>;
 }
 
 function HomeFallback({ onHome, text = "この領収書は申請済みか、外されています" }: { onHome: () => void; text?: string }) {
