@@ -16,7 +16,7 @@ export type Fields = { amount: string; spentOn: string; payee: string; purpose: 
 export type FieldKey = keyof Fields;
 export type Source = "ai" | "ocr" | "history";
 export type Draft = {
-  key: string; kind: PayKind; targetUse?: CardUseView; file?: File; preview: string; pdf: boolean; state: "preparing" | "reading" | "ready" | "sending"; manual: boolean;
+  key: string; kind: PayKind; targetUse?: CardUseView; burst?: string; file?: File; preview: string; pdf: boolean; state: "preparing" | "reading" | "ready" | "sending"; manual: boolean;
   fields: Fields; auto: Partial<Record<FieldKey, Source>>; touched: Partial<Record<FieldKey, true>>; ocrText: string; warnings: string[]; error: string;
   claim?: MyClaim; more: boolean;
 };
@@ -24,7 +24,8 @@ export type ScreenState =
   | { name: "home" }
   | { name: "confirm"; key: string; mode: "single" | "batch" | "edit" }
   | { name: "batch" }
-  | { name: "done"; count: number; total: number; label: string }
+  | { name: "done"; count: number; total: number; label: string; note?: string }
+  | { name: "shutter"; kind: PayKind; session: string }
   | { name: "list" }
   | { name: "detail"; id: string }
   | { name: "cardPick"; receipt: Pick<CardReceiptView, "id" | "updatedAt" | "payee" | "amount" | "spentOn" | "candidates"> }

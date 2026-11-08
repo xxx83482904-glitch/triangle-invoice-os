@@ -8,6 +8,7 @@ import type { ReceiptField, ReceiptReading } from "@/lib/expense-receipt-reading
 import { prepareReceiptFile } from "@/lib/receipt-image";
 import type { ExpensePaidWith } from "@/lib/types";
 import { cardReceiptAction, expenseAction } from "../actions";
+import { ShutterScreen, liveCameraAvailable } from "./camera";
 import { CardDetailScreen, CardDoneScreen, CardHomeScreen, CardPickScreen, MissingScreen } from "./card-screens";
 import { InstallHint } from "./install-hint";
 import { amountOf, cardMatches, claimFields, emptyFields, missing, type CardReceiptView, type CardUseView, type Draft, type FieldKey, type MyCardView, type MyClaim, type Option, type PayKind, type ScreenState, type SheetState } from "./model";
@@ -133,21 +134,39 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
     }
   };
 
+  const createDrafts = (files: File[], requestedKind: PayKind, target?: CardUseView, burst?: string) => {
+    const paidWith = (["CASH", "PERSONAL_CARD", "OTHER"].includes(stored(STORAGE_PAID_WITH)) ? stored(STORAGE_PAID_WITH) : "CASH") as ExpensePaidWith;
+    const kind = card ? requestedKind : "expense", use = kind === "card" && files.length === 1 ? target : undefined;
+    const created = files.map((file): Draft => ({ key: crypto.randomUUID(), kind, targetUse: use, burst, file, preview: file.type === "application/pdf" ? "" : URL.createObjectURL(file), pdf: file.type === "application/pdf",
+      state: "preparing", manual: false, fields: { ...emptyFields(paidWith), ...(use ? { amount: String(Math.round(use.amount)), spentOn: use.date } : {}) },
+      auto: {}, touched: {}, ocrText: "", warnings: [], error: "", more: false }));
+    setDrafts((rows) => [...rows, ...created]);
+    for (const draft of created) void prepare(draft.key, draft.file!);
+    return created;
+  };
+  // Screens that only lead somewhere else are replaced, so back doesn't return to a finished step or a closed camera.
+  const go = (next: ScreenState) => screen.name === "done" || screen.name === "cardDone" || screen.name === "shutter" ? replace(next) : push(next);
   const addFiles = (list: FileList | null) => {
     const files = Array.from(list || []);
     if (!files.length) return;
-    const paidWith = (["CASH", "PERSONAL_CARD", "OTHER"].includes(stored(STORAGE_PAID_WITH)) ? stored(STORAGE_PAID_WITH) : "CASH") as ExpensePaidWith;
-    const kind = card ? addKind.current : "expense", target = kind === "card" && files.length === 1 ? addUse.current : undefined;
-    const created = files.map((file): Draft => ({ key: crypto.randomUUID(), kind, targetUse: target, file, preview: file.type === "application/pdf" ? "" : URL.createObjectURL(file), pdf: file.type === "application/pdf",
-      state: "preparing", manual: false, fields: { ...emptyFields(paidWith), ...(target ? { amount: String(Math.round(target.amount)), spentOn: target.date } : {}) },
-      auto: {}, touched: {}, ocrText: "", warnings: [], error: "", more: false }));
-    setDrafts((rows) => [...rows, ...created]);
+    const created = createDrafts(files, addKind.current, addUse.current);
     const toBatch = addTarget.current === "batch" || files.length > 1;
-    if (toBatch && screen.name !== "batch") { if (screen.name === "done") replace({ name: "batch" }); else push({ name: "batch" }); }
-    else if (!toBatch) { const next = { name: "confirm" as const, key: created[0].key, mode: "single" as const }; if (screen.name === "done") replace(next); else push(next); }
-    for (const draft of created) void prepare(draft.key, draft.file!);
+    if (toBatch && screen.name !== "batch") go({ name: "batch" });
+    else if (!toBatch) go({ name: "confirm", key: created[0].key, mode: "single" });
   };
-  const openCamera = (target: "auto" | "batch", kind: PayKind = "expense", use?: CardUseView) => { addTarget.current = target; addKind.current = kind; addUse.current = use; camera.current?.click(); };
+  const openCamera = (target: "auto" | "batch", kind: PayKind = "expense", use?: CardUseView) => {
+    addTarget.current = target; addKind.current = kind; addUse.current = use;
+    // The live camera keeps shooting receipt after receipt; a receipt for one specific card use still uses the camera app.
+    if (!use && liveCameraAvailable()) go({ name: "shutter", kind: card ? kind : "expense", session: crypto.randomUUID() });
+    else camera.current?.click();
+  };
+  const finishShutter = (session: string) => {
+    const shots = draftsRef.current.filter((row) => row.burst === session && !row.claim);
+    const previous = stack[depth.current - 1];
+    if (previous?.name === "batch" || !shots.length) back();
+    else if (shots.length === 1) replace({ name: "confirm", key: shots[0].key, mode: "single" });
+    else replace({ name: "batch" });
+  };
   const openLibrary = (kind: PayKind = "expense") => { addTarget.current = "auto"; addKind.current = kind; addUse.current = undefined; library.current?.click(); };
   const openRetake = (key: string) => { retakeKey.current = key; retake.current?.click(); };
   const onRetake = (list: FileList | null) => {
@@ -212,7 +231,10 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
     setBulk(false);
     if (!count) return;
     router.refresh();
-    if (count === unsent.length) replace({ name: "done", count, total, label: `${count}枚の領収書` });
+    const cards = ready.filter((row) => row.kind === "card").length;
+    const note = cards ? cards === count ? "会社カードの領収書は、カードの利用に付けました。同じ金額の利用が複数あるものは、申請状況の「会社カード」で選んでください。"
+      : "立替は経理が確認したあとに振り込まれます。会社カードの領収書はカードの利用に付けました（選ぶ必要があるものは申請状況の「会社カード」に出ます）。" : undefined;
+    if (count === unsent.length) replace({ name: "done", count, total, label: `${count}枚の領収書`, note });
     else toast({ title: `${count}件を申請しました。残りの領収書を確認してください。`, variant: "success" });
   };
 
@@ -263,9 +285,15 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
   const recentProjects = useMemo(() => recentProjectIds.map((id) => projects.find((row) => row.value === id)).filter(Boolean) as Option[], [projects, recentProjectIds]);
   const recentCategories = useMemo(() => distinct(claims.map((row) => row.categoryId), 5).map((id) => categories.find((row) => row.value === id)).filter(Boolean) as Option[], [claims, categories]);
 
-  const sheetDraft = sheet && "key" in sheet ? drafts.find((row) => row.key === sheet.key) : undefined;
+  const allDrafts = sheet && "key" in sheet && sheet.key === "__all__";
+  const sheetDraft = sheet && "key" in sheet ? allDrafts ? unsent[0] : drafts.find((row) => row.key === sheet.key) : undefined;
   const closeSheet = () => setSheet(null);
-  const pick = (field: FieldKey) => (value: string) => { if (sheetDraft) change(sheetDraft.key, field, value); closeSheet(); };
+  const pick = (field: FieldKey) => (value: string) => {
+    // "まとめて設定" on the batch screen: one project for every receipt in the batch.
+    if (allDrafts) for (const row of unsent) change(row.key, field, value);
+    else if (sheetDraft) change(sheetDraft.key, field, value);
+    closeSheet();
+  };
 
   let view: React.ReactNode = null;
   if (screen.name === "home" && card) {
@@ -291,11 +319,21 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
       onToggleMore={() => update(draft.key, (row) => ({ ...row, more: !row.more }))} onRetake={() => openRetake(draft.key)}
       onSubmit={() => void submitOne(draft, screen.mode === "edit" ? "edit" : "single")} onRemove={() => { remove(draft.key); back(); }}
       onWithdraw={() => draft.claim && setSheet({ kind: "withdraw", id: draft.claim.id })} />;
+  } else if (screen.name === "shutter") {
+    const session = screen.session, shots = drafts.filter((row) => row.burst === session && !row.claim);
+    view = <ShutterScreen kind={screen.kind} cardLabel={card?.account.label} shots={shots}
+      onShot={(file) => { createDrafts([file], screen.kind, undefined, session); }}
+      onSwitchKind={card ? () => { const kind = screen.kind === "card" ? "expense" : "card"; replace({ ...screen, kind }); setDrafts((rows) => rows.map((row) => row.burst === session ? { ...row, kind } : row)); } : undefined}
+      onDone={() => finishShutter(session)} onClose={() => finishShutter(session)}
+      onFallback={() => { addTarget.current = "batch"; addKind.current = screen.kind; addUse.current = undefined; camera.current?.click(); }}
+      onLibrary={() => { addTarget.current = "batch"; addKind.current = screen.kind; addUse.current = undefined; library.current?.click(); }} />;
   } else if (screen.name === "batch") {
-    view = <BatchScreen drafts={unsent} today={today} sending={bulk} onBack={back} onOpen={(key) => push({ name: "confirm", key, mode: "batch" })}
-      onCamera={() => openCamera("batch")} onSubmit={() => void submitBatch()} />;
+    const common = unsent.length && unsent.every((row) => row.fields.projectId === unsent[0].fields.projectId) ? unsent[0].fields.projectId : undefined;
+    view = <BatchScreen drafts={unsent} today={today} sending={bulk} cardLabel={card?.account.label} onBack={back} onOpen={(key) => push({ name: "confirm", key, mode: "batch" })}
+      project={common === undefined ? "（それぞれ別）" : projects.find((row) => row.value === common)?.label || "共通経費（案件なし）"} onProject={() => setSheet({ kind: "projectId", key: "__all__" })}
+      onCamera={() => openCamera("batch", unsent.at(-1)?.kind || "expense")} onSubmit={() => void submitBatch()} />;
   } else if (screen.name === "done") {
-    view = <DoneScreen count={screen.count} total={screen.total} label={screen.label} onCamera={() => openCamera("auto", "expense")} onList={() => replace({ name: "list" })} onHome={() => backTo((row) => row.name === "home")} />;
+    view = <DoneScreen count={screen.count} total={screen.total} label={screen.label} note={screen.note} onCamera={() => openCamera("auto", "expense")} onList={() => replace({ name: "list" })} onHome={() => backTo((row) => row.name === "home")} />;
   } else if (screen.name === "list") {
     view = <ListScreen claims={claims} fresh={fresh} onBack={back} onOpen={(id) => push({ name: "detail", id })}
       initialKind={card?.receipts.some((row) => fresh.has(row.id)) ? "card" : "expense"}

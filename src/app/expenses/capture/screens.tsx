@@ -142,17 +142,18 @@ export function ConfirmScreen({ draft, mode, today, projects, categories, card, 
   </Screen>;
 }
 
-export function BatchScreen({ drafts, today, sending, onBack, onOpen, onCamera, onSubmit }: {
-  drafts: Draft[]; today: string; sending: boolean; onBack: () => void; onOpen: (key: string) => void; onCamera: () => void; onSubmit: () => void;
+export function BatchScreen({ drafts, today, sending, cardLabel, project, onBack, onOpen, onProject, onCamera, onSubmit }: {
+  drafts: Draft[]; today: string; sending: boolean; cardLabel?: string; project: string; onBack: () => void; onOpen: (key: string) => void; onProject: () => void; onCamera: () => void; onSubmit: () => void;
 }) {
   const ready = drafts.filter((row) => row.state === "ready" && !missing(row.fields, today).length);
   const waiting = drafts.length - ready.length, total = drafts.reduce((sum, row) => sum + amountOf(row.fields), 0);
   return <Screen footer={<div className="space-y-2">
     <p className="text-center text-sm text-muted-foreground">合計 {yen(total)}{waiting ? `（うち${waiting}枚は${drafts.some((row) => row.state === "reading" || row.state === "preparing") ? "読み取り中・" : ""}入力待ち）` : ""}</p>
-    <PrimaryButton onClick={onSubmit} disabled={!ready.length || sending}>{sending ? <><Loader2 className="size-6 animate-spin" />申請しています…</> : ready.length ? `${ready.length}件を申請する` : "入力が必要です"}</PrimaryButton></div>}>
+    <PrimaryButton onClick={onSubmit} disabled={!ready.length || sending}>{sending ? <><Loader2 className="size-6 animate-spin" />登録しています…</> : ready.length ? `${ready.length}件をまとめて登録` : "入力が必要です"}</PrimaryButton></div>}>
     <TopBar title={`${drafts.length}枚を確認`} onBack={onBack} />
     <div className="space-y-3 px-5 pb-6">
-      <p className="text-[15px] text-muted-foreground">タップすると1枚ずつ確認・修正できます</p>
+      <Card><Row label="案件" value={project} placeholder="共通経費（案件なし）" onClick={onProject} last /></Card>
+      <p className="text-[15px] text-muted-foreground">案件はまとめて設定できます。ほかの項目は、タップして1枚ずつ確認・修正できます</p>
       {drafts.map((draft) => {
         const gaps = missing(draft.fields, today), reading = draft.state === "reading" || draft.state === "preparing", amount = amountOf(draft.fields);
         return <button key={draft.key} type="button" onClick={() => onOpen(draft.key)} className={`flex min-h-[104px] w-full items-center gap-3.5 rounded-[20px] bg-card p-3.5 text-left active:bg-muted ${gaps.length && !reading ? "border-2 border-amber-400" : "border"}`}>
@@ -160,28 +161,29 @@ export function BatchScreen({ drafts, today, sending, onBack, onOpen, onCamera, 
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate text-[17px] font-bold">{draft.fields.payee || (reading ? "読み取り中…" : "お店を入力してください")}</span>
             <span className="truncate text-sm text-muted-foreground">{[dayLabel(draft.fields.spentOn), draft.fields.purpose].filter(Boolean).join("・") || "—"}</span>
+            {cardLabel ? <span className="flex items-center gap-1 text-[13px] text-muted-foreground">{draft.kind === "card" ? <><CreditCard className="size-3.5" />会社カード</> : <><Wallet className="size-3.5" />立替</>}</span> : null}
             {reading ? <span className="flex items-center gap-1.5 text-[15px] text-muted-foreground"><Loader2 className="size-4 animate-spin" />読み取り中</span>
               : draft.state === "sending" ? <span className="flex items-center gap-1.5 text-[15px] text-muted-foreground"><Loader2 className="size-4 animate-spin" />申請中</span>
                 : draft.error ? <span className="text-[15px] font-bold text-rose-800 dark:text-rose-300">{draft.error}</span>
                   : gaps.length ? <span className="flex items-center gap-1.5 text-[15px] font-bold text-amber-800 dark:text-amber-300"><AlertCircle className="size-4" />{gaps.join("・")}が未入力</span>
-                    : <span className="flex items-center gap-1.5 text-[15px] font-medium text-emerald-700 dark:text-emerald-300"><Check className="size-4" strokeWidth={2.8} />申請できます</span>}
+                    : <span className="flex items-center gap-1.5 text-[15px] font-medium text-emerald-700 dark:text-emerald-300"><Check className="size-4" strokeWidth={2.8} />{draft.kind === "card" ? "登録できます" : "申請できます"}</span>}
           </span>
           <span className="text-xl font-bold tabular-nums">{amount ? yen(amount) : "—"}</span>
         </button>;
       })}
-      <button type="button" onClick={onCamera} className="flex min-h-16 w-full items-center justify-center gap-2.5 rounded-[20px] border-2 border-dashed border-input text-[17px] font-medium active:bg-muted"><Camera className="size-6" />もう1枚撮る</button>
+      <button type="button" onClick={onCamera} className="flex min-h-16 w-full items-center justify-center gap-2.5 rounded-[20px] border-2 border-dashed border-input text-[17px] font-medium active:bg-muted"><Camera className="size-6" />続けて撮る</button>
     </div>
   </Screen>;
 }
 
-export function DoneScreen({ count, total, label: detail, onCamera, onList, onHome }: { count: number; total: number; label: string; onCamera: () => void; onList: () => void; onHome: () => void }) {
+export function DoneScreen({ count, total, label: detail, note, onCamera, onList, onHome }: { count: number; total: number; label: string; note?: string; onCamera: () => void; onList: () => void; onHome: () => void }) {
   return <Screen>
     <div className="flex flex-1 flex-col gap-3.5 px-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+2rem)]">
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center" role="status">
         <span className="flex size-32 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950"><Check className="size-[68px] text-emerald-700 dark:text-emerald-300" strokeWidth={2.6} /></span>
-        <p className="text-[30px] font-bold">{count > 1 ? `${count}件を申請しました` : "申請しました"}</p>
+        <p className="text-[30px] font-bold">{count > 1 ? `${count}件を登録しました` : "申請しました"}</p>
         <div><p className="text-[34px] font-bold tabular-nums">{yen(total)}</p><p className="text-[17px] text-muted-foreground">{detail}</p></div>
-        <p className="text-[15px] leading-relaxed text-muted-foreground">経理が確認したあと、口座に振り込まれます。</p>
+        <p className="text-[15px] leading-relaxed text-muted-foreground">{note || "経理が確認したあと、口座に振り込まれます。"}</p>
       </div>
       <PrimaryButton onClick={onCamera} className="h-[72px] rounded-[22px]"><Camera className="size-7" strokeWidth={2} />続けて撮る</PrimaryButton>
       <SecondaryButton onClick={onList}><List className="size-6" />申請状況を見る</SecondaryButton>
