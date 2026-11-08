@@ -3,6 +3,7 @@ import { assertBankAccess, bankToday, isBankDate } from "@/lib/banking";
 import { bankAccountFilter } from "@/lib/bank-account-options";
 import { APLUS_SETTLEMENT_LINK_ISSUE, bankCardSettlementConflict, bankCardSettlementDetail, knownBankCardSettlement } from "@/lib/bank-card-settlement";
 import type { BankTransaction, BankTransfer } from "@/lib/banking-types";
+import { expensePayoutTransactionIds } from "@/lib/expense-payouts";
 import type { AppData, User } from "@/lib/types";
 import type { CompanyScope } from "@/lib/company";
 
@@ -24,6 +25,7 @@ function rowIssue(data: AppData, company: CompanyScope, row: BankTransaction, to
   if (row.sourceMissing || row.sourceStatus === "excluded" || row.treatment === "EXCLUDED") return "元明細なし・対象外の明細は選択できません";
   if (!isBankDate(row.transactionDate) || row.transactionDate > today || !Number.isFinite(row.amount) || row.amount <= 0 || row.amount > 1e12 || Math.abs(row.amount * 100 - cents(row.amount)) > 0.001) return "取引日・金額を確認してください";
   if (invoiced(data, row.id)) return "請求書と照合済みです。先に請求書照合を解除してください";
+  if (expensePayoutTransactionIds(data).has(row.id)) return "経費精算の振込と照合済みです。先に経費精算の照合を解除してください";
   return "";
 }
 

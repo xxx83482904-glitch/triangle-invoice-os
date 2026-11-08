@@ -9,7 +9,7 @@ import { readData, readDataForRequest } from "@/lib/store";
 import type { User } from "@/lib/types";
 import { isActiveUser } from "@/lib/user-access";
 
-const cookieName = "triangle-session";
+import { SESSION_COOKIE_MAX_AGE, SESSION_COOKIE_NAME as cookieName } from "@/lib/session-cookie";
 
 function secureSessionCookie() {
   if (process.env.SESSION_COOKIE_SECURE === "false") return false;
@@ -46,7 +46,6 @@ export async function signIn(email: string, password: string) {
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("8h")
     .sign(secretKey());
 
   const cookieStore = await cookies();
@@ -55,7 +54,7 @@ export async function signIn(email: string, password: string) {
     sameSite: "lax",
     secure: secureSessionCookie(),
     path: "/",
-    maxAge: 60 * 60 * 8,
+    maxAge: SESSION_COOKIE_MAX_AGE,
   });
 
   return user;

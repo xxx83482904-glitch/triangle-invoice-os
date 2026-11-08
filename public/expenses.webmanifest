@@ -1,0 +1,18 @@
+{
+  "id": "/expenses/capture",
+  "name": "TRIANGLE 経費精算",
+  "short_name": "経費精算",
+  "description": "領収書を撮って、そのまま経費精算を申請します。",
+  "lang": "ja",
+  "start_url": "/expenses/capture",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "/expenses-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/expenses-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/expenses-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

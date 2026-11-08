@@ -688,3 +688,8 @@ body.has-selection-bar .workspace-main { padding-bottom: 180px; }
 @media (min-width: 768px) { .record-detail-dialog { inset-inline-start: auto; width: min(680px, 90vw); box-shadow: var(--shadow-raised); } }
 @media (min-width: 1024px) { .record-detail-dialog { width: min(960px, 92vw); } .record-detail-body { padding: 16px; } }
 @media (min-width: 1024px) { body:has(.workspace-shell) .record-detail-dialog { width: min(960px, calc(100vw - var(--app-sidebar-offset) - 24px)); } }
+
+/* Expense capture: the scan line sweeping over a receipt while it is read. */
+@keyframes receipt-scan { 0% { top: 4%; } 50% { top: 94%; } 100% { top: 4%; } }
+.receipt-scan { top: 4%; animation: receipt-scan 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .receipt-scan { animation: none; top: 50%; } }

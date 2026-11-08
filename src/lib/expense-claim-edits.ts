@@ -67,6 +67,8 @@ const fields = {
   amount: z.number().finite().int("金額は整数円で入力してください").positive("金額は1円以上にしてください"),
   payee: required("支払先", 100), purpose: required("用途", 200),
   categoryId: reference.optional(), projectId: reference.optional(), paidWith: z.enum(["CASH", "PERSONAL_CARD", "OTHER"]).optional(), memo,
+  registrationNumber: z.string().trim().regex(/^T\d{13}$/, "登録番号はTと13桁の数字で入力してください").optional(),
+  taxBreakdown: z.object({ rate10: z.number().int("消費税額は整数円で入力してください").nonnegative().optional(), rate8: z.number().int("消費税額は整数円で入力してください").nonnegative().optional() }).strict().optional(),
   file: z.object({ fileUrl: required("領収書", 2000), originalFileName: required("ファイル名", 1000), mimeType: z.enum(["application/pdf", "image/jpeg", "image/png"]), ocrText: z.string().max(4000, "OCRテキストは4000文字以内にしてください").optional() }).strict().optional(),
 };
 const mutationSchema = z.discriminatedUnion("action", [
@@ -103,8 +105,11 @@ export function applyExpenseMutation(data: AppData, actor: Actor, company: Compa
   if (value.action === "submit" || value.action === "update") {
     if (value.projectId && !data.projects.some((row) => row.id === value.projectId && !row.deletedAt && matchesCompany(row, company))) throw new Error("この会社の案件を選択してください");
     if (value.categoryId && !expenseCategoryOptions(data, company).some((row) => row.value === value.categoryId)) throw new Error("利用できる経費の勘定科目を選択してください");
+    const tax = value.taxBreakdown && Object.fromEntries(Object.entries(value.taxBreakdown).filter(([, amount]) => amount)) as NonNullable<typeof value.taxBreakdown>;
+    if (tax && (tax.rate10 || 0) + (tax.rate8 || 0) >= value.amount) throw new Error("消費税額は金額より小さくしてください");
     const contents = { spentOn: value.spentOn, amount: value.amount, payee: value.payee, purpose: value.purpose,
-      categoryId: value.categoryId, projectId: value.projectId, paidWith: value.paidWith, memo: value.memo, ...value.file };
+      categoryId: value.categoryId, projectId: value.projectId, paidWith: value.paidWith, memo: value.memo,
+      registrationNumber: value.registrationNumber, taxBreakdown: tax && Object.keys(tax).length ? tax : undefined, ...value.file };
     if (value.action === "submit") {
       const id = submissionId ?? globalThis.crypto.randomUUID(), at = stamp();
       if ((data.expenseClaims || []).some((row) => row.id === id)) throw new Error("経費の申請が既に登録されています");
@@ -142,6 +147,7 @@ export function applyExpenseMutation(data: AppData, actor: Actor, company: Compa
   } as const;
   const next = transitions[value.action];
   assertState(next.allowed);
+  if (value.action === "unpay" && row.payout) throw new Error("口座明細と照合済みです。先に照合を解除してから精算を取り消してください");
   const at = stamp(row.updatedAt);
   row.status = next.status; row.updatedAt = at;
   if (value.action === "approve" || value.action === "return") { row.reviewedById = actor.id; row.reviewedAt = at; }

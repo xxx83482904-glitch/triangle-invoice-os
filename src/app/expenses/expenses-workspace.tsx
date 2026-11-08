@@ -3,7 +3,8 @@ import { Money } from "@/components/app/money";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ExternalLink, Plus, Search, X } from "lucide-react";
+import Link from "next/link";
+import { Camera, ChevronLeft, ChevronRight, ExternalLink, Landmark, Plus, Search, Unlink, X } from "lucide-react";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { cardPressProps } from "@/components/app/list-selection";
 import { MonthTabs } from "@/components/app/month-tabs";
@@ -23,7 +24,10 @@ import { formatDate } from "@/lib/format";
 import { countByMonth } from "@/lib/month-tabs";
 import { operationFailureToast } from "@/lib/operation-feedback";
 import type { ExpenseClaimStatus, ExpensePaidWith } from "@/lib/types";
-import { expenseAction } from "./actions";
+import type { ExpensePayoutDetail } from "@/lib/expense-payouts";
+import type { ReceiptReading } from "@/lib/expense-receipt-reading";
+import { prepareReceiptFile } from "@/lib/receipt-image";
+import { expenseAction, expensePayoutAction, expensePayoutDetailAction } from "./actions";
 
 type Option = { value: string; label: string };
 type Summary = ReturnType<typeof expenseSettlementSummary>;
@@ -42,9 +46,9 @@ function ExpenseBadge({ status }: { status: ExpenseClaimStatus }) {
   return <Badge variant="outline" className={`font-normal ${statusClasses[status]}`}>{expenseStatusLabels[status]}</Badge>;
 }
 
-export function ExpensesWorkspace({ company, views, summary, projects, categories, canManage, today, currentUserId, actors, initialStatus, initialView, initialId }: {
+export function ExpensesWorkspace({ company, views, summary, projects, categories, canManage, canReconcile, today, currentUserId, actors, initialStatus, initialView, initialId }: {
   company: CompanyScope; views: ExpenseClaimView[]; summary: { all: Summary; mine: Summary }; projects: Option[]; categories: Option[];
-  canManage: boolean; today: string; currentUserId: string; actors: Record<string, string>;
+  canManage: boolean; canReconcile: boolean; today: string; currentUserId: string; actors: Record<string, string>;
   initialStatus: ExpenseClaimStatus | "all"; initialView: "all" | "mine"; initialId?: string;
 }) {
   const router = useRouter(), wide = useMediaQuery("(min-width: 1024px)");
@@ -98,7 +102,7 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
   };
 
   return <div className="min-w-0 space-y-4">
-    <div className="flex justify-end"><Button type="button" disabled={pending} onClick={create}><Plus className="size-4" />領収書を提出</Button></div>
+    <div className="flex flex-wrap justify-end gap-2"><Button asChild variant="outline"><Link href="/expenses/capture"><Camera className="size-4" />スマホで撮って申請</Link></Button><Button type="button" disabled={pending} onClick={create}><Plus className="size-4" />領収書を提出</Button></div>
     <section aria-label="経費精算の集計" className="grid grid-cols-3 gap-2 text-xs text-muted-foreground sm:gap-3">
       {[[`申請中 ${totals.submittedCount}件`, totals.submittedAmount], ["承認済み・未精算", totals.approvedAmount], ["今月の精算済み", totals.paidThisMonth]].map(([label, amount]) =>
         <div key={label} className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>{label}</div><div className="mt-1 break-all text-sm font-medium text-foreground"><Money value={Number(amount)} /></div></div>)}
@@ -123,7 +127,7 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
               <tbody>{filtered.map((row) => <tr key={`${row.id}:${row.updatedAt}`} {...cardPressProps(() => { if (!pending) open(row.id); })} data-active={row.id === activeId ? "" : undefined}>
                 <td className="record-card-title"><button type="button" data-selection-open className="record-card-open" title="開く" disabled={pending} onClick={() => open(row.id)}>{row.payee}</button><div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.purpose}</div></td>
                 <td data-card-sub>{formatDate(row.spentOn)}</td>{view === "all" ? <td data-card-line>{row.submitterName}</td> : null}
-                <td data-card-hide className="text-muted-foreground">{row.categoryName}</td><td data-card-end className="text-right"><Money value={row.amount} /></td><td><ExpenseBadge status={row.status} /></td>
+                <td data-card-hide className="text-muted-foreground">{row.categoryName}</td><td data-card-end className="text-right"><Money value={row.amount} /></td><td><ExpenseBadge status={row.status} />{canManage && row.status === "PAID" && row.payout ? <span className="ml-1 text-xs text-muted-foreground">明細照合済</span> : null}</td>
               </tr>)}</tbody>
             </table> : <div className="flex flex-col items-center gap-3 py-12 text-sm text-muted-foreground"><p>条件に合う申請がありません</p><Button type="button" variant="outline" onClick={reset}>条件をリセット</Button>{!scoped.length ? <Button type="button" disabled={pending} onClick={create}>最初の領収書を提出する</Button> : null}</div>}
           </div>
@@ -134,7 +138,7 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
                 {!creating ? <><Button type="button" variant="outline" size="icon" aria-label="前の申請" disabled={!step(-1)} onClick={step(-1)}><ChevronLeft className="size-4" /></Button><Button type="button" variant="outline" size="icon" aria-label="次の申請" disabled={!step(1)} onClick={step(1)}><ChevronRight className="size-4" /></Button></> : null}
                 <Button type="button" variant="ghost" size="icon" aria-label="詳細を閉じる" disabled={pending} onClick={close}><X className="size-4" /></Button></div> : null}
               {creating ? <ExpenseForm key="new" company={company} today={today} projects={projects} categories={categories} pending={pending} save={save} />
-                : active ? <ExpenseDetail key={`${active.id}:${active.updatedAt}`} row={active} company={company} today={today} projects={projects} categories={categories} actors={actors} wide={wide} canManage={canManage} pending={pending} save={save} run={run} />
+                : active ? <ExpenseDetail key={`${active.id}:${active.updatedAt}`} row={active} company={company} today={today} projects={projects} categories={categories} actors={actors} wide={wide} canManage={canManage} canReconcile={canReconcile} pending={pending} save={save} run={run} />
                   : <p className="py-12 text-center text-sm text-muted-foreground">{activeId ? "申請を読み込んでいます。" : "申請を開くと詳細を確認できます。"}</p>}
             </div>
           </RecordDetail>
@@ -171,25 +175,33 @@ function ExpenseForm({ row, company, today, projects, categories, pending, save 
 }) {
   const [spentOn, setSpentOn] = useState(row?.spentOn || today), [amount, setAmount] = useState(row ? String(row.amount) : ""), [payee, setPayee] = useState(row?.payee || "");
   const [paidWith, setPaidWith] = useState<ExpensePaidWith>(row?.paidWith || "CASH"), [ocrText, setOcrText] = useState(row?.ocrText || "");
-  const [reading, setReading] = useState(false), [ocrRead, setOcrRead] = useState(false), [ocrError, setOcrError] = useState("");
+  const [purpose, setPurpose] = useState(row?.purpose || ""), [categoryId, setCategoryId] = useState(row?.categoryId || "");
+  const [registrationNumber, setRegistrationNumber] = useState(row?.registrationNumber || "");
+  const [tax10, setTax10] = useState(row?.taxBreakdown?.rate10 ? String(row.taxBreakdown.rate10) : ""), [tax8, setTax8] = useState(row?.taxBreakdown?.rate8 ? String(row.taxBreakdown.rate8) : "");
+  const [reading, setReading] = useState(false), [ocrRead, setOcrRead] = useState(false), [ocrError, setOcrError] = useState(""), [warnings, setWarnings] = useState<string[]>([]);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const readReceipt = async (file?: File) => {
     request.current?.abort(); request.current = null;
-    setOcrText(""); setOcrRead(false); setOcrError(""); setReading(false);
+    setOcrText(""); setOcrRead(false); setOcrError(""); setWarnings([]); setReading(false);
     if (!file) return;
     const controller = new AbortController(); request.current = controller; setReading(true);
     try {
-      const data = new FormData(); data.set("company", company); data.set("file", file);
+      const data = new FormData(); data.set("company", company); data.set("file", await prepareReceiptFile(file));
       const response = await fetch("/api/uploads/expenses/ocr", { method: "POST", body: data, signal: controller.signal });
-      const body = await response.json() as { spentOn?: string; amount?: number; payee?: string; ocrText?: string; error?: string };
+      const body = await response.json() as Partial<ReceiptReading> & { error?: string };
       if (!response.ok) throw new Error(body.error || "領収書を読み取れませんでした");
       if (controller.signal.aborted) return;
       // Input entered while OCR runs always wins over the draft.
       setSpentOn((current) => current || body.spentOn || "");
       setAmount((current) => current || (typeof body.amount === "number" && body.amount > 0 ? String(body.amount) : ""));
       setPayee((current) => current || body.payee || "");
-      setOcrText(body.ocrText || ""); setOcrRead(true);
+      setPurpose((current) => current || body.purpose || ""); setCategoryId((current) => current || body.categoryId || "");
+      if (body.paidWith && !row) setPaidWith(body.paidWith);
+      setRegistrationNumber((current) => current || body.registrationNumber || "");
+      setTax10((current) => current || (body.taxBreakdown?.rate10 ? String(body.taxBreakdown.rate10) : ""));
+      setTax8((current) => current || (body.taxBreakdown?.rate8 ? String(body.taxBreakdown.rate8) : ""));
+      setOcrText(body.ocrText || ""); setOcrRead(true); setWarnings(body.warnings || []);
     } catch (error) {
       if (!controller.signal.aborted) { setOcrError("読み取れませんでした。領収書を確認して手入力で続けられます。"); toast(operationFailureToast(error)); }
     } finally { if (request.current === controller) setReading(false); }
@@ -202,15 +214,16 @@ function ExpenseForm({ row, company, today, projects, categories, pending, save 
       <span className="block text-xs text-muted-foreground">PDF・JPEG・PNG、10MB以内</span>
     </label>
     {reading ? <p role="status" className="text-xs text-muted-foreground">領収書を読み取り中…</p> : null}
-    {ocrRead ? <p role="status" className="text-xs text-muted-foreground">OCRで読み取った値です。領収書と見比べて直してください。</p> : null}
+    {ocrRead ? <p role="status" className="text-xs text-muted-foreground">領収書から読み取った値です。領収書と見比べて直してください。</p> : null}
+    {warnings.map((warning) => <p key={warning} role="status" className="border-l-2 border-amber-500 pl-2 text-xs">{warning}</p>)}
     {ocrError ? <p role="status" className="text-xs text-muted-foreground">{ocrError}</p> : null}
     <div className="grid grid-cols-2 gap-3">
       <label className="min-w-0 space-y-1 text-sm"><span>支払日</span><Input name="spentOn" type="date" value={spentOn} max={today} required disabled={pending} onChange={(event) => setSpentOn(event.target.value)} /></label>
       <label className="min-w-0 space-y-1 text-sm"><span>金額（円）</span><Input name="amount" type="number" value={amount} min={1} step={1} required disabled={pending} onChange={(event) => setAmount(event.target.value)} /></label>
     </div>
     <label className="block space-y-1 text-sm"><span>支払先</span><Input name="payee" value={payee} maxLength={100} required disabled={pending} onChange={(event) => setPayee(event.target.value)} /></label>
-    <label className="block space-y-1 text-sm"><span>用途</span><Input name="purpose" defaultValue={row?.purpose || ""} maxLength={200} required disabled={pending} /></label>
-    <label className="block space-y-1 text-sm"><span>勘定科目</span><select name="categoryId" defaultValue={row?.categoryId || ""} className={selectClass} disabled={pending}>
+    <label className="block space-y-1 text-sm"><span>用途</span><Input name="purpose" value={purpose} maxLength={200} required disabled={pending} onChange={(event) => setPurpose(event.target.value)} /></label>
+    <label className="block space-y-1 text-sm"><span>勘定科目</span><select name="categoryId" value={categoryId} className={selectClass} disabled={pending} onChange={(event) => setCategoryId(event.target.value)}>
       <option value="">未設定</option>{row?.categoryId && !categories.some((item) => item.value === row.categoryId) ? <option value={row.categoryId} disabled>{row.categoryName}（利用不可）</option> : null}
       {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
     </select></label>
@@ -219,14 +232,19 @@ function ExpenseForm({ row, company, today, projects, categories, pending, save 
       {projects.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
     </select></label>
     <OptionTabs label="立替方法" caption="立替方法" name="paidWith" value={paidWith} options={[["CASH", "現金"], ["PERSONAL_CARD", "個人カード"], ["OTHER", "その他"]]} disabled={pending} onChange={setPaidWith} />
+    <div className="grid grid-cols-3 gap-3">
+      <label className="min-w-0 space-y-1 text-sm"><span>登録番号</span><Input name="registrationNumber" value={registrationNumber} placeholder="T1234…" maxLength={20} disabled={pending} onChange={(event) => setRegistrationNumber(event.target.value)} /></label>
+      <label className="min-w-0 space-y-1 text-sm"><span>消費税10%</span><Input name="tax10" type="number" min={0} step={1} value={tax10} disabled={pending} onChange={(event) => setTax10(event.target.value)} /></label>
+      <label className="min-w-0 space-y-1 text-sm"><span>消費税8%</span><Input name="tax8" type="number" min={0} step={1} value={tax8} disabled={pending} onChange={(event) => setTax8(event.target.value)} /></label>
+    </div>
     <label className="block space-y-1 text-sm"><span>メモ</span><Textarea name="memo" defaultValue={row?.memo || ""} maxLength={1000} disabled={pending} /></label>
     <Button type="submit" disabled={pending || reading}>{pending ? "保存中…" : row?.status === "RETURNED" ? "修正して再提出" : row ? "変更を保存" : "領収書を提出"}</Button>
   </form>;
 }
 
-function ExpenseDetail({ row, company, today, projects, categories, actors, wide, canManage, pending, save, run }: {
+function ExpenseDetail({ row, company, today, projects, categories, actors, wide, canManage, canReconcile, pending, save, run }: {
   row: ExpenseClaimView; company: CompanyScope; today: string; projects: Option[]; categories: Option[]; actors: Record<string, string>;
-  wide: boolean; canManage: boolean; pending: boolean; save: (data: FormData) => void; run: RunAction;
+  wide: boolean; canManage: boolean; canReconcile: boolean; pending: boolean; save: (data: FormData) => void; run: RunAction;
 }) {
   const [returning, setReturning] = useState(false), [paying, setPaying] = useState(false);
   const target = { id: row.id, version: row.updatedAt };
@@ -243,7 +261,9 @@ function ExpenseDetail({ row, company, today, projects, categories, actors, wide
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
       <dt className="text-muted-foreground">状態</dt><dd><ExpenseBadge status={row.status} /></dd>
       {([["支払日", formatDate(row.spentOn)], ["金額", <Money key="amount" value={row.amount} />], ["支払先", row.payee], ["用途", row.purpose], ["科目", row.categoryName], ["案件", row.projectName],
-        ["立替方法", row.paidWith ? expensePaidWithLabels[row.paidWith] : "未設定"], ["メモ", row.memo || "—"], ["申請者", row.submitterName]] as const).map(([label, value]) =>
+        ["立替方法", row.paidWith ? expensePaidWithLabels[row.paidWith] : "未設定"], ["登録番号", row.registrationNumber || "—"],
+        ["消費税", row.taxBreakdown ? [row.taxBreakdown.rate10 ? `10%: ${row.taxBreakdown.rate10.toLocaleString("ja-JP")}円` : "", row.taxBreakdown.rate8 ? `8%: ${row.taxBreakdown.rate8.toLocaleString("ja-JP")}円` : ""].filter(Boolean).join(" / ") : "—"],
+        ["メモ", row.memo || "—"], ["申請者", row.submitterName]] as const).map(([label, value]) =>
         <div key={label} className="contents"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 whitespace-pre-wrap break-words">{value}</dd></div>)}
       {row.reviewedAt ? <><dt className="text-muted-foreground">確認者</dt><dd>{row.reviewerName} / {dateTime(row.reviewedAt)}</dd></> : null}
       {row.paidAt ? <><dt className="text-muted-foreground">振込日</dt><dd>{formatDate(row.paidAt)}</dd><dt className="text-muted-foreground">精算者</dt><dd>{row.paidByName}</dd><dt className="text-muted-foreground">精算メモ</dt><dd className="whitespace-pre-wrap break-words">{row.paymentMemo || "—"}</dd></> : null}
@@ -253,13 +273,14 @@ function ExpenseDetail({ row, company, today, projects, categories, actors, wide
       {row.status === "SUBMITTED" ? <Button type="button" disabled={pending} onClick={() => run({ action: "approve", ...target }, "申請を承認しました。")}>承認</Button> : null}
       {row.status === "SUBMITTED" || row.status === "APPROVED" ? <Button type="button" variant="outline" disabled={pending} onClick={() => { setReturning(!returning); setPaying(false); }}>差戻し</Button> : null}
       {row.status === "APPROVED" ? <Button type="button" disabled={pending} onClick={() => { setPaying(!paying); setReturning(false); }}>精算済みにする</Button> : null}
-      {row.status === "PAID" ? <Button type="button" variant="outline" disabled={pending} onClick={() => run({ action: "unpay", ...target }, "精算を取り消しました。")}>精算を取り消す</Button> : null}
+      {row.status === "PAID" ? <Button type="button" variant="outline" disabled={pending || Boolean(row.payout)} title={row.payout ? "口座明細との照合を解除してから取り消せます" : undefined} onClick={() => run({ action: "unpay", ...target }, "精算を取り消しました。")}>精算を取り消す</Button> : null}
     </div>
       {returning ? <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); run({ action: "return", ...target, note: String(data.get("note") || "") }, "申請を差し戻しました。", () => setReturning(false)); }}>
         <label className="block space-y-1 text-sm"><span>差戻しの理由</span><Textarea name="note" required maxLength={500} disabled={pending} /></label><Button type="submit" disabled={pending}>理由を添えて差し戻す</Button>
       </form> : null}
       {paying ? <PaymentForm today={today} pending={pending} onCancel={() => setPaying(false)} onSubmit={(paidAt, memo) => run({ action: "pay", items: [target], paidAt, memo }, "精算済みにしました。", () => setPaying(false))} /> : null}
     </section> : null}
+    {canManage && canReconcile && row.status === "PAID" ? <PayoutSection key={row.updatedAt} company={company} claimId={row.id} /> : null}
     {row.editable ? <section className="space-y-3 border-t pt-4"><h3 className="text-sm font-medium">申請を編集</h3>
       <ExpenseForm row={row} company={company} today={today} projects={projects} categories={categories} pending={pending} save={save} />
       <Button type="button" variant="outline" disabled={pending} onClick={() => { if (window.confirm("この申請を取り下げますか？")) run({ action: "withdraw", ...target }, "申請を取り下げました。"); }}>取り下げ</Button>
@@ -268,4 +289,34 @@ function ExpenseDetail({ row, company, today, projects, categories, actors, wide
       <li key={`${entry.at}:${index}`} className="space-y-1"><p><time dateTime={entry.at}>{dateTime(entry.at)}</time> ・ {actors[entry.byId] || entry.byId} ・ {expenseActionLabels[entry.action]}</p>{entry.note ? <p className="whitespace-pre-wrap break-words">{entry.note}</p> : null}</li>)}
     </ol></section>
   </div>;
+}
+
+function PayoutSection({ company, claimId }: { company: CompanyScope; claimId: string }) {
+  const router = useRouter(), [detail, setDetail] = useState<ExpensePayoutDetail | null>(null), [error, setError] = useState(""), [pending, startTransition] = useTransition();
+  useEffect(() => {
+    let live = true;
+    void expensePayoutDetailAction(company, claimId).then((result) => { if (!live) return; if (result.success) setDetail(result.detail); else setError(result.error); });
+    return () => { live = false; };
+  }, [company, claimId]);
+  const items = detail?.items.map((row) => ({ id: row.id, version: row.updatedAt })) || [];
+  const submit = (input: Parameters<typeof expensePayoutAction>[1], title: string) => startTransition(async () => {
+    const result = await expensePayoutAction(company, input);
+    if (!result.success) { toast(operationFailureToast(new Error(result.error))); return; }
+    toast({ title, variant: "success" }); router.refresh();
+  });
+  return <section aria-label="振込の照合" className="space-y-3 border-t pt-4">
+    <h3 className="flex items-center gap-2 text-sm font-medium"><Landmark className="size-4" />振込と口座明細の照合</h3>
+    {error ? <p className="text-sm text-muted-foreground">{error}</p> : !detail ? <p className="text-sm text-muted-foreground">口座明細を確認しています…</p> : <>
+      <p className="text-xs text-muted-foreground">{detail.submitterName}さんへ {formatDate(detail.paidAt)} に精算した {detail.items.length}件、合計 <Money value={detail.total} /> の振込です。</p>
+      {detail.issue ? <p role="alert" className="border-l-2 border-amber-500 p-2 text-sm">{detail.issue}</p> : null}
+      {detail.linked ? <div className="space-y-2 rounded-lg border bg-muted/20 p-3 text-sm">
+        <p className="font-medium">{detail.linked.date} {detail.linked.content}</p><p className="text-xs text-muted-foreground">{detail.linked.account} / <Money value={detail.linked.amount} maximumFractionDigits={2} /></p>
+        <Button type="button" variant="ghost" disabled={pending} onClick={() => submit({ action: "unlink", claimId, items }, "照合を解除しました。")}><Unlink className="size-4" />照合を解除</Button>
+      </div> : detail.issue ? <Button type="button" variant="outline" disabled={pending} onClick={() => submit({ action: "unlink", claimId, items }, "照合を解除しました。")}><Unlink className="size-4" />照合を解除</Button>
+        : detail.candidates.length ? <ul className="divide-y rounded-lg border" aria-label="口座明細の候補">{detail.candidates.map((bank) => <li key={bank.id} className="flex flex-wrap items-center gap-2 p-3 text-sm">
+          <div className="min-w-0 flex-1"><p className="break-words font-medium">{bank.date} {bank.content}</p><p className="text-xs text-muted-foreground">{bank.account} / <Money value={bank.amount} maximumFractionDigits={2} />{bank.days ? ` / 振込日の${Math.abs(bank.days)}日${bank.days > 0 ? "後" : "前"}` : " / 振込日と同日"}</p></div>
+          <Button type="button" variant="outline" disabled={pending} onClick={() => submit({ action: "link", claimId, items, transactionId: bank.id, transactionUpdatedAt: bank.updatedAt }, "口座明細と照合しました。")}>この明細と照合</Button>
+        </li>)}</ul> : <p className="text-sm text-muted-foreground">振込日の前後{31}日に、合計額と同じ金額の出金明細がありません。口座明細を同期したあとに開き直してください。</p>}
+    </>}
+  </section>;
 }

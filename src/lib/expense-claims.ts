@@ -6,7 +6,7 @@ export const expenseStatusLabels: Record<ExpenseClaimStatus, string> = {
 };
 export const expensePaidWithLabels: Record<ExpensePaidWith, string> = { CASH: "現金", PERSONAL_CARD: "個人カード", OTHER: "その他" };
 export const expenseActionLabels: Record<ExpenseClaimAction, string> = {
-  SUBMIT: "提出", EDIT: "修正", RESUBMIT: "再提出", WITHDRAW: "取り下げ", APPROVE: "承認", RETURN: "差戻し", PAY: "精算", UNPAY: "精算取消",
+  SUBMIT: "提出", EDIT: "修正", RESUBMIT: "再提出", WITHDRAW: "取り下げ", APPROVE: "承認", RETURN: "差戻し", PAY: "精算", UNPAY: "精算取消", LINK_BANK: "口座明細と照合", UNLINK_BANK: "照合解除",
 };
 
 export function expenseMonth(row: Pick<ExpenseClaim, "spentOn">) {

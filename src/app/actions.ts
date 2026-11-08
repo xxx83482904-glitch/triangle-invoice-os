@@ -1,6 +1,7 @@
 "use server";
 
 import { applyImportShipmentFormFields } from "@/lib/import-shipment-views";
+import { safeNextPath } from "@/lib/safe-next-path";
 import { projectCreationValues } from "@/lib/project-display";
 
 import { revalidatePath } from "next/cache";
@@ -212,7 +213,7 @@ export type RegisterState = { error: string; success?: boolean };
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const user = await signIn(value(formData, "email"), value(formData, "password"));
   if (!user) return { error: "ログインできません。メールアドレス・パスワードと、管理者の承認状況を確認してください。" };
-  redirect(defaultPathForRole(user.role));
+  redirect(safeNextPath(value(formData, "next")) || defaultPathForRole(user.role));
 }
 
 export async function registerAction(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
