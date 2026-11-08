@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
+import { assignCompanyCard } from "@/lib/card-receipts";
 import { assertCan } from "@/lib/rbac";
 import { mutateData } from "@/lib/store";
 import { approvalRoles, reviewRegistration } from "@/lib/user-access";
@@ -54,4 +55,17 @@ export async function revokeAgentTokenAction(_previous: { error: string }, formD
   }
   revalidatePath("/users");
   return { error: "" };
+}
+
+export async function assignCompanyCardAction(_previous: { error: string; success?: boolean }, formData: FormData) {
+  const actor = await requireUser();
+  assertCan(actor, "manage:users");
+  const userId = String(formData.get("userId") ?? ""), accountId = String(formData.get("accountId") ?? "");
+  try {
+    await mutateData(actor.id, "ASSIGN_COMPANY_CARD", "User", userId, (data) => assignCompanyCard(data, actor, "JAPAN", { userId, accountId }));
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "会社カードを登録できませんでした。" };
+  }
+  revalidatePath("/users"); revalidatePath("/expenses/capture");
+  return { error: "", success: true };
 }

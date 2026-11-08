@@ -3,7 +3,7 @@
 import { Money } from "@/components/app/money";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowUpRight, Eye, EyeOff, LoaderCircle, Mail, Paperclip, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowUpRight, Eye, EyeOff, LoaderCircle, Mail, Paperclip, RefreshCw, Trash2, Upload, CreditCard } from "lucide-react";
 import { loadBankDetailDocumentsAction, removeBankReceiptAction } from "@/app/banking/receipt-actions";
 import { MailPickerDialog } from "@/components/app/mail-picker-dialog";
 import { OriginalDocumentPreview } from "@/app/received-invoices/original-document-preview";
@@ -103,8 +103,8 @@ export function BankDetailDocuments({ company, transactionId, disabled, canLinkM
       </div>
       {!receipts.length ? <p className="text-xs text-muted-foreground">{links.length ? "請求書以外の証憑（振込控え・レシートなど）を添付できます。" : "請求書のない出金は、レシートや領収書のPDF・写真を添付しておくと確認と保管が楽になります。"}PDF・JPEG・PNG、10MBまで。</p> : <ul className="divide-y rounded-lg border">{receipts.map((receipt) => <li key={receipt.id} className="min-w-0 space-y-3 p-3 text-sm">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0 flex-1"><p className="flex min-w-0 items-center gap-1 break-all font-medium">{receipt.source ? <Mail className="size-3.5 shrink-0" /> : <Paperclip className="size-3.5 shrink-0" />}{receipt.source ? receipt.source.title : receipt.fileName}</p>
-            <p className="break-words text-xs text-muted-foreground">{receipt.source ? <>{receipt.source.deleted ? "郵便物（削除済み）" : <Link className="underline underline-offset-2" href={receipt.source.href} target="_blank" rel="noreferrer">郵便物を開く</Link>} / </> : null}{receipt.createdAt.slice(0, 10)}{receipt.uploadedBy ? ` / ${receipt.uploadedBy}` : ""}</p></div>
+          <div className="min-w-0 flex-1"><p className="flex min-w-0 items-center gap-1 break-all font-medium">{receipt.source?.kind === "card" ? <CreditCard className="size-3.5 shrink-0" /> : receipt.source ? <Mail className="size-3.5 shrink-0" /> : <Paperclip className="size-3.5 shrink-0" />}{receipt.source ? receipt.source.title : receipt.fileName}</p>
+            <p className="break-words text-xs text-muted-foreground">{receipt.source?.kind === "card" ? <>{receipt.source.detail}{receipt.source.deleted ? "（取り消し済み）" : ""} / </> : receipt.source ? <>{receipt.source.deleted ? "郵便物（削除済み）" : <Link className="underline underline-offset-2" href={receipt.source.href} target="_blank" rel="noreferrer">郵便物を開く</Link>} / </> : null}{receipt.createdAt.slice(0, 10)}{receipt.uploadedBy ? ` / ${receipt.uploadedBy}` : ""}</p></div>
           <div className="flex flex-wrap gap-1">
             <Button variant="ghost" className="min-h-11" aria-pressed={shown === receipt.id} onClick={() => setShown(shown === receipt.id ? null : receipt.id)}>{shown === receipt.id ? <EyeOff className="size-4" /> : <Eye className="size-4" />}{shown === receipt.id ? "閉じる" : "表示"}</Button>
             <Button variant="ghost" className="min-h-11" aria-label={`${receipt.source ? receipt.source.title : receipt.fileName}の添付を外す`} disabled={busy} onClick={() => setRemoving(receipt.id)}><Trash2 className="size-4" />外す</Button>

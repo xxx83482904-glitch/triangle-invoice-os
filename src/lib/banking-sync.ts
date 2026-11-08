@@ -1,4 +1,5 @@
 import "server-only";
+import { autoLinkCardReceipts } from "@/lib/card-receipts";
 import { z } from "zod";
 import { assertBankAccess, bankToday, isBankDate, mergeBankMasters, mergeBankTransactions, monthRanges } from "@/lib/banking";
 import { bankingError, MoneyForwardClient, MoneyForwardError, moneyForwardConfig } from "@/lib/moneyforward-client";
@@ -118,6 +119,8 @@ export async function runBankSync(job: Awaited<ReturnType<typeof queueBankSync>>
     }
     await update("BANK_SYNC_FINISH", (data, current) => {
       current.status = "SUCCESS";
+      // Card receipts photographed before the use reached the statement are attached now.
+      autoLinkCardReceipts(data, company);
       // A historical-only refresh must not advance the incremental watermark.
       if (request.mode !== "range") current.lastSuccessAt = new Date().toISOString();
       const run = bankSyncRunFor(data, company, runId);
