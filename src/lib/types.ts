@@ -72,6 +72,8 @@ export type User = {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
+  // The company card (a CARD bank account) this person pays with; their card receipts are matched to its rows.
+  companyCardAccountId?: string;
 };
 
 export type BankPartyAlias = { id: string; company: "JAPAN" | "CHINA"; accountId: string; content: string; confirmedById: string; createdAt: string };
@@ -190,6 +192,18 @@ export type InvoicePdfText = Partial<Record<InvoicePdfTextKey, string>>;
 export type ExpenseClaimStatus = "SUBMITTED" | "RETURNED" | "APPROVED" | "PAID" | "WITHDRAWN";
 export type ExpensePaidWith = "CASH" | "PERSONAL_CARD" | "OTHER";
 export type ExpenseClaimAction = "SUBMIT" | "EDIT" | "RESUBMIT" | "WITHDRAW" | "APPROVE" | "RETURN" | "PAY" | "UNPAY" | "LINK_BANK" | "UNLINK_BANK";
+// A receipt for something paid with the person's company card. Nothing is reimbursed: the receipt is attached
+// (as an Attachment) to the matching use on that card's statement, automatically when exactly one use fits.
+export type CardReceipt = {
+  id: string; company: "JAPAN" | "CHINA"; submittedById: string; accountId: string;
+  spentOn: string; amount: number; payee: string; purpose: string; projectId?: string; categoryId?: string; memo?: string;
+  registrationNumber?: string; taxBreakdown?: { rate10?: number; rate8?: number };
+  fileUrl: string; originalFileName: string; mimeType: string; ocrText?: string;
+  transactionId?: string; attachmentId?: string; linkedAt?: string; linkedBy?: "AUTO" | "SELF";
+  // Rows accounting detached this receipt from; never matched again automatically.
+  excludedTransactionIds?: string[];
+  createdAt: string; updatedAt: string; deletedAt?: string | null;
+};
 // The bank row that paid a settled claim back. Claims settled together for one person share the row; the evidence detects later bank edits.
 export type ExpensePayoutLink = { transactionId: string; evidence: string; linkedAt: string; linkedById: string };
 // One receipt a staff member paid for and wants back: submitted, reviewed by accounting, then settled.
@@ -403,7 +417,7 @@ export type Attachment = {
   createdAt: string;
   deletedAt?: string | null;
   // Set when the attachment points at an existing record's file instead of an upload (e.g. a mail scan linked to a bank row).
-  sourceType?: "MailDocument";
+  sourceType?: "MailDocument" | "CardReceipt";
   sourceId?: string;
 };
 
@@ -513,6 +527,7 @@ export type AppData = {
   integrityAcknowledgements?: IntegrityAcknowledgement[];
   importShipments?: ImportShipment[];
   expenseClaims?: ExpenseClaim[];
+  cardReceipts?: CardReceipt[];
 };
 
 export type IntegrityAcknowledgement = {

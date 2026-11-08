@@ -3,6 +3,7 @@ import "server-only";
 import { assertBankAccess } from "@/lib/banking";
 import { BANK_RECEIPT_TYPE } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
+import { cardReceiptSource, detachCardReceipt } from "@/lib/card-receipts";
 import { uploadedFileNameFromUrl } from "@/lib/files";
 import type { AppData, Attachment, User } from "@/lib/types";
 
@@ -15,7 +16,8 @@ export const bankReceiptMimeTypes = ["application/pdf", "image/jpeg", "image/png
 
 export type BankReceiptInput = { transactionId: string; fileUrl: string; fileName: string; mimeType: string };
 export type BankReceiptView = { id: string; fileUrl: string; fileName: string; mimeType: string; createdAt: string; uploadedBy: string;
-  source?: { kind: "mail"; id: string; title: string; category: string; deleted: boolean; href: string } };
+  source?: { kind: "mail"; id: string; title: string; category: string; deleted: boolean; href: string }
+    | { kind: "card"; id: string; title: string; detail: string; deleted: boolean } };
 
 function transactionFor(data: AppData, company: CompanyScope, id: string) {
   const row = data.bankTransactions.find((item) => item.id === id && item.company === company);
@@ -33,6 +35,9 @@ export function bankReceiptViews(data: AppData, company: CompanyScope, transacti
   const users = new Map(data.users.map((row) => [row.id, row.name])), mail = new Map(data.mailDocuments.map((row) => [row.id, row]));
   return bankReceipts(data, company, transactionId).map((row) => {
     const source = row.sourceType === "MailDocument" && row.sourceId ? mail.get(row.sourceId) : undefined;
+    const card = row.sourceType === "CardReceipt" && row.sourceId ? cardReceiptSource(data, row.sourceId) : undefined;
+    if (card) return { id: row.id, fileUrl: row.fileUrl, fileName: row.fileName, mimeType: row.mimeType, createdAt: row.createdAt, uploadedBy: users.get(row.uploadedById) || "",
+      source: { kind: "card" as const, id: row.sourceId!, title: `${card.payee}（${card.purpose}）`, detail: [`会社カードの領収書・${card.submitter}`, card.project].filter(Boolean).join(" / "), deleted: card.deleted } };
     return { id: row.id, fileUrl: row.fileUrl, fileName: row.fileName, mimeType: row.mimeType, createdAt: row.createdAt, uploadedBy: users.get(row.uploadedById) || "",
       ...(row.sourceType === "MailDocument" && row.sourceId ? { source: { kind: "mail" as const, id: row.sourceId, title: source?.title || source?.originalFileName || row.fileName, category: source?.category || "",
         deleted: !source || Boolean(source.deletedAt), href: `/documents?company=${company}&document=${encodeURIComponent(`mail:${row.sourceId}`)}` } } : {}) };
@@ -62,6 +67,7 @@ export function removeBankReceipt(data: AppData, actor: Actor, company: CompanyS
   if (!row) throw new Error("添付ファイルが見つかりません。画面を更新してください");
   transactionFor(data, company, row.relatedId);
   row.deletedAt = now;
+  detachCardReceipt(data, row, now);
   return { id, transactionId: row.relatedId };
 }
 

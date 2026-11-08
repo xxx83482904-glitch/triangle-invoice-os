@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
 import { applyExpenseMutation, type ExpenseWorkflowMutation } from "@/lib/expense-claim-edits";
+import { pickCardUse, removeCardReceipt } from "@/lib/card-receipts";
 import { expensePayoutDetail, linkExpensePayout, unlinkExpensePayout, type ExpensePayoutLinkInput, type ExpensePayoutUnlinkInput } from "@/lib/expense-payouts";
 import { mutateData, readData } from "@/lib/store";
 import { isActiveUser } from "@/lib/user-access";
@@ -49,5 +50,18 @@ export async function expensePayoutAction(company: CompanyScope, input: ({ actio
       (data) => action === "link" ? linkExpensePayout(data, liveActor(data, user.id), company, rest as ExpensePayoutLinkInput) : unlinkExpensePayout(data, liveActor(data, user.id), company, rest as ExpensePayoutUnlinkInput));
     revalidatePath("/expenses"); revalidatePath("/banking/reconcile");
     return { success: true as const, ...result };
+  } catch (error) { return { success: false as const, error: message(error) }; }
+}
+
+export async function cardReceiptAction(company: CompanyScope, input: { action: "pick"; id: string; version: string; transactionId: string } | { action: "remove"; id: string; version: string }) {
+  const user = await requireUser();
+  try {
+    if (!input || (input.action !== "pick" && input.action !== "remove")) throw new Error("操作を確認してください");
+    const { action, ...rest } = input;
+    await mutateData(user.id, action === "pick" ? "PICK_CARD_USE" : "REMOVE_CARD_RECEIPT", "CardReceipt", String(rest.id), (data) => action === "pick"
+      ? pickCardUse(data, liveActor(data, user.id), company, rest as { id: string; version: string; transactionId: string })
+      : removeCardReceipt(data, liveActor(data, user.id), company, { id: rest.id, version: rest.version }));
+    revalidatePath("/expenses/capture"); revalidatePath("/banking");
+    return { success: true as const };
   } catch (error) { return { success: false as const, error: message(error) }; }
 }

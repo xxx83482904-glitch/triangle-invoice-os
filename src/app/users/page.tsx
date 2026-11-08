@@ -7,6 +7,8 @@ import { approvalRoles } from "@/lib/user-access";
 import { ApprovalForm } from "./approval-form";
 import { AgentTokens } from "./agent-tokens";
 import { agentScopes, agentTokenViews } from "@/lib/agent-tokens";
+import { cardAccountLabel, companyCardAccounts } from "@/lib/card-receipts";
+import { CompanyCardForm } from "./company-card-form";
 
 export default async function UsersPage() {
   const actor = await getCurrentUser();
@@ -18,6 +20,8 @@ export default async function UsersPage() {
   const roles = approvalRoles.map((value) => ({ value, label: roleLabel(value) }));
   const tokens = agentTokenViews(data);
   const tokenUsers = users.filter((user) => user.accessStatus !== "PENDING" && user.accessStatus !== "REJECTED").map((user) => ({ id: user.id, name: user.name, role: roleLabel(user.role) }));
+  const cards = companyCardAccounts(data, "JAPAN").map((account) => ({ id: account.id, label: cardAccountLabel(account),
+    holder: users.find((user) => user.companyCardAccountId === account.id)?.name || "" }));
   const scopes = Object.entries(agentScopes).map(([value, meta]) => ({ value, label: meta.label }));
 
   return <AppShell>
@@ -36,11 +40,15 @@ export default async function UsersPage() {
       </div>
     </section>
     <section aria-labelledby="registered-users">
-      <h2 id="registered-users" className="mb-3 text-base font-semibold">登録済み利用者</h2>
+      <h2 id="registered-users" className="mb-1 text-base font-semibold">登録済み利用者</h2>
+      {cards.length ? <p className="mb-3 text-sm text-muted-foreground">会社カードを登録した人は、スマホの経費精算で「会社カードで払った」を選んで領収書をカードの利用に付けられます。</p> : null}
       <div className="space-y-2">
         {users.filter((user) => user.accessStatus !== "PENDING").map((user) => <div key={user.id} className="record-card flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0"><div className="break-words font-medium">{user.name}</div><div className="break-all text-sm text-muted-foreground">{user.email}</div></div>
-          <div className="text-sm">{user.accessStatus === "REJECTED" ? "申請却下" : roleLabel(user.role)}</div>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            {user.accessStatus !== "REJECTED" && user.role !== "GUEST" && cards.length ? <CompanyCardForm key={`${user.id}:${user.companyCardAccountId || ""}`} userId={user.id} accountId={user.companyCardAccountId || ""} cards={cards} /> : null}
+            <div className="text-sm">{user.accessStatus === "REJECTED" ? "申請却下" : roleLabel(user.role)}</div>
+          </div>
         </div>)}
       </div>
     </section>

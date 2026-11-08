@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, Camera, Check, ChevronRight, ImagePlus, List, Loader2, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, Camera, Check, ChevronRight, CreditCard, ImagePlus, List, Loader2, Plus, Trash2, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { ExpensePaidWith } from "@/lib/types";
-import { amountOf, missing, type Draft, type FieldKey, type MyClaim, type Option } from "./model";
+import { CardMatchBox, CardReceiptList } from "./card-screens";
+import { amountOf, missing, type CardReceiptView, type CardUseView, type Draft, type FieldKey, type MyClaim, type Option } from "./model";
 import { AutoBadge, Card, PrimaryButton, ReceiptThumb, Row, Screen, SecondaryButton, StatusSteps, TopBar, dateTimeLabel, dayLabel, statusText, statusTone, yen } from "./ui";
 
 const label = (options: Option[], value: string) => options.find((row) => row.value === value)?.label || "";
@@ -65,14 +66,17 @@ export function ReadingScreen({ draft, onManual, onClose }: { draft: Draft; onMa
   </div>;
 }
 
-export function ConfirmScreen({ draft, mode, today, projects, categories, onBack, onChange, onSheet, onToggleMore, onRetake, onSubmit, onRemove, onWithdraw }: {
+export function ConfirmScreen({ draft, mode, today, projects, categories, card, onSwitchKind, onBack, onChange, onSheet, onToggleMore, onRetake, onSubmit, onRemove, onWithdraw }: {
   draft: Draft; mode: "single" | "batch" | "edit"; today: string; projects: Option[]; categories: Option[];
+  card?: { label: string; matches: CardUseView[] }; onSwitchKind?: () => void;
   onBack: () => void; onChange: (key: FieldKey, value: string) => void; onSheet: (kind: "spentOn" | "payee" | "purpose" | "projectId" | "categoryId") => void;
   onToggleMore: () => void; onRetake: () => void; onSubmit: () => void; onRemove: () => void; onWithdraw: () => void;
 }) {
   const { fields, auto } = draft, gaps = missing(fields, today), sending = draft.state === "sending", reading = draft.state === "preparing" || draft.state === "reading";
-  const claim = draft.claim;
-  const title = mode === "edit" ? (claim?.status === "RETURNED" ? "差し戻された申請" : "申請を直す") : "内容を確認";
+  const claim = draft.claim, isCard = draft.kind === "card";
+  const title = mode === "edit" ? (claim?.status === "RETURNED" ? "差し戻された申請" : "申請を直す") : isCard ? "会社カードの領収書" : "内容を確認";
+  const attach = isCard && (draft.targetUse || card?.matches.length === 1);
+  const submitLabel = isCard ? (attach ? "明細に付ける" : "登録する") : "申請する";
   const footer = mode === "batch"
     ? <div className="grid grid-cols-3 gap-2.5"><SecondaryButton label="この領収書を外す" tone="danger" onClick={onRemove} disabled={sending}><Trash2 className="size-6" /></SecondaryButton>
       <PrimaryButton className="col-span-2" onClick={onBack}>OK</PrimaryButton></div>
@@ -80,12 +84,17 @@ export function ConfirmScreen({ draft, mode, today, projects, categories, onBack
       ? <div className="space-y-2"><PrimaryButton onClick={onSubmit} disabled={sending}>{sending ? <><Loader2 className="size-6 animate-spin" />送信しています…</> : claim?.status === "RETURNED" ? "直して再提出" : "変更を保存"}</PrimaryButton>
         <button type="button" onClick={onWithdraw} disabled={sending} className="flex min-h-13 w-full items-center justify-center text-base text-muted-foreground">この申請を取り下げる</button></div>
       : <div className="grid grid-cols-3 gap-2.5"><SecondaryButton onClick={onRetake} disabled={sending}>撮り直す</SecondaryButton>
-        <PrimaryButton className="col-span-2" onClick={onSubmit} disabled={sending || reading && !draft.manual}>{sending ? <><Loader2 className="size-6 animate-spin" />申請中…</> : reading && !draft.manual ? "読み取り中…" : "申請する"}</PrimaryButton></div>;
+        <PrimaryButton className="col-span-2" onClick={onSubmit} disabled={sending || reading && !draft.manual}>{sending ? <><Loader2 className="size-6 animate-spin" />送信中…</> : reading && !draft.manual ? "読み取り中…" : submitLabel}</PrimaryButton></div>;
   const pay = (value: ExpensePaidWith, text: string) => <button type="button" aria-pressed={fields.paidWith === value} onClick={() => onChange("paidWith", value)} disabled={sending}
     className={`h-[60px] rounded-2xl text-lg ${fields.paidWith === value ? "border-2 border-foreground bg-foreground font-bold text-background" : "border border-input bg-card font-medium"}`}>{text}</button>;
   return <Screen footer={footer}>
     <TopBar title={title} onBack={onBack} close={mode !== "batch"} />
     <div className="space-y-3.5 px-5 pb-6">
+      {card && mode !== "edit" ? <div className={`flex min-h-14 items-center gap-3 rounded-2xl px-4 ${isCard ? "bg-foreground text-background" : "border bg-card"}`}>
+        {isCard ? <CreditCard className="size-6 shrink-0" /> : <Wallet className="size-6 shrink-0" />}
+        <span className="min-w-0 flex-1 text-base font-bold">{isCard ? `${card.label}で支払い` : "自分で立て替えた（あとで振込）"}</span>
+        {onSwitchKind && !draft.targetUse ? <button type="button" onClick={onSwitchKind} disabled={sending} className={`min-h-11 shrink-0 text-sm underline underline-offset-4 ${isCard ? "opacity-80" : "text-muted-foreground"}`}>{isCard ? "立替に変える" : "会社カードに変える"}</button> : null}
+      </div> : null}
       {claim?.status === "RETURNED" && claim.reviewNote ? <div className="space-y-1.5 rounded-[20px] bg-rose-100 p-4 text-rose-950 dark:bg-rose-950 dark:text-rose-100">
         <p className="text-sm font-bold">経理からのコメント{claim.reviewerName ? `（${claim.reviewerName}）` : ""}</p><p className="text-lg font-medium leading-relaxed">{claim.reviewNote}</p></div> : null}
       {draft.warnings.map((warning) => <p key={warning} className="flex items-start gap-2 rounded-2xl bg-amber-50 p-3 text-[15px] text-amber-950 dark:bg-amber-950/50 dark:text-amber-100"><AlertCircle className="mt-0.5 size-5 shrink-0" />{warning}</p>)}
@@ -108,8 +117,9 @@ export function ConfirmScreen({ draft, mode, today, projects, categories, onBack
         <Row label="用途" value={fields.purpose} placeholder="入力してください" warn source={auto.purpose} onClick={() => onSheet("purpose")} />
         <Row label="案件" value={label(projects, fields.projectId) || (fields.projectId ? "（利用できない案件）" : "")} placeholder="共通経費（案件なし）" onClick={() => onSheet("projectId")} last />
       </Card>
-      <div className="space-y-2"><p className="text-[15px] text-muted-foreground">支払い方法</p>
-        <div role="group" aria-label="支払い方法" className="grid grid-cols-2 gap-2.5">{pay("CASH", "現金")}{pay("PERSONAL_CARD", "カード・電子マネー")}</div></div>
+      {isCard ? <CardMatchBox target={draft.targetUse} matches={card?.matches || []} />
+        : <div className="space-y-2"><p className="text-[15px] text-muted-foreground">支払い方法</p>
+          <div role="group" aria-label="支払い方法" className="grid grid-cols-2 gap-2.5">{pay("CASH", "現金")}{pay("PERSONAL_CARD", "個人のカード・電子マネー")}</div></div>}
       <button type="button" aria-expanded={draft.more} onClick={onToggleMore} className="flex min-h-14 items-center gap-2 px-1 text-base text-muted-foreground">
         <Plus className={`size-5 transition-transform ${draft.more ? "rotate-45" : ""}`} strokeWidth={2.2} />その他（科目・登録番号・メモ）</button>
       {draft.more ? <div className="space-y-3.5">
@@ -181,9 +191,12 @@ export function DoneScreen({ count, total, label: detail, onCamera, onList, onHo
 }
 
 type Tab = "active" | "paid" | "all";
-export function ListScreen({ claims, fresh, onBack, onOpen }: { claims: MyClaim[]; fresh: Set<string>; onBack: () => void; onOpen: (id: string) => void }) {
+export function ListScreen({ claims, fresh, card, initialKind = "expense", onBack, onOpen }: {
+  claims: MyClaim[]; fresh: Set<string>; card?: { receipts: CardReceiptView[]; onOpen: (id: string) => void }; initialKind?: "expense" | "card"; onBack: () => void; onOpen: (id: string) => void;
+}) {
   const active = claims.filter((row) => row.status !== "PAID");
   const [tab, setTab] = useState<Tab>(active.length ? "active" : "all");
+  const [kind, setKind] = useState<"expense" | "card">(card ? initialKind : "expense");
   const rank = (row: MyClaim) => fresh.has(row.id) ? 0 : row.status === "RETURNED" ? 1 : 2;
   const rows = (tab === "active" ? active : tab === "paid" ? claims.filter((row) => row.status === "PAID") : claims)
     .slice().sort((a, b) => rank(a) - rank(b) || b.submittedAt.localeCompare(a.submittedAt));
@@ -191,6 +204,12 @@ export function ListScreen({ claims, fresh, onBack, onOpen }: { claims: MyClaim[
     className={`h-12 rounded-xl text-base ${tab === value ? "bg-card font-bold shadow-sm" : "text-muted-foreground"}`}>{text}</button>;
   return <Screen>
     <TopBar title="申請状況" onBack={onBack} />
+    {card ? <div className="px-5 pb-3"><div role="group" aria-label="種類" className="grid grid-cols-2 gap-1.5 rounded-2xl bg-muted p-1">
+      {(["expense", "card"] as const).map((value) => <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}
+        className={`flex h-[52px] items-center justify-center gap-2 rounded-xl text-base ${kind === value ? "bg-card font-bold shadow-sm" : "text-muted-foreground"}`}>
+        {value === "card" ? <><CreditCard className="size-5" />会社カード {card.receipts.length}</> : <><Wallet className="size-5" />立替 {claims.length}</>}</button>)}
+    </div></div> : null}
+    {kind === "card" && card ? <CardReceiptList receipts={card.receipts} fresh={fresh} onOpen={card.onOpen} /> : <>
     <div className="px-5 pb-3"><div role="group" aria-label="表示" className="grid grid-cols-3 gap-1.5 rounded-2xl bg-muted p-1">
       {tabButton("active", `進行中 ${active.length}`)}{tabButton("paid", "振込済み")}{tabButton("all", "すべて")}</div></div>
     <ul className="space-y-3 px-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
@@ -206,7 +225,7 @@ export function ListScreen({ claims, fresh, onBack, onOpen }: { claims: MyClaim[
         {row.status === "RETURNED" ? <span className="text-sm text-rose-900 dark:text-rose-200">{row.reviewNote}</span> : <StatusSteps status={row.status} />}
       </button></li>)}
       {!rows.length ? <li className="rounded-[20px] border border-dashed p-8 text-center text-[17px] text-muted-foreground">{tab === "paid" ? "振込済みの申請はまだありません" : "申請はまだありません"}</li> : null}
-    </ul>
+    </ul></>}
   </Screen>;
 }
 

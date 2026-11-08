@@ -1,4 +1,8 @@
+import type { CardReceiptView, CardUseView, MyCardView } from "@/lib/card-receipts";
 import type { ExpenseClaimStatus, ExpensePaidWith } from "@/lib/types";
+
+export type { CardReceiptView, CardUseView, MyCardView };
+export type PayKind = "expense" | "card";
 
 export type Option = { value: string; label: string };
 // One of the person's own claims, as the phone screens need it.
@@ -12,7 +16,7 @@ export type Fields = { amount: string; spentOn: string; payee: string; purpose: 
 export type FieldKey = keyof Fields;
 export type Source = "ai" | "ocr" | "history";
 export type Draft = {
-  key: string; file?: File; preview: string; pdf: boolean; state: "preparing" | "reading" | "ready" | "sending"; manual: boolean;
+  key: string; kind: PayKind; targetUse?: CardUseView; file?: File; preview: string; pdf: boolean; state: "preparing" | "reading" | "ready" | "sending"; manual: boolean;
   fields: Fields; auto: Partial<Record<FieldKey, Source>>; touched: Partial<Record<FieldKey, true>>; ocrText: string; warnings: string[]; error: string;
   claim?: MyClaim; more: boolean;
 };
@@ -22,8 +26,20 @@ export type ScreenState =
   | { name: "batch" }
   | { name: "done"; count: number; total: number; label: string }
   | { name: "list" }
-  | { name: "detail"; id: string };
-export type SheetState = { kind: "spentOn" | "payee" | "purpose" | "projectId" | "categoryId"; key: string } | { kind: "withdraw"; id: string } | null;
+  | { name: "detail"; id: string }
+  | { name: "cardPick"; receipt: Pick<CardReceiptView, "id" | "updatedAt" | "payee" | "amount" | "spentOn" | "candidates"> }
+  | { name: "cardDone"; status: CardReceiptView["status"]; payee: string; amount: number; purpose: string; use?: CardUseView }
+  | { name: "missing" }
+  | { name: "cardDetail"; id: string };
+export type SheetState = { kind: "spentOn" | "payee" | "purpose" | "projectId" | "categoryId"; key: string } | { kind: "withdraw"; id: string }
+  | { kind: "payKind" } | { kind: "removeCard"; id: string } | null;
+
+const DAY = 86_400_000;
+// The same rule the server applies: the person's own undocumented uses with the same amount within a week.
+export function cardMatches(uses: Array<CardUseView & { documented: boolean }>, amount: number, spentOn: string) {
+  if (!amount || !/^\d{4}-\d{2}-\d{2}$/.test(spentOn)) return [];
+  return uses.filter((row) => !row.documented && Math.round(row.amount * 100) === Math.round(amount * 100) && Math.abs(Date.parse(row.date) - Date.parse(spentOn)) <= 7 * DAY);
+}
 
 export const emptyFields = (paidWith: ExpensePaidWith): Fields => ({ amount: "", spentOn: "", payee: "", purpose: "", categoryId: "", projectId: "", paidWith,
   registrationNumber: "", tax10: "", tax8: "", memo: "" });

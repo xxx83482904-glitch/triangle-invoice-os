@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Search } from "lucide-react";
+import { Check, CreditCard, Search, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { Option } from "./model";
 import { PrimaryButton, SecondaryButton, Sheet, dayLabel } from "./ui";
@@ -68,5 +68,24 @@ export function WithdrawSheet({ payee, amount, pending, onConfirm, onClose }: { 
     <button type="button" disabled={pending} onClick={onConfirm} className="flex h-[68px] w-full items-center justify-center rounded-[20px] bg-rose-700 text-xl font-bold text-white active:opacity-85 disabled:opacity-50">{pending ? "取り下げています…" : "取り下げる"}</button>
     <SecondaryButton onClick={onClose} disabled={pending}>やめる</SecondaryButton></div>}>
     <p className="pt-2 text-[17px] leading-relaxed">{payee}（{amount}）の申請を取り下げます。経理には届かなくなります。</p>
+  </Sheet>;
+}
+
+export function PayKindSheet({ cardLabel, onPick, onClose }: { cardLabel: string; onPick: (kind: "expense" | "card") => void; onClose: () => void }) {
+  return <Sheet title="どちらで払いましたか？" onClose={onClose}>
+    <div className="space-y-3 pb-2 pt-2">
+      <button type="button" onClick={() => onPick("card")} className="flex min-h-24 w-full items-center gap-4 rounded-[22px] bg-foreground px-5 text-left text-background active:opacity-90">
+        <CreditCard className="size-9 shrink-0" strokeWidth={1.9} /><span><span className="block text-xl font-bold">会社カードで払った</span><span className="block text-sm opacity-75">{cardLabel}</span></span></button>
+      <button type="button" onClick={() => onPick("expense")} className="flex min-h-24 w-full items-center gap-4 rounded-[22px] border-2 border-foreground bg-card px-5 text-left active:bg-muted">
+        <Wallet className="size-9 shrink-0" strokeWidth={1.9} /><span><span className="block text-xl font-bold">自分で立て替えた</span><span className="block text-sm text-muted-foreground">あとで口座に振込</span></span></button>
+    </div>
+  </Sheet>;
+}
+
+export function DangerSheet({ title, body, action, pendingLabel, pending, onConfirm, onClose }: { title: string; body: string; action: string; pendingLabel: string; pending: boolean; onConfirm: () => void; onClose: () => void }) {
+  return <Sheet title={title} onClose={onClose} footer={<div className="space-y-2.5">
+    <button type="button" disabled={pending} onClick={onConfirm} className="flex h-[68px] w-full items-center justify-center rounded-[20px] bg-rose-700 text-xl font-bold text-white active:opacity-85 disabled:opacity-50">{pending ? pendingLabel : action}</button>
+    <SecondaryButton onClick={onClose} disabled={pending}>やめる</SecondaryButton></div>}>
+    <p className="pt-2 text-[17px] leading-relaxed">{body}</p>
   </Sheet>;
 }
