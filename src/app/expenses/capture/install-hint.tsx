@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Share, Smartphone, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 const STORAGE_INSTALL = "triangle:expense-capture:install-hint";
 function stored(key: string) { try { return window.localStorage.getItem(key) || ""; } catch { return ""; } }
@@ -23,13 +22,13 @@ export function InstallHint() {
   }, []);
   if (!mode) return null;
   const dismiss = () => { store(STORAGE_INSTALL, "dismissed"); setMode(""); };
-  return <section aria-label="ホーム画面に追加" className="flex items-start gap-3 rounded-[20px] border bg-sky-50 p-4 text-[15px] text-sky-950 dark:bg-sky-950/40 dark:text-sky-100">
-    <Smartphone className="mt-0.5 size-5 shrink-0" />
+  return <section aria-label="ホーム画面に追加" className="cap-surface flex items-start gap-3.5 px-5 py-4">
+    <Smartphone className="mt-0.5 size-5 shrink-0 text-muted-foreground" strokeWidth={1.5} />
     <div className="min-w-0 flex-1 space-y-2">
-      <p className="font-medium">ホーム画面に追加すると、アプリのようにすぐ撮影できます</p>
-      {mode === "ios" ? <p className="text-xs">Safariの <Share className="inline size-3.5 align-[-2px]" /> 共有ボタン →「ホーム画面に追加」</p>
-        : <Button type="button" className="h-12 rounded-xl px-5 text-base" onClick={async () => { await prompt.current?.prompt(); dismiss(); }}>ホーム画面に追加</Button>}
+      <p className="text-[14px] tracking-[0.04em]">ホーム画面に追加すると、アイコンからすぐ撮影できます</p>
+      {mode === "ios" ? <p className="text-[12.5px] tracking-[0.04em] text-muted-foreground">Safariの <Share className="inline size-3.5 align-[-2px]" strokeWidth={1.6} /> 共有 →「ホーム画面に追加」</p>
+        : <button type="button" className="cap-press h-11 rounded-full bg-foreground px-5 text-[13px] tracking-[0.1em] text-background" onClick={async () => { await prompt.current?.prompt(); dismiss(); }}>ホーム画面に追加</button>}
     </div>
-    <button type="button" aria-label="閉じる" className="-m-2 flex size-12 items-center justify-center" onClick={dismiss}><X className="size-5" /></button>
+    <button type="button" aria-label="閉じる" className="-m-2 flex size-12 items-center justify-center text-muted-foreground" onClick={dismiss}><X className="size-4" strokeWidth={1.6} /></button>
   </section>;
 }
