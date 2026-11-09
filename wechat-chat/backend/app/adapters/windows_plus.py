@@ -17,10 +17,11 @@ MAX_BYTES = 4 * 1024 * 1024
 
 class PlusRPC:
     """One serialized process for UI/COM affinity and listener lifetime."""
-    def __init__(self, store, send_enabled=False, max_listeners=8, language="en"):
+    def __init__(self, store, send_enabled=False, max_listeners=8, language="cn", client_kind="微信"):
         self.process = None
         self.lock = asyncio.Lock()
         self.store, self.send_enabled, self.limit, self.language = store, send_enabled, max_listeners, language
+        self.client_kind = client_kind
 
     async def close(self):
         if self.process is not None:
@@ -43,7 +44,8 @@ class PlusRPC:
                         if key.startswith(("OPENAI_", "WECHAT_")):
                             env.pop(key)
                     env.update(KOMOREBI_PLUS_STORE=str(self.store), KOMOREBI_PLUS_SEND=str(self.send_enabled).lower(),
-                               KOMOREBI_PLUS_LIMIT=str(self.limit), KOMOREBI_PLUS_LANGUAGE=self.language)
+                               KOMOREBI_PLUS_LIMIT=str(self.limit), KOMOREBI_PLUS_LANGUAGE=self.language,
+                               KOMOREBI_PLUS_CLIENT_KIND=self.client_kind)
                     python = ROOT / ".runtime/wxautox4-venv/Scripts/python.exe"
                     self.process = await asyncio.create_subprocess_exec(str(python), "-X", "utf8", "-m", "app.adapters.plus_worker",
                         cwd=ROOT / "backend", env=env, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
@@ -104,8 +106,8 @@ def validate_snapshot(data):
 
 
 class WindowsPlusAdapter(WeChatAdapter):
-    def __init__(self, store_path=None, *, send_enabled=False, max_listeners=8, language="en", transport=None, poll_seconds=5):
-        self.rpc = transport or PlusRPC(store_path or ROOT / "data/wxautox4-worker.sqlite3", send_enabled, max_listeners, language)
+    def __init__(self, store_path=None, *, send_enabled=False, max_listeners=8, language="cn", client_kind="微信", transport=None, poll_seconds=5):
+        self.rpc = transport or PlusRPC(store_path or ROOT / "data/wxautox4-worker.sqlite3", send_enabled, max_listeners, language, client_kind)
         self.test_transport = transport is not None
         self.send_enabled = send_enabled
         self.poll_seconds = max(5, poll_seconds)

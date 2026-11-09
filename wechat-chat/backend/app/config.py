@@ -30,7 +30,8 @@ class Settings:
     openai_model: str = ""
     plus_send_enabled: bool = False
     plus_max_listeners: int = 8
-    plus_language: str = "en"
+    plus_language: str = "cn"
+    plus_client_kind: str = "微信"
 
     @classmethod
     def from_env(cls):
@@ -38,9 +39,12 @@ class Settings:
         mode = os.getenv("WECHAT_ADAPTER", "mock")
         if mode not in ("mock", "windows-uia", "windows-ocr", "wxauto4", "wxautox4"):
             raise ValueError("Unsupported WECHAT_ADAPTER")
-        plus_language = os.getenv("WECHAT_PLUS_LANGUAGE", "en")
+        plus_language = os.getenv("WECHAT_PLUS_LANGUAGE", "cn")
         if plus_language not in ("cn", "cn_t", "en"):
             raise ValueError("Unsupported WECHAT_PLUS_LANGUAGE")
+        plus_client_kind = os.getenv("WECHAT_PLUS_CLIENT_KIND", "微信")
+        if plus_client_kind not in ("微信", "WeChat"):
+            raise ValueError("Unsupported WECHAT_PLUS_CLIENT_KIND")
         token = os.getenv("WECHAT_ACCESS_TOKEN", "").strip()
         if not token:
             path = ROOT / ".runtime" / "access-token.txt"
@@ -85,4 +89,5 @@ class Settings:
             plus_send_enabled=os.getenv("WECHAT_PLUS_SEND_ENABLED", "false").lower() == "true",
             plus_max_listeners=min(32, max(1, int(os.getenv("WECHAT_PLUS_MAX_LISTENERS", "8")))),
             plus_language=plus_language,
+            plus_client_kind=plus_client_kind,
         )

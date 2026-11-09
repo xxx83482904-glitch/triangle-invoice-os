@@ -65,6 +65,7 @@ test("Plus coverage remains partial on mobile and archived chats cannot send", a
   await openPlus(page, () => false);
   await page.getByLabel("メッセージを入力",{exact:true}).fill("保存だけの会話");
   await expect(page.getByLabel("メッセージを送信",{exact:true})).toBeDisabled();
+  await expect(page.locator(".history-banner")).toContainText("現在は監視対象外");
   await page.getByRole("button",{name:"一覧に戻る",exact:true}).click();
   await page.getByRole("button",{name:"接続状態・設定",exact:true}).click();
   const card = page.getByRole("article",{name:"Plusの監視範囲"});

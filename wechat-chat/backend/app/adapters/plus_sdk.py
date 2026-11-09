@@ -12,7 +12,7 @@ from .plus_core import PlusFailure, digest
 
 
 class PlusSDK:
-    def __init__(self, language="en"):
+    def __init__(self, language="cn", client_kind="微信"):
         if version("wxautox4") != "41.2.3":
             raise PlusFailure("dependency_missing")
         # 41.2.3 has a lazy package bootstrap. Set the documented privacy
@@ -33,6 +33,7 @@ class PlusSDK:
         self.events = Queue(maxsize=1000)
         self.overflow = False
         self.scope = None
+        self.client_kind = client_kind
 
     def _main(self):
         from .windows_probe import process_inventory, file_version
@@ -59,7 +60,7 @@ class PlusSDK:
         self.process_id = main.ProcessId
         self.main_hwnd = main.NativeWindowHandle
         self.scope = self.check_scope()
-        self.wx = self.factory(resize=False, debug=False, start_listener=False, version="WeChat")
+        self.wx = self.factory(resize=False, debug=False, start_listener=False, version=self.client_kind)
         account = self.account_id()
         if self.check_scope() != self.scope:
             raise PlusFailure("sdk_unavailable")
@@ -68,7 +69,9 @@ class PlusSDK:
     def account_id(self):
         info = self.wx.GetMyInfo()
         # Do not substitute nickname, phone, region or a guessed account ID.
-        account = info.get("wxid") if isinstance(info, dict) else None
+        # 41.2.3 returns display_name / id / region. The id value was compared
+        # with the owner's visible WeChat-ID profile label on the real client.
+        account = info.get("id") if isinstance(info, dict) else None
         if not isinstance(account, str) or not account.strip():
             raise PlusFailure("account_unavailable")
         return account
@@ -79,15 +82,17 @@ class PlusSDK:
 
     def _window(self, name):
         # Require one independent conversation window owned by this WeChat
-        # process. A title match alone is insufficient: input + message list
-        # must also be present and the input's recipient label must match.
+        # process. In 4.1.8.107 the child input is labelled "输入", NOT the
+        # recipient. Match the separate visible conversation header instead.
         candidates = []
         for control in self.uia.GetRootControl().GetChildren():
-            if control.ProcessId != self.process_id or control.NativeWindowHandle == self.main_hwnd or control.Name != name:
+            if (control.ProcessId != self.process_id or control.NativeWindowHandle == self.main_hwnd
+                    or control.ClassName != "mmui::ChatSingleWindow" or control.Name != name):
                 continue
             edit = control.EditControl(AutomationId="chat_input_field", searchDepth=40)
             listing = control.ListControl(AutomationId="chat_message_list", searchDepth=40)
-            if edit.Exists(0) and listing.Exists(0) and edit.Name == name:
+            header = control.TextControl(AutomationId="content_view.top_content_view.title_h_view.left_v_view.left_content_v_view.left_ui_.big_title_line_h_view.current_chat_name_label", searchDepth=40)
+            if edit.Exists(0) and listing.Exists(0) and header.Exists(0) and header.Name == name:
                 candidates.append((control, edit))
         if len(candidates) != 1:
             raise PlusFailure("binding_unavailable")
@@ -187,5 +192,6 @@ class PlusSDK:
 
     def close(self):
         if self.wx is not None:
-            self.wx.StopListening(remove=True)
-        # Do not close existing windows or touch WeChat authentication.
+            # remove=True also closes child windows, including ones the owner
+            # already had open. Stop callbacks without closing those windows.
+            self.wx.StopListening(remove=False)

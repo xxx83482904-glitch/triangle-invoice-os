@@ -1,6 +1,6 @@
 # Windowsセットアップ
 
-wxautox4 Plusへの移行は [Plus専用のセットアップ・本人による認証・実機検証手順](WXAUTOX4_PLUS.md) を参照してください。購入・認証前の常駐版は無料Readerのままです。
+wxautox4 Plusへの移行は [Plus専用のセットアップ・認証・実機検証手順](WXAUTOX4_PLUS.md) を参照してください。このPCでは本人の明示許可で公式認証と読み取り検証を完了しています。別PCではそのPCの正規認証が必要です。
 
 ## Mockモード
 

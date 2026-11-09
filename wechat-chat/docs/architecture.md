@@ -2,7 +2,7 @@
 
 調査日: 2026-11-09。参照: [SiverWXbot_plus](https://github.com/SiverKing/SiverWXbot_plus/tree/a861923f6b4f792a6efb9b51f494f59bbea0d6af)、commit `a861923f6b4f792a6efb9b51f494f59bbea0d6af`。README表記はv4.8.3。
 
-2026-11-10に本人が **wxautox4 Plusで進める方針**を選びました。既存のUI・SQLite・認証・送信キューを再利用し、Plus 41.2.3用Adapter/隔離workerを追加しています。SiverのBot本体やFlask画面は起動しません。[Plusの構成・実装範囲・実機で未検証の箇所](WXAUTOX4_PLUS.md) を参照してください。以下の上流調査表は無料版を優先していた時点の判断を含みます。
+2026-11-10に本人が **wxautox4 Plusで進める方針**を選びました。既存のUI・SQLite・認証・送信キューを再利用し、Plus 41.2.3用Adapter/隔離workerを追加しています。本人の明示許可による公式認証と、Weixin 4.1.8.107中国語UIでの8会話・44件の読み取りを検証しました。SiverのBot本体やFlask画面は起動しません。[Plusの構成・実機検証範囲](WXAUTOX4_PLUS.md) を参照してください。以下の上流調査表は無料版を優先していた時点の判断を含みます。
 
 ## 上流コードの調査結果
 
@@ -24,10 +24,27 @@
 
 上流の非侵襲なUI操作エンジンを包む設計と、通常版／国際版の切り分けを利用しています。Siverのソースコードを直接コピーしたファイルはまだありません。既存コードにない機能だけを追加し、同じ役割のFlaskサーバーやJSONストアを新設しません。
 
+## 2026-11-10の追加確認: 採用候補
+
+公開mainは引き続き `a861923f6b4f792a6efb9b51f494f59bbea0d6af`（v4.8.3）でした。今回のPlus認証・読み取り成功後に、次の機能を実コードとREADMEで再確認しました。下表は追加開発の候補で、すでに移植済みという意味ではありません。
+
+| Siverの機能・参照箇所 | このアプリでの使い方 |
+|---|---|
+| `init_wx_listeners` / `_verify_initial_listeners`（wxbot_core.py）: 対象指定、登録後に子窓を個別確認 | 設定画面で監視対象を選択・停止できるようにする。現在の自動登録上限8件を操作可能にする。登録済みと取得成功を区別する |
+| `_get_chat_prompt` / `_get_group_prompt`: 会話ごとのPrompt割当 | 取引先向けの丁寧な中国語、親しい相手向けなど、返信候補の文体を会話別に保存する |
+| `chat(..., history=...)` / 会話記憶 | 本人が確認した直近の履歴と発言者を返信案・翻訳へ渡す。現在のSQLiteと送信前データ確認を維持し、JSONストアを重ねない |
+| `_check_merge_buffers` / `_flush_merged`: 連投の集約 | 複数の発言を一つの話題としてまとめて返信案を生成する。元メッセージの保存単位は変えず、返信は手動送信だけにする |
+| OpenAI互換API・画像入力処理 | 将来の画像説明・画像内テキスト翻訳に参考利用。画像の取得と外部送信は別段階で確認する |
+| `bot_lifecycle.py`: 起動中/稼働中/停止中/停止の一元管理 | 二重起動や初期化途中の停止の設計・テストを参考にする。現行の常駐監視と隔離workerを維持する |
+
+「返事の急ぎ順」「決定事項からタスクへ」は、上記を組み合わせてこのアプリ側で整える領域です。Siverの自動返信・自動転送・定時一斉送信は取り込みません。READMEの内蔵Agent/ClawBot連携は別配布の `+agent` 分岐専用と明記されており、公開ソースに含まれるものとして扱いません。
+
+出典: [wxbot_core.py](https://github.com/SiverKing/SiverWXbot_plus/blob/a861923f6b4f792a6efb9b51f494f59bbea0d6af/wxbot_core.py)、[bot_lifecycle.py](https://github.com/SiverKing/SiverWXbot_plus/blob/a861923f6b4f792a6efb9b51f494f59bbea0d6af/bot_lifecycle.py)、[memory_store.py](https://github.com/SiverKing/SiverWXbot_plus/blob/a861923f6b4f792a6efb9b51f494f59bbea0d6af/memory_store.py)、[README](https://github.com/SiverKing/SiverWXbot_plus/blob/a861923f6b4f792a6efb9b51f494f59bbea0d6af/README.md)。
+
 ## ライセンスの境界
 
 - Siverリポジトリの `LICENSE` はApache-2.0。コードを直接取り込む場合はライセンス・著作権表示を保持し、改変箇所を明示し、上流のNOTICEがある場合は必要な表示も維持する方針です。
-- Siverのライセンスは `wxautox4` の利用権を付与しません。上流READMEは別途デバイス認証が必要としています。購入・認証は行っていません。
+- Siverのライセンスは `wxautox4` の利用権を付与しません。上流READMEは別途デバイス認証が必要としています。本PCでは本人提供のコードを明示許可のもと正規CLIへ渡し、有効を確認しました。コードやwheelは再配布しません。
 - SiverPanelのリモートアクセス認証はwxautox4ライセンスと別契約です。現アプリは許可済みのWindows常駐・認証付きHTTPS経路を持つため導入しません。
 - 無料wxauto4の検証wheelではLICENSE同梱・ライセンス欄を確認できず、古いwxautoリポジトリのApache表示を自動的に適用しません。wheelや改変済みパッケージは再配布せず、セットアップ時に配布元から取得します。
 

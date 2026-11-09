@@ -89,7 +89,7 @@ def create_app(settings=None, adapter=None, ai_provider=None):
             elif settings.adapter == "wxautox4":
                 selected = WindowsPlusAdapter(settings.db_path.with_name(settings.db_path.stem + "-worker.sqlite3"),
                     send_enabled=settings.plus_send_enabled, max_listeners=settings.plus_max_listeners,
-                    language=settings.plus_language)
+                    language=settings.plus_language, client_kind=settings.plus_client_kind)
             else:
                 selected = WindowsUIAAdapter(settings.poll_seconds)
         engine = Engine(db, selected, settings)

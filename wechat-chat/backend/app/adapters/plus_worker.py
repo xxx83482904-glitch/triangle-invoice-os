@@ -22,7 +22,8 @@ def main():
         from .plus_sdk import PlusSDK
         from .wxauto4_worker import reader_mutex
         store = PlusStore(Path(os.environ["KOMOREBI_PLUS_STORE"]))
-        supervisor = PlusSupervisor(lambda: PlusSDK(os.environ.get("KOMOREBI_PLUS_LANGUAGE", "en")), store,
+        supervisor = PlusSupervisor(lambda: PlusSDK(os.environ.get("KOMOREBI_PLUS_LANGUAGE", "cn"),
+                                    os.environ.get("KOMOREBI_PLUS_CLIENT_KIND", "微信")), store,
                                     send_enabled=os.environ.get("KOMOREBI_PLUS_SEND") == "true",
                                     max_listeners=int(os.environ.get("KOMOREBI_PLUS_LIMIT", "8")))
         try:
