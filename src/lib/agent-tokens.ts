@@ -4,9 +4,9 @@ import type { ApiToken, ApiTokenScope, AppData, User } from "@/lib/types";
 import { can } from "@/lib/rbac";
 import { isActiveUser } from "@/lib/user-access";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 
-// A token can never do more than the person it belongs to: effective rights are role permissions ∩ scopes.
+// A token can never do more than its owner: effective rights are current permissions ∩ scopes.
 export const agentScopes: Record<ApiTokenScope, { label: string; permission: string }> = {
   "bank:read": { label: "明細・書類・照合・支払記録の読み取り", permission: "view:banking" },
   "integrity:read": { label: "整合性チェックの読み取り", permission: "view:banking" },

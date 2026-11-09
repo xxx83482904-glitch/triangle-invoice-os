@@ -30,6 +30,12 @@ export const agentResources = {
   "bank-transactions": "bank:read", "received-invoices": "bank:read", "issued-invoices": "bank:read", payments: "bank:read", reconciliations: "bank:read",
   "mail-documents": "bank:read", vendors: "bank:read", projects: "bank:read", categories: "bank:read", "sync-runs": "bank:read", integrity: "integrity:read",
 } as const satisfies Record<string, ApiTokenScope>;
+// A broad read scope still requires access to the particular feature being read.
+const resourcePermissions: Record<keyof typeof agentResources, string> = {
+  "bank-transactions": "view:banking", "received-invoices": "view:receivedInvoices", "issued-invoices": "view:issuedInvoices",
+  payments: "view:payments", reconciliations: "view:banking", "mail-documents": "view:mailSorter",
+  vendors: "view:partners", projects: "view:projects", categories: "view:banking", "sync-runs": "view:banking", integrity: "view:banking",
+};
 export type AgentResource = keyof typeof agentResources;
 export const isAgentResource = (value: string): value is AgentResource => Object.hasOwn(agentResources, value);
 
@@ -50,6 +56,7 @@ export function listAgentResource(data: AppData, auth: AgentAuth, resource: Agen
   const value = listSchema.parse(params), company = companyFromParam(value.company), today = options.today || bankToday();
   if (!canAccessCompany(auth.user, company)) throw new AgentError(403, "会社スコープ外です");
   if (!agentCan(auth, agentResources[resource])) throw new AgentError(403, `スコープ ${agentResources[resource]} が必要です`);
+  if (!can(auth.user, resourcePermissions[resource])) throw new AgentError(403, "この機能を使う権限がありません");
   const inRange = (date?: string) => (!value.start || (date || "") >= value.start) && (!value.end || (date || "") <= value.end);
   const since = (row: { updatedAt: string }) => !value.updatedSince || row.updatedAt > value.updatedSince;
   const text = normalize(value.q);
@@ -209,9 +216,24 @@ function allocation(data: AppData, company: CompanyScope, bank: BankTransaction,
 }
 const nextSortOrder = (rows: Array<{ company?: string | null; deletedAt?: string | null; sortOrder?: number }>, company: CompanyScope) => Math.max(0, ...rows.filter((row) => !row.deletedAt && companyFromParam(row.company) === company).map((row) => row.sortOrder || 0)) + 1;
 
-function applyOperation(data: AppData, auth: AgentAuth, company: CompanyScope, operation: Operation, today: string): { targetId?: string; result: unknown } {
+/** Check before both executing an operation and returning its saved idempotent result. */
+export function assertAgentOperationAccess(data: AppData, auth: AgentAuth, operation: Operation) {
   const scope = agentOperations[operation.op];
   if (!agentCan(auth, scope)) throw new AgentError(403, `スコープ ${scope} が必要です`);
+  let permission: string | undefined;
+  if (operation.op === "project.create") permission = "manage:projects";
+  if (operation.op === "payment.record") permission = paymentRecordSchema.parse(operation.payload).kind === "issued" ? "manage:incomePayments" : "manage:expensePayments";
+  if (operation.op === "payment.cancel" || operation.op === "payment.adjust") {
+    // Include a canceled payment when authorizing a replay of its cancellation.
+    const payment = data.payments.find((row) => row.id === operation.target.id);
+    if (!payment) throw new AgentError(403, "支払記録を確認する権限がありません");
+    permission = payment.type === "INCOME" ? "manage:incomePayments" : "manage:expensePayments";
+  }
+  if (permission && !can(auth.user, permission)) throw new AgentError(403, "この操作を行う権限がありません");
+}
+
+function applyOperation(data: AppData, auth: AgentAuth, company: CompanyScope, operation: Operation, today: string): { targetId?: string; result: unknown } {
+  assertAgentOperationAccess(data, auth, operation);
   const actor = auth.user, reason = operation.reason || "";
   switch (operation.op) {
     case "bank.classify": {
@@ -353,7 +375,7 @@ export function recordAgentRequest(data: AppData, tokenId: string, idempotencyKe
 export function describeAgentApi() {
   return {
     version: "v1",
-    authentication: "Authorization: Bearer <token>（管理者が利用者管理で発行。権限はトークンの利用者ロール ∩ scopes、会社は JAPAN のみ）",
+    authentication: "Authorization: Bearer <token>（管理者が利用者管理で発行。権限はトークン利用者の現在の機能権限 ∩ scopes、会社は JAPAN のみ）",
     resources: Object.entries(agentResources).map(([resource, scope]) => ({ resource, scope, path: `/api/agent/v1/${resource}` })),
     listParameters: ["company", "start", "end", "updatedSince", "account", "status", "side", "reviewed", "q", "kind", "limit(1-500)", "cursor"],
     operations: Object.entries(agentOperations).map(([op, scope]) => ({ op, scope })),

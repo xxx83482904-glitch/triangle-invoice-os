@@ -9,13 +9,14 @@ import { bankAnalysisAccounts } from "@/lib/bank-analysis";
 import { bankSpendingInsights, spendingMonth } from "@/lib/bank-insights";
 import { bankToday } from "@/lib/banking";
 import { companyFromParam } from "@/lib/company";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 
 export default async function BankInsightsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:banking")) redirect(defaultPathForUser(user));
   const params = await searchParams, company = companyFromParam(params.company), data = await readDataForRequest();
   const { accounts, account } = bankAnalysisAccounts(data, company, params.account);
   const today = bankToday(), month = spendingMonth(params.month, today);

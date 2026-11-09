@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { defaultPathForRole } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { RegisterForm } from "./register-form";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 
 export default async function RegisterPage() {
   const user = await getCurrentUser();
-  if (user) redirect(defaultPathForRole(user.role));
+  if (user) redirect(defaultPathForUser(user));
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 px-4">

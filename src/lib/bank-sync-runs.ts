@@ -4,7 +4,7 @@ import type { CompanyScope } from "@/lib/company";
 import type { AppData, User } from "@/lib/types";
 import type { BankSyncChange, BankSyncReviewSnapshot, BankSyncRun, BankSyncSourceField, BankTransaction } from "@/lib/banking-types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 // Recent runs per company and change rows per run are bounded so the store stays small.
 export const BANK_SYNC_RUN_LIMIT = 20;
 export const BANK_SYNC_CHANGE_LIMIT = 500;

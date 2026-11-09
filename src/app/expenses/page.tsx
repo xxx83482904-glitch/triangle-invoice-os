@@ -5,18 +5,19 @@ import { bankToday } from "@/lib/banking";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { expenseCategoryOptions, expenseClaimViews, expenseSettlementSummary } from "@/lib/expense-claim-edits";
 import { expenseStatuses } from "@/lib/expense-claims";
-import { can, canAccessCompany, defaultPathForRole } from "@/lib/rbac";
+import { can, canAccessCompany } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 import { ExpensesWorkspace } from "./expenses-workspace";
 
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "submit:expenses")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "submit:expenses")) redirect(defaultPathForUser(user));
   const params = await searchParams;
   const param = (key: string) => typeof params[key] === "string" ? params[key] : undefined;
   const company = companyFromParam(param("company"));
-  if (!canAccessCompany(user, company)) redirect(defaultPathForRole(user.role));
+  if (!canAccessCompany(user, company)) redirect(defaultPathForUser(user));
   const data = await readDataForRequest(), today = bankToday(), canManage = can(user, "manage:expenses");
   const views = expenseClaimViews(data, user, company);
   const summary = { all: expenseSettlementSummary(views, today), mine: expenseSettlementSummary(views.filter((row) => row.submittedById === user.id), today) };

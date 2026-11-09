@@ -15,7 +15,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { partnerMatchesCompany, type CompanyScope } from "@/lib/company";
-import { can, canEditOptionGroup, companyForUser, defaultPathForRole } from "@/lib/rbac";
+import { can, canEditOptionGroup, companyForUser } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { managedOptionGroups, optionGroupLabels, selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
 import type { SelectOptionGroup } from "@/lib/types";
@@ -28,7 +29,7 @@ export default async function PartnersPage({
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:partners")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:partners")) redirect(defaultPathForUser(user));
   const company = companyForUser(user, params.company);
   const billingOnly = user.role === "BILLING_EDITOR";
   const data = await readData();

@@ -49,7 +49,7 @@ export const receivedStatusLabels: Record<string, string> = {
   PAID: "支払い済み", ON_HOLD: "保留", REJECTED: "差し戻し", ARCHIVED: "アーカイブ",
 };
 
-export function visibleProjects(data: AppData, user: Pick<User, "id" | "role">) {
+export function visibleProjects(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">) {
   if (user.role === "BILLING_EDITOR") return data.projects.filter((p) => !p.deletedAt && p.company === "JAPAN");
   return data.projects.filter((p) => p.company === "JAPAN" && !p.deletedAt && (can(user, "view:all") || p.managerId === user.id || p.memberIds.includes(user.id)));
 }
@@ -58,7 +58,7 @@ export function isBillableIssuedInvoice(invoice: IssuedInvoice) {
   return !invoice.deletedAt && invoice.total > 0 && invoice.status !== "DRAFT" && invoice.status !== "CANCELED";
 }
 
-export function documentRows(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope): DocumentRow[] {
+export function documentRows(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope): DocumentRow[] {
   if (!canAccessCompany(user, company)) return [];
   const projects = visibleProjects(data, user).filter((p) => companyFromParam(p.company) === company);
   const projectMap = new Map(projects.map((p) => [p.id, p]));
@@ -111,7 +111,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role">, com
       fileUrl: m.fileUrl, fileName: m.originalFileName, mimeType: m.mimeType, sourceHref: "/mail-sorter?company=JAPAN", updatedAt: m.updatedAt });
   }
   // Mail staff also handle direct uploads shown in the Japan mail folder.
-  if (user.role === "MAIL_EDITOR" && company === "JAPAN") for (const i of data.receivedInvoices) {
+  if (user.role === "MAIL_EDITOR" && can(user, "view:mailSorter") && company === "JAPAN") for (const i of data.receivedInvoices) {
     const project = data.projects.find((p) => p.id === i.projectId && !p.deletedAt);
     if (i.deletedAt || linkedReceived.has(i.id) || !project || companyFromParam(project.company) !== company) continue;
     const processed = isMailProcessed(i);

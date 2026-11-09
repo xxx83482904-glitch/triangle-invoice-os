@@ -1,3 +1,4 @@
+import { pathForUser } from "@/lib/app-navigation";
 import { NextResponse } from "next/server";
 import { visibleProjects } from "@/lib/documents";
 import { requireUser } from "@/lib/auth";
@@ -104,5 +105,5 @@ export async function POST(request: Request) {
     return invoice;
   });
 
-  return NextResponse.redirect(new URL(`/received-invoices?company=${company}&uploaded=1`, request.url), { status: 303 });
+  return NextResponse.redirect(new URL(pathForUser(user, `/received-invoices?company=${company}&uploaded=1`), request.url), { status: 303 });
 }

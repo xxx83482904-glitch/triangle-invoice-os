@@ -7,7 +7,7 @@ import { cardReceiptSource, detachCardReceipt } from "@/lib/card-receipts";
 import { uploadedFileNameFromUrl } from "@/lib/files";
 import type { AppData, Attachment, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 
 // Receipts and other evidence attached directly to a bank row (for payments that have no invoice).
 export { BANK_RECEIPT_TYPE };

@@ -20,7 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { todayIso } from "@/lib/format";
-import { can, companyForUser, defaultPathForRole } from "@/lib/rbac";
+import { can, companyForUser } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { defaultSelectOptions, selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 
@@ -32,7 +33,7 @@ export default async function IssuedInvoicesPage({
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:issuedInvoices")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:issuedInvoices")) redirect(defaultPathForUser(user));
   const company = companyForUser(user, params.company);
   const data = await readData();
   const setting = data.invoiceNumberSettings[0] ?? { prefix: "TRI", fiscalYear: new Date().getFullYear(), nextNumber: data.issuedInvoices.length + 1 };
@@ -54,7 +55,7 @@ export default async function IssuedInvoicesPage({
   return (
     <AppShell>
       <PageHeader title="発行請求書">
-        <SectionExportDialog scope="issued" role={user.role} />
+        <SectionExportDialog scope="issued" access={{ role: user.role, featureAccess: user.featureAccess }} />
         {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
         <BillingProjectCleanup company={company} groups={billingProjectGroups(data, user, company)} />
         {can(user, "view:documents") ? <Button asChild variant="outline"><Link href={`/documents?company=${company}`} prefetch={false}>全書類</Link></Button> : null}

@@ -17,7 +17,7 @@ export const exportQuerySchema = z.object({
 export type ExportQuery = z.infer<typeof exportQuerySchema>;
 export const fiscalRange = (year: number) => ({ start: `${year - 1}-09-01`, end: `${year}-08-31` });
 
-export function canExportSection(user: Pick<User, "role"> | null, scope: ExportScope) {
+export function canExportSection(user: Pick<User, "role" | "featureAccess"> | null, scope: ExportScope) {
   if (!user) return false;
   if (scope === "all") return can(user, "export:csv") && can(user, "view:reports");
   if (scope === "banking") return can(user, "export:csv") && can(user, "view:banking");
@@ -34,7 +34,7 @@ function exportedFileType(r: DocumentRow): ExportDocument["fileType"] {
   return generated ? "生成PDF" : r.fileUrl ? "原本" : "原本なし";
 }
 
-export function sectionExport(data: AppData, user: Pick<User, "id" | "role">, input: ExportQuery): SectionExport {
+export function sectionExport(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, input: ExportQuery): SectionExport {
   const q = exportQuerySchema.parse(input);
   if (!canAccessCompany(user, q.company) || !canExportSection(user, q.scope)) throw new Error("書き出し権限がありません");
   const all = documentRows(data, user, q.company);
@@ -67,7 +67,7 @@ export function sectionExport(data: AppData, user: Pick<User, "id" | "role">, in
   }
   documents.sort((a, b) => b.exportDate.localeCompare(a.exportDate) || a.id.localeCompare(b.id));
   const bank: ExportBankRow[] = [];
-  if (q.scope === "all" || q.scope === "banking") {
+  if ((q.scope === "all" || q.scope === "banking") && can(user, "view:banking")) {
     const accounts = new Map(data.bankAccounts.filter((a) => a.company === q.company).map((a) => [a.id, a]));
     const categories = new Map(data.accountingCategories.filter((a) => a.company === q.company).map((a) => [a.id, a.name]));
     for (const t of data.bankTransactions) {

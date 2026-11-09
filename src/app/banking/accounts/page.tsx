@@ -5,13 +5,14 @@ import { getCurrentUser } from "@/lib/auth";
 import { bankAccountOverview } from "@/lib/bank-account-overview";
 import { bankToday } from "@/lib/banking";
 import { companyFromParam } from "@/lib/company";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 
 export default async function BankAccountsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:banking")) redirect(defaultPathForUser(user));
   const params = await searchParams, company = companyFromParam(params.company);
   const data = await readDataForRequest(), today = bankToday();
   const overview = bankAccountOverview(data, company, params.month, today, params.fiscalYear);

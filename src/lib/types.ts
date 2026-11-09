@@ -1,3 +1,4 @@
+import type { FeatureAccess } from "@/lib/member-features";
 import type { AccountingCategory, BankAccount, BankReconciliation, BankRule, BankSyncRun, BankSyncState, BankTransaction, BankTransfer } from "@/lib/banking-types";
 
 export type UserRole =
@@ -66,6 +67,7 @@ export type User = {
   email: string;
   passwordHash: string;
   role: UserRole;
+  featureAccess?: FeatureAccess;
   accessStatus?: "PENDING" | "ACTIVE" | "DISABLED" | "REJECTED";
   sessionVersion?: number;
   passwordChangedAt?: string;

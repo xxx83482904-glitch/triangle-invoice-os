@@ -4,7 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { importShipmentViews, unassignedImportDocuments } from "@/lib/import-shipment-views";
 import { importToday } from "@/lib/import-shipments";
-import { assertCompanyAccess, can, defaultPathForRole } from "@/lib/rbac";
+import { assertCompanyAccess, can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest as readData } from "@/lib/store";
 import { ShipmentDetail } from "./shipment-detail";
 
@@ -16,7 +17,7 @@ export default async function ImportShipmentPage({ params, searchParams }: {
   const company = companyFromParam(typeof search.company === "string" ? search.company : undefined);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:imports")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:imports")) redirect(defaultPathForUser(user));
   assertCompanyAccess(user, company);
   const data = await readData(), today = importToday();
   const view = importShipmentViews(data, company, today).find((row) => row.id === id);

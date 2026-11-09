@@ -7,19 +7,20 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam } from "@/lib/company";
 import { documentRows, visibleProjects } from "@/lib/documents";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 
 export default async function DocumentsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:documents")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:documents")) redirect(defaultPathForUser(user));
   const params = await searchParams;
   const company = user.role === "MAIL_EDITOR" ? "JAPAN" : companyFromParam(params.company);
   const data = await readDataForRequest();
   return <AppShell>
     <PageHeader title="全書類">
-      <SectionExportDialog scope="all" role={user.role} />
+      <SectionExportDialog scope="all" access={{ role: user.role, featureAccess: user.featureAccess }} />
       {can(user, "view:mailSorter") ? <Button variant="outline" asChild><Link prefetch={false} href="/mail-sorter?company=JAPAN">郵便物</Link></Button> : null}
       {can(user, "view:receivedInvoices") ? <Button variant="outline" asChild><Link prefetch={false} href={`/received-invoices?company=${company}`}>受領請求書</Link></Button> : null}
       {can(user, "view:issuedInvoices") ? <Button variant="outline" asChild><Link prefetch={false} href={`/issued-invoices?company=${company}`}>発行請求書</Link></Button> : null}

@@ -1,3 +1,4 @@
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { Money } from "@/components/app/money";
 import { redirect } from "next/navigation";
 import { FileText, LogOut } from "lucide-react";
@@ -34,7 +35,7 @@ export default async function GuestInvoicesPage({
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "GUEST") redirect("/issued-invoices");
+  if (user.role !== "GUEST") redirect(defaultPathForUser(user));
 
   const data = await readData();
   const company = companyFromParam(params.company);

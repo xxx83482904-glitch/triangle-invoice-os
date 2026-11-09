@@ -8,7 +8,7 @@ import { hasConfirmedBankLink, knownBankCardSettlement } from "@/lib/bank-card-s
 
 // 取引先単位の一括変更: every row with the same description (and direction) gets the same category, reviewed rows included,
 // after a preview that spells out what will change and what is left alone.
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 export const normalizeBankContent = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("ja");
 
 const scopeSchema = z.object({ content: z.string().trim().min(1).max(500), side: z.enum(["INCOME", "EXPENSE"]).optional(), bankAccountId: z.string().max(1000).optional(), includeReviewed: z.boolean().default(true) });

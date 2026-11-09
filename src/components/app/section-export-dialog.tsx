@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { canExportSection, exportScopes, fiscalRange, type ExportScope, type SectionExport } from "@/lib/section-export";
 import { documentKindLabels } from "@/lib/documents";
-import type { UserRole } from "@/lib/types";
+import type { UserAccess } from "@/lib/rbac";
 
 const control = "h-11 w-full min-w-0 rounded-md border bg-background px-3 text-sm";
-export function SectionExportDialog({ scope, role, disabled = false, open: controlledOpen, onOpenChange }: { scope: ExportScope; role: UserRole; disabled?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+export function SectionExportDialog({ scope, access, disabled = false, open: controlledOpen, onOpenChange }: { scope: ExportScope; access: UserAccess; disabled?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const [localOpen, setLocalOpen] = useState(false);
   const open = controlledOpen ?? localOpen;
   const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); };
@@ -52,7 +52,7 @@ export function SectionExportDialog({ scope, role, disabled = false, open: contr
     const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) setLimit((value) => value + 80); }, { root: scroll.current, rootMargin: "150px" });
     observer.observe(sentinel.current); return () => observer.disconnect();
   }, [count, limit, loading]);
-  if (!canExportSection({ role }, scope)) return null;
+  if (!canExportSection(access, scope)) return null;
   async function download(format: "csv" | "zip") {
     setBusy(true); setError(""); setNotice("");
     const controller = new AbortController(); downloadController.current = controller;

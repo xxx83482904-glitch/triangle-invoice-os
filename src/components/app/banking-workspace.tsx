@@ -51,7 +51,7 @@ import { BankBulkReclassifyDialog } from "@/components/app/bank-bulk-reclassify-
 import { isGuessClassification } from "@/lib/bank-classification";
 import type { AccountingCategory, BankAccount, BankEdit, BankFilters, BankRule, BankSyncState, BankTransaction } from "@/lib/banking-types";
 import type { CompanyScope } from "@/lib/company";
-import type { UserRole } from "@/lib/types";
+import type { UserAccess } from "@/lib/rbac";
 import { Money } from "@/components/app/money";
 import { RecordDetail } from "@/components/app/record-detail";
 import { BankDetailDocuments } from "@/components/app/bank-detail-documents";
@@ -66,7 +66,7 @@ const editFrom = bankEditFrom;
 const manualClassification = { classificationSource: "MANUAL" as const, classificationConfidence: "INFERRED" as const, classificationReason: "手動選択（未確定）" };
 
 type Props = {
-  role: UserRole;
+  access: UserAccess;
   company: CompanyScope; rows: BankDisplayRow[]; accounts: BankAccount[]; accountOptions: BankAccountOption[]; selectedAccountOption: string; categories: AccountingCategory[]; rules: BankRule[];
   filters: BankFilters; total: number; page: number; months: string[]; revision: string;
   summary: { income: number; expense: number; excluded: number; unclassified: number };
@@ -586,7 +586,7 @@ export function BankingWorkspace(props: Props) {
   const nextMatch = linkIndex >= 0 ? rows.slice(linkIndex + 1).find(awaitingMatch) : undefined;
   const detailLatest = detailRow ? latestConflict[detailRow.id] : undefined;
   const classificationDisabled = pending || Boolean(dirty) || !months.length;
-  const canExport = canExportSection({ role: props.role }, "banking");
+  const canExport = canExportSection(props.access, "banking");
   const syncStatus = !configured ? "Money Forward 未接続（連携キー・事業者番号が未設定）" : syncing ? `同期中${sync?.completedThrough ? ` / ${sync.completedThrough}まで取得済み` : ""}` : sync?.lastSuccessAt ? `最終同期 ${new Date(sync.lastSuccessAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}` : "Money Forward 接続設定済み・初回同期前";
   const advancedCount = bankAdvancedFilterCount({ ...filters, category: filterEdits.category ?? filters.category, queryMode: filterEdits.queryMode as BankFilters["queryMode"], excludeQuery: filterEdits.excludeQuery });
   const hasFilters = Boolean(filters.month || filters.account || filters.category || filters.side || filters.status || filters.query || filters.excludeQuery || filters.analysisThrough || filters.transaction || filters.queryMode === "exact" || filterDirty);
@@ -633,7 +633,7 @@ export function BankingWorkspace(props: Props) {
         </section></PopoverContent></Popover> : null}
       </div>
     </header>
-    <div className="bank-workflow-line lg:hidden"><WorkflowNav role={props.role} compact /></div>
+    <div className="bank-workflow-line lg:hidden"><WorkflowNav access={props.access} compact /></div>
     <div className="bank-ledger-controls">
       <MonthTabs label="取引月" value={filters.month} months={months} today={bankToday()} disabled={pending} onChange={(month) => navigate({ month })} />
       <FilterPanel activeCount={advancedCount} onReset={hasFilters ? resetFilters : undefined} resetDisabled={pending} primary={<>
@@ -772,14 +772,14 @@ export function BankingWorkspace(props: Props) {
         {company === "JAPAN" ? <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={pending || filterDirty || autosave.undoing.includes(detailRow.id)} onClick={() => reviewSelection(!detailValue.reviewed, undefined, [detailRow], false)}>{detailValue.reviewed ? "未確認に戻す" : "確認済みにする"}</Button>{detailRow.predictionPending && !drafts[detailRow.id] ? <Button variant="outline" disabled={pending || filterDirty} onClick={() => adoptCandidates([detailRow], false, false)}>候補を採用</Button> : null}</div> : null}
         {detailSales ? <section className="bank-sales-hint space-y-2 rounded-lg border p-3 text-sm"><p>請求書と照合済みの入金。{detailSales.categoryName ? `売上系の科目「${detailSales.categoryName}」を提案` : "売上系の科目を提案"}</p><p className="break-words text-xs text-muted-foreground">{detailSales.reason}</p><div className="flex flex-wrap gap-2">{detailSales.categoryId ? <Button variant="outline" disabled={pending || filterDirty || Boolean(detailRow.bookkeeping?.splits?.length)} aria-label={`${detailRow.content}に売上科目「${detailSales.categoryName}」を適用`} onClick={() => edit(detailRow, { categoryId: detailSales.categoryId, subCategoryId: undefined, classificationReason: "発行請求書と照合済みの入金（売上科目の提案を採用・未確定）" })}>提案を採用</Button> : null}<Button variant="outline" disabled={pending || filterDirty || Boolean(detailRow.bookkeeping?.splits?.length)} onClick={() => openCategories(detailRow)}>科目を選ぶ</Button></div></section> : null}
         <section className="space-y-2"><div className="flex flex-wrap items-center gap-2">{linkButton(detailRow)}<BankBookkeepingDialog key={`bookkeeping:${detailRow.id}`} company={company} transaction={detailRow} categories={categories} showLabel disabled={pending || Boolean(dirty)} onSaved={(saved) => setSavedRows((current) => ({ ...current, [saved.id]: { ...detailRow, ...saved, predictionPending: false } }))} /><BankBulkReclassifyDialog key={`bulk:${detailRow.id}`} company={company} row={detailRow} accountName={accountMap.get(detailRow.bankAccountId)} categories={categories} showLabel disabled={pending || Boolean(dirty) || detailRow.sourceMissing} onApplied={() => router.refresh()} /></div>{detailRow.settlementConflict ? <p className="break-words text-sm text-[var(--tone-amber-fg)]">既存分類・照合を要確認: {detailRow.settlementConflict}</p> : null}</section>
-        <BankDetailDocuments key={`documents:${detailRow.id}:${documentsVersion}`} company={company} transactionId={detailRow.id} disabled={pending} canLinkMail={company === "JAPAN" && can({ role: props.role }, "view:mailSorter")} onChanged={() => router.refresh()} />
+        <BankDetailDocuments key={`documents:${detailRow.id}:${documentsVersion}`} company={company} transactionId={detailRow.id} disabled={pending} canLinkMail={company === "JAPAN" && can(props.access, "view:mailSorter")} onChanged={() => router.refresh()} />
         {drafts[detailRow.id] ? <Button variant="ghost" aria-label={`${detailRow.content}の編集を破棄`} disabled={pending || detailSave?.status === "saving"} onClick={() => discardRow(detailRow)}><X className="size-4" />この変更を取り消す</Button> : null}
       </div> : null}
     </RecordDetail>
     {headerDialog === "audit" ? <BankAuditDialog company={company} open onOpenChange={closeHeaderDialog} /> : null}
     {headerDialog === "sync-runs" ? <BankSyncRunsDialog company={company} open onOpenChange={closeHeaderDialog} pending={props.syncImpact?.pending ?? 0} /> : null}
     {headerDialog === "ai-settings" && props.aiSettings ? <BankAiSettings {...props.aiSettings} open onOpenChange={closeHeaderDialog} /> : null}
-    {headerDialog === "export" ? <SectionExportDialog scope="banking" role={props.role} open onOpenChange={closeHeaderDialog} /> : null}
+    {headerDialog === "export" ? <SectionExportDialog scope="banking" access={props.access} open onOpenChange={closeHeaderDialog} /> : null}
 
     {company !== "JAPAN" && savePreview ? <BankSavePreviewDialog preview={savePreview} categories={categories} busy={pending} onClose={() => setSavePreview(null)} onSave={save} error={error} /> : null}
     {guessReview ? <BankGuessReviewDialog guesses={guessReview.guesses} others={guessReview.others} categories={categories} busy={pending} onClose={() => setGuessReview(null)} onConfirm={(acknowledgeGuesses) => reviewSelection(true, { acknowledgeGuesses }, guessReview.targets, guessReview.confirmUnloaded)} /> : null}

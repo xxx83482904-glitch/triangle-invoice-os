@@ -7,7 +7,7 @@ import { isBillableIssuedInvoice, visibleProjects } from "@/lib/documents";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, IssuedInvoice, Payment, PaymentHistoryEntry, ReceivedInvoice, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 export type PaymentKind = "issued" | "received";
 const cents = (value: number) => Math.round(value * 100);
 const monetary = (value: number) => Number.isFinite(value) && value > 0 && value <= 1e12 && Math.abs(value * 100 - cents(value)) < 0.001;

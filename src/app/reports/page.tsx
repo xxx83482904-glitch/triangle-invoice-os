@@ -12,7 +12,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { percent } from "@/lib/format";
 import { monthlyInvoiceSummary } from "@/lib/accounting-summary";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData } from "@/lib/store";
 import { importMonthlySummary, importShipmentViews } from "@/lib/import-shipment-views";
 
@@ -25,7 +26,7 @@ export default async function ReportsPage({
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:reports")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:reports")) redirect(defaultPathForUser(user));
   const data = await readData();
   const projects = data.projects.filter((project) => !project.deletedAt && matchesCompany(project, company));
   const projectIds = new Set(projects.map((project) => project.id));
@@ -47,7 +48,7 @@ export default async function ReportsPage({
   return (
     <AppShell>
       <PageHeader title="レポート" description="月別、案件別、クライアント別、支払先別の数字をCSVに落とせる形で確認します。">
-        <SectionExportDialog scope="all" role={user.role} />
+        <SectionExportDialog scope="all" access={{ role: user.role, featureAccess: user.featureAccess }} />
         <Button asChild variant="outline"><Link href={`/api/export/projects?company=${company}`} prefetch={false}>案件別CSV</Link></Button>
       </PageHeader>
 

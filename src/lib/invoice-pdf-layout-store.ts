@@ -10,7 +10,7 @@ import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import { saveEstimate } from "@/lib/estimates";
 import type { AppData, Estimate, InvoicePdfLayout, InvoicePdfText, IssuedInvoice, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 
 // Saving from the PDF dialog. Layout and wording are presentation only: they keep `updatedAt`, so edits
 // already open in a list stay valid. Number, dates, lines and notes are the document itself and go

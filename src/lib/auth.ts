@@ -29,7 +29,7 @@ function secretKey() {
   );
 }
 
-export type SessionUser = Pick<User, "id" | "name" | "email" | "role">;
+export type SessionUser = Pick<User, "id" | "name" | "email" | "role" | "featureAccess">;
 
 export async function signIn(email: string, password: string) {
   const data = await readData();
@@ -84,6 +84,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
       name: user.name,
       email: user.email,
       role: user.role,
+      featureAccess: user.featureAccess,
     };
   } catch {
     return null;

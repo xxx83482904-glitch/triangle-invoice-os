@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { editableRoles, endUserSessions, updateUserAccount, userAccountPasswordSchema, userAccountViews } from "../src/lib/user-admin";
+import { createUserAccount, editableRoles, endUserSessions, updateUserAccount, userAccountPasswordSchema, userAccountViews } from "../src/lib/user-admin";
+import { effectiveFeatures, memberFeatures } from "../src/lib/member-features";
 import { isActiveUser, sessionVersionMatches } from "../src/lib/user-access";
 import { roleLabel } from "../src/lib/rbac";
 import type { AppData, User } from "../src/lib/types";
@@ -9,6 +10,8 @@ import { fixture, timestamp } from "./document-fixture";
 const admin: User = { id: "test-admin", name: "Synthetic Admin", email: "admin@example.invalid", passwordHash: "test-only-admin-hash", role: "ADMIN", createdAt: timestamp, updatedAt: timestamp };
 const staff: User = { ...admin, id: "test-staff", name: "Synthetic Staff", email: "staff@example.invalid", passwordHash: "test-only-staff-hash", role: "DESIGNER" };
 type UpdateInput = Parameters<typeof updateUserAccount>[2];
+type CreateInput = Parameters<typeof createUserAccount>[2];
+const newAccount: CreateInput = { name: "Synthetic New Member", email: "new-member@example.invalid", role: "DESIGNER", passwordHash: "test-only-created-hash" };
 
 function setup(patch: Partial<User> = {}) {
   const data = fixture();
@@ -45,9 +48,10 @@ test("account views sort active, disabled and rejected users by name and expose 
   const views = userAccountViews(data);
   assert.deepEqual(views.map((view) => view.id), ["legacy", "active-z", "disabled-a", "disabled-z", "rejected"]);
   assert.deepEqual(views[0], { id: "legacy", name: "A Legacy", email: "legacy@example.invalid", role: "DESIGNER", roleLabel: roleLabel("DESIGNER"), status: "ACTIVE",
-    updatedAt: timestamp, createdAt: timestamp, approvedAt: timestamp, passwordChangedAt: timestamp, companyCardAccountId: "test-card" });
+    updatedAt: timestamp, createdAt: timestamp, approvedAt: timestamp, passwordChangedAt: timestamp, companyCardAccountId: "test-card",
+    featureAccess: undefined, features: effectiveFeatures("DESIGNER") });
   for (const view of views) {
-    assert.deepEqual(Object.keys(view).sort(), ["id", "name", "email", "role", "roleLabel", "status", "updatedAt", "createdAt", "approvedAt", "passwordChangedAt", "companyCardAccountId"].sort());
+    assert.deepEqual(Object.keys(view).sort(), ["id", "name", "email", "role", "roleLabel", "status", "updatedAt", "createdAt", "approvedAt", "passwordChangedAt", "companyCardAccountId", "featureAccess", "features"].sort());
   }
   assert.deepEqual(data, before);
 });
@@ -57,8 +61,8 @@ test("edits normalize name and email, preserve unrelated fields, and return a sa
   const result = updateUserAccount(data, admin.id, edit(user, { name: "  Synthetic Renamed  ", email: "  RENAMED@EXAMPLE.INVALID  ", role: "ACCOUNTING" }));
   assert.deepEqual(result, {
     id: staff.id,
-    before: { name: staff.name, email: staff.email, role: "DESIGNER", status: "ACTIVE" },
-    after: { name: "Synthetic Renamed", email: "renamed@example.invalid", role: "ACCOUNTING", status: "ACTIVE" },
+    before: { name: staff.name, email: staff.email, role: "DESIGNER", status: "ACTIVE", features: null },
+    after: { name: "Synthetic Renamed", email: "renamed@example.invalid", role: "ACCOUNTING", status: "ACTIVE", features: null },
     passwordChanged: false, sessionsEnded: false,
   });
   assert.equal(user.name, result.after.name); assert.equal(user.email, result.after.email); assert.equal(user.role, "ACCOUNTING");
@@ -113,7 +117,7 @@ test("email uniqueness is case insensitive and includes deleted, pending and dis
   assert.equal(user.email, staff.email);
 });
 
-test("non-admin, disabled, deleted, pending, rejected and missing actors cannot edit or end sessions", () => {
+test("non-admin, disabled, deleted, pending, rejected and missing actors cannot create, edit or end sessions", () => {
   const patches: Partial<User>[] = [
     ...editableRoles.filter((role) => role !== "ADMIN").map((role) => ({ role })),
     { accessStatus: "DISABLED" }, { accessStatus: "PENDING" }, { accessStatus: "REJECTED" }, { deletedAt: timestamp },
@@ -122,10 +126,12 @@ test("non-admin, disabled, deleted, pending, rejected and missing actors cannot 
   for (const patch of patches) {
     const { data, user } = setup();
     Object.assign(data.users[0], patch);
+    rejectsUnchanged(data, () => createUserAccount(data, admin.id, newAccount), /権限がありません/);
     rejectsUnchanged(data, () => updateUserAccount(data, admin.id, edit(user)), /権限がありません/);
     rejectsUnchanged(data, () => endUserSessions(data, admin.id, user), /権限がありません/);
   }
   const { data, user } = setup();
+  rejectsUnchanged(data, () => createUserAccount(data, "missing", newAccount), /権限がありません/);
   rejectsUnchanged(data, () => updateUserAccount(data, "missing", edit(user)), /権限がありません/);
   rejectsUnchanged(data, () => endUserSessions(data, "missing", user), /権限がありません/);
 });
@@ -290,4 +296,151 @@ test("administrator passwords enforce both character length and the UTF-8 bcrypt
   const result = userAccountPasswordSchema.safeParse("あ".repeat(25));
   assert.ok(!result.success);
   assert.equal(result.error.issues[0].message, "パスワードはUTF-8で72バイト以内にしてください");
+});
+
+test("creating an account activates and approves it immediately, normalizes fields and overrides, and returns a safe audit", () => {
+  const { data } = setup();
+  const previousUsers = structuredClone(data.users);
+  const result = createUserAccount(data, admin.id, { ...newAccount, name: "  Synthetic New Member  ", email: "  NEW-MEMBER@EXAMPLE.INVALID  ",
+    features: { banking: true, projects: true, receivedInvoices: false, reports: false } });
+  const user = data.users[0];
+  assert.match(user.id, /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+  assert.equal(user.passwordHash, newAccount.passwordHash);
+  assert.equal(user.accessStatus, "ACTIVE"); assert.equal(isActiveUser(user), true);
+  assert.equal(user.approvedById, admin.id);
+  assert.ok(Number.isFinite(Date.parse(user.createdAt)));
+  assert.equal(user.approvedAt, user.createdAt); assert.equal(user.passwordChangedAt, user.createdAt); assert.equal(user.updatedAt, user.createdAt);
+  assert.deepEqual(user.featureAccess, { banking: true, receivedInvoices: false });
+  assert.deepEqual(result, { id: user.id, after: { name: newAccount.name, email: newAccount.email, role: "DESIGNER", status: "ACTIVE",
+    features: { banking: true, receivedInvoices: false } } });
+  assert.doesNotMatch(JSON.stringify(result), /password|hash|test-only|sessionVersion/i);
+  assert.deepEqual(data.users.slice(1), previousUsers);
+});
+
+test("creation accepts every editable role, removes redundant overrides and ignores guest switches", () => {
+  for (const role of editableRoles) {
+    const { data } = setup();
+    const result = createUserAccount(data, admin.id, { ...newAccount, role,
+      features: role === "GUEST" ? { banking: true, projects: true } : effectiveFeatures(role) });
+    assert.equal(data.users[0].role, role); assert.equal(isActiveUser(data.users[0]), true);
+    assert.equal(Object.hasOwn(data.users[0], "featureAccess"), false);
+    assert.equal(result.after.features, null);
+  }
+});
+
+test("creation reserves email addresses case insensitively across active, deleted, pending, disabled and rejected accounts", () => {
+  for (const patch of [{}, { deletedAt: timestamp }, { accessStatus: "PENDING" as const }, { accessStatus: "DISABLED" as const }, { accessStatus: "REJECTED" as const }]) {
+    const { data } = setup();
+    data.users.push({ ...staff, id: "reserved-account", email: "Reserved@EXAMPLE.INVALID", ...patch });
+    rejectsUnchanged(data, () => createUserAccount(data, admin.id, { ...newAccount, email: " RESERVED@example.invalid " }), /このメールアドレスはほかの利用者が使っています/);
+  }
+});
+
+test("creation rejects invalid fields and missing, blank or malformed password hashes before any mutation", () => {
+  for (const patch of [
+    { name: " " }, { name: "x".repeat(101) }, { email: "invalid" }, { email: `${"x".repeat(240)}@example.invalid` },
+    { role: "INVALID" }, { passwordHash: undefined }, { passwordHash: "" }, { passwordHash: "  " }, { passwordHash: null }, { passwordHash: 42 },
+  ]) {
+    const { data } = setup();
+    rejectsUnchanged(data, () => createUserAccount(data, admin.id, { ...newAccount, ...patch } as CreateInput));
+  }
+});
+
+test("creation uses the server-generated audit ID when supplied and rejects collisions", () => {
+  const { data } = setup();
+  const id = "00000000-0000-4000-8000-000000000003";
+  const result = createUserAccount(data, admin.id, { ...newAccount, id });
+  assert.equal(result.id, id); assert.equal(data.users[0].id, id);
+  rejectsUnchanged(data, () => createUserAccount(data, admin.id, { ...newAccount, id, email: "another-new@example.invalid" }), /利用者がすでに存在します/);
+});
+
+test("create and edit reject unknown feature keys and non-boolean states without mutation", () => {
+  for (const features of [{ unknownFeature: true }, { "manage:users": true }, { banking: "on" }, { banking: null }, []]) {
+    const { data, user } = setup();
+    rejectsUnchanged(data, () => createUserAccount(data, admin.id, { ...newAccount, features } as CreateInput));
+    rejectsUnchanged(data, () => updateUserAccount(data, admin.id, edit(user, { features } as Partial<UpdateInput>)));
+  }
+});
+
+test("feature updates normalize full switch states against the saved new role and include safe before and after overrides", () => {
+  const { data, user } = setup({ featureAccess: { banking: true, projects: true } });
+  const result = updateUserAccount(data, admin.id, edit(user, { role: "ACCOUNTING", features: { ...effectiveFeatures("ACCOUNTING"), imports: false } }));
+  assert.deepEqual(result.before.features, { banking: true });
+  assert.deepEqual(result.after.features, { imports: false });
+  assert.deepEqual(user.featureAccess, { imports: false });
+  assert.equal(user.role, "ACCOUNTING");
+  assert.doesNotMatch(JSON.stringify(result), /passwordHash|test-only|sessionVersion/);
+  assert.equal(user.sessionVersion, undefined);
+});
+
+test("old callers retain overrides only with the same role; changing role without features clears them", () => {
+  const { data, user } = setup({ featureAccess: { banking: true, projects: true } });
+  const retained = updateUserAccount(data, admin.id, edit(user, { name: "Synthetic Legacy Edit" }));
+  assert.deepEqual(user.featureAccess, { banking: true });
+  assert.deepEqual(retained.after.features, { banking: true });
+  const cleared = updateUserAccount(data, admin.id, edit(user, { role: "MAIL_EDITOR" }));
+  assert.equal(Object.hasOwn(user, "featureAccess"), false);
+  assert.deepEqual(cleared.before.features, { banking: true }); assert.equal(cleared.after.features, null);
+});
+
+test("restoring defaults removes the stored override field and switching every feature off is allowed", () => {
+  const { data, user } = setup({ featureAccess: { banking: true } });
+  const restored = updateUserAccount(data, admin.id, edit(user, { features: effectiveFeatures(user.role) }));
+  assert.equal(Object.hasOwn(user, "featureAccess"), false); assert.equal(restored.after.features, null);
+  const allOff = Object.fromEntries(memberFeatures.map(({ key }) => [key, false]));
+  updateUserAccount(data, admin.id, edit(user, { features: allOff }));
+  assert.deepEqual(user.featureAccess, { projects: false, receivedInvoices: false, expenses: false });
+  assert.equal(Object.values(userAccountViews(data).find((view) => view.id === user.id)!.features).some(Boolean), false);
+});
+
+test("administrators cannot alter their own switches, including resetting existing overrides", () => {
+  for (const featureAccess of [undefined, { banking: false }]) {
+    const { data } = setup();
+    const user = data.users[0];
+    user.featureAccess = featureAccess;
+    const current = effectiveFeatures(user.role, featureAccess);
+    rejectsUnchanged(data, () => updateUserAccount(data, user.id, edit(user, { features: { ...current, banking: !current.banking } })), /自分の権限と利用状態は、ほかの管理者が変更してください/);
+    if (featureAccess) rejectsUnchanged(data, () => updateUserAccount(data, user.id, edit(user, { features: {} })), /自分の権限と利用状態は、ほかの管理者が変更してください/);
+  }
+});
+
+test("self edits compare normalized overrides and accept unchanged switches and legacy omitted switches", () => {
+  for (const omit of [false, true]) {
+    const { data } = setup();
+    const user = data.users[0];
+    user.featureAccess = { banking: false, projects: true };
+    const result = updateUserAccount(data, user.id, edit(user, { name: "Synthetic Self Features",
+      features: omit ? undefined : effectiveFeatures(user.role, user.featureAccess) }));
+    assert.deepEqual(user.featureAccess, { banking: false });
+    assert.deepEqual(result.before.features, result.after.features);
+    assert.equal(user.name, "Synthetic Self Features");
+  }
+});
+
+test("guest updates clear old overrides whether switches are submitted or omitted", () => {
+  for (const role of ["DESIGNER", "GUEST"] as const) {
+    for (const features of [undefined, { banking: true, projects: true }]) {
+      const { data, user } = setup({ role, featureAccess: { banking: true } });
+      const result = updateUserAccount(data, admin.id, edit(user, { role: "GUEST", features }));
+      assert.equal(Object.hasOwn(user, "featureAccess"), false); assert.equal(result.after.features, null);
+      assert.equal(Object.values(userAccountViews(data).find((view) => view.id === user.id)!.features).some(Boolean), false);
+    }
+  }
+});
+
+test("views expose normalized overrides and all effective states without exposing hashes or mutating stored values", () => {
+  const { data, user } = setup({ featureAccess: { banking: true, projects: true, receivedInvoices: false }, sessionVersion: 7 });
+  data.users.push({ ...staff, id: "test-guest", role: "GUEST", featureAccess: { banking: true } });
+  const before = structuredClone(data);
+  const views = userAccountViews(data);
+  const view = views.find((entry) => entry.id === user.id)!;
+  assert.deepEqual(view.featureAccess, { banking: true, receivedInvoices: false });
+  assert.deepEqual(Object.keys(view.features).sort(), memberFeatures.map(({ key }) => key).sort());
+  assert.equal(view.features.banking, true); assert.equal(view.features.projects, true); assert.equal(view.features.receivedInvoices, false); assert.equal(view.features.expenses, true);
+  const guest = views.find((entry) => entry.id === "test-guest")!;
+  assert.equal(guest.featureAccess, undefined); assert.equal(Object.values(guest.features).some(Boolean), false);
+  assert.doesNotMatch(JSON.stringify(views), /passwordHash|test-only|sessionVersion/);
+  assert.deepEqual(data, before);
+  view.featureAccess!.banking = false;
+  assert.deepEqual(data, before);
 });

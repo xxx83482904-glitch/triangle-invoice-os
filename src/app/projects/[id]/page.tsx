@@ -11,7 +11,8 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { companyFromParam } from "@/lib/company";
 import { formatDate, percent } from "@/lib/format";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -19,7 +20,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:projects")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:projects")) redirect(defaultPathForUser(user));
   const data = await readData();
   const project = scopedProjectsForUser(data, user).find((item) => item.id === id && !item.deletedAt);
   if (!project) notFound();

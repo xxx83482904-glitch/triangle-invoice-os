@@ -259,8 +259,8 @@ test("mail and received invoice forms set or clear the shipment link only when t
 
 test("the import board sits beside received invoices for accounting roles only", () => {
   assert.ok(appNavigation.flatMap((group) => group.items).some((item) => item.href === "/imports"));
-  for (const role of ["ADMIN", "ACCOUNTING", "CHIEF_DESIGNER"] as const) assert.ok(navigationGroups(role).flatMap((group) => group.items).some((item) => item.href === "/imports"), role);
-  for (const role of ["MAIL_EDITOR", "BILLING_EDITOR", "PROJECT_MANAGER", "DESIGNER"] as const) assert.equal(navigationGroups(role).flatMap((group) => group.items).some((item) => item.href === "/imports"), false, role);
+  for (const role of ["ADMIN", "ACCOUNTING", "CHIEF_DESIGNER"] as const) assert.ok(navigationGroups({ role: role }).flatMap((group) => group.items).some((item) => item.href === "/imports"), role);
+  for (const role of ["MAIL_EDITOR", "BILLING_EDITOR", "PROJECT_MANAGER", "DESIGNER"] as const) assert.equal(navigationGroups({ role: role }).flatMap((group) => group.items).some((item) => item.href === "/imports"), false, role);
 });
 
 function boardDocument(id: string, references: ImportReferences = {}, extra: Partial<ImportBoardDocument> = {}): ImportBoardDocument {

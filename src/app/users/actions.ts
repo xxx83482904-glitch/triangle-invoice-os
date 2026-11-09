@@ -1,16 +1,46 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 import { issueSession, requireUser } from "@/lib/auth";
 import { assignCompanyCard } from "@/lib/card-receipts";
+import { memberFeatures } from "@/lib/member-features";
 import { assertCan } from "@/lib/rbac";
 import { mutateData } from "@/lib/store";
 import { approvalRoles, reviewRegistration } from "@/lib/user-access";
-import { editableRoles, endUserSessions, updateUserAccount, userAccountPasswordSchema, type UserAccountStatus } from "@/lib/user-admin";
+import { createUserAccount, editableRoles, endUserSessions, updateUserAccount, userAccountPasswordSchema, type UserAccountStatus } from "@/lib/user-admin";
 import { generateAgentTokenSecret, issueAgentToken, revokeAgentToken } from "@/lib/agent-tokens";
 import type { ApiTokenScope } from "@/lib/types";
+
+function featureStatesFromForm(formData: FormData) {
+  // New forms send every catalog key, including disabled switches; old forms send none.
+  const entries = memberFeatures.map(({ key }) => [key, formData.get(`feature:${key}`)] as const);
+  if (entries.every(([, value]) => value === null)) return undefined;
+  const stateSchema = z.enum(["on", "off"], "使える機能の設定を確認してください");
+  return Object.fromEntries(entries.map(([key, value]) => [key, stateSchema.parse(value) === "on"]));
+}
+
+export async function createUserAccountAction(_previous: { error: string; success?: boolean }, formData: FormData) {
+  const actor = await requireUser();
+  assertCan(actor, "manage:users");
+  try {
+    const checked = userAccountPasswordSchema.safeParse(String(formData.get("password") ?? ""));
+    if (!checked.success) return { error: checked.error.issues[0].message };
+    const features = featureStatesFromForm(formData);
+    const passwordHash = await hash(checked.data, 12);
+    const id = randomUUID();
+    await mutateData(actor.id, "CREATE_USER_ACCOUNT", "User", id, (data) => createUserAccount(data, actor.id, {
+      id, name: String(formData.get("name") ?? ""), email: String(formData.get("email") ?? ""),
+      role: String(formData.get("role")) as (typeof editableRoles)[number], passwordHash, features,
+    }), undefined, { undoable: false });
+  } catch (error) {
+    return { error: error instanceof z.ZodError ? error.issues[0].message : error instanceof Error ? error.message : "メンバーを追加できませんでした。" };
+  }
+  revalidatePath("/users");
+  return { error: "", success: true };
+}
 
 export async function updateUserAccountAction(_previous: { error: string; success?: boolean }, formData: FormData) {
   const actor = await requireUser();
@@ -22,6 +52,7 @@ export async function updateUserAccountAction(_previous: { error: string; succes
     // Only return the validation message; never return the submitted password.
     const checked = password ? userAccountPasswordSchema.safeParse(password) : undefined;
     if (checked && !checked.success) return { error: checked.error.issues[0].message };
+    const features = featureStatesFromForm(formData);
     const passwordHash = password ? await hash(password, 12) : undefined;
     await mutateData(actor.id, "UPDATE_USER_ACCOUNT", "User", id, (data) => {
       const result = updateUserAccount(data, actor.id, {
@@ -29,7 +60,7 @@ export async function updateUserAccountAction(_previous: { error: string; succes
         name: String(formData.get("name") ?? ""), email: String(formData.get("email") ?? ""),
         role: String(formData.get("role")) as (typeof editableRoles)[number],
         status: String(formData.get("status")) as UserAccountStatus,
-        passwordHash,
+        passwordHash, features,
       });
       // Capture this mutation's version, without putting it or the hash in the audit result.
       if (id === actor.id && result.passwordChanged) currentDevice = data.users.find((user) => user.id === actor.id);

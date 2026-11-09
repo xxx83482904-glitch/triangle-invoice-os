@@ -8,7 +8,7 @@ import { effectiveOcrConfig } from "@/lib/ocr-settings";
 import { extractDocumentText, inferReceivedInvoice, type ExtractedText } from "@/lib/ocr";
 import type { AppData, ExpensePaidWith, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 type Option = { value: string; label: string };
 
 // What the model may return. Everything is re-validated before it reaches the form.

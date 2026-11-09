@@ -32,7 +32,7 @@ const schema = z.discriminatedUnion("mode", [
 export type PayrollSettingsInput = z.input<typeof schema>;
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
 
-export function savePayrollSettings(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: PayrollSettingsInput) {
+export function savePayrollSettings(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: PayrollSettingsInput) {
   assertCompanyAccess(actor, company); assertCan(actor, "manage:banking");
   const value = schema.parse(input), current = (data.payrollSettings || []).find((row) => row.company === company);
   if ((current?.updatedAt || "") !== value.updatedAt) throw new Error("対象科目の設定が更新されています。再読込してから選び直してください");

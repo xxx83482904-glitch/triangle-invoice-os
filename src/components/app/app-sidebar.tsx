@@ -13,9 +13,8 @@ import { UndoButton } from "@/components/app/undo-button";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { sidebarNavigation } from "@/lib/app-navigation";
-import { canRole, roleLabel } from "@/lib/rbac";
+import { can, roleLabel, type UserAccess } from "@/lib/rbac";
 import { sidebarAttribute, sidebarMediaQuery, sidebarStorageKey } from "@/lib/sidebar-preference";
-import type { UserRole } from "@/lib/types";
 import { cx } from "@/utils/cx";
 
 const iconButton = "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground-icon-secondary hover:bg-tile focus-visible:outline-2 focus-visible:outline-ring";
@@ -36,12 +35,12 @@ function subscribeSidebar(listener: () => void) {
   };
 }
 
-export function AppSidebar({ name, role, canUndo }: { name: string; role: UserRole; canUndo: boolean }) {
+export function AppSidebar({ name, access, canUndo }: { name: string; access: UserAccess; canUndo: boolean }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const expanded = useSyncExternalStore(subscribeSidebar, sidebarExpanded, () => false);
-  const groups = sidebarNavigation(pathname, new URLSearchParams(params.toString()), role);
-  const person = `${name} / ${roleLabel(role)}`;
+  const groups = sidebarNavigation(pathname, new URLSearchParams(params.toString()), access);
+  const person = `${name} / ${roleLabel(access.role)}`;
 
   useLayoutEffect(() => {
     // Development remounts can clear the attribute set before paint.
@@ -62,19 +61,19 @@ export function AppSidebar({ name, role, canUndo }: { name: string; role: UserRo
     <aside className="app-sidebar hidden shrink-0 flex-col lg:flex" aria-label="ワークスペース">
       <div className="app-sidebar-row flex shrink-0 items-center gap-2">
         <div className="app-sidebar-row flex min-w-0 items-center gap-2">
-          <ScopedBrandLink compact role={role} />
+          <ScopedBrandLink compact access={access} />
           <div data-sidebar-collapsed>
             {/* Reset the popup when its trigger is hidden. */}
             <Popover key={expanded ? "expanded" : "collapsed"}>
               <PopoverTrigger asChild>
                 <button type="button" className={iconButton} title="対象会社" aria-label="対象会社"><Building2 className="size-4" aria-hidden /></button>
               </PopoverTrigger>
-              <PopoverContent side="right" align="start" className="w-48 p-2"><CompanySwitch role={role} /></PopoverContent>
+              <PopoverContent side="right" align="start" className="w-48 p-2"><CompanySwitch role={access.role} /></PopoverContent>
             </Popover>
           </div>
           <div data-sidebar-expanded className="min-w-0">
             <p className="text-body-medium text-text-primary">TRIANGLE</p>
-            <MobileCompanySwitch role={role} />
+            <MobileCompanySwitch role={access.role} />
           </div>
         </div>
         <div className="app-sidebar-row app-sidebar-tools ml-auto flex shrink-0 items-center">
@@ -149,8 +148,8 @@ export function AppSidebar({ name, role, canUndo }: { name: string; role: UserRo
 
       <div className="app-sidebar-row flex shrink-0 items-center gap-2 border-t border-separator-border pt-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-background-tertiary-default text-caption-1-medium text-text-primary" title={person} aria-label={person}>{Array.from(name)[0] || "利"}</span>
-        <div data-sidebar-expanded className="min-w-0 flex-1" title={person}><p className="truncate text-body-medium text-text-primary">{name}</p><p className="truncate text-caption-1-regular text-text-tertiary">{roleLabel(role)}</p></div>
-        {canRole(role, "undo:changes") && <UndoButton compact disabled={!canUndo} />}
+        <div data-sidebar-expanded className="min-w-0 flex-1" title={person}><p className="truncate text-body-medium text-text-primary">{name}</p><p className="truncate text-caption-1-regular text-text-tertiary">{roleLabel(access.role)}</p></div>
+        {can(access, "undo:changes") && <UndoButton compact disabled={!canUndo} />}
         <form action={logoutAction}><Button variant="ghost" size="icon" className="size-9 rounded-lg" title={`${person} / ログアウト`} aria-label="ログアウト"><LogOut className="size-4" aria-hidden /></Button></form>
       </div>
     </aside>

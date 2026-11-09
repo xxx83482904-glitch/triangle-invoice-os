@@ -14,7 +14,7 @@ export type DashboardDocument = {
   timing: "overdue" | "soon" | "later" | "undated"; paymentMismatch: boolean;
 };
 
-export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, today: string, requestedYear?: string) {
+export function dashboardSummary(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, today: string, requestedYear?: string) {
   assertCan(user, "view:dashboard");
   assertCompanyAccess(user, company);
   if (!isBankDate(today)) throw new Error("基準日が不正です");

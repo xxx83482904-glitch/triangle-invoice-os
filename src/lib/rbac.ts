@@ -1,103 +1,25 @@
 import type { User, UserRole } from "@/lib/types";
+import { effectivePermissions } from "@/lib/member-features";
+import { rolePermissions } from "@/lib/role-permissions";
 import type { CompanyScope } from "@/lib/company";
 
-const permissions = {
-  ADMIN: [
-    "submit:expenses",
-    "manage:expenses",
-    "view:documents",
-    "view:dashboard",
-    "view:projects",
-    "view:mailSorter",
-    "view:issuedInvoices",
-    "view:receivedInvoices",
-    "view:payments",
-    "view:banking",
-    "manage:banking",
-    "view:partners",
-    "view:reports",
-    "manage:users",
-    "manage:settings",
-    "manage:clients",
-    "manage:vendors",
-    "manage:projects",
-    "manage:issuedInvoices",
-    "manage:incomePayments",
-    "manage:mailSorter",
-    "manage:receivedInvoices",
-    "view:imports",
-    "manage:imports",
-    "manage:expensePayments",
-    "export:csv",
-    "undo:changes",
-    "view:all",
-  ],
-  ACCOUNTING: [
-    "submit:expenses",
-    "manage:expenses",
-    "view:documents",
-    "view:dashboard",
-    "view:projects",
-    "view:mailSorter",
-    "view:issuedInvoices",
-    "view:receivedInvoices",
-    "view:payments",
-    "view:banking",
-    "manage:banking",
-    "view:partners",
-    "view:reports",
-    "manage:clients",
-    "manage:vendors",
-    "manage:projects",
-    "manage:issuedInvoices",
-    "manage:incomePayments",
-    "manage:mailSorter",
-    "manage:receivedInvoices",
-    "view:imports",
-    "manage:imports",
-    "manage:expensePayments",
-    "export:csv",
-    "undo:changes",
-    "view:all",
-  ],
-  CHIEF_DESIGNER: [
-    "submit:expenses",
-    "view:documents",
-    "view:projects",
-    "view:receivedInvoices",
-    "view:imports",
-    "view:assigned",
-    "approve:receivedInvoices",
-    "upload:receivedInvoices",
-    "comment:project",
-  ],
-  PROJECT_MANAGER: [
-    "submit:expenses",
-    "view:documents",
-    "view:projects",
-    "view:issuedInvoices",
-    "view:assigned",
-    "manage:clients",
-    "manage:projects",
-    "manage:issuedInvoices",
-    "comment:project",
-  ],
-  MAIL_EDITOR: ["view:documents", "view:mailSorter", "manage:mailSorter", "submit:expenses"],
-  BILLING_EDITOR: ["view:issuedInvoices", "manage:issuedInvoices", "view:partners", "manage:clients", "create:invoiceProjects", "export:issuedInvoices"],
-  DESIGNER: ["view:assigned", "upload:receivedInvoices", "comment:project", "submit:expenses"],
-  GUEST: ["guest:createIssuedInvoices"],
-} satisfies Record<UserRole, string[]>;
+/** Safe to pass to client components; never pass a full stored User. */
+export type UserAccess = Pick<User, "role" | "featureAccess">;
 
-export function canRole(role: UserRole, permission: string) {
-  if (permission === "manage:invoiceProjects") return permissions[role].includes("manage:projects") || permissions[role].includes("create:invoiceProjects");
-  if (permission === "view:estimates") return permissions[role].includes("view:issuedInvoices");
-  if (permission === "manage:estimates") return permissions[role].includes("manage:issuedInvoices");
-  return permissions[role].includes(permission);
+function hasPermission(permissions: ReadonlySet<string>, permission: string) {
+  if (permission === "manage:invoiceProjects") return permissions.has("manage:projects") || permissions.has("create:invoiceProjects");
+  if (permission === "view:estimates") return permissions.has("view:issuedInvoices");
+  if (permission === "manage:estimates") return permissions.has("manage:issuedInvoices");
+  return permissions.has(permission);
 }
 
-export function can(user: Pick<User, "role"> | null, permission: string) {
-  if (!user) return false;
-  return canRole(user.role, permission);
+/** Role previews only. Use can(access, permission) for a signed-in person. */
+export function canRole(role: UserRole, permission: string) {
+  return hasPermission(new Set(rolePermissions[role]), permission);
+}
+
+export function can(user: UserAccess | null, permission: string) {
+  return Boolean(user && hasPermission(effectivePermissions(user.role, user.featureAccess), permission));
 }
 
 export function defaultPathForRole(role: UserRole) {
@@ -126,7 +48,7 @@ export function roleLabel(role: UserRole) {
   }[role];
 }
 
-export function assertCan(user: Pick<User, "role"> | null, permission: string) {
+export function assertCan(user: UserAccess | null, permission: string) {
   if (!can(user, permission)) throw new Error("権限がありません");
 }
 
@@ -144,6 +66,6 @@ export function assertCompanyAccess(user: Pick<User, "role">, company: CompanySc
   if (!canAccessCompany(user, company)) throw new Error("日本版では日本のデータのみ操作できます");
 }
 
-export function canEditOptionGroup(user: Pick<User, "role">, group: string) {
+export function canEditOptionGroup(user: UserAccess, group: string) {
   return can(user, "manage:clients") && (user.role !== "BILLING_EDITOR" || ["ISSUED_INVOICE_STATUS", "TAX_RATE"].includes(group));
 }

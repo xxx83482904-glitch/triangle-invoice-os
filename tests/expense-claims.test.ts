@@ -254,8 +254,8 @@ test("category options include only active expense categories and label children
 });
 
 test("expense navigation and permissions stay limited to the approved roles", () => {
-  for (const role of ["ADMIN", "DESIGNER", "ACCOUNTING", "PROJECT_MANAGER", "CHIEF_DESIGNER", "MAIL_EDITOR"] as const) assert.ok(navigationGroups(role).some((group) => group.items.some((item) => item.href === "/expenses")));
-  for (const role of ["BILLING_EDITOR", "GUEST"] as const) assert.equal(navigationGroups(role).some((group) => group.items.some((item) => item.href === "/expenses")), false);
+  for (const role of ["ADMIN", "DESIGNER", "ACCOUNTING", "PROJECT_MANAGER", "CHIEF_DESIGNER", "MAIL_EDITOR"] as const) assert.ok(navigationGroups({ role: role }).some((group) => group.items.some((item) => item.href === "/expenses")));
+  for (const role of ["BILLING_EDITOR", "GUEST"] as const) assert.equal(navigationGroups({ role: role }).some((group) => group.items.some((item) => item.href === "/expenses")), false);
   assert.equal(can(des, "manage:expenses"), false); assert.equal(can(acct, "manage:expenses"), true);
 });
 

@@ -6,7 +6,7 @@ import { documentDateSchema, estimateListEditSchema, estimateSchema, estimateTot
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, Estimate, IssuedInvoice, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 export type EstimateTarget = { id: string; updatedAt: string };
 export type EstimateStatusUpdate = EstimateTarget & { status: Exclude<Estimate["status"], "CONVERTED"> };
 export type EstimateConversion = EstimateTarget & { issueDate: string; dueDate: string; transactionDate: string };

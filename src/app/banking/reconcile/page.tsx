@@ -7,7 +7,8 @@ import { isReconcileTodo, RECONCILE_TODO_STATUS } from "@/lib/bank-reconcile-tod
 import { invoiceAccountScopeIssue } from "@/lib/bank-reconciliation-accounts";
 import { bankAccountFilter } from "@/lib/bank-account-options";
 import { companyFromParam } from "@/lib/company";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 import { prepareBankAi } from "@/lib/bank-ai";
 import { bankDocumentReview } from "@/lib/bank-review";
@@ -18,7 +19,7 @@ import { effectiveOcrConfig } from "@/lib/ocr-settings";
 export default async function BankReconciliationPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:banking")) redirect(defaultPathForUser(user));
   const params = await searchParams, company = companyFromParam(params.company), data = await readDataForRequest();
   const overview = bankReconciliationOverview(data, company);
   const filters = { account: params.account || "", month: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month || "") ? params.month! : "", status: ["all", "matched", "conflict", "excluded", "not_required", ...(company === "JAPAN" ? [RECONCILE_TODO_STATUS] : [])].includes(params.status || "") ? params.status! : "unmatched", query: (params.q || "").slice(0, 200), invoice: params.invoice || "" };

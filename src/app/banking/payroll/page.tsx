@@ -7,15 +7,16 @@ import { bankToday } from "@/lib/banking";
 import { companyFromParam } from "@/lib/company";
 import { payrollPeriod, payrollSummary, payrollYearCookieName } from "@/lib/payroll-summary";
 import { payrollSettingsView } from "@/lib/payroll-settings";
-import { can, canAccessCompany, defaultPathForRole } from "@/lib/rbac";
+import { can, canAccessCompany } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 
 export default async function BankPayrollPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:banking")) redirect(defaultPathForUser(user));
   const params = await searchParams, company = companyFromParam(params.company);
-  if (!canAccessCompany(user, company)) redirect(defaultPathForRole(user.role));
+  if (!canAccessCompany(user, company)) redirect(defaultPathForUser(user));
   const data = await readDataForRequest();
   const remembered = (await cookies()).get(payrollYearCookieName(user.id, company))?.value;
   const period = payrollPeriod(data, company, bankToday(), params.year, remembered);

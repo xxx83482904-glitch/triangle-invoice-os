@@ -20,7 +20,7 @@ export function forecastDefaults(account: BankAccount, month: string): BankForec
     minimumBalance: saved?.minimumBalance ?? 0, incomePercent: saved?.incomePercent ?? 0, expensePercent: saved?.expensePercent ?? 0 };
 }
 
-export function saveBankForecastSettings(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, id: string, updatedAt: string, input: BankForecastSettings, today: string) {
+export function saveBankForecastSettings(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, id: string, updatedAt: string, input: BankForecastSettings, today: string) {
   assertBankAccess(actor, company);
   const settings = forecastSettingsSchema.parse(input);
   if (!isBankDate(today) || settings.balanceMonth !== today.slice(0, 7)) throw new Error("月が変わりました。画面を更新して月初残高を確認してください");

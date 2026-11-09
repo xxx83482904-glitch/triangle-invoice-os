@@ -66,7 +66,7 @@ export function transferFeeDifference(a: BankTransaction, b: BankTransaction) {
   return difference === 0 ? 0 : difference > 0 && difference <= cents(TRANSFER_FEE_LIMIT) ? difference / 100 : -1;
 }
 
-export function confirmBankTransfer(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: TransferInput, today = bankToday()) {
+export function confirmBankTransfer(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: TransferInput, today = bankToday()) {
   assertBankAccess(actor, company);
   const value = transferSchema.parse(input);
   const first = data.bankTransactions.find((row) => row.id === value.transactionId), second = data.bankTransactions.find((row) => row.id === value.counterpartId);
@@ -85,7 +85,7 @@ export function confirmBankTransfer(data: AppData, actor: Pick<User, "id" | "rol
   return { id: link.id };
 }
 
-export function removeBankTransfer(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, id: string, updatedAt: string) {
+export function removeBankTransfer(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, id: string, updatedAt: string) {
   assertBankAccess(actor, company);
   const link = active(data).find((row) => row.id === id && row.company === company);
   if (!link || link.updatedAt !== updatedAt) throw new Error("照合記録が更新されています");

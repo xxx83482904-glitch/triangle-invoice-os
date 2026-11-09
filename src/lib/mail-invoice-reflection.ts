@@ -5,7 +5,7 @@ import { assertReceivedPaidAllowed } from "@/lib/payment-records";
 import { resolveMailLink } from "@/lib/mail-links";
 import type { AppData, ReceivedInvoice, ReceivedInvoiceStatus, User } from "@/lib/types";
 
-export function reflectMailInvoice(data: AppData, actor: Pick<User, "id" | "role">, form: FormData, now = new Date().toISOString()) {
+export function reflectMailInvoice(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, form: FormData, now = new Date().toISOString()) {
   assertCompanyAccess(actor, "JAPAN");
   if (!can(actor, "manage:mailSorter") && !can(actor, "manage:receivedInvoices") && !can(actor, "upload:receivedInvoices")) throw new Error("権限がありません。");
   const field = (name: string) => String(form.get(name) ?? "").trim();
