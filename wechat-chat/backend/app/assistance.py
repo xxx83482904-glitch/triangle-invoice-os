@@ -17,7 +17,7 @@ class LocalRulesProvider:
         incoming = [m for m in messages if m["direction"] == "incoming"]
         source = incoming[-1] if incoming else None
         last = messages[-1] if messages else None
-        unresolved = any(m["direction"] == "outgoing" and m.get("message_type") != "ocr_text" and m["delivery_status"] in ("pending", "sending", "unknown", "failed") for m in messages)
+        unresolved = any(m["direction"] == "outgoing" and m.get("message_type") != "ocr_text" and m.get("identity_quality") != "uia_runtime" and m["delivery_status"] in ("pending", "sending", "unknown", "failed") for m in messages)
         confirmed = max((m["id"] for m in messages if m["direction"] == "outgoing" and m["delivery_status"] == "confirmed"), default=0)
         text = source["content"] if source else ""
         question = bool(re.search(r"[?？]|どう|お願い|ください|確認して|教えて|できます|能否|请|麻烦", text))

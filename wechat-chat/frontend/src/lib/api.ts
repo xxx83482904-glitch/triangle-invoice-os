@@ -3,6 +3,7 @@ export type Chat = {
   last_message_at: string | null; sync_status: string; history_note: string;
   member_count: number | null; unread_count: number; last_message: string | null;
   last_sync_at: string | null; connection_status: string; last_delivery_status: string;
+  last_identity_quality?: string; last_timestamp_quality?: string;
 };
 export type Message = {
   id: number; chat_id: string; content: string; sender_name: string; sender_id: string;

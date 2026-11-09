@@ -59,7 +59,9 @@ class Database:
     def chats(self):
         return self.all("""SELECT c.*, s.last_sync_at,s.connection_status,s.error_message,
            (SELECT content FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_message,
-           (SELECT delivery_status FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_delivery_status
+           (SELECT delivery_status FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_delivery_status,
+           (SELECT identity_quality FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_identity_quality,
+           (SELECT timestamp_quality FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_timestamp_quality
            FROM chats c LEFT JOIN sync_state s ON s.chat_id=c.id ORDER BY c.last_message_at DESC, c.name""")
 
     def chat(self, ident):
@@ -81,9 +83,15 @@ class Database:
             return False
         stamp = now()
         with self.lock, self.conn:
+            if message.source_key:
+                previous = self.one("SELECT content,direction,sender_name,message_type FROM messages WHERE chat_id=? AND source_key=?", (chat["id"], message.source_key))
+                if previous:
+                    if tuple(previous[k] for k in ("content", "direction", "sender_name", "message_type")) != (message.content, message.direction, message.sender_name, message.message_type):
+                        raise ValueError("source_observation_conflict")
+                    return False
             cur = self.conn.execute("""INSERT OR IGNORE INTO messages
-             (chat_id,external_message_id,dedupe_key,sender_id,sender_name,direction,content,message_type,timestamp,observed_at,timestamp_quality,delivery_status,identity_quality)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (chat["id"], message.external_message_id, self.fingerprint(message), message.sender_id, message.sender_name, message.direction, message.content, message.message_type, message.timestamp, stamp, message.timestamp_quality, "received" if message.direction == "incoming" else "confirmed", "external" if message.external_message_id else "fingerprint"))
+             (chat_id,external_message_id,dedupe_key,sender_id,sender_name,direction,content,message_type,timestamp,observed_at,timestamp_quality,delivery_status,identity_quality,source_key)
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (chat["id"], message.external_message_id, self.fingerprint(message), message.sender_id, message.sender_name, message.direction, message.content, message.message_type, message.timestamp, stamp, message.timestamp_quality, message.delivery_status or ("received" if message.direction == "incoming" else "confirmed"), message.identity_quality or ("external" if message.external_message_id else "fingerprint"), message.source_key))
             if cur.rowcount:
                 self.conn.execute("UPDATE chats SET last_message_at=MAX(COALESCE(last_message_at,''),?),unread_count=unread_count+? WHERE id=?", (message.timestamp or stamp, int(message.direction == "incoming"), chat["id"]))
         return bool(cur.rowcount)

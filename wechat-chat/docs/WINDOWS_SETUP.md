@@ -52,6 +52,12 @@ cd ..\backend
 
 `dev.ps1` でFastAPI 8765とNext.js 3100を起動します。フロントエンドはホットリロード、Pythonコード変更後は停止・再起動してください。開発サーバーをリモート公開しないでください。
 
+## 無料wxauto4による実会話の読み取り
+
+[無料Readerの手順](WXAUTO4_READER.md) に従って隔離依存を導入し、`WECHAT_ADAPTER=wxauto4` と専用の `data/wxauto4.sqlite3` を設定します。現在はWeixin 4.1.8.107の英語UIで実機検証済みです。PCで開いた会話のテキストだけを取り込み、実送信は無効です。
+
+WeChat自体の再起動・アカウント変更後は自動で履歴を結合せず停止します。再バインドは未対応です。アプリだけの再起動では保存済み履歴・内部IDを保持します。Readerのキャッシュにも本文が含まれるため、DBと同様に `.runtime/` を非公開で保管してください。
+
 ## Windows版WeChat診断
 
 ```powershell

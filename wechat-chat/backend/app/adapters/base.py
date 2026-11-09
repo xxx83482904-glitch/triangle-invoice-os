@@ -30,6 +30,9 @@ class Message:
     message_type: str = "text"
     occurrence: str = ""  # stable UI occurrence marker, when available
     timestamp_quality: str = "exact"
+    source_key: str | None = None  # Local observation identity, never a WeChat message ID.
+    identity_quality: str | None = None
+    delivery_status: str | None = None
 
 
 @dataclass

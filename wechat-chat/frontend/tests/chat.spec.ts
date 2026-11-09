@@ -15,7 +15,8 @@ async function checkFreeTrialEvidence(page: Page) {
   }}}));
   await page.getByRole("button", {name:"接続状態・設定",exact:true}).click();
   const record = page.getByRole("region", {name:"無料版の検証記録"});
-  await expect(record).toContainText("実際の会話は同期されていません");
+  await expect(record).toContainText("標準設定による過去の試験");
+  await expect(record).toContainText("現在のReaderの接続状態とは別");
   await expect(record).toContainText("現在の接続状態ではなく");
   await expect(record.getByText("会話画面を認識できず",{exact:true})).toHaveCount(3);
   await expect(record).toContainText("4.1.8.107");
@@ -93,6 +94,45 @@ async function login(page: Page) {
   await page.getByRole("button", {name:"チャット一覧", exact:true}).click();
 }
 async function chat(page: Page, id="mock:lin") { await page.getByTestId(`chat-${id}`).click(); }
+
+test("read-only WeChat observations show provenance and unknown delivery on mobile", async ({page}) => {
+  await page.setViewportSize({width:390,height:844});
+  await page.route("**/api/status", async route => {
+    const response = await route.fetch();
+    await route.fulfill({json:{...await response.json(),mode:"wxauto4",state:"connected",can_read:true,can_send:false}});
+  });
+  await page.route(/\/api\/chats\/[^/]+\/messages(?:\?.*)?$/, async route => {
+    const response = await route.fetch();
+    const data = await response.json();
+    await route.fulfill({json:{...data,messages:data.messages.slice(-2).map((message:Record<string,unknown>,index:number) => ({
+      ...message,timestamp:null,timestamp_quality:"unavailable",identity_quality:"uia_runtime",
+      direction:index ? "outgoing" : "incoming",delivery_status:index ? "unknown" : "received",
+    }))}});
+  });
+  await login(page);
+  await expect(page.getByText("無料wxauto4・読取",{exact:true})).toBeVisible();
+  await chat(page,"mock:studio");
+  await expect(page.locator(".message-list")).toContainText("WeChat画面から取得");
+  await expect(page.locator(".message-list")).toContainText("日時未取得");
+  await expect(page.locator(".message-list")).toContainText("配信結果未取得");
+  await expect(page.getByRole("button",{name:"メッセージを送信",exact:true})).toBeDisabled();
+  await expect(page.getByText("実送信は未対応です",{exact:true})).toBeVisible();
+  await page.setViewportSize({width:320,height:720});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button",{name:"一覧に戻る",exact:true}).click();
+  await page.route("**/api/wechat/diagnostics", route => route.fulfill({json:{
+    active_adapter:"wxauto4",checked_at:new Date().toISOString(),
+    connection:{state:"limited",can_read:false,can_send:false,version:"4.1.8.107",detail:"汎用診断では本文を取得しません"},
+    active_connection:{state:"connected",mode:"wxauto4",can_read:true,can_send:false,version:"4.1.8.107",detail:"表示中のテキストのみ読み取り中",limitations:[]},
+    diagnostic:{state:"reader_not_implemented",node_count:100,interactive_node_count:30},
+  }}));
+  await page.getByRole("button",{name:"接続状態・設定",exact:true}).click();
+  const diagnostic=page.locator(".wechat-diagnostics");
+  await diagnostic.getByRole("button",{name:"WeChatの読み取りを診断",exact:true}).click();
+  await expect(diagnostic.getByText("読取専用",{exact:true})).toBeVisible();
+  await expect(diagnostic.getByRole("status")).toHaveText("表示中のテキストのみ読み取り中");
+  await expect(diagnostic.getByText("限定範囲で有効",{exact:true})).toBeVisible();
+});
 
 test.beforeEach(async ({request}) => {
   // One isolated Mock server is shared by this suite; reset transient fault state.

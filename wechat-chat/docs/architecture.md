@@ -43,6 +43,9 @@ flowchart LR
     Engine --> Mock[Mock Adapter]
     Engine --> UIA[Windows UIA診断 Adapter]
     Engine --> OCR[手動OCR補助 Adapter]
+    Engine --> Reader[無料wxauto4 読み取り専用Adapter]
+    Reader --> Worker[隔離worker / UI部品の照合]
+    Worker --> WX
     UIA --> WX[Windows WeChat]
     OCR --> WX
     Trial[隔離wxauto4実機試験] --> WX
@@ -53,6 +56,12 @@ flowchart LR
 `WeChatAdapter` のconnect/disconnect/get_chats/get_messages/watch_messages/send_message/get_connection_status契約、共通の `Connection` と `Receipt` を維持します。ライブラリ固有オブジェクトをRESTへ露出しません。実際のReader/Senderが検証できるまでUIAは送受信を無効にし、OCRは確認付きの手動取り込みに限定します。
 
 無料版試験は常駐処理と分離しています。既定のログ・テレメトリー設定をimport前に無効化し、Pythonネットワーク操作を拒否し、各試験に時間上限を設けます。結果は診断用で、DBへの取り込み・Adapterの切替・送信許可を行いません。実測と再実行は [無料版の検証記録](FREE_WXAUTO4_TRIAL.md) を参照してください。
+
+## 無料wxauto4 Readerの追加
+
+英語UIの固定ラベル・辞書に互換処理を加え、`GetSession`、`ChatInfo`、実際のテキスト解析を再利用します。プロフィール取得失敗時は自分のID・表示名を未取得に保ち、送信を有効にしません。会話の情報・送信者・方向を構造化した限定IPCを共通Adapterへ渡します。本文は非公開パイプ・DB・読み取りキャッシュだけに保持し、診断やログへ出しません。
+
+既存Engine・SQLite・WebSocket・認証・UIを利用し、新しいBotやサーバーは作りません。マイグレーション006で `source_key` と一意制約を追加し、WeChat外部IDとは区別します。現在の会話を読み取るだけで、Siverの自動返信・会話巡回・Plusの監視機能を有効にしません。詳細と限界は [無料Reader](WXAUTO4_READER.md) を参照してください。
 
 ## 既存APIと追加開発の境界
 
@@ -65,7 +74,7 @@ flowchart LR
 | タスク候補・保存・検索 | 本人確認後の保存、元発言へのリンク、保存済み本文検索を実装 |
 | 画像・ファイル送受信 | 未実装。Plus側のAPI記載を無料版で検証済みと扱わない |
 
-Phase 1の調査、既存のPhase 2–3のMock基盤に加え、AI API・翻訳表示・返信案・要約・決定事項・タスク候補を実装しました。無料版の実機初期化は失敗。実AIは合成ProviderとHTTPモックによるテストまでで、疎通・品質確認済みとは扱いません。
+Phase 1の調査、既存のPhase 2–3のMock基盤に加え、AI API・翻訳表示・返信案・要約・決定事項・タスク候補を実装しました。無料版の標準設定は失敗しましたが、英語UI互換Readerでは実本文の取得・保存・表示に成功しました。実AIは合成ProviderとHTTPモックによるテストまでで、疎通・品質確認済みとは扱いません。
 
 AIはサーバー側環境変数にキーを置き、明示的に選択した最小限の会話だけを送ります。翻訳・候補・要約・タスク抽出を独立Providerにし、生成処理から送信キューやタスク保存を直接呼ばせません。ユーザーが内容を確認し、送信・タスク追加をそれぞれ操作します。方針は [AI拡張](AI_EXTENSION.md)。
 

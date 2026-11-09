@@ -80,6 +80,11 @@ class Engine:
         while True:
             try:
                 async for message in self.adapter.watch_messages():
+                    if not self.db.one("SELECT id FROM chats WHERE external_id=?", (message.chat_id,)):
+                        # A real reader can discover the conversation the owner
+                        # just opened after startup. Persist its verified metadata
+                        # before ingesting the first event for that conversation.
+                        await self.sync()
                     if self.db.ingest(message):
                         chat = self.db.one("SELECT id FROM chats WHERE external_id=?", (message.chat_id,))
                         if chat:

@@ -18,6 +18,7 @@ from .adapters.mock import MockWeChatAdapter
 from .adapters.base import now
 from .adapters.windows_uia import WindowsUIAAdapter
 from .adapters.windows_ocr import WindowsOCRAdapter
+from .adapters.windows_wxauto4 import WindowsWxauto4Adapter
 from .ocr_inbox import OcrInbox
 from .ocr_routes import register_ocr_routes
 from .assistance import LocalRulesProvider, attention_snapshot
@@ -82,6 +83,8 @@ def create_app(settings=None, adapter=None, ai_provider=None):
                 selected = MockWeChatAdapter()
             elif settings.adapter == "windows-ocr":
                 selected = WindowsOCRAdapter()
+            elif settings.adapter == "wxauto4":
+                selected = WindowsWxauto4Adapter(settings.poll_seconds)
             else:
                 selected = WindowsUIAAdapter(settings.poll_seconds)
         engine = Engine(db, selected, settings)
@@ -179,7 +182,9 @@ def create_app(settings=None, adapter=None, ai_provider=None):
         security.rate_limit("wechat-diagnostics", 6)
         async with lock:
             diagnostic = await asyncio.to_thread(WindowsUIAAdapter._probe)
-        return {"connection": asdict(WindowsUIAAdapter.describe(diagnostic)), "diagnostic": diagnostic, "checked_at": now(), "active_adapter": settings.adapter}
+        return {"connection": asdict(WindowsUIAAdapter.describe(diagnostic)), "diagnostic": diagnostic,
+                "checked_at": now(), "active_adapter": settings.adapter,
+                "active_connection": await app.state.engine.status()}
 
     @api.get("/wechat/free-trial")
     async def wechat_free_trial():
