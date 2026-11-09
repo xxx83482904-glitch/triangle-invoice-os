@@ -7,7 +7,7 @@ import { jwtVerify, SignJWT } from "jose";
 import { cache } from "react";
 import { readData, readDataForRequest } from "@/lib/store";
 import type { User } from "@/lib/types";
-import { isActiveUser } from "@/lib/user-access";
+import { isActiveUser, sessionVersionMatches } from "@/lib/user-access";
 
 import { SESSION_COOKIE_MAX_AGE, SESSION_COOKIE_NAME as cookieName } from "@/lib/session-cookie";
 
@@ -38,11 +38,17 @@ export async function signIn(email: string, password: string) {
   const ok = await compare(password, user.passwordHash);
   if (!ok) return null;
 
+  await issueSession(user);
+  return user;
+}
+
+export async function issueSession(user: SessionUser & Pick<User, "sessionVersion">) {
   const token = await new SignJWT({
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    sv: user.sessionVersion ?? 0,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -56,8 +62,6 @@ export async function signIn(email: string, password: string) {
     path: "/",
     maxAge: SESSION_COOKIE_MAX_AGE,
   });
-
-  return user;
 }
 
 export async function signOut() {
@@ -72,9 +76,9 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 
   try {
     const verified = await jwtVerify(token, secretKey());
-    const payload = verified.payload as SessionUser;
+    const payload = verified.payload;
     const user = (await readDataForRequest()).users.find((item) => item.id === payload.id && isActiveUser(item));
-    if (!user) return null;
+    if (!user || !sessionVersionMatches(user, payload.sv)) return null;
     return {
       id: user.id,
       name: user.name,
