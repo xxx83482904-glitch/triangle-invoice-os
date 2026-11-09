@@ -8,6 +8,7 @@ import { expenseCategoryOptions } from "@/lib/expense-claim-edits";
 import { uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, assertCompanyAccess, can } from "@/lib/rbac";
 import type { AppData, Attachment, CardReceipt, User } from "@/lib/types";
+import { isActiveUser } from "@/lib/user-access";
 
 // Company card receipts: each person has their own card account. A receipt is attached to a use on that card,
 // automatically when exactly one use has the same amount within a week of the receipt date. Nothing is reimbursed.
@@ -37,7 +38,7 @@ export function userCardAccount(data: AppData, user: Pick<User, "id">, company: 
 // Administrators give each person one card; a card belongs to one person.
 export function assignCompanyCard(data: AppData, actor: Actor, company: CompanyScope, input: { userId: string; accountId: string }) {
   assertCan(actor, "manage:users"); assertCompanyAccess(actor, company);
-  const user = data.users.find((row) => row.id === input.userId && !row.deletedAt);
+  const user = data.users.find((row) => row.id === input.userId && isActiveUser(row));
   if (!user) throw new Error("利用者が見つかりません");
   if (input.accountId) {
     if (!companyCardAccounts(data, company).some((row) => row.id === input.accountId)) throw new Error("カードの口座を選んでください");

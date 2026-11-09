@@ -26,7 +26,7 @@ test("public registration ignores injected roles and always remains pending", ()
 test("legacy active users remain usable, pending/rejected/deleted and unknown states fail closed", () => {
   assert.equal(isActiveUser(account), true);
   assert.equal(isActiveUser({ ...account, accessStatus: "ACTIVE" }), true);
-  for (const accessStatus of ["PENDING", "REJECTED"] as const) assert.equal(isActiveUser({ ...account, accessStatus }), false);
+  for (const accessStatus of ["PENDING", "REJECTED", "DISABLED"] as const) assert.equal(isActiveUser({ ...account, accessStatus }), false);
   assert.equal(isActiveUser({ ...account, deletedAt: timestamp }), false);
   assert.equal(isActiveUser({ ...account, accessStatus: "unknown" as User["accessStatus"] }), false);
 });

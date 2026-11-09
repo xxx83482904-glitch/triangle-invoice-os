@@ -37,6 +37,16 @@ test("only administrators give out cards, only card accounts can be given, and e
   assert.equal(data.users.find((row) => row.id === "des")?.companyCardAccountId, undefined);
 });
 
+test("disabled, pending, rejected and deleted users cannot receive a company card", () => {
+  for (const patch of [{ accessStatus: "DISABLED" as const }, { accessStatus: "PENDING" as const }, { accessStatus: "REJECTED" as const }, { deletedAt: timestamp }]) {
+    const data = setup();
+    Object.assign(data.users.find((user) => user.id === "pm")!, patch);
+    const before = structuredClone(data);
+    assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "aplus-pm" }), /利用者が見つかりません/);
+    assert.deepEqual(data, before);
+  }
+});
+
 test("a receipt with exactly one matching use on the person's own card is attached automatically and shows up for accounting", () => {
   const data = setup();
   assert.throws(() => submitCardReceipt(data, expenseManager, "JAPAN", receipt(), "no-card"), /会社カードが登録されていません/);

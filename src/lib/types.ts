@@ -66,7 +66,9 @@ export type User = {
   email: string;
   passwordHash: string;
   role: UserRole;
-  accessStatus?: "PENDING" | "ACTIVE" | "REJECTED";
+  accessStatus?: "PENDING" | "ACTIVE" | "DISABLED" | "REJECTED";
+  sessionVersion?: number;
+  passwordChangedAt?: string;
   approvedById?: string;
   approvedAt?: string;
   createdAt: string;

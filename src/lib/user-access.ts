@@ -16,6 +16,13 @@ export function isActiveUser(user: Pick<User, "id" | "deletedAt" | "accessStatus
   return !user.deletedAt && (user.accessStatus === undefined || user.accessStatus === "ACTIVE");
 }
 
+export function sessionVersionMatches(user: Pick<User, "sessionVersion">, tokenVersion?: unknown) {
+  // Both pre-existing cookies and pre-existing users start at version zero.
+  const version = tokenVersion === undefined ? 0 : tokenVersion;
+  return typeof version === "number" && Number.isSafeInteger(version) && version >= 0
+    && version === (user.sessionVersion ?? 0);
+}
+
 export function requestRegistration(data: AppData, input: { name: string; email: string; passwordHash: string }) {
   const email = input.email.trim().toLowerCase();
   if (data.users.some((user) => user.email.toLowerCase() === email)) {
