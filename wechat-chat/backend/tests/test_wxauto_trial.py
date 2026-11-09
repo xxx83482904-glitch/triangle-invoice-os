@@ -114,3 +114,43 @@ def test_error_classification_never_returns_raw_exception():
     assert script.classify_error(Exception("PRIVATE message and account")) == "probe_failed"
     assert script.classify_error(Exception("PRIVATE message"), initialized=True) == "read_failed"
     assert script.classify_error(Exception("未找到已登录的客户端主窗口 PRIVATE")) == "main_window_not_found"
+
+
+@pytest.mark.parametrize("properties,has_name,empty,has_class", [
+    ({"Name": "PRIVATE_ACCOUNT", "ClassName": "PRIVATE_CLASS"}, True, False, True),
+    ({"Name": ""}, True, True, False),
+    ({"RegexName": "PRIVATE_CHAT.*"}, True, False, False),
+    ({"AutomationId": "PRIVATE_ID"}, False, False, False),
+])
+def test_failed_lookup_reports_structure_without_private_selector_values(properties, has_name, empty, has_class):
+    script = load_script()
+    class ButtonControl:
+        def __init__(self):
+            self.searchProperties = properties
+        def __repr__(self):
+            raise AssertionError("must_not_read_live_ui_or_repr")
+    namespace = {}
+    exec(compile("def Refind(self):\n    raise LookupError('Find Control Timeout: PRIVATE_CONTENT')\n",
+                 "uiautomation.py", "exec"), namespace)
+    try:
+        namespace["Refind"](ButtonControl())
+    except LookupError as exc:
+        context = script.failure_context(exc)
+    assert context == {"missing_control_type": "ButtonControl", "selector_has_name": has_name,
+                       "selector_name_empty": empty, "selector_has_class": has_class}
+    assert "PRIVATE" not in json.dumps(context)
+
+
+def test_report_retains_failure_stage_but_rejects_arbitrary_diagnostic_text(tmp_path):
+    path = tmp_path / "report.json"
+    report = sample_report()
+    report["attempts"][0].update(error_code="control_timeout", failure_stage="initialize",
+                                 missing_control_type="ButtonControl", selector_name_empty=True,
+                                 raw_selector="PRIVATE_ACCOUNT")
+    path.write_text(json.dumps(report), encoding="utf-8")
+    output = read_report(path)
+    assert output["report"]["attempts"][0]["failure_stage"] == "initialize"
+    assert "PRIVATE" not in json.dumps(output)
+    report["attempts"][0]["missing_control_type"] = "PRIVATE_ACCOUNT"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    assert read_report(path)["state"] == "unavailable"

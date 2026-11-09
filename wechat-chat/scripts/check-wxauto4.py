@@ -19,6 +19,34 @@ ROOT = Path(__file__).resolve().parents[1]
 PIN = "41.1.7"
 FLAGS = {"TELEMETRY_ENABLED", "ENABLE_FILE_LOGGER"}
 NETWORK_EVENTS = {"socket.connect", "socket.getaddrinfo", "socket.sendto", "socket.bind"}
+CONTROL_TYPES = {"ButtonControl", "EditControl", "ListControl", "ListItemControl", "PaneControl",
+                 "TextControl", "WindowControl", "ToolBarControl", "TabControl", "MenuControl"}
+
+
+def failure_context(exc):
+    """Keep selector structure, never selector values or formatted exceptions.
+
+    UIA lookup exceptions embed Name/ClassName/search values, which may include
+    private account or conversation labels. Inspect the failed lookup's local
+    control without reading any live UI properties or evaluating its repr.
+    """
+    result = {}
+    frame = exc.__traceback__
+    while frame is not None:
+        code = frame.tb_frame.f_code
+        if code.co_name == "Refind" and Path(code.co_filename).name == "uiautomation.py":
+            control = frame.tb_frame.f_locals.get("self")
+            attributes = getattr(control, "__dict__", {})
+            properties = attributes.get("searchProperties", {}) if isinstance(attributes, dict) else {}
+            if isinstance(properties, dict):
+                control_name = type(control).__name__
+                if control_name in CONTROL_TYPES:
+                    result["missing_control_type"] = control_name
+                result["selector_has_name"] = any(key in properties for key in ("Name", "SubName", "RegexName"))
+                result["selector_name_empty"] = properties.get("Name") == "" if "Name" in properties else False
+                result["selector_has_class"] = "ClassName" in properties
+        frame = frame.tb_next
+    return result
 
 
 def privacy_source():
@@ -77,6 +105,7 @@ def worker(variant):
     result = {"variant": variant, "initialized": False, "read_attempted": False}
     blocked = [0]
     started = time.monotonic()
+    stage = "package"
 
     def deny_network(event, _args):
         if event in NETWORK_EVENTS:
@@ -105,10 +134,11 @@ def worker(variant):
             for cls in (Chat, WeChat):
                 for name in ("SendMsg", "SendFiles", "SendUrlCard", "PublishMoment", "AddNewFriend",
                              "EditFriendInfo", "CreateGroup", "ShutDown", "ChatWith", "AddListenChat",
-                             "StartListening", "SwitchToChat", "SwitchToContact"):
+                             "StartListening", "SwitchToChat", "SwitchToContact", "Close"):
                     if hasattr(cls, name):
                         setattr(cls, name, no_input)
 
+            stage = "window_inventory"
             sys.path.insert(0, str(ROOT / "backend"))
             from app.adapters.windows_probe import file_version, process_inventory
             processes = process_inventory()
@@ -126,18 +156,26 @@ def worker(variant):
                     stack.extend((c, depth + 1) for c in control.GetChildren())
             result.update(node_count=nodes, interactive_node_count=controls)
             options = {"version": "WeChat"} if variant == "international" else {}
+            stage = "initialize"
             client = WeChat(debug=False, resize=False, **options)
             result["initialized"] = True
             result["read_attempted"] = True
             # Only counts leave this process. No names, text, account identifiers,
             # message objects, database records or downloads are persisted.
+            stage = "sessions"
             sessions = client.GetSession()
+            if not isinstance(sessions, list):
+                raise ValueError("unexpected_read_shape")
+            result["session_count"] = len(sessions)
+            stage = "messages"
             messages = client.GetAllMessage()
             if not isinstance(sessions, list) or not isinstance(messages, list):
                 raise ValueError("unexpected_read_shape")
             result.update(session_count=len(sessions), visible_message_count=len(messages))
     except Exception as exc:
         result["error_code"] = classify_error(exc, result["initialized"])
+        result["failure_stage"] = stage
+        result.update(failure_context(exc))
     result["blocked_python_network_operations"] = blocked[0]
     result["elapsed_seconds"] = round(time.monotonic() - started, 2)
     return result

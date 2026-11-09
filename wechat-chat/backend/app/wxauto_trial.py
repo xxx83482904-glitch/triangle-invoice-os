@@ -22,6 +22,12 @@ class Attempt(BaseModel):
     error_code: TrialError | None = None
     blocked_python_network_operations: int = Field(default=0, ge=0)
     elapsed_seconds: float = Field(default=0, ge=0, le=60)
+    failure_stage: Literal["package", "window_inventory", "initialize", "sessions", "messages"] | None = None
+    missing_control_type: Literal["ButtonControl", "EditControl", "ListControl", "ListItemControl", "PaneControl",
+                                  "TextControl", "WindowControl", "ToolBarControl", "TabControl", "MenuControl"] | None = None
+    selector_has_name: bool = False
+    selector_name_empty: bool = False
+    selector_has_class: bool = False
 
     @model_validator(mode="after")
     def consistent(self):

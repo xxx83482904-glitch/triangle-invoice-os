@@ -24,9 +24,10 @@ DETAILS = {
 class WindowsUIAAdapter(WeChatAdapter):
     """Real connection diagnostics; message I/O is intentionally fail-closed.
 
-    Weixin 4.1.15.56 and 4.1.8.107 were observed after login on this PC, but both
-    exposed only window/container nodes. No validated conversation schema or stable IDs
-    exist yet. Empty history is never reported as complete, and send_message
+    Earlier login sessions exposed only window/container nodes; a later 4.1.8.107
+    session exposed interactive controls but free-wxauto4 initialization timed out.
+    No validated conversation schema or stable IDs exist yet.
+    Empty history is never reported as complete, and send_message
     never invokes a UI action.
     """
     def __init__(self, poll_seconds=3):
