@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./attention.css";
 
 export const metadata: Metadata = {
   title: "こもれび — あなたの会話を、ひとつに。",

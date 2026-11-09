@@ -8,8 +8,14 @@ Mock・共通基盤と実WeChatを区別します。**Mockアプリの自動テ�
 
 | 対象 | 結果 | 内容 |
 |---|---|---|
-| Python / FastAPI / SQLite / Adapter / 常駐 | 成功 | `pytest backend/tests -q`: **43件成功** |
-| 実ブラウザE2E（Chrome / Windows） | 成功 | `npm run test:e2e`: **11件成功** |
+| Python / FastAPI / SQLite / Adapter / 常駐 | 成功 | `pytest backend/tests -q`: **54件成功** |
+| 実ブラウザE2E（Chrome / Windows） | 成功 | `npm run test:e2e`: **15件成功** |
+| 優先度と返信候補 | 成功 | 根拠・部分履歴・グループ宛先の注意、急ぎではない表現、既読と返信の分離、送信確認後の候補解除、手動指定と解除を検証 |
+| 返信案の安全性 | 成功 | 案の表示や下書き挿入では送信キューが増えない。既存下書きを保持し、本人の送信操作で初めてMockへ送信。確認不能時は返信案を停止 |
+| タスク保存・復旧 | 成功 | 元メッセージと会話の一致、重複・受付ID競合、期限の検証、SQLite永続化、アプリ再起動後の完了状態・手動優先度保持 |
+| タスクと携帯UI | 成功 | 候補確認→編集→保存→再読込→完了→元の発言へ移動。390px/320pxで横はみ出しなし、ダーク表示、別認証端末へのWebSocket更新を確認 |
+| 新APIのアクセス制御 | 成功 | attention/tasks/priorityへの未認証拒否、ブラウザCookie認証の許可外Origin拒否 |
+| 実AIの意味理解・返信生成 | 未検証 | モデル未接続。今回のUIはローカル簡易ルールと定型文。精度を実AIとして評価していない |
 | TypeScript | 成功 | `npm run typecheck` |
 | Next.js本番ビルド | 成功 | Next.js 16.4.5、静的export |
 | npm依存検査 | 成功 | `npm audit --omit=dev`: 既知の脆弱性0件 |
@@ -90,3 +96,11 @@ PythonテストにはStarletteが従来のhttpxテストクライアントを将
 ```
 
 UIテストは専用ポート8877と一時DBを使用し、実行中のユーザー用アプリのDBや実WeChatには触れません。
+
+## AI中心のUI追加時の記録
+
+最終結果はPython 54件・Chrome 15件が成功、型検査と本番ビルドも成功。途中、Bearer認証にCookie用のOrigin制約を期待した新規テスト1件が失敗し、既存の認証方式に合わせてCookieログインのテストへ修正した。認証実装は弱めていない。最終の失敗は0件。
+
+Windows / Python 3.10のE2Eテストサーバー切断時に、asyncio ProactorのConnectionResetErrorが1回出力された。15件のアサーションは成功し、実行は終了コード0。人工的な切断テストを含むサーバー終了時の観測で、抑制処理は追加していない。
+
+画面確認: `test-results/attention-desktop.png`、`attention-mobile.png`、`attention-dark-mobile.png`、`tasks-mobile.png`。いずれも架空のMockデータで、Gitには含めない。iPhone実機・AIモデル・外部タスクサービスは未検証。

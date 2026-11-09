@@ -145,3 +145,36 @@ class Database:
     def search(self, query, limit=100):
         escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         return self.all("SELECT m.*,c.name AS chat_name,c.type AS chat_type FROM messages m JOIN chats c ON c.id=m.chat_id WHERE m.content LIKE ? ESCAPE '\\' ORDER BY m.id DESC LIMIT ?", ("%" + escaped + "%", limit))
+
+    def set_priority(self, chat_id, priority):
+        with self.lock, self.conn:
+            if priority == "auto":
+                self.conn.execute("DELETE FROM chat_priorities WHERE chat_id=?", (chat_id,))
+            else:
+                self.conn.execute("INSERT INTO chat_priorities VALUES(?,?) ON CONFLICT(chat_id) DO UPDATE SET priority=excluded.priority", (chat_id, priority))
+
+    def tasks(self):
+        return self.all("""SELECT t.*, c.name AS chat_name, m.content AS source_content
+          FROM tasks t JOIN chats c ON c.id=t.chat_id JOIN messages m ON m.id=t.source_message_id
+          ORDER BY t.status='done', t.due_date IS NULL, t.due_date, t.created_at DESC, t.id""")
+
+    def create_task(self, chat_id, source_id, title, due_date, request_id):
+        with self.lock, self.conn:
+            existing = self.one("SELECT * FROM tasks WHERE client_request_id=?", (request_id,))
+            if existing:
+                if (existing["chat_id"], existing["source_message_id"], existing["title"], existing["due_date"]) != (chat_id, source_id, title, due_date):
+                    raise ValueError("idempotency_conflict")
+                return existing
+            source = self.one("SELECT * FROM messages WHERE id=? AND chat_id=? AND direction='incoming'", (source_id, chat_id))
+            if not source:
+                raise ValueError("source_mismatch")
+            if self.one("SELECT id FROM tasks WHERE source_message_id=?", (source_id,)):
+                raise ValueError("task_already_exists")
+            ident, stamp = str(uuid4()), now()
+            self.conn.execute("INSERT INTO tasks(id,client_request_id,chat_id,source_message_id,title,due_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", (ident, request_id, chat_id, source_id, title, due_date, stamp, stamp))
+            return self.one("SELECT * FROM tasks WHERE id=?", (ident,))
+
+    def set_task_state(self, ident, state):
+        with self.lock, self.conn:
+            self.conn.execute("UPDATE tasks SET status=?,updated_at=? WHERE id=?", (state, now(), ident))
+            return self.one("SELECT * FROM tasks WHERE id=?", (ident,))

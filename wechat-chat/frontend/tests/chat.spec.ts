@@ -7,6 +7,7 @@ async function login(page: Page) {
   await page.getByLabel("このアプリの接続キー").fill(TOKEN);
   await page.getByRole("button", { name: "このPCに接続", exact: true }).click();
   await expect(page.getByText("リアルタイム接続", {exact: true})).toBeVisible();
+  await page.getByRole("button", {name:"チャット一覧", exact:true}).click();
 }
 async function chat(page: Page, id="mock:lin") { await page.getByTestId(`chat-${id}`).click(); }
 
@@ -27,7 +28,7 @@ test("desktop: list, WebSocket arrival, reply, search and local persistence", as
   await page.getByLabel("メッセージを送信", {exact:true}).click();
   const row = page.locator(".message-row").filter({hasText:"ブラウザから返信テスト"});
   await expect(row.getByText("送信確認済み", {exact:true})).toBeVisible();
-  await page.reload(); await expect(page.getByText("リアルタイム接続", {exact:true})).toBeVisible(); await chat(page);
+  await page.reload(); await expect(page.getByText("リアルタイム接続", {exact:true})).toBeVisible(); await page.getByRole("button", {name:"チャット一覧", exact:true}).click(); await chat(page);
   await expect(page.locator(".bubble").filter({hasText:"ブラウザから返信テスト"})).toHaveCount(1);
   await page.screenshot({path:"../test-results/desktop.png"});
   await page.getByRole("button", {name:"メッセージ検索", exact:true}).click();

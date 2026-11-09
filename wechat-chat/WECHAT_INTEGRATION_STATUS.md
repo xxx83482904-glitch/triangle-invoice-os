@@ -85,3 +85,7 @@
 ## 開発を引き継ぐ場合
 
 Adapter契約は `backend/app/adapters/base.py`。UI固有処理は `windows_*` に限定し、Mockや共通キューへWeChatのセレクターを持ち込まないでください。現在の `WindowsUIAAdapter` は診断専用で、送受信処理の中身が完成しているように扱わないでください。実機検証なしに `can_send` / `can_read` をtrueへ変更しないでください。
+
+## AIを前提としたUIの追加
+
+「対応すること」画面、返信優先度の手動調整、定型返信案の下書き挿入、本人確認後のタスク保存・完了管理を追加。これらは保存済みデータに対する端末内の簡易ルールで、実AI推論も実WeChat連携も有効化していない。詳しくは `docs/AI_EXTENSION.md`。

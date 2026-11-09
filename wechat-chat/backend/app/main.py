@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+from datetime import date
 from contextlib import asynccontextmanager
 from typing import Literal
 from uuid import UUID
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .adapters.mock import MockWeChatAdapter
+from .assistance import LocalRulesProvider, attention_snapshot
 from .body_limit import BodyLimitMiddleware
 from .config import Settings
 from .database import Database
@@ -34,6 +36,22 @@ class Read(BaseModel):
     through_id: int = Field(ge=0)
 
 
+class Priority(BaseModel):
+    priority: Literal["auto", "high", "normal", "low"]
+
+
+class NewTask(BaseModel):
+    chat_id: str = Field(min_length=1, max_length=100)
+    source_message_id: int = Field(ge=1)
+    title: str = Field(min_length=1, max_length=200)
+    due_date: date | None = None
+    client_request_id: UUID
+
+
+class TaskState(BaseModel):
+    status: Literal["open", "done"]
+
+
 class MockAction(BaseModel):
     action: Literal["receive", "disconnect", "reconnect", "next_unknown", "next_failed", "next_confirmed"]
     chat_id: str | None = None
@@ -42,6 +60,7 @@ class MockAction(BaseModel):
 def create_app(settings=None, adapter=None):
     settings = settings or Settings.from_env()
     security = Security(settings)
+    assistance = LocalRulesProvider()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -135,6 +154,41 @@ def create_app(settings=None, adapter=None):
         if not chat:
             raise HTTPException(404, "chat_not_found")
         return chat
+
+    @api.get("/attention")
+    async def attention():
+        return attention_snapshot(app.state.db, assistance)
+
+    @api.post("/chats/{ident}/priority")
+    async def priority(ident: str, body: Priority):
+        require_chat(ident)
+        app.state.db.set_priority(ident, body.priority)
+        app.state.engine.hub.publish("attention", ident)
+        return {"ok": True}
+
+    @api.get("/tasks")
+    async def tasks():
+        return app.state.db.tasks()
+
+    @api.post("/tasks", status_code=201)
+    async def create_task(body: NewTask):
+        require_chat(body.chat_id)
+        if not body.title.strip():
+            raise HTTPException(422, "empty_task")
+        try:
+            result = app.state.db.create_task(body.chat_id, body.source_message_id, body.title.strip(), body.due_date.isoformat() if body.due_date else None, str(body.client_request_id))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        app.state.engine.hub.publish("tasks", body.chat_id)
+        return result
+
+    @api.post("/tasks/{ident}/state")
+    async def task_state(ident: str, body: TaskState):
+        result = app.state.db.set_task_state(ident, body.status)
+        if not result:
+            raise HTTPException(404, "task_not_found")
+        app.state.engine.hub.publish("tasks", result["chat_id"])
+        return result
 
     @api.get("/chats/{ident}/messages")
     async def messages(ident: str, before: int | None = Query(None, ge=1), limit: int = Query(100, ge=1, le=200)):

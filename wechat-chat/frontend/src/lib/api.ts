@@ -16,6 +16,21 @@ export type Status = {
   sync_error: string | null;
 };
 export type QueueItem = { id: string; client_request_id: string; chat_id: string; chat_name: string; status: string; content: string; error_message: string | null; created_at: string };
+export type Priority = "high" | "normal" | "low";
+export type AttentionItem = {
+  chat_id: string; chat_name: string; chat_type: "individual" | "group";
+  source_message_id: number | null; source_content: string; source_at: string | null;
+  latest_message_id: number | null; priority: Priority; priority_origin: "manual" | "rule";
+  state: "reply_candidate" | "review_send" | "no_candidate"; reasons: string[];
+  suggestions: {label: string; text: string}[]; task_title: string | null;
+};
+export type Attention = { provider: string; ai_connected: boolean; history_scope: string; items: AttentionItem[] };
+export type Task = {
+  id: string; chat_id: string; chat_name: string; source_message_id: number; source_content: string;
+  title: string; due_date: string | null; status: "open" | "done"; created_at: string; updated_at: string;
+};
+export const priorityLabels: Record<Priority, string> = { high: "優先", normal: "通常", low: "あとで" };
+export const priorityOrder: Record<Priority, number> = { high: 0, normal: 1, low: 2 };
 
 export const delivery: Record<string, string> = { received: "受信", pending: "未送信", sending: "送信処理中", confirmed: "送信確認済み", unknown: "確認不能", failed: "失敗" };
 const errors: Record<string, string> = {
@@ -25,6 +40,9 @@ const errors: Record<string, string> = {
   idempotency_conflict: "受付IDが重複しています。送信状態を確認してください。", mock_offline: "Mockを再接続してからお試しください。",
   invalid_request: "入力を確認してください。", empty_message: "メッセージを入力してください。",
   origin_not_allowed: "この接続元は許可されていません。設定の接続元URLを確認してください。",
+  empty_task: "タスク名を入力してください。", source_mismatch: "元のメッセージと会話が一致しません。",
+  task_already_exists: "このメッセージはタスクに追加済みです。タスク画面で確認してください。",
+  task_not_found: "タスクが見つかりません。画面を更新してください。",
 };
 export class ApiError extends Error { constructor(public status: number, public code: string) { super(errors[code] || "処理できませんでした。接続状態を確認してください。"); } }
 export async function api<T>(path: string, body?: unknown): Promise<T> {
