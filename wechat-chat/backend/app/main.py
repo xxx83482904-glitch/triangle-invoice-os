@@ -26,6 +26,10 @@ from .config import Settings
 from .database import Database
 from .engine import Engine
 from .security import COOKIE, SESSION_SECONDS, Security
+from .wxauto_trial import read_report
+from .ai_provider import OpenAIProvider
+from .ai_service import AIService
+from .ai_routes import register_ai_routes
 
 
 class Login(BaseModel):
@@ -64,7 +68,7 @@ class MockAction(BaseModel):
     chat_id: str | None = None
 
 
-def create_app(settings=None, adapter=None):
+def create_app(settings=None, adapter=None, ai_provider=None):
     settings = settings or Settings.from_env()
     security = Security(settings)
     assistance = LocalRulesProvider()
@@ -82,6 +86,8 @@ def create_app(settings=None, adapter=None):
                 selected = WindowsUIAAdapter(settings.poll_seconds)
         engine = Engine(db, selected, settings)
         app.state.db, app.state.engine, app.state.security = db, engine, security
+        provider = ai_provider or OpenAIProvider(settings.openai_api_key, settings.openai_model)
+        app.state.ai = AIService(db, provider, settings.ai_enabled)
         app.state.wechat_diagnostic_lock = asyncio.Lock()
         app.state.ocr = OcrInbox()
         cleaner = asyncio.create_task(app.state.ocr.clean())
@@ -93,6 +99,7 @@ def create_app(settings=None, adapter=None):
             with suppress(asyncio.CancelledError):
                 await cleaner
             app.state.ocr.previews.clear()
+            await app.state.ai.close()
             await engine.stop()
             db.close()
 
@@ -160,7 +167,7 @@ def create_app(settings=None, adapter=None):
 
     @api.get("/device")
     async def device():
-        return {"mobile_url": settings.mobile_url, "mobile_access": settings.mobile_access, "ai_enabled": False, "push_enabled": False}
+        return {"mobile_url": settings.mobile_url, "mobile_access": settings.mobile_access, "ai_enabled": app.state.ai.status()["ready"], "push_enabled": False}
 
     @api.post("/wechat/diagnostics")
     async def wechat_diagnostics():
@@ -173,6 +180,12 @@ def create_app(settings=None, adapter=None):
         async with lock:
             diagnostic = await asyncio.to_thread(WindowsUIAAdapter._probe)
         return {"connection": asdict(WindowsUIAAdapter.describe(diagnostic)), "diagnostic": diagnostic, "checked_at": now(), "active_adapter": settings.adapter}
+
+    @api.get("/wechat/free-trial")
+    async def wechat_free_trial():
+        # Stored evidence only. A browser request cannot run/install wxauto4,
+        # change the active adapter, import messages or authorize real sending.
+        return read_report(settings.wxauto_trial_report)
 
     @api.get("/chats")
     async def chats():
@@ -234,6 +247,7 @@ def create_app(settings=None, adapter=None):
         return {"ok": True}
 
     @api.post("/chats/{ident}/send", status_code=202)
+    @api.post("/chats/{ident}/messages", status_code=202)
     async def send(ident: str, body: Send):
         chat = require_chat(ident)
         if not body.content.strip():
@@ -294,9 +308,11 @@ def create_app(settings=None, adapter=None):
         return await engine.status()
 
     register_ocr_routes(api, app, settings, security)
+    register_ai_routes(api, app, security)
     app.include_router(api)
 
     @app.websocket("/ws")
+    @app.websocket("/ws/events")
     async def websocket(ws: WebSocket):
         if ws.headers.get("origin") not in settings.origins or not security.valid_session(ws.cookies.get(COOKIE)):
             await ws.close(code=1008)

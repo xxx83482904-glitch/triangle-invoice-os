@@ -24,6 +24,10 @@ class Settings:
     mock_interval: float = 0
     poll_seconds: float = 3
     frontend: Path = field(default_factory=lambda: ROOT / "frontend" / "out")
+    wxauto_trial_report: Path = field(default_factory=lambda: ROOT / ".runtime" / "wxauto4-trial.json")
+    ai_enabled: bool = False
+    openai_api_key: str = field(default="", repr=False)
+    openai_model: str = ""
 
     @classmethod
     def from_env(cls):
@@ -69,4 +73,7 @@ class Settings:
             secure_cookie=os.getenv("WECHAT_SECURE_COOKIE", "false").lower() == "true",
             mock_interval=max(0, float(os.getenv("WECHAT_MOCK_INTERVAL", "0"))),
             poll_seconds=max(1, float(os.getenv("WECHAT_UI_POLL_SECONDS", "3"))),
+            ai_enabled=os.getenv("WECHAT_AI_ENABLED", "false").lower() == "true",
+            openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
+            openai_model=os.getenv("OPENAI_MODEL", "").strip(),
         )

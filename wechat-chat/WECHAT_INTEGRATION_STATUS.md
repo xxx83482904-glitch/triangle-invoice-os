@@ -14,7 +14,7 @@
 
 `WeChatAdapter` 契約は共通です。UIAは版別Reader未実装時に明示的なエラーを返します。OCRは自動Readerを装わず、`can_read=false` / `can_send=false` を維持します。明示操作の `POST /api/wechat/ocr/preview` と確認後の `POST /api/wechat/ocr/import` で手動取り込みます。診断・OCR・Mockは独立しています。
 
-共通基盤にはSQLite、マイグレーション、重複判定、送信キュー、WebSocket、認証、再接続、優先度・定型返信案・タスクを実装しています。AIモデルは未接続です。
+共通基盤にはSQLite、マイグレーション、重複判定、送信キュー、WebSocket、認証、再接続、優先度・定型返信案・タスクを実装しています。OpenAI向けの翻訳・返信案・要約・タスク抽出APIと確認画面も実装済みです。稼働環境では外部AIは無効で、実モデルの疎通・品質は未検証です。
 
 ## 実機で検証済み
 
@@ -26,7 +26,10 @@
 | ログイン後のUIA本文取得 | 失敗 | Qt51514QWindowIcon、全2ノード、対話部品0。再ログイン後も同様 |
 | 既存ナレーターによるUI公開の改善 | 失敗 | 読み取り部品は増えず。確認後に本人がナレーターを終了済み |
 | 4.1.8.107でのログイン後UIA本文取得 | 失敗 | 起動中の実行ファイルの版とログイン後の会話画面を確認。2ノード・対話部品0。前面表示でも変化なし |
-| wxauto4 41.1.7のUIA読み取り | 失敗 | 隔離venvへ導入し、同梱UIAのGetRootControl/GetChildrenで検証。4.1.8.107に対して1ウィンドウ・2ノード・対話部品0。WeChatクラスでの操作・送信は未実施 |
+| wxauto4 41.1.7のUIA読み取り | 失敗 | 隔離venvへ導入し、同梱UIAで4.1.8.107に対して1ウィンドウ・2ノード・対話部品0 |
+| 無料版WeChatクラスの初期化 | 失敗 | 英語・中国語・国際版指定の3設定で `main_window_not_found`。会話画面は表示済み。`GetSession` / `GetAllMessage` に到達せず |
+| その後のログアウト検出 | 成功 | 別PCでのログインによりこのPCがログアウトした旨の画面を確認。再認証は操作していない。無料版試験はログイン済み時の結果として保持 |
+| 無料版の検証記録表示 | 成功 | 日時付きの結果を設定画面に表示。記録表示によってAdapter・DB・送信可否は変えない |
 | Windows標準UIAの追加確認 | 失敗 | MTAスレッドで対象ウィンドウの構造変更イベントを20秒購読しても最大2ノード・対話部品0。購読は解除済み |
 | 管理者権限差の切り分け | 成功 | 読み取りプロセスとWeixinの5プロセスはいずれも非昇格。権限を上げる操作はしていない |
 | 個人会話の画面OCR | 成功 | 日本語OCRで画面38行、確認した本文領域の3行を取得 |
@@ -46,7 +49,7 @@
 - OCRの体系的な精度測定、画像・音声・ファイルの意味認識、混在言語での品質保証。
 - 画面ロック・サインアウト・別Windows環境での実機OCR。拒否処理はありますが、本PCを実際にロックする試験は行っていません。
 - iPhone / Mac / Safari実機・携帯回線での今回のOCR操作。Chromeの携帯幅でのフォーム確認は成功です。
-- 実AIによる意味理解・返信生成。現在は端末内の簡易ルール・定型文で、外部AIに本文を送りません。
+- 実AIによる意味理解・返信生成。生成APIと画面は合成応答で検証済みですが、実モデルでは未検証です。優先度は簡易ルール。現設定では外部AIに本文を送りません。
 
 ## 連携方式とライセンス
 
@@ -62,7 +65,9 @@
 
 出典: [wxauto公式対応版](https://docs.wxauto.org/docs/install.html)、[wxautoリポジトリ](https://github.com/cluic/wxauto)、[利用条件](https://docs.wxauto.org/agreement.html)、[Plus商用条件](https://docs.wxauto.org/legal/commercial-license.html)、[uiautomation](https://pypi.org/project/uiautomation/2.0.29/)、[PyWinRT](https://github.com/pywinrt/pywinrt)、[Pillow ImageGrab](https://pillow.readthedocs.io/en/stable/reference/ImageGrab.html)。第三者の調査例にも4.1.15系のUIA公開不足が記録されていますが、本PCでの判断根拠は実測です。[調査例](https://wx4auto.lightisle.cn/docs/environment/)
 
-wxauto4の配布物にはテレメトリーとファイルログが既定で有効な設定がありました。隔離環境の設定を**import前に無効化**し、検証プロセスにはPythonのsocket接続等を拒否するaudit hookを追加しました。検証中のPythonネットワーク操作の検出は0件です。これはOS全体の通信遮断や、コンパイル済みライブラリの完全監査を意味しません。wheel、検証venv、私的な画面はGitに含めません。
+wxauto4の配布物にはテレメトリーとファイルログが既定で有効な設定がありました。隔離環境の設定を**import前に無効化**し、検証プロセスにはPythonのsocket接続等を拒否するaudit hookを追加しました。UIA構造取得のみでは0件、WeChatクラス初期化では各設定3件の名前解決要求を拒否しました。呼び出し元は `get_wxauto_ads` でした。これはOS全体の通信遮断や、コンパイル済みライブラリの完全監査を意味しません。wheel、検証venv、私的な画面はGitに含めません。
+
+本人の指定により無料版の試験を優先し、有料版を購入・導入していません。[無料版の再検証手順](docs/FREE_WXAUTO4_TRIAL.md) と [SiverWXBot Plus調査](docs/architecture.md) に、使用API・版の違い・再利用判断を記録しました。
 
 追加診断には[MicrosoftのUIAイベントAPI](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationclient/nf-uiautomationclient-iuiautomation-addstructurechangedeventhandler)を使いました。バージョンが公称対応範囲内であることだけでは、このPC・アカウントでの画面公開を保証できません。画面公開を妨げている内部条件は未特定です。
 

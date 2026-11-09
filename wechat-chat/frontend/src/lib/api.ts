@@ -34,6 +34,15 @@ export const priorityOrder: Record<Priority, number> = { high: 0, normal: 1, low
 
 export const delivery: Record<string, string> = { received: "受信", pending: "未送信", sending: "送信処理中", confirmed: "送信確認済み", unknown: "確認不能", failed: "失敗" };
 const errors: Record<string, string> = {
+  ai_disabled: "外部AIは無効です。PC側の設定で有効化してください。",
+  ai_not_configured: "PC側のOpenAI APIキーとモデルが未設定です。",
+  ai_preview_expired: "確認内容の期限が切れました。送る内容を確認し直してください。",
+  ai_preview_mismatch: "確認した機能と実行する機能が一致しません。確認し直してください。",
+  ai_preview_limit: "確認中の内容が多いため、5分ほど待ってください。",
+  ai_invalid_selection: "対象の会話とメッセージを確認してください。翻訳は本文1件または下書きだけを選びます。",
+  ai_context_too_large: "送る内容が12,000文字を超えています。メッセージを減らしてください。",
+  ai_busy: "別のAI処理が実行中です。完了後にお試しください。",
+  ai_job_not_found: "AI処理の受付をまだ確認できません。自動で再実行しません。",
   authentication_required: "接続キーでログインしてください。", invalid_access_token: "接続キーが一致しません。",
   destination_mismatch: "宛先が一致しないため、送信を中止しました。", sending_unavailable: "送信できる接続がありません。下書きは保持しています。",
   queue_full: "送信待ちが多いため、少し待ってからお試しください。", rate_limited: "操作が続いています。1分ほど待ってください。",

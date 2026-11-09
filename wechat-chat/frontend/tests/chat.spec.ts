@@ -3,6 +3,28 @@ import { test, expect, Page } from "@playwright/test";
 const TOKEN = "e2e-mock-only-" + "x".repeat(40);
 const ORIGIN = "http://127.0.0.1:8877";
 
+async function checkFreeTrialEvidence(page: Page) {
+  await page.setViewportSize({width:320,height:720});
+  const mutations: string[] = [];
+  page.on("request", request => {
+    if (request.method() === "POST" && /\/api\/(wechat|chats|sync)/.test(request.url())) mutations.push(request.url());
+  });
+  await page.route("**/api/wechat/free-trial", route => route.fulfill({json:{state:"available",report:{
+    checked_at:"2026-11-09T08:00:00Z",package_version:"41.1.7",wechat_version:"4.1.8.107",
+    attempts:["en","cn","international"].map(variant => ({variant,initialized:false,error_code:"main_window_not_found",visible_message_count:null})),
+  }}}));
+  await page.getByRole("button", {name:"接続状態・設定",exact:true}).click();
+  const record = page.getByRole("region", {name:"無料版の検証記録"});
+  await expect(record).toContainText("実際の会話は同期されていません");
+  await expect(record).toContainText("現在の接続状態ではなく");
+  await expect(record.getByText("会話画面を認識できず",{exact:true})).toHaveCount(3);
+  await expect(record).toContainText("4.1.8.107");
+  await record.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(mutations).toEqual([]);
+  await page.screenshot({path:"../test-results/free-wxauto4-mobile.png"});
+}
+
 async function screenOcr(page: Page, expires = 300) {
   await login(page);
   await page.route("**/api/status", async route => {
@@ -242,6 +264,8 @@ test("mobile list does not mark a hidden conversation as read", async ({page}) =
 
 test("WeChat diagnostic UI distinguishes logged-in but inaccessible UI from sync success", async ({page}) => {
   await page.setViewportSize({width:390,height:844}); await login(page);
+  await checkFreeTrialEvidence(page);
+  await page.setViewportSize({width:390,height:844});
   await page.route("**/api/wechat/diagnostics", route => route.fulfill({json:{active_adapter:"mock",checked_at:new Date().toISOString(),connection:{state:"limited",mode:"windows-uia",can_read:false,can_send:false,version:"4.1.15.56",detail:"WeChatは起動していますが、会話の読み取り用UI情報が公開されていません。ログイン済みでも、この状態では本文や宛先を取得できません。"},diagnostic:{state:"ui_tree_unavailable",node_count:3,interactive_node_count:0}}}));
   await page.getByRole("button",{name:"接続状態・設定",exact:true}).click();
   const card = page.locator(".wechat-diagnostics");

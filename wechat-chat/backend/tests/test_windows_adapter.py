@@ -31,6 +31,7 @@ def test_diagnostic_states_fail_closed(monkeypatch, diagnostic, expected):
     ({"process_count": 1, "window_count": 0}, "window_unavailable"),
     ({"process_count": 1, "window_count": 1, "all_windows_minimized": True}, "window_minimized"),
     ({"process_count": 1, "window_count": 1, "login_layout_detected": True, "interactive_node_count": 3}, "login_required"),
+    ({"process_count": 1, "window_count": 1, "window_classes": ["mmui::LoginWindow"], "interactive_node_count": 18}, "login_required"),
     ({"process_count": 5, "window_count": 1, "node_count": 3, "interactive_node_count": 0}, "ui_tree_unavailable"),
     ({"process_count": 5, "window_count": 1, "node_count": 300, "interactive_node_count": 100}, "unsupported_ui"),
 ])

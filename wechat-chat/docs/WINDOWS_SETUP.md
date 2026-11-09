@@ -74,6 +74,8 @@ Mockとは別のDBが必要です。既存DBのAdapter種別が違う場合は�
 
 ## よくある状態
 
+無料wxauto4を試す場合は [専用のセットアップと再検証](FREE_WXAUTO4_TRIAL.md) を使用してください。`setup-wxauto4.ps1` で隔離環境に導入します。検証だけで稼働中のAdapter・DB・送信設定は変更しません。
+
 | 状態 | 対応 |
 |---|---|
 | バックエンドに接続できない | 8765の起動、`.runtime/backend.err.log` を確認 |

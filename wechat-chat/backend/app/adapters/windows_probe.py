@@ -18,7 +18,7 @@ def classify_observation(observation):
         return "window_unavailable"
     if observation.get("all_windows_minimized"):
         return "window_minimized"
-    if observation.get("login_layout_detected"):
+    if observation.get("login_layout_detected") or "mmui::LoginWindow" in observation.get("window_classes", []):
         return "login_required"
     if not observation.get("interactive_node_count"):
         return "ui_tree_unavailable"

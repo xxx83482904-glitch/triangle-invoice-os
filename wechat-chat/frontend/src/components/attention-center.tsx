@@ -20,7 +20,7 @@ function DraftOptions({item, onDraft}: Pick<Actions, "onDraft"> & {item: Attenti
 
 export function ReplySupport({item, task, onDraft, onTask, onSource}: Actions & {item: AttentionItem; task?: Task}) {
   if (!item.source_message_id) return null;
-  return <details className="reply-support"><summary><Sparkles size={15}/><span>返信・次の行動を考える</span><PriorityBadge item={item}/><ChevronDown size={14}/></summary><div className="reply-support-body"><p className="assist-caption">AI未接続 · 取得済みの直近50件を使う簡易判定</p><p className="assist-reason">{item.reasons[0]}</p><button className="source-link" onClick={() => onSource(item.chat_id, item.source_message_id!)}>参照したメッセージへ <ArrowUpRight size={13}/></button>{item.state === "review_send" ? <p className="assist-reason">送信キューの状態を確認してください。確認不能のメッセージは自動再送しません。</p> : <DraftOptions item={item} onDraft={onDraft}/>}<button className="secondary task-add" disabled={!!task} onClick={() => onTask(item)}><ListTodo size={15}/>{task ? "タスクに追加済み" : "タスク候補を確認"}</button></div></details>;
+  return <details className="reply-support"><summary><Sparkles size={15}/><span>返信・次の行動を考える</span><PriorityBadge item={item}/><ChevronDown size={14}/></summary><div className="reply-support-body"><p className="assist-caption">取得済みの直近50件を使う簡易判定</p><p className="assist-reason">{item.reasons[0]}</p><button className="source-link" onClick={() => onSource(item.chat_id, item.source_message_id!)}>参照したメッセージへ <ArrowUpRight size={13}/></button>{item.state === "review_send" ? <p className="assist-reason">送信キューの状態を確認してください。確認不能のメッセージは自動再送しません。</p> : <DraftOptions item={item} onDraft={onDraft}/>}<button className="secondary task-add" disabled={!!task} onClick={() => onTask(item)}><ListTodo size={15}/>{task ? "タスクに追加済み" : "タスク候補を確認"}</button></div></details>;
 }
 
 export function AttentionCenter({items, tasks, loading, available, onPriority, onDraft, onTask, onSource}: Actions & {
@@ -38,7 +38,7 @@ export function AttentionCenter({items, tasks, loading, available, onPriority, o
     setSaving(chatId);
     try { await onPriority(chatId, value); } finally { setSaving(null); }
   }
-  return <section className="content-page attention-page" aria-label="対応すること"><div className="attention-intro"><div><span className="eyebrow">A LITTLE CLARITY, EVERY DAY</span><h1>会話を、次の一歩へ。</h1><p>いま返す言葉と、あとでやることを整理しましょう。</p></div><span className="assist-mode"><Sparkles size={14}/>AI未接続 · 簡易ルールでプレビュー</span></div>
+  return <section className="content-page attention-page" aria-label="対応すること"><div className="attention-intro"><div><span className="eyebrow">A LITTLE CLARITY, EVERY DAY</span><h1>会話を、次の一歩へ。</h1><p>いま返す言葉と、あとでやることを整理しましょう。</p></div><span className="assist-mode"><Sparkles size={14}/>優先度は簡易ルール · 自動送信なし</span></div>
     <div className="attention-summary"><div><span>返信・確認の候補</span><strong>{candidates.length}<small>件</small></strong></div><div><span>優先して確認</span><strong>{candidates.filter(i => i.priority === "high").length}<small>件</small></strong></div><div><span>未完了のタスク</span><strong>{tasks.filter(t => t.status === "open").length}<small>件</small></strong></div></div>
     <div className="attention-toolbar"><div className="segmented"><button aria-pressed={!all} onClick={() => setAll(false)}>返信・確認の候補</button><button aria-pressed={all} onClick={() => setAll(true)}>すべての会話</button></div><label>並び順<select aria-label="対応することの並び順" value={sort} onChange={e => setSort(e.target.value)}><option value="priority">返信の優先度</option><option value="recent">受信の新しい順</option></select></label></div>
     <p className="attention-scope">未読と返信の必要性は別に扱います。取得済みの直近50件からの候補で、優先度は変更できます。</p>
@@ -57,13 +57,15 @@ export function AttentionCenter({items, tasks, loading, available, onPriority, o
   </section>;
 }
 
+export type TaskSeed = Pick<AttentionItem, "chat_id" | "chat_name" | "source_message_id" | "source_content" | "task_title"> & {due_date?: string | null};
+
 export function TaskComposer({item, onClose, onSaved, onError}: {
-  item: AttentionItem; onClose: () => void; onSaved: () => void; onError: (error: unknown) => void;
+  item: TaskSeed; onClose: () => void; onSaved: () => void; onError: (error: unknown) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const submitting = useRef(false);
   const [title, setTitle] = useState(item.task_title || "");
-  const [due, setDue] = useState("");
+  const [due, setDue] = useState(item.due_date || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [requestId] = useState(() => crypto.randomUUID());

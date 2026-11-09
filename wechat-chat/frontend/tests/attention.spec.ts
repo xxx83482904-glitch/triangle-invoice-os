@@ -14,7 +14,7 @@ test("priority reasons, manual override, ordering and no automatic sends", async
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   await page.setViewportSize({width:1440,height:960});
   await login(page);
-  await expect(page.locator(".assist-mode")).toContainText("AI未接続");
+  await expect(page.locator(".assist-mode")).toContainText("優先度は簡易ルール");
   await expect(page.locator(".attention-card").first()).toContainText("日中デザイン室");
   await expect(page.locator(".attention-card").first()).toContainText("あなたへの依頼か確認");
   await page.screenshot({path:"../test-results/attention-desktop.png"});
@@ -45,11 +45,12 @@ test("reply suggestions append to the draft and require a separate send", async 
 
 test("mobile: review a task, save it once, complete it and reopen the source", async ({page}) => {
   await page.setViewportSize({width:390,height:844}); await login(page);
+  const existingTasks = await (await page.request.get("/api/tasks")).json();
   const card = page.locator(".attention-card").filter({has:page.getByRole("heading",{name:"日中デザイン室",exact:true})});
   await card.getByRole("button",{name:"タスク候補を確認",exact:true}).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByLabel("タスクの期限")).toHaveValue("");
-  expect(await (await page.request.get("/api/tasks")).json()).toHaveLength(0);
+  expect(await (await page.request.get("/api/tasks")).json()).toEqual(existingTasks);
   await page.getByLabel("タスク名",{exact:true}).fill("打ち合わせ前に素材を確認");
   await page.getByLabel("タスクの期限").fill("2026-11-20");
   await page.getByRole("button",{name:"タスクに追加",exact:true}).click();
@@ -76,7 +77,7 @@ test("mobile: review a task, save it once, complete it and reopen the source", a
   await expect(page.locator(".attention-card").first()).toHaveCSS("background-color", "rgb(29, 39, 33)");
   await page.screenshot({path:"../test-results/attention-dark-mobile.png"});
   const tasks = await (await page.request.get("/api/tasks")).json();
-  expect(tasks).toHaveLength(1); expect(tasks[0].status).toBe("done");
+  expect(tasks).toHaveLength(existingTasks.length+1); expect(tasks.find((task:{title:string})=>task.title==="打ち合わせ前に素材を確認").status).toBe("done");
 });
 
 test("task updates arrive on another authenticated device through WebSocket", async ({page,browser}) => {
