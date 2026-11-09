@@ -35,7 +35,7 @@ const inputSchema = z.object({
   hold: z.object({ reason: z.enum(["MISSING_DOCUMENT", "CATEGORY_UNCLEAR", "AMOUNT_MISMATCH", "DUPLICATE_REVIEW", "OTHER"]), question: z.string().trim().min(1).max(2000) }).strict().nullable(),
   invoiceRequirement: z.enum(["UNDECIDED", "REQUIRED", "NOT_REQUIRED"]), memo: z.string().max(2000), reviewed: z.boolean(),
 }).strict();
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 
 function authorizedRow(data: AppData, actor: Actor, company: CompanyScope, id: string): BookkeepingTransaction {
   z.enum(["JAPAN", "CHINA"]).parse(company);

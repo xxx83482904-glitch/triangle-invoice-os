@@ -16,7 +16,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { todayIso } from "@/lib/format";
 import { receivedStatusLabels, visibleProjects } from "@/lib/documents";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
 import { paymentRecordsFor } from "@/lib/payment-records";
@@ -39,7 +40,7 @@ export default async function ReceivedInvoicesPage({
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:receivedInvoices")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:receivedInvoices")) redirect(defaultPathForUser(user));
 
   const data = await readData();
   const mayUpload = can(user, "manage:receivedInvoices") || can(user, "upload:receivedInvoices");
@@ -113,7 +114,7 @@ export default async function ReceivedInvoicesPage({
       <PageHeader title="受領請求書" description="請求書ファイルを直接ドロップすると、OCRで支払先・案件・日付・金額を仮仕分けします。">
         {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
         <Button asChild variant="outline"><Link href={`/documents?company=${company}`}>全書類</Link></Button>
-        <SectionExportDialog scope="received" role={user.role} />
+        <SectionExportDialog scope="received" access={{ role: user.role, featureAccess: user.featureAccess }} />
       </PageHeader>
 
       <div className="space-y-6">

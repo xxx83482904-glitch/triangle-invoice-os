@@ -1,7 +1,6 @@
 "use server";
 
 import { applyImportShipmentFormFields } from "@/lib/import-shipment-views";
-import { safeNextPath } from "@/lib/safe-next-path";
 import { projectCreationValues } from "@/lib/project-display";
 
 import { revalidatePath } from "next/cache";
@@ -11,7 +10,8 @@ import { obligationKindInput } from "@/lib/obligation-edits";
 import { signIn, signOut, requireUser } from "@/lib/auth";
 import { companyClientId, companyFromParam, mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { deleteReceivedInvoiceFile, uploadedFileNameFromUrl } from "@/lib/files";
-import { assertCan, assertCompanyAccess, can, canEditOptionGroup, defaultPathForRole } from "@/lib/rbac";
+import { assertCan, assertCompanyAccess, can, canEditOptionGroup } from "@/lib/rbac";
+import { defaultPathForUser, pathForUser } from "@/lib/app-navigation";
 import { mutateData, newId, readData, restoreUndoState, withDataMutationLock, writeData } from "@/lib/store";
 import { visibleProjects } from "@/lib/documents";
 import { applyIssuedInvoiceEdits } from "@/lib/issued-invoice-edits";
@@ -213,7 +213,7 @@ export type RegisterState = { error: string; success?: boolean };
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const user = await signIn(value(formData, "email"), value(formData, "password"));
   if (!user) return { error: "ログインできません。メールアドレス・パスワードと、管理者の承認状況を確認してください。" };
-  redirect(safeNextPath(value(formData, "next")) || defaultPathForRole(user.role));
+  redirect(pathForUser(user, value(formData, "next")));
 }
 
 export async function registerAction(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
@@ -233,7 +233,7 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
 export async function guestLoginAction() {
   const user = await signIn("guest@triangle.local", "password123");
   if (!user) redirect("/login");
-  redirect("/guest-invoices");
+  redirect(defaultPathForUser(user));
 }
 
 export async function logoutAction() {
@@ -244,7 +244,7 @@ export async function logoutAction() {
 export async function undoLastAction(formData: FormData) {
   const user = await requireUser();
   assertCan(user, "undo:changes");
-  const returnPath = value(formData, "returnPath") || defaultPathForRole(user.role);
+  const returnPath = pathForUser(user, value(formData, "returnPath"));
   await withDataMutationLock(async () => {
     const data = await readData();
     const targetLog = data.auditLogs.find((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson);
@@ -408,7 +408,7 @@ export async function updateProjectInline(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/projects");
   revalidatePath(`/projects/${id}`);
-  redirect(`${returnPath}?company=${submittedCompany}`);
+  redirect(pathForUser(user, `${returnPath}?company=${submittedCompany}`));
 }
 
 export async function createSelectOption(formData: FormData) {
@@ -647,7 +647,7 @@ export async function createGuestIssuedInvoice(formData: FormData) {
   });
 
   revalidatePath("/guest-invoices");
-  redirect(`/guest-invoices?company=${company}&created=${invoice.id}`);
+  redirect(pathForUser(user, `/guest-invoices?company=${company}&created=${invoice.id}`));
 }
 
 export async function createIssuedInvoice(formData: FormData) {
@@ -1004,7 +1004,7 @@ export async function deleteOcrDocument(formData: FormData) {
   revalidatePath("/mail-sorter");
   revalidatePath("/received-invoices");
   revalidatePath("/dashboard");
-  redirect(`/mail-sorter?company=${company}`);
+  redirect(pathForUser(user, `/mail-sorter?company=${company}`));
 }
 
 export async function deleteOcrDocumentsBulk(formData: FormData) {
@@ -1016,7 +1016,7 @@ export async function deleteOcrDocumentsBulk(formData: FormData) {
   const mailDocumentIds = uniqueFormValues(formData, "mailDocumentId");
   const company = mailSorterCompany;
   const receivedInvoiceIds = uniqueFormValues(formData, "receivedInvoiceId");
-  if (!mailDocumentIds.length && !receivedInvoiceIds.length) redirect(`/mail-sorter?company=${company}`);
+  if (!mailDocumentIds.length && !receivedInvoiceIds.length) redirect(pathForUser(user, `/mail-sorter?company=${company}`));
 
   const timestamp = now();
   const data = await readData();
@@ -1059,7 +1059,7 @@ export async function deleteOcrDocumentsBulk(formData: FormData) {
   revalidatePath("/mail-sorter");
   revalidatePath("/received-invoices");
   revalidatePath("/dashboard");
-  redirect(`/mail-sorter?company=${company}`);
+  redirect(pathForUser(user, `/mail-sorter?company=${company}`));
 }
 
 export async function createMailFolder(formData: FormData) {

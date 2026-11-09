@@ -6,7 +6,7 @@ import { integrityReport } from "@/lib/integrity";
 import { can } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 
-export function dashboardNextSteps(data: AppData, user: Pick<User, "id" | "role">, summary: DashboardSummary, fileExists?: (url?: string) => boolean | undefined): DashboardNextStep[] {
+export function dashboardNextSteps(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, summary: DashboardSummary, fileExists?: (url?: string) => boolean | undefined): DashboardNextStep[] {
   if (summary.company !== "JAPAN") return [];
   const query = "company=JAPAN";
   const steps: DashboardNextStep[] = [];

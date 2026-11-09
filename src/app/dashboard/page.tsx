@@ -6,7 +6,8 @@ import { companyFromParam } from "@/lib/company";
 import { dashboardSummary } from "@/lib/dashboard";
 import { dashboardNextSteps } from "@/lib/dashboard-next-steps";
 import { uploadedFileExists } from "@/lib/files";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 import { DashboardWorkspace } from "./dashboard-workspace";
 
@@ -14,7 +15,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:dashboard")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:dashboard")) redirect(defaultPathForUser(user));
   const company = companyFromParam(params.company);
   const data = await readDataForRequest();
   const summary = dashboardSummary(data, user, company, bankToday(), params.year);

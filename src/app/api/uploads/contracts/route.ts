@@ -1,3 +1,4 @@
+import { pathForUser } from "@/lib/app-navigation";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
@@ -85,5 +86,5 @@ export async function POST(request: Request) {
   revalidatePath("/dashboard");
   revalidatePath(`/projects/${projectId}`);
 
-  return NextResponse.redirect(new URL(`/projects?company=${company}&contractUploaded=${projectId}`, request.url), { status: 303 });
+  return NextResponse.redirect(new URL(pathForUser(user, `/projects?company=${company}&contractUploaded=${projectId}`), request.url), { status: 303 });
 }

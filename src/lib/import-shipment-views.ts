@@ -5,7 +5,7 @@ import { receivedPaymentSummary } from "@/lib/payment-records";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, ImportDocumentKind, ImportFieldSource, ImportOrder, ImportShipment, MailDocument, ReceivedInvoice, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 
 export type ImportBoardDocument = ImportLinkedDocument & {
   displayName: string; references: ImportReferences; fileUrl: string | undefined; mimeType: string | undefined; fileName: string;

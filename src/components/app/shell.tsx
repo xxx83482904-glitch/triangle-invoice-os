@@ -15,18 +15,19 @@ export async function AppShell({ children, banking = false }: { children: React.
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role === "GUEST") redirect("/guest-invoices");
+  const access = { role: user.role, featureAccess: user.featureAccess };
   const canUndoChanges = can(user, "undo:changes");
   const data = canUndoChanges ? await readData() : null;
   const canUndo = Boolean(data?.auditLogs.some((log) => log.action !== "UNDO_ACTION" && !log.undoneAt && log.beforeStateJson));
 
   return (
-    <AppCommandPaletteProvider role={user.role}>
+    <AppCommandPaletteProvider access={access}>
       <div className={`workspace-shell min-h-screen bg-background ${banking ? "banking-ledger-shell" : ""}`}>
         <a href="#main-content" className="sr-only fixed left-3 top-3 z-50 rounded-md bg-background p-3 text-sm focus:not-sr-only">本文へ移動</a>
-        <AppSidebar name={user.name} role={user.role} canUndo={canUndo} />
+        <AppSidebar name={user.name} access={access} canUndo={canUndo} />
         <div className="workspace-content">
           <header className="workspace-mobile-header sticky top-0 z-20 flex h-14 items-center justify-between border-b px-4 backdrop-blur lg:hidden">
-            <ScopedBrandLink compact role={user.role} />
+            <ScopedBrandLink compact access={access} />
             <div className="flex min-w-0 items-center gap-2">
               <MobileCompanySwitch role={user.role} />
               <AppSearchButton compact />
@@ -40,9 +41,9 @@ export async function AppShell({ children, banking = false }: { children: React.
               </form>
             </div>
           </header>
-          <main id="main-content" tabIndex={-1} className={`workspace-main mx-auto w-full px-3 py-3 pb-28 outline-none lg:px-8 lg:py-6 ${banking ? "banking-main" : ""}`}>{!banking ? <WorkflowNav role={user.role} compact /> : null}{children}</main>
+          <main id="main-content" tabIndex={-1} className={`workspace-main mx-auto w-full px-3 py-3 pb-28 outline-none lg:px-8 lg:py-6 ${banking ? "banking-main" : ""}`}>{!banking ? <WorkflowNav access={access} compact /> : null}{children}</main>
           <div className="workspace-mobile-nav fixed inset-x-0 bottom-0 z-30 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-            <MobileAppNav role={user.role} />
+            <MobileAppNav access={access} />
           </div>
         </div>
       </div>

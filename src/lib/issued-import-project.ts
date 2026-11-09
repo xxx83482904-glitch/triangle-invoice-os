@@ -21,7 +21,7 @@ function containsName(text: string, name: string) {
 
 // Called inside the invoice mutation, after duplicate checks, so creation is atomic.
 export function resolveIssuedImportProject(
-  data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope,
+  data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope,
   requestedId: string, hints: ImportHints,
 ) {
   if (!can(user, "manage:issuedInvoices")) throw new Error("権限がありません");

@@ -9,7 +9,7 @@ import { uploadedFileNameFromUrl } from "@/lib/files";
 import { assertCan, assertCompanyAccess, can, canAccessCompany } from "@/lib/rbac";
 import type { AppData, ExpenseClaim, ExpenseClaimAction, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 export type ExpenseClaimView = ExpenseClaim & {
   month: string; submitterName: string; projectName: string; categoryName: string; reviewerName: string; paidByName: string; editable: boolean;
 };

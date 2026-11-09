@@ -17,7 +17,7 @@ const editSchema = z.object({
 export type IssuedEdit = z.infer<typeof editSchema>;
 
 
-export function applyIssuedInvoiceEdits(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, input: IssuedEdit[]) {
+export function applyIssuedInvoiceEdits(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: IssuedEdit[]) {
   assertCan(user, "manage:issuedInvoices");
   assertCompanyAccess(user, company);
   const edits = z.array(editSchema).min(1).max(500).parse(input);

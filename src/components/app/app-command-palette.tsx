@@ -9,12 +9,12 @@ import { DirectionProvider } from "@/components/foundations/direction/direction"
 import { navigationIcon } from "@/components/app/navigation-icon";
 import { commandNavigation } from "@/lib/app-navigation";
 import { requestAppNavigation } from "@/lib/navigation-intent";
-import type { UserRole } from "@/lib/types";
+import type { UserAccess } from "@/lib/rbac";
 import { cx } from "@/utils/cx";
 
 const OpenPaletteContext = createContext<(() => void) | null>(null);
 
-export function AppCommandPaletteProvider({ role, children }: { role: UserRole; children: ReactNode }) {
+export function AppCommandPaletteProvider({ access, children }: { access: UserAccess; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   function changeOpen(next: boolean) {
@@ -26,14 +26,14 @@ export function AppCommandPaletteProvider({ role, children }: { role: UserRole; 
     <DirectionProvider locale="ja-JP">
       <OpenPaletteContext.Provider value={() => changeOpen(true)}>
         {children}
-        <AppCommandPalette role={role} open={open} onOpenChange={changeOpen} query={query} onQueryChange={setQuery} />
+        <AppCommandPalette access={access} open={open} onOpenChange={changeOpen} query={query} onQueryChange={setQuery} />
       </OpenPaletteContext.Provider>
     </DirectionProvider>
   );
 }
 
-export function AppCommandPalette({ role, open, onOpenChange, query, onQueryChange }: {
-  role: UserRole;
+export function AppCommandPalette({ access, open, onOpenChange, query, onQueryChange }: {
+  access: UserAccess;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   query: string;
@@ -42,7 +42,7 @@ export function AppCommandPalette({ role, open, onOpenChange, query, onQueryChan
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
-  const screens = commandNavigation(pathname, new URLSearchParams(params.toString()), role);
+  const screens = commandNavigation(pathname, new URLSearchParams(params.toString()), access);
 
   return (
     <CommandPalette

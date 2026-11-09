@@ -16,7 +16,7 @@ const revokeSchema = z.object({ id: z.string().min(1).max(1000), updatedAt: z.st
 export type RevokeIntegrityInput = z.input<typeof revokeSchema>;
 type Options = { today?: string; fileExists?: (fileUrl?: string) => boolean | undefined };
 
-export function acknowledgeIntegrity(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: AcknowledgeIntegrityInput, options: Options = {}) {
+export function acknowledgeIntegrity(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: AcknowledgeIntegrityInput, options: Options = {}) {
   assertCompanyAccess(actor, company); assertCan(actor, "manage:banking");
   const value = schema.parse(input), report = integrityReport(data, company, options);
   const current = new Map(report.issues.map((issue) => [issue.id, issue]));
@@ -32,7 +32,7 @@ export function acknowledgeIntegrity(data: AppData, actor: Pick<User, "id" | "ro
   return { mode: value.mode, kind: value.kind, count: rows.length, batchId, reason: value.reason, ids: rows.map((row) => row.id) };
 }
 
-export function revokeIntegrityAcknowledgement(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: RevokeIntegrityInput) {
+export function revokeIntegrityAcknowledgement(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: RevokeIntegrityInput) {
   assertCompanyAccess(actor, company); assertCan(actor, "manage:banking");
   const value = revokeSchema.parse(input), row = (data.integrityAcknowledgements || []).find((item) => item.id === value.id && item.company === company);
   const latest = row && data.integrityAcknowledgements!.find((item) => item.company === company && item.issueId === row.issueId);

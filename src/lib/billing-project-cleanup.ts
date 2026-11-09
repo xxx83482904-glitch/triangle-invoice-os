@@ -5,7 +5,7 @@ import { visibleProjects } from "@/lib/documents";
 import { assertCan, assertCompanyAccess, can, canAccessCompany } from "@/lib/rbac";
 import type { AppData, Project, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 export type BillingProjectGroup = { id: string; signature: string; name: string; clientName: string; names: string[]; documentCount: number };
 const accessKey = (p: Project) => JSON.stringify([p.managerId, [...p.memberIds].sort()]);
 

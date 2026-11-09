@@ -5,7 +5,8 @@ import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/c
 import { groupImportDocuments, importShipmentViews, unassignedImportDocuments } from "@/lib/import-shipment-views";
 import { legacyImportShipmentHref } from "@/lib/import-list";
 import { importToday } from "@/lib/import-shipments";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest as readData } from "@/lib/store";
 import { ImportsWorkspace } from "./imports-workspace";
 
@@ -18,7 +19,7 @@ export default async function ImportsPage({
   const company = companyFromParam(Array.isArray(params.company) ? params.company[0] : params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:imports")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:imports")) redirect(defaultPathForUser(user));
   const legacyHref = legacyImportShipmentHref(company, params.shipment);
   if (legacyHref) redirect(legacyHref);
   const today = importToday();

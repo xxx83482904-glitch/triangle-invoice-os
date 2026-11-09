@@ -11,7 +11,7 @@ test("navigation retains every existing destination exactly once and removes emp
   const paths = appNavigation.flatMap((group) => group.items.map((item) => item.href));
   assert.equal(paths.length, 14); assert.equal(new Set(paths).size, 14);
   for (const role of ["ADMIN", "ACCOUNTING", "CHIEF_DESIGNER", "PROJECT_MANAGER", "MAIL_EDITOR", "BILLING_EDITOR", "DESIGNER", "GUEST"] as UserRole[]) {
-    const groups = navigationGroups(role), { primary, more } = mobileNavigation(role);
+    const groups = navigationGroups({ role: role }), { primary, more } = mobileNavigation({ role: role });
     assert.ok(groups.every((group) => group.items.length && group.items.every((item) => canRole(role, item.permission))));
     assert.deepEqual([...primary, ...more].map((item) => item.href).sort(), groups.flatMap((group) => group.items.map((item) => item.href)).sort());
     assert.ok(primary.length <= 4);
@@ -19,13 +19,13 @@ test("navigation retains every existing destination exactly once and removes emp
 });
 
 test("limited roles do not gain bank, aggregate or cross-company destinations", () => {
-  assert.deepEqual(navigationGroups("BILLING_EDITOR").flatMap((group) => group.items.map((item) => item.href)), ["/estimates", "/issued-invoices", "/partners"]);
-  assert.deepEqual(mobileNavigation("MAIL_EDITOR").primary.map((item) => item.href), ["/mail-sorter", "/documents"]);
+  assert.deepEqual(navigationGroups({ role: "BILLING_EDITOR" }).flatMap((group) => group.items.map((item) => item.href)), ["/estimates", "/issued-invoices", "/partners"]);
+  assert.deepEqual(mobileNavigation({ role: "MAIL_EDITOR" }).primary.map((item) => item.href), ["/mail-sorter", "/documents"]);
   for (const role of ["BILLING_EDITOR", "MAIL_EDITOR"] as const) {
     assert.equal(navigationCompany(role, "CHINA"), "JAPAN");
-    assert.deepEqual(workflowNavigation("/banking", new URLSearchParams("company=CHINA"), role), []);
+    assert.deepEqual(workflowNavigation("/banking", new URLSearchParams("company=CHINA"), { role: role }), []);
   }
-  assert.ok(mobileNavigation("ACCOUNTING").primary.some((item) => item.href === "/banking"));
+  assert.ok(mobileNavigation({ role: "ACCOUNTING" }).primary.some((item) => item.href === "/banking"));
 });
 
 test("navigation matches nested routes but not similarly named paths", () => {
@@ -35,7 +35,7 @@ test("navigation matches nested routes but not similarly named paths", () => {
 });
 
 test("workflow tabs preserve bank account/month without carrying stale selection filters", () => {
-  const tabs = workflowNavigation("/banking", new URLSearchParams("company=JAPAN&account=a%2Fb&month=2026-09&transaction=secret&category=c&page=5&q=private"), "ACCOUNTING");
+  const tabs = workflowNavigation("/banking", new URLSearchParams("company=JAPAN&account=a%2Fb&month=2026-09&transaction=secret&category=c&page=5&q=private"), { role: "ACCOUNTING" });
   assert.equal(tabs.filter((tab) => tab.active).length, 1);
   for (const tab of tabs) {
     const url = new URL(tab.href, "https://test.invalid");
@@ -50,14 +50,14 @@ test("workflow tabs preserve bank account/month without carrying stale selection
 
 test("account overview always opens latest data instead of inheriting an old month or fiscal period", () => {
   for (const path of ["/banking", "/banking/reconcile", "/banking/accounts"]) {
-    const tabs = workflowNavigation(path, new URLSearchParams("company=JAPAN&month=2026-06&checkMonth=2026-05&fiscalYear=2026"), "ADMIN");
+    const tabs = workflowNavigation(path, new URLSearchParams("company=JAPAN&month=2026-06&checkMonth=2026-05&fiscalYear=2026"), { role: "ADMIN" });
     assert.equal(tabs.find((tab) => tab.label === "口座一覧")!.href, "/banking/accounts?company=JAPAN");
   }
 });
 
 test("AI and normal reconciliation tabs have distinct active states", () => {
   for (const view of ["checks", "invoices", "banks", ""]) {
-    const tabs = workflowNavigation("/banking/reconcile", new URLSearchParams({ company: "JAPAN", view, checkMonth: "2026-08" }), "ADMIN");
+    const tabs = workflowNavigation("/banking/reconcile", new URLSearchParams({ company: "JAPAN", view, checkMonth: "2026-08" }), { role: "ADMIN" });
     assert.equal(tabs.filter((tab) => tab.active).length, 1);
     assert.equal(tabs.find((tab) => tab.active)?.label, view === "checks" ? "AI・確認事項" : "銀行・書類照合");
     assert.ok(tabs.find((tab) => tab.label === "明細")?.href.includes("month=2026-08"));
@@ -65,22 +65,22 @@ test("AI and normal reconciliation tabs have distinct active states", () => {
 });
 
 test("sales and receiving workflow tabs stay scoped and respect permissions", () => {
-  const sales = workflowNavigation("/projects/123", new URLSearchParams("company=JAPAN"), "PROJECT_MANAGER");
+  const sales = workflowNavigation("/projects/123", new URLSearchParams("company=JAPAN"), { role: "PROJECT_MANAGER" });
   assert.deepEqual(sales.map((tab) => tab.label), ["案件", "見積書", "発行請求書"]);
   assert.equal(sales.find((tab) => tab.active)?.label, "案件");
-  const mail = workflowNavigation("/received-invoices", new URLSearchParams("company=CHINA"), "ADMIN");
+  const mail = workflowNavigation("/received-invoices", new URLSearchParams("company=CHINA"), { role: "ADMIN" });
   assert.equal(mail[0].href, "/mail-sorter?company=JAPAN");
   assert.equal(mail[1].href, "/received-invoices?company=JAPAN");
-  assert.deepEqual(workflowNavigation("/users", new URLSearchParams(), "ADMIN"), []);
+  assert.deepEqual(workflowNavigation("/users", new URLSearchParams(), { role: "ADMIN" }), []);
 });
 
 test("shipment detail retains the receiving workflow with only imports active", () => {
-  const tabs = workflowNavigation("/imports/ship-1", new URLSearchParams("company=JAPAN&document=old"), "ADMIN");
+  const tabs = workflowNavigation("/imports/ship-1", new URLSearchParams("company=JAPAN&document=old"), { role: "ADMIN" });
   assert.deepEqual(tabs.map((tab) => tab.label), ["郵便仕分け", "受領請求書", "輸入"]);
   assert.deepEqual(tabs.filter((tab) => tab.active).map((tab) => tab.href), ["/imports?company=JAPAN"]);
   assert.ok(tabs.every((tab) => !tab.href.includes("document=")));
-  assert.deepEqual(workflowNavigation("/imports-extra/ship-1", new URLSearchParams(), "ADMIN"), []);
-  assert.deepEqual(workflowNavigation("/imports/ship-1", new URLSearchParams(), "BILLING_EDITOR"), []);
+  assert.deepEqual(workflowNavigation("/imports-extra/ship-1", new URLSearchParams(), { role: "ADMIN" }), []);
+  assert.deepEqual(workflowNavigation("/imports/ship-1", new URLSearchParams(), { role: "BILLING_EDITOR" }), []);
 });
 
 test("mail search handles multiple terms, Japanese width, case and missing OCR without mutating data", () => {
@@ -102,8 +102,8 @@ test("sidebar keeps the existing groups, order, permissions and active parent de
   for (const role of roles) {
     for (const pathname of ["/dashboard", "/projects/123", "/received-invoices", "/users"]) {
       const params = new URLSearchParams("company=JAPAN");
-      const groups = sidebarNavigation(pathname, params, role);
-      assert.deepEqual(groups, navigationGroups(role).map((group) => ({
+      const groups = sidebarNavigation(pathname, params, { role: role });
+      assert.deepEqual(groups, navigationGroups({ role: role }).map((group) => ({
         label: group.label,
         items: group.items.map((item) => ({
           label: item.label,
@@ -115,7 +115,7 @@ test("sidebar keeps the existing groups, order, permissions and active parent de
     }
   }
   assert.equal(appNavigation[0].items.find((item) => item.href === "/banking")?.label, "口座・カード");
-  assert.equal(mobileNavigation("ADMIN").primary.find((item) => item.href === "/banking")?.label, "口座・カード");
+  assert.equal(mobileNavigation({ role: "ADMIN" }).primary.find((item) => item.href === "/banking")?.label, "口座・カード");
 });
 
 test("sidebar bank children reuse workflow permissions, context and active states without changing query params", () => {
@@ -128,8 +128,8 @@ test("sidebar bank children reuse workflow permissions, context and active state
       ]) {
         const params = new URLSearchParams(query);
         const before = params.toString();
-        const bank = sidebarNavigation(pathname, params, role).flatMap((group) => group.items).find((item) => item.label === "口座・カード");
-        const tabs = workflowNavigation(pathname, params, role);
+        const bank = sidebarNavigation(pathname, params, { role: role }).flatMap((group) => group.items).find((item) => item.label === "口座・カード");
+        const tabs = workflowNavigation(pathname, params, { role: role });
         assert.equal(params.toString(), before);
         assert.deepEqual(bank?.children ?? [], tabs.map((tab) => ({ ...tab, icon: navigationIconName(tab.href) })));
         assert.equal(bank?.children?.length ?? 0, canRole(role, "view:banking") ? canRole(role, "manage:banking") ? 9 : 7 : 0);
@@ -146,14 +146,14 @@ test("sidebar bank children reuse workflow permissions, context and active state
 
 test("bank children only expand on banking routes", () => {
   for (const pathname of ["/dashboard", "/banking-extra", "/projects/banking", "/mail-sorter"]) {
-    for (const role of roles) assert.ok(sidebarNavigation(pathname, new URLSearchParams(), role).every((group) => group.items.every((item) => !item.children)));
+    for (const role of roles) assert.ok(sidebarNavigation(pathname, new URLSearchParams(), { role: role }).every((group) => group.items.every((item) => !item.children)));
   }
 });
 
 test("sidebar company queries retain current Japan-only access and mail scoping", () => {
   for (const role of roles) {
     for (const value of ["JAPAN", "CHINA", "invalid"]) {
-      const groups = sidebarNavigation("/banking/reconcile", new URLSearchParams({ company: value, view: "checks" }), role);
+      const groups = sidebarNavigation("/banking/reconcile", new URLSearchParams({ company: value, view: "checks" }), { role: role });
       for (const item of groups.flatMap((group) => group.items).flatMap((item) => [item, ...(item.children ?? [])])) {
         const url = new URL(item.href, "https://test.invalid");
         assert.equal(url.searchParams.get("company"), url.pathname === "/mail-sorter" ? "JAPAN" : navigationCompany(role, value));
@@ -168,17 +168,17 @@ test("sidebar company queries retain current Japan-only access and mail scoping"
 test("palette exposes all permitted bank screens from any route, with no duplicate destinations", () => {
   const params = new URLSearchParams("company=CHINA&account=synthetic&month=2026-09&view=checks");
   for (const role of roles) {
-    const screens = commandNavigation("/dashboard", params, role);
-    const main = navigationGroups(role).flatMap((group) => group.items).filter((item) => item.href !== "/banking");
-    const bank = workflowNavigation("/banking", params, role);
+    const screens = commandNavigation("/dashboard", params, { role: role });
+    const main = navigationGroups({ role: role }).flatMap((group) => group.items).filter((item) => item.href !== "/banking");
+    const bank = workflowNavigation("/banking", params, { role: role });
     assert.equal(screens.length, main.length + bank.length);
     assert.equal(new Set(screens.map((screen) => screen.href)).size, screens.length);
     assert.deepEqual(screens.filter((screen) => screen.group === "口座・カード").map(({ label, href }) => ({ label, href })), bank.map(({ label, href }) => ({ label, href })));
     assert.deepEqual(screens.filter((screen) => screen.group !== "口座・カード").map((screen) => screen.href), main.map((item) => navHref(item.href, navigationCompany(role, "CHINA"))));
     assert.ok(screens.every((screen) => screen.group && screen.icon && screen.href.startsWith("/")));
   }
-  assert.equal(commandNavigation("/dashboard", params, "ADMIN").length, 22);
-  const checks = commandNavigation("/banking/reconcile", params, "ADMIN").find((screen) => screen.label === "AI・確認事項");
+  assert.equal(commandNavigation("/dashboard", params, { role: "ADMIN" }).length, 22);
+  const checks = commandNavigation("/banking/reconcile", params, { role: "ADMIN" }).find((screen) => screen.label === "AI・確認事項");
   assert.ok(checks);
   assert.match(checks!.href, /checkMonth=2026-09/);
 });
@@ -186,8 +186,8 @@ test("palette exposes all permitted bank screens from any route, with no duplica
 test("all sidebar and palette destinations include icon names, including the distinct AI checks route", () => {
   for (const role of roles) {
     const params = new URLSearchParams("company=JAPAN&view=checks");
-    const items = sidebarNavigation("/banking/reconcile", params, role).flatMap((group) => group.items).flatMap((item) => [item, ...(item.children ?? [])]);
-    for (const item of [...items, ...commandNavigation("/dashboard", params, role)]) {
+    const items = sidebarNavigation("/banking/reconcile", params, { role: role }).flatMap((group) => group.items).flatMap((item) => [item, ...(item.children ?? [])]);
+    for (const item of [...items, ...commandNavigation("/dashboard", params, { role: role })]) {
       assert.ok(item.icon, item.href);
       assert.equal(item.icon, navigationIconName(item.label === "口座・カード" ? "/banking" : item.href));
     }

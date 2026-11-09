@@ -10,7 +10,7 @@ import type { BankSyncState } from "@/lib/banking-types";
 import { recordBankCoverage } from "@/lib/bank-forecast";
 import { BANK_SYNC_SYSTEM_ACTOR, bankSyncRunFor, beginBankSyncRun, finishBankSyncRun, recordBankSyncChanges, recordBankSyncRange } from "@/lib/bank-sync-runs";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 export type BankSyncRequest = { mode: "recent" | "all" | "range"; start?: string; end?: string };
 const requestSchema = z.object({ mode: z.enum(["recent", "all", "range"]), start: z.string().optional(), end: z.string().optional() });
 const staleMs = 30 * 60 * 1000;

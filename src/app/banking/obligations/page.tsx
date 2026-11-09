@@ -6,7 +6,8 @@ import { AppShell } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
 import { bankToday } from "@/lib/banking";
 import { companyFromParam } from "@/lib/company";
-import { can, canAccessCompany, defaultPathForRole } from "@/lib/rbac";
+import { can, canAccessCompany } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 import { ObligationsWorkspace } from "@/components/app/obligations-workspace";
 import { taxObligations } from "@/lib/tax-obligations";
@@ -16,9 +17,9 @@ import { taxObligations } from "@/lib/tax-obligations";
 export default async function BankObligationsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:banking")) redirect(defaultPathForUser(user));
   const params = await searchParams, company = companyFromParam(params.company);
-  if (!canAccessCompany(user, company)) redirect(defaultPathForRole(user.role));
+  if (!canAccessCompany(user, company)) redirect(defaultPathForUser(user));
   const data = await readDataForRequest(), today = bankToday();
   const summary = taxObligations(data, company, today);
   return <AppShell><div className="min-w-0 space-y-4 pb-12">

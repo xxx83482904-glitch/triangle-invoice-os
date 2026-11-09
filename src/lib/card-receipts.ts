@@ -12,7 +12,7 @@ import { isActiveUser } from "@/lib/user-access";
 
 // Company card receipts: each person has their own card account. A receipt is attached to a use on that card,
 // automatically when exactly one use has the same amount within a week of the receipt date. Nothing is reimbursed.
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 const DAY = 86_400_000;
 export const CARD_MATCH_DAYS = 7;
 export const CARD_USE_LOOKBACK_DAYS = 120;

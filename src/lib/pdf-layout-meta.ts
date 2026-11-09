@@ -12,7 +12,7 @@ export type PdfLayoutMeta = {
   canEditContent: boolean; amountsLocked: boolean;
 };
 
-export function issuedPdfMeta(invoice: IssuedInvoice, data: AppData, user: Pick<User, "role">): PdfLayoutMeta {
+export function issuedPdfMeta(invoice: IssuedInvoice, data: AppData, user: Pick<User, "role" | "featureAccess">): PdfLayoutMeta {
   const defaults = pdfTextDefaults(invoice, data, "invoice");
   return {
     kind: "invoice", updatedAt: invoice.updatedAt, total: invoice.total, layout: resolvePdfLayout(invoice.pdfLayout), defaults, text: resolvePdfText(invoice.pdfText, defaults),
@@ -22,7 +22,7 @@ export function issuedPdfMeta(invoice: IssuedInvoice, data: AppData, user: Pick<
   };
 }
 
-export function estimatePdfMeta(estimate: Estimate, data: AppData, user: Pick<User, "role">): PdfLayoutMeta {
+export function estimatePdfMeta(estimate: Estimate, data: AppData, user: Pick<User, "role" | "featureAccess">): PdfLayoutMeta {
   const defaults = pdfTextDefaults(estimate, data, "estimate");
   return {
     kind: "estimate", updatedAt: estimate.updatedAt, total: estimate.total, layout: resolvePdfLayout(estimate.pdfLayout), defaults, text: resolvePdfText(estimate.pdfText, defaults),

@@ -9,7 +9,8 @@ import { bankSyncBusy } from "@/lib/banking-sync";
 import { pendingBankSyncReviewCount } from "@/lib/bank-sync-runs";
 import { companyFromParam } from "@/lib/company";
 import { moneyForwardConfig } from "@/lib/moneyforward-client";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 import { effectiveOcrConfig } from "@/lib/ocr-settings";
 import { bankingDataRevision } from "@/lib/banking-revision";
@@ -17,7 +18,7 @@ import { bankingDataRevision } from "@/lib/banking-revision";
 export default async function BankingPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:banking")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:banking")) redirect(defaultPathForUser(user));
   const params = await searchParams;
   const company = companyFromParam(params.company);
   const data = await readDataForRequest();
@@ -27,7 +28,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
   const result = selectBankTransactions(data, company, filters);
   const sync = data.bankSyncStates.find((state) => state.company === company);
   const ai = await effectiveOcrConfig();
-  return <AppShell banking><BankingWorkspace key={`${company}:${JSON.stringify(filters)}`} role={user.role} company={company} filters={filters} {...result}
+  return <AppShell banking><BankingWorkspace key={`${company}:${JSON.stringify(filters)}`} access={{ role: user.role, featureAccess: user.featureAccess }} company={company} filters={filters} {...result}
     rows={bankDisplayRows(data, result.rows)}
     revision={bankingDataRevision(data, company)}
     accounts={data.bankAccounts.filter((row) => row.company === company)}

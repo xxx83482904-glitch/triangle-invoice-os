@@ -1,33 +1,16 @@
 "use client";
 
-import { useActionState, useId, useRef, useState, type RefObject } from "react";
-import { Eye, EyeOff, KeyRound, LogOut, Pencil } from "lucide-react";
-import { OptionTabs } from "@/components/app/option-tabs";
+import { useActionState, useRef, useState, type RefObject } from "react";
+import { LogOut, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { navigationGroups } from "@/lib/app-navigation";
-import type { UserRole } from "@/lib/types";
-import type { UserAccountStatus, UserAccountView } from "@/lib/user-admin";
+import type { UserAccountView } from "@/lib/user-admin";
 import { endUserSessionsAction, updateUserAccountAction } from "./actions";
+import { UserAccountFields, type AccountRoleOption } from "./user-account-fields";
 
-type EditorProps = { user: UserAccountView; actorId: string; roles: Array<{ value: UserRole; label: string }> };
+type EditorProps = { user: UserAccountView; actorId: string; roles: AccountRoleOption[] };
 type ActionState = { error: string; success?: boolean };
-
-function randomPassword() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  const limit = Math.floor(256 / alphabet.length) * alphabet.length;
-  let password = "";
-  while (password.length < 14) {
-    for (const value of globalThis.crypto.getRandomValues(new Uint8Array(14))) {
-      if (value >= limit) continue;
-      password += alphabet[value % alphabet.length];
-      if (password.length === 14) break;
-    }
-  }
-  return password;
-}
 
 export function UserAccountEditor(props: EditorProps) {
   const [open, setOpen] = useState(false);
@@ -46,13 +29,6 @@ function UserAccountDialog({ user: initialUser, actorId, roles, triggerRef, onCl
   // Keep the version that was opened, even if another action refreshes the page while editing.
   const [user] = useState(initialUser);
   const isSelf = user.id === actorId;
-  const fieldId = useId();
-  const [name, setName] = useState(user.name);
-  const [email, setEmail] = useState(user.email);
-  const [password, setPassword] = useState("");
-  const [visible, setVisible] = useState(false);
-  const [role, setRole] = useState(user.role);
-  const [status, setStatus] = useState<UserAccountStatus>(user.status);
   const [state, save, saving] = useActionState(async (previous: ActionState, formData: FormData): Promise<ActionState> => {
     try {
       const result = await updateUserAccountAction(previous, formData);
@@ -78,9 +54,6 @@ function UserAccountDialog({ user: initialUser, actorId, roles, triggerRef, onCl
     }
   }, { error: "" });
   const pending = saving || ending;
-  const screens = navigationGroups(role).flatMap((group) => group.items.map((item) => item.label));
-  const statusOptions: Array<readonly [UserAccountStatus, string]> = [["ACTIVE", "利用中"], ["DISABLED", "停止"]];
-  if (user.status === "REJECTED") statusOptions.push(["REJECTED", "申請却下（現在）"]);
   const logoutHelp = isSelf
     ? "ほかの端末をすべてログアウトします。この端末はログインしたままです。パスワードは変わりません。"
     : "この人がログイン中の端末をすべてログアウトします。パスワードは変わりません。";
@@ -95,49 +68,7 @@ function UserAccountDialog({ user: initialUser, actorId, roles, triggerRef, onCl
       <form action={save} className="min-w-0 space-y-4" aria-busy={saving}>
         <input type="hidden" name="id" value={user.id} />
         <input type="hidden" name="updatedAt" value={user.updatedAt} />
-        <label className="grid min-w-0 gap-1 text-sm">名前
-          <Input name="name" autoComplete="off" required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} disabled={pending} className="h-11 lg:h-9" />
-        </label>
-        <label className="grid min-w-0 gap-1 text-sm">メールアドレス（ログインに使います）
-          <Input name="email" type="email" autoComplete="off" autoCapitalize="none" spellCheck={false} required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} disabled={pending} className="h-11 lg:h-9" />
-        </label>
-        <div className="min-w-0 space-y-2">
-          <label htmlFor={`${fieldId}-password`} className="grid min-w-0 gap-1 text-sm">新しいパスワード
-            <Input id={`${fieldId}-password`} name="password" type={visible ? "text" : "password"} autoComplete="new-password" autoCapitalize="none" spellCheck={false}
-              placeholder="変更しないときは空のまま" minLength={8} maxLength={72} value={password} onChange={(event) => setPassword(event.target.value)} disabled={pending}
-              aria-describedby={`${fieldId}-password-help`} className="h-11 lg:h-9" />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="h-11 lg:h-9" aria-controls={`${fieldId}-password`} aria-pressed={visible} disabled={pending} onClick={() => setVisible(!visible)}>
-              {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}{visible ? "隠す" : "表示"}
-            </Button>
-            <Button type="button" variant="outline" className="h-11 lg:h-9" disabled={pending} onClick={() => { setPassword(randomPassword()); setVisible(true); }}>
-              <KeyRound className="size-4" />作成
-            </Button>
-          </div>
-          <p id={`${fieldId}-password-help`} className="text-xs leading-relaxed text-muted-foreground">保存すると、この人はすべての端末からログアウトし、新しいパスワードでログインし直します。
-            {isSelf ? "自分のパスワードを変更する場合、この端末はログインしたままです。" : null}
-          </p>
-        </div>
-        <div className="min-w-0 space-y-2">
-          <label className="grid min-w-0 gap-1 text-sm">権限
-            <select name={isSelf ? undefined : "role"} value={role} onChange={(event) => setRole(event.target.value as UserRole)} disabled={pending || isSelf}
-              aria-describedby={`${fieldId}-screens${isSelf ? ` ${fieldId}-self-help` : ""}`} className="h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50 lg:h-9">
-              {roles.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          {isSelf ? <input type="hidden" name="role" value={role} /> : null}
-          <div id={`${fieldId}-screens`} className="space-y-1 text-xs text-muted-foreground" aria-live="polite">
-            <p className="font-medium">この権限で使える画面</p>
-            <p className="break-words leading-relaxed">{screens.join("・") || "ゲスト用の請求書作成画面"}</p>
-          </div>
-        </div>
-        <div className="min-w-0 space-y-2">
-          <p className="text-sm">利用状態</p>
-          <OptionTabs name="status" label="利用状態" value={status} options={statusOptions} disabled={pending || isSelf} onChange={setStatus} />
-          {status === "DISABLED" ? <p className="text-xs leading-relaxed text-muted-foreground">停止するとログインできなくなり、ログイン中の端末もすぐに使えなくなります。</p> : null}
-          {isSelf ? <p id={`${fieldId}-self-help`} className="text-xs leading-relaxed text-muted-foreground">自分の権限と利用状態は、ほかの管理者が変更します</p> : null}
-        </div>
+        <UserAccountFields user={user} roles={roles} pending={pending} isSelf={isSelf} />
         {state.error ? <p role="alert" className="break-words text-sm text-destructive">{state.error}</p> : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" disabled={pending} className="h-11 lg:h-9" onClick={onClose}>キャンセル</Button>

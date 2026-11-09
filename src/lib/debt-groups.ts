@@ -6,7 +6,7 @@ import { can, canAccessCompany } from "@/lib/rbac";
 
 // A debt group bundles the paper trail of one debt: 請求書 → 再請求 → 督促 → 領収書 (and 合計請求書).
 // Only the latest payable document in a group is the one to pay and reconcile; the others stay as evidence.
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 export const debtRoles: Record<DebtRole, string> = { INVOICE: "請求書", REISSUE: "再請求", REMINDER: "督促", STATEMENT: "合計請求書", RECEIPT: "領収書" };
 export const debtRoleList = Object.keys(debtRoles) as DebtRole[];
 const payableRoles: DebtRole[] = ["INVOICE", "REISSUE", "REMINDER", "STATEMENT"];

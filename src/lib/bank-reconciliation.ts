@@ -140,7 +140,7 @@ export const reconcileSchema = z.object({
 });
 export type ReconcileInput = z.input<typeof reconcileSchema>;
 
-export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: ReconcileInput, today = bankToday()) {
+export function confirmBankReconciliation(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: ReconcileInput, today = bankToday()) {
   assertBankAccess(actor, company);
   const value = reconcileSchema.parse(input), amount = cents(value.amount);
   const bank = data.bankTransactions.find((row) => row.company === company && row.id === value.transactionId);
@@ -205,7 +205,7 @@ export const reconciliationBatchSchema = z.object({
 });
 export type ReconciliationBatchInput = z.input<typeof reconciliationBatchSchema>;
 
-export function confirmBankReconciliationBatch(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: ReconciliationBatchInput, today = bankToday()) {
+export function confirmBankReconciliationBatch(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: ReconciliationBatchInput, today = bankToday()) {
   assertBankAccess(actor, company);
   const value = reconciliationBatchSchema.parse(input);
   const keys = new Set<string>();
@@ -237,7 +237,7 @@ export function confirmBankReconciliationBatch(data: AppData, actor: Pick<User, 
 
 const aliasSchema = z.object({ transactionId: z.string().min(1), transactionUpdatedAt: z.string(), invoiceKind: z.enum(["issued", "received"]), invoiceId: z.string().min(1), invoiceUpdatedAt: z.string(), acknowledged: z.literal(true), removeId: z.string().optional() });
 export type ReconciliationAliasInput = z.input<typeof aliasSchema>;
-export function saveReconciliationAlias(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: ReconciliationAliasInput) {
+export function saveReconciliationAlias(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: ReconciliationAliasInput) {
   assertBankAccess(actor, company);
   const value = aliasSchema.parse(input);
   const bank = data.bankTransactions.find((row) => row.id === value.transactionId && row.company === company);
@@ -278,7 +278,7 @@ const installmentSchema = z.object({ invoiceId: z.string().min(1), invoiceUpdate
   installments: z.array(z.object({ id: z.string().min(1).max(100), dueDate: z.string().refine(isBankDate), amount: z.number().refine(monetary), note: z.string().trim().max(500).optional() })).max(100),
 });
 export type ReconciliationInstallmentsInput = z.input<typeof installmentSchema>;
-export function saveReconciliationInstallments(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: ReconciliationInstallmentsInput) {
+export function saveReconciliationInstallments(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: ReconciliationInstallmentsInput) {
   assertBankAccess(actor, company);
   const value = installmentSchema.parse(input);
   const { invoice } = targetInvoice(data, company, "issued", value.invoiceId);
@@ -291,7 +291,7 @@ export function saveReconciliationInstallments(data: AppData, actor: Pick<User, 
   return { invoiceId: invoice.id, count: value.installments.length };
 }
 
-export function removeBankReconciliation(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, id: string, updatedAt: string) {
+export function removeBankReconciliation(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, id: string, updatedAt: string) {
   assertBankAccess(actor, company);
   const link = activeLinks(data, company).find((row) => row.id === id);
   if (!link || link.updatedAt !== updatedAt) throw new Error("照合記録が更新されています");
@@ -306,7 +306,7 @@ export function removeBankReconciliation(data: AppData, actor: Pick<User, "id" |
   return { id: link.id, removedPayment: link.createdPayment };
 }
 
-export function syncReconciledInvoiceStatus(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, kind: Kind, id: string, updatedAt: string, today = bankToday()) {
+export function syncReconciledInvoiceStatus(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, kind: Kind, id: string, updatedAt: string, today = bankToday()) {
   assertBankAccess(actor, company);
   if (!["issued", "received"].includes(kind)) throw new Error("書類の種類が不正です");
   const { invoice } = targetInvoice(data, company, kind, id);
@@ -336,7 +336,7 @@ export function reconciliationReaffirmBlocker(data: AppData, link: BankReconcili
   return "";
 }
 
-function reaffirmLink(data: AppData, actor: Pick<User, "id" | "role">, link: BankReconciliation, today: string) {
+function reaffirmLink(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, link: BankReconciliation, today: string) {
   const issue = reconciliationIssue(data, link, today);
   if (!issue) throw new Error("この照合は要再確認ではありません");
   const blocker = reconciliationReaffirmBlocker(data, link, today);
@@ -350,14 +350,14 @@ function reaffirmLink(data: AppData, actor: Pick<User, "id" | "role">, link: Ban
   return { id: link.id, issue };
 }
 
-export function reaffirmBankReconciliation(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, id: string, updatedAt: string, today = bankToday()) {
+export function reaffirmBankReconciliation(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, id: string, updatedAt: string, today = bankToday()) {
   assertBankAccess(actor, company);
   const link = activeLinks(data, company).find((row) => row.id === id);
   if (!link || link.updatedAt !== updatedAt) throw new Error("照合記録が更新されています");
   return reaffirmLink(data, actor, link, today);
 }
 
-export function reaffirmInvoiceReconciliations(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, kind: Kind, id: string, updatedAt: string, today = bankToday()) {
+export function reaffirmInvoiceReconciliations(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, kind: Kind, id: string, updatedAt: string, today = bankToday()) {
   assertBankAccess(actor, company);
   if (!["issued", "received"].includes(kind)) throw new Error("書類の種類が不正です");
   const { invoice } = targetInvoice(data, company, kind, id);

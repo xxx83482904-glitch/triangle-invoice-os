@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { agentBatchSchema, agentRequestHash, AgentError, findAgentRequest, recordAgentRequest, runAgentOperations, type AgentBatchOutcome, type AgentOperationResult } from "@/lib/agent-api";
+import { agentBatchSchema, agentRequestHash, AgentError, assertAgentOperationAccess, findAgentRequest, recordAgentRequest, runAgentOperations, type AgentBatchOutcome, type AgentOperationResult } from "@/lib/agent-api";
 import { touchAgentToken, verifyAgentToken } from "@/lib/agent-tokens";
 import { mutateData, readData } from "@/lib/store";
+import type { AppData } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,12 +28,20 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "本文が不正です", issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`) }, { status: 400, headers });
   const auth = verified.auth, batch = parsed.data, requestHash = agentRequestHash(batch);
   const origin = { kind: "agent" as const, tokenId: auth.token.id, reason: batch.reason };
+  const currentAuth = (live: AppData) => {
+    const current = verifyAgentToken(live, request.headers.get("authorization"));
+    if (!current.ok) throw new AgentError(current.status, current.error);
+    return current.auth;
+  };
   try {
     if (batch.idempotencyKey && !batch.dryRun) {
       const previous = findAgentRequest(data, auth.token.id, batch.idempotencyKey);
-      if (previous) return previous.requestHash === requestHash
-        ? Response.json({ ...(previous.result as AgentBatchOutcome), replayed: true, applied: true }, { headers })
-        : Response.json({ error: "同じ idempotencyKey が別の内容で使われています" }, { status: 409, headers });
+      if (previous) {
+        for (const operation of batch.operations) assertAgentOperationAccess(data, auth, operation);
+        return previous.requestHash === requestHash
+          ? Response.json({ ...(previous.result as AgentBatchOutcome), replayed: true, applied: true }, { headers })
+          : Response.json({ error: "同じ idempotencyKey が別の内容で使われています" }, { status: 409, headers });
+      }
     }
     // Rehearse on a copy first: the response can describe every failure without touching the store.
     const rehearsal = runAgentOperations(structuredClone(data), auth, batch, { stopOnFailure: batch.atomicity === "batch" });
@@ -40,7 +49,7 @@ export async function POST(request: Request) {
     if (batch.atomicity === "batch") {
       if (rehearsal.failed) return Response.json({ ...rehearsal, applied: false }, { status: 422, headers });
       const outcome = await mutateData(auth.user.id, "AGENT_BATCH", "AgentBatch", randomUUID(), (live) => {
-        const result = runAgentOperations(live, auth, batch, { stopOnFailure: true });
+        const result = runAgentOperations(live, currentAuth(live), batch, { stopOnFailure: true });
         if (result.failed) throw new AgentError(409, `保存時に失敗しました: ${result.results.find((row) => row.status === "failed")?.error}`);
         touchAgentToken(live, auth.token.id);
         if (batch.idempotencyKey) recordAgentRequest(live, auth.token.id, batch.idempotencyKey, requestHash, result);
@@ -53,7 +62,7 @@ export async function POST(request: Request) {
     for (const [index, operation] of batch.operations.entries()) {
       try {
         const result = await mutateData(auth.user.id, "AGENT_OPERATION", "AgentBatch", randomUUID(), (live) => {
-          const outcome = runAgentOperations(live, auth, { ...batch, operations: [operation] }, { stopOnFailure: true });
+          const outcome = runAgentOperations(live, currentAuth(live), { ...batch, operations: [operation] }, { stopOnFailure: true });
           if (outcome.failed) throw new AgentError(422, outcome.results[0].error || "操作に失敗しました");
           touchAgentToken(live, auth.token.id);
           return outcome.results[0];

@@ -5,20 +5,21 @@ import { EstimatesWorkspace } from "@/components/app/estimates-workspace";
 import { getCurrentUser } from "@/lib/auth";
 import { matchesCompany, partnerMatchesCompany } from "@/lib/company";
 import { documentRows, visibleProjects } from "@/lib/documents";
-import { can, companyForUser, defaultPathForRole } from "@/lib/rbac";
+import { can, companyForUser } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 
 export default async function EstimatesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:estimates")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:estimates")) redirect(defaultPathForUser(user));
   const params = await searchParams;
   const company = companyForUser(user, params.company);
   const data = await readDataForRequest();
   const projects = visibleProjects(data, user).filter((p) => matchesCompany(p, company));
   const ids = new Set(projects.map((p) => p.id));
   const estimates = data.estimates.filter((e) => !e.deletedAt && ids.has(e.projectId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  return <AppShell><PageHeader title="発行見積書"><SectionExportDialog scope="estimate" role={user.role} /></PageHeader><EstimatesWorkspace key={company} company={company} estimates={estimates}
+  return <AppShell><PageHeader title="発行見積書"><SectionExportDialog scope="estimate" access={{ role: user.role, featureAccess: user.featureAccess }} /></PageHeader><EstimatesWorkspace key={company} company={company} estimates={estimates}
     rows={documentRows(data, user, company).filter((row) => row.kind === "estimate")}
     initialId={params.document} canEdit={can(user, "manage:estimates")}
     projects={projects.map((p) => ({ id: p.id, name: p.name, clientId: p.clientId, updatedAt: p.updatedAt }))}

@@ -7,7 +7,7 @@ import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { assertCan } from "@/lib/rbac";
 import type { AppData, Attachment, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 
 // A mail document linked to a bank row as evidence (a receipt, notice or contract behind a payment).
 // It never moves money: amount reconciliation stays with invoices. The link is an Attachment on the bank row

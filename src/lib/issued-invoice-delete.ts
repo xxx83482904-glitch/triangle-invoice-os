@@ -7,7 +7,7 @@ import type { AppData, User } from "@/lib/types";
 export type IssuedDelete = { id: string; updatedAt: string };
 const schema = z.array(z.object({ id: z.string().min(1), updatedAt: z.string().min(1) })).min(1).max(500);
 
-export function applyIssuedInvoiceDeletion(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, input: IssuedDelete[]) {
+export function applyIssuedInvoiceDeletion(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: IssuedDelete[]) {
   assertCan(user, "manage:issuedInvoices");
   assertCompanyAccess(user, company);
   const requested = schema.parse(input);

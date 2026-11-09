@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
-import { can, defaultPathForRole, roleLabel } from "@/lib/rbac";
+import { can, roleLabel } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
 import { approvalRoles, isActiveUser } from "@/lib/user-access";
 import { editableRoles, userAccountViews } from "@/lib/user-admin";
+import { memberFeatures } from "@/lib/member-features";
 import { Badge } from "@/components/ui/badge";
 import { ApprovalForm } from "./approval-form";
 import { AgentTokens } from "./agent-tokens";
@@ -12,11 +14,12 @@ import { agentScopes, agentTokenViews } from "@/lib/agent-tokens";
 import { cardAccountLabel, companyCardAccounts } from "@/lib/card-receipts";
 import { CompanyCardForm } from "./company-card-form";
 import { UserAccountEditor } from "./user-account-editor";
+import { UserAccountCreator } from "./user-account-creator";
 
 export default async function UsersPage() {
   const actor = await getCurrentUser();
   if (!actor) redirect("/login");
-  if (!can(actor, "manage:users")) redirect(defaultPathForRole(actor.role));
+  if (!can(actor, "manage:users")) redirect(defaultPathForUser(actor));
   const data = await readDataForRequest();
   const users = data.users.filter((user) => !user.deletedAt);
   const pending = users.filter((user) => user.accessStatus === "PENDING");
@@ -46,8 +49,11 @@ export default async function UsersPage() {
         </div>) : <p className="py-6 text-sm text-muted-foreground">承認待ちの申請はありません。</p>}
       </div>
     </section>
-    <section aria-labelledby="registered-users">
-      <h2 id="registered-users" className="mb-1 text-base font-semibold">登録済み利用者</h2>
+    <section className="min-w-0" aria-labelledby="registered-users">
+      <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 id="registered-users" className="text-base font-medium">登録済み利用者</h2>
+        <UserAccountCreator roles={accountRoles} />
+      </div>
       {cards.length ? <p className="mb-3 text-sm text-muted-foreground">会社カードを登録した人は、スマホの経費精算で「会社カードで払った」を選んで領収書をカードの利用に付けられます。</p> : null}
       <div className="space-y-2">
         {accounts.map((user) => <div key={user.id} className="record-card flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -58,6 +64,9 @@ export default async function UsersPage() {
             </div>
             <div className="break-all text-sm text-muted-foreground">{user.email}</div>
             <div className="text-sm">{user.roleLabel}</div>
+            {user.featureAccess ? <div className="break-words text-xs leading-relaxed text-muted-foreground">個別設定: {memberFeatures
+              .filter(({ key }) => user.featureAccess?.[key] !== undefined)
+              .map(({ key, label }) => `${user.featureAccess?.[key] ? "+" : "−"}${label}`).join(" ")}</div> : null}
             {user.passwordChangedAt ? <div className="text-xs text-muted-foreground">パスワード変更 {user.passwordChangedAt.slice(0, 10)}</div> : null}
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-3">

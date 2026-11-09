@@ -7,8 +7,8 @@ import { navigationIcon } from "@/components/app/navigation-icon";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { companyFromParam, companyOptions, mailSorterCompany, type CompanyScope } from "@/lib/company";
-import { companyForUser, defaultPathForRole } from "@/lib/rbac";
-import { mobileNavigation, navHref, navigationActive, navigationCompany, workflowNavigation } from "@/lib/app-navigation";
+import { companyForUser, type UserAccess } from "@/lib/rbac";
+import { defaultPathForUser, mobileNavigation, navHref, navigationActive, navigationCompany, workflowNavigation } from "@/lib/app-navigation";
 import type { UserRole } from "@/lib/types";
 
 function scopedHref(pathname: string, searchParams: { toString(): string }, company: CompanyScope) {
@@ -78,11 +78,11 @@ export function MobileCompanySwitch({ role }: { role?: UserRole }) {
   );
 }
 
-export function MobileAppNav({ role }: { role: UserRole }) {
+export function MobileAppNav({ access }: { access: UserAccess }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const company = navigationCompany(role, searchParams.get("company"));
-  const { primary: primaryItems, more: moreItems } = mobileNavigation(role);
+  const company = navigationCompany(access.role, searchParams.get("company"));
+  const { primary: primaryItems, more: moreItems } = mobileNavigation(access);
   const moreActive = moreItems.some((item) => navigationActive(pathname, item.href));
 
   return (
@@ -140,9 +140,9 @@ export function MobileAppNav({ role }: { role: UserRole }) {
   );
 }
 
-export function WorkflowNav({ role, compact = false }: { role: UserRole; compact?: boolean }) {
+export function WorkflowNav({ access, compact = false }: { access: UserAccess; compact?: boolean }) {
   const pathname = usePathname(), searchParams = useSearchParams();
-  const items = workflowNavigation(pathname, new URLSearchParams(searchParams.toString()), role);
+  const items = workflowNavigation(pathname, new URLSearchParams(searchParams.toString()), access);
   if (items.length < 2) return null;
   return <nav aria-label="関連画面" className={`${compact ? "" : "mb-6"} flex min-w-0 flex-wrap gap-1 rounded-xl bg-muted p-1 lg:hidden`}>
     {items.map((item) => <Link key={item.href} href={item.href} prefetch={false} aria-current={item.active ? "page" : undefined}
@@ -152,10 +152,10 @@ export function WorkflowNav({ role, compact = false }: { role: UserRole; compact
   </nav>;
 }
 
-export function ScopedBrandLink({ compact = false, role }: { compact?: boolean; role: UserRole }) {
+export function ScopedBrandLink({ compact = false, access }: { compact?: boolean; access: UserAccess }) {
   const searchParams = useSearchParams();
-  const company = navigationCompany(role, searchParams.get("company"));
-  const href = defaultPathForRole(role);
+  const company = navigationCompany(access.role, searchParams.get("company"));
+  const href = defaultPathForUser(access);
 
   return (
     <Link href={navHref(href, company)} prefetch={false} aria-label="TRIANGLE Invoice OS" title={compact ? "TRIANGLE Invoice OS" : undefined} className={compact ? "font-medium" : "flex items-center gap-3 rounded-xl px-1"}>

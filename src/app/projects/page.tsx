@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany, partnerMatchesCompany } from "@/lib/company";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { canAccessPath, defaultPathForUser } from "@/lib/app-navigation";
 import { selectOptionsFor } from "@/lib/select-options";
 import { projectMoney, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 
@@ -18,7 +19,7 @@ export default async function ProjectsPage({
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:projects") && !can(user, "view:assigned")) redirect(defaultPathForRole(user.role));
+  if (!canAccessPath(user, "/projects")) redirect(defaultPathForUser(user));
   const data = await readData();
   const projects = user ? scopedProjectsForUser(data, user) : [];
   const clients = data.clients

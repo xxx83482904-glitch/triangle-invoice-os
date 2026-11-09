@@ -13,7 +13,8 @@ import { OcrDocumentsTable, type OcrDocumentListItem } from "@/app/mail-sorter/o
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, mailSorterCompany, matchesCompany } from "@/lib/company";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { selectOptionsFor } from "@/lib/select-options";
 import { readDataForRequest as readData } from "@/lib/store";
 import { uploadedFileExists } from "@/lib/files";
@@ -39,7 +40,7 @@ export default async function MailSorterPage({
   const linkRequiredOnly = params.link === "required";
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:mailSorter")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:mailSorter")) redirect(defaultPathForUser(user));
   if (params.company !== mailSorterCompany) redirect(linkRequiredOnly ? mailInvoiceLinkRequiredHref(company) : `/mail-sorter?company=${company}`);
   const data = await readData();
   const requiredMailIds = new Set(mailsNeedingReceivedInvoice(data, company).map((row) => row.id));
@@ -171,7 +172,7 @@ export default async function MailSorterPage({
         title="郵便物フォルダー"
       >
         {can(user, "view:banking") ? <BankReconciliationLink company={company} invoices /> : null}
-        <SectionExportDialog scope="mail" role={user.role} />
+        <SectionExportDialog scope="mail" access={{ role: user.role, featureAccess: user.featureAccess }} />
       </PageHeader>
 
       <div className="space-y-6">

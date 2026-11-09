@@ -216,7 +216,7 @@ function ensureReviewProject(data: AppData, company: "CHINA" | "JAPAN", timestam
 }
 
 export type MailIntakeInput = {
-  user: Pick<User, "id" | "role">; company: CompanyScope;
+  user: Pick<User, "id" | "role" | "featureAccess">; company: CompanyScope;
   fileName: string; mimeType: string; buffer: Buffer; extracted: ExtractedText;
   targetMonth?: string;
   senderName?: string;   // when the caller already read who sent it, e.g. the shipper on customs papers

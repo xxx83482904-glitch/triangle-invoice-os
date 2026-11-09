@@ -17,7 +17,7 @@ export type MailSorterEdit = z.input<typeof editSchema>;
 const stamp = (previous: string) => new Date(Math.max(Date.now(), Date.parse(previous) + 1)).toISOString();
 
 // Validate every target before changing anything; called inside the existing mutation lock/audit/Undo path.
-export function applyMailSorterEdits(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, input: unknown) {
+export function applyMailSorterEdits(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: unknown) {
   assertCompanyAccess(actor, company);
   if (!can(actor, "manage:mailSorter") && !can(actor, "manage:receivedInvoices") && !can(actor, "upload:receivedInvoices")) throw new Error("権限がありません");
   const edits = z.array(editSchema).min(1, "保存する変更がありません").max(1000, "一度に保存できるのは1000件までです").parse(input);

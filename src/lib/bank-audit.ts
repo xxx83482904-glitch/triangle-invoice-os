@@ -27,7 +27,7 @@ function blockedReason(data: AppData, log: AuditLog, list: Change[]) {
     || data.bankTransfers?.some((link) => !link.deletedAt && (ids.has(link.incomingId) || ids.has(link.outgoingId)))) return "照合を解除してから分類を戻してください";
   return "";
 }
-export function bankAuditEntries(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope): BankAuditEntry[] {
+export function bankAuditEntries(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope): BankAuditEntry[] {
   assertBankAccess(user, company);
   const category = new Map(data.accountingCategories.filter((row) => row.company === company).map((row) => [row.id, row.name]));
   const describe = (row: BankTransaction) => {
@@ -48,7 +48,7 @@ export function bankAuditEntries(data: AppData, user: Pick<User, "id" | "role">,
     }) }];
   }).slice(0, 50);
 }
-export function bankAuditUndoPatch(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, id: string) {
+export function bankAuditUndoPatch(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, id: string) {
   assertBankAccess(user, company); assertCan(user, "undo:changes");
   const log = data.auditLogs.find((row) => row.id === id && /^BANK_(CLASSIFY|BOOKKEEPING)/.test(row.action));
   if (!log) throw new Error("操作履歴が見つかりません");

@@ -686,7 +686,7 @@ export function projectMoney(data: AppData, projectId: string): ProjectMoney {
   };
 }
 
-export function scopedProjectsForUser(data: AppData, user: Pick<User, "id" | "role">) {
+export function scopedProjectsForUser(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">) {
   if (user.role === "BILLING_EDITOR") return visibleProjects(data, user);
   if (user.role === "ADMIN" || user.role === "ACCOUNTING") return active(data.projects).filter((project) => project.company === "JAPAN");
   if (user.role === "GUEST") return [];

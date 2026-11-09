@@ -15,7 +15,7 @@ import { APLUS_SETTLEMENT_LABEL, bankCardSettlementConflict, bankSettlementClass
 export const treatmentLabels = { NORMAL: "通常", TRANSFER: "振替・カード精算", EXCLUDED: "対象外" } as const;
 export const categoryGroups = { EXPENSE: "費用", INCOME: "収益", ASSET: "資産", LIABILITY: "負債", EQUITY: "純資産", OTHER: "その他" } as const;
 export const BANK_PAGE_SIZE = 50;
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 const companySchema = z.enum(["JAPAN", "CHINA"]);
 const reference = z.string().max(1000).optional();
 const treatment = z.enum(["NORMAL", "TRANSFER", "EXCLUDED"]);

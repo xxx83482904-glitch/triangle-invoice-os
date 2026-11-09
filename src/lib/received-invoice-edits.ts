@@ -5,7 +5,7 @@ import { can, canAccessCompany } from "@/lib/rbac";
 import { receivedAmountsFromForm, validateReceivedDates } from "@/lib/received-invoice-review";
 import type { AppData, User } from "@/lib/types";
 
-export function applyReceivedInvoiceFields(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, id: string, form: FormData) {
+export function applyReceivedInvoiceFields(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, id: string, form: FormData) {
   if (!can(user, "manage:receivedInvoices") || !canAccessCompany(user, company)) throw new Error("権限がありません。");
   const invoice = data.receivedInvoices.find((item) => item.id === id && !item.deletedAt);
   const projects = visibleProjects(data, user).filter((project) => companyFromParam(project.company) === company);

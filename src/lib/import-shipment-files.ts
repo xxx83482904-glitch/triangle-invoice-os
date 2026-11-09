@@ -5,7 +5,7 @@ import type { AppData, User } from "@/lib/types";
 
 // Import viewers can open originals attached to live shipments, even outside their assigned projects.
 // This branch grants no access to unassigned paperwork, other companies, or deleted rows.
-export function canViewImportFile(data: AppData, user: Pick<User, "role">, name: string) {
+export function canViewImportFile(data: AppData, user: Pick<User, "role" | "featureAccess">, name: string) {
   if (!can(user, "view:imports") || !name || /[\\/\x00]/.test(name) || name === "." || name === "..") return false;
   const shipments = new Map((data.importShipments ?? []).filter((row) => !row.deletedAt && canAccessCompany(user, companyFromParam(row.company)))
     .map((row) => [row.id, companyFromParam(row.company)]));

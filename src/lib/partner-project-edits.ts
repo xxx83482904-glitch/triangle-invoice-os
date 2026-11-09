@@ -6,7 +6,7 @@ import { visibleProjects } from "@/lib/documents";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import type { AppData, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 const targetSchema = z.object({ id: z.string().min(1), updatedAt: z.string().min(1) });
 const projectSchema = targetSchema.extend({ name: z.string().trim().min(1, "案件名を入力してください").max(500), clientId: z.string().min(1) });
 export type ProjectBasicInput = z.infer<typeof projectSchema>;

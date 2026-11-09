@@ -8,7 +8,7 @@ import type { AppData, ExpenseClaim, User } from "@/lib/types";
 
 // Settled claims are paid back in one transfer per person and payment date. That transfer is matched to one
 // outgoing bank row; the bank row itself is left untouched so bookkeeping and sync keep working as before.
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 const cents = (value: number) => Math.round(value * 100);
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
 const DAY = 86_400_000;

@@ -1,7 +1,8 @@
-import { companyForUser, canRole } from "@/lib/rbac";
+import { companyForUser, can, defaultPathForRole, type UserAccess } from "@/lib/rbac";
 import { mailSorterCompany, type CompanyScope } from "@/lib/company";
 import { navigationIconName } from "@/lib/navigation-icons";
 import type { UserRole } from "@/lib/types";
+import { safeNextPath } from "@/lib/safe-next-path";
 
 export const appNavigation = [
   { label: "全体", items: [
@@ -28,8 +29,31 @@ export const appNavigation = [
   ] },
 ];
 
-export function navigationGroups(role: UserRole) {
-  return appNavigation.map((group) => ({ ...group, items: group.items.filter((item) => canRole(role, item.permission)) })).filter((group) => group.items.length);
+export function navigationGroups(access: UserAccess) {
+  return appNavigation.map((group) => ({ ...group, items: group.items.filter((item) => can(access, item.permission)) })).filter((group) => group.items.length);
+}
+
+/** DESIGNER's legacy assigned-project list remains available until projects is off. */
+export function canAccessPath(access: UserAccess, path: string) {
+  const safe = safeNextPath(path);
+  if (!safe) return false;
+  const pathname = safe.split("?")[0].replace(/\/$/, "");
+  if (access.role === "GUEST") return pathname === "/guest-invoices";
+  if (pathname === "/no-access") return true;
+  if (pathname === "/projects" && can(access, "view:assigned") && can(access, "comment:project")) return true;
+  return appNavigation.some((group) => group.items.some((item) => navigationActive(pathname, item.href) && can(access, item.permission)));
+}
+
+/** The usual role landing page, then the first permitted menu item, then no-access. */
+export function defaultPathForUser(access: UserAccess) {
+  const usual = defaultPathForRole(access.role);
+  if (canAccessPath(access, usual)) return usual;
+  return navigationGroups(access)[0]?.items[0]?.href ?? "/no-access";
+}
+
+/** Also validate login/return destinations against the person's current access. */
+export function pathForUser(access: UserAccess, requested: string) {
+  return canAccessPath(access, requested) ? requested : defaultPathForUser(access);
 }
 
 export function navigationActive(pathname: string, href: string) {
@@ -52,10 +76,10 @@ export type SidebarNavigationItem = {
   children?: SidebarNavigationItem[];
 };
 
-export function sidebarNavigation(pathname: string, params: URLSearchParams, role: UserRole) {
-  const company = navigationCompany(role, params.get("company"));
+export function sidebarNavigation(pathname: string, params: URLSearchParams, access: UserAccess) {
+  const company = navigationCompany(access.role, params.get("company"));
   const bank = navigationActive(pathname, "/banking");
-  return navigationGroups(role).map((group) => ({
+  return navigationGroups(access).map((group) => ({
     label: group.label,
     items: group.items.map((item): SidebarNavigationItem => ({
       label: item.label,
@@ -63,7 +87,7 @@ export function sidebarNavigation(pathname: string, params: URLSearchParams, rol
       icon: navigationIconName(item.href),
       active: navigationActive(pathname, item.href),
       ...(item.href === "/banking" && bank ? {
-        children: workflowNavigation(pathname, params, role).map((child) => ({
+        children: workflowNavigation(pathname, params, access).map((child) => ({
           ...child,
           icon: navigationIconName(child.href),
         })),
@@ -72,16 +96,17 @@ export function sidebarNavigation(pathname: string, params: URLSearchParams, rol
   }));
 }
 
-export function commandNavigation(pathname: string, params: URLSearchParams, role: UserRole) {
+export function commandNavigation(pathname: string, params: URLSearchParams, access: UserAccess) {
   // The palette exposes bank screens even when the sidebar branch is closed.
-  const groups = sidebarNavigation(navigationActive(pathname, "/banking") ? pathname : "/banking", params, role);
+  const groups = sidebarNavigation(navigationActive(pathname, "/banking") ? pathname : "/banking", params, access);
   return groups.flatMap((group) => group.items.flatMap((item) =>
     (item.children ?? [item]).map(({ label, href, icon }) => ({ label, href, icon, group: item.children ? item.label : group.label })),
   ));
 }
 
-export function mobileNavigation(role: UserRole) {
-  const items = navigationGroups(role).flatMap((group) => group.items);
+export function mobileNavigation(access: UserAccess) {
+  const items = navigationGroups(access).flatMap((group) => group.items);
+  const { role } = access;
   const preferred = role === "BILLING_EDITOR" ? ["/issued-invoices", "/estimates", "/partners"]
     : role === "MAIL_EDITOR" ? ["/mail-sorter", "/documents"]
       : role === "ADMIN" || role === "ACCOUNTING" ? ["/mail-sorter", "/issued-invoices", "/banking", "/documents"]
@@ -89,8 +114,8 @@ export function mobileNavigation(role: UserRole) {
   return { primary: preferred.flatMap((href) => items.filter((item) => item.href === href)), more: items.filter((item) => !preferred.includes(item.href)) };
 }
 
-export function workflowNavigation(pathname: string, params: URLSearchParams, role: UserRole) {
-  const company = navigationCompany(role, params.get("company"));
+export function workflowNavigation(pathname: string, params: URLSearchParams, access: UserAccess) {
+  const company = navigationCompany(access.role, params.get("company"));
   const sales = ["/projects", "/estimates", "/issued-invoices"];
   const receiving = ["/mail-sorter", "/received-invoices", "/imports"];
   const bank = pathname === "/banking" || pathname.startsWith("/banking/");
@@ -106,7 +131,7 @@ export function workflowNavigation(pathname: string, params: URLSearchParams, ro
     { href: "/banking/obligations", label: "税金・保険", permission: "view:banking" },
     { href: "/banking/integrity", label: "整合性", permission: "view:banking" },
   ] : appNavigation.flatMap((group) => group.items).filter((item) => paths.includes(item.href)).sort((a, b) => paths.indexOf(a.href) - paths.indexOf(b.href));
-  return items.filter((item) => canRole(role, item.permission)).map((item) => {
+  return items.filter((item) => can(access, item.permission)).map((item) => {
     const [path, search] = item.href.split("?"), target = new URLSearchParams(search);
     target.set("company", path === "/mail-sorter" ? "JAPAN" : company);
     const checks = target.get("view") === "checks";

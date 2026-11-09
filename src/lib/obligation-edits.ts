@@ -5,7 +5,7 @@ import { assertCan, assertCompanyAccess } from "@/lib/rbac";
 import { taxObligations } from "@/lib/tax-obligations";
 import type { AppData, ManualObligation, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 const required = (label: string, max = 200) => z.string().trim().min(1, `${label}を入力してください`).max(max, `${label}は${max}文字以内にしてください`);
 const reference = required("対象", 1000), reason = required("理由", 500), version = required("更新情報", 20000);
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();

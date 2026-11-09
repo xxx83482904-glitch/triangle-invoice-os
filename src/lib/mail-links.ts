@@ -5,7 +5,7 @@ import { visibleProjects } from "@/lib/documents";
 import { can, canAccessCompany } from "@/lib/rbac";
 import type { AppData, MailDocument, ReceivedInvoice, User } from "@/lib/types";
 
-type Actor = Pick<User, "id" | "role">;
+type Actor = Pick<User, "id" | "role" | "featureAccess">;
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
 const normalize = (value?: string) => (value || "").normalize("NFKC").toLocaleLowerCase("ja").replace(/\s+/g, "");
 export const canManageMailLinks = (actor: Actor) => can(actor, "manage:mailSorter") || can(actor, "manage:receivedInvoices") || can(actor, "upload:receivedInvoices");

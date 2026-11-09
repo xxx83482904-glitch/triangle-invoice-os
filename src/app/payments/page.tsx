@@ -16,7 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCurrentUser } from "@/lib/auth";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { formatDate, todayIso } from "@/lib/format";
-import { can, defaultPathForRole } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
+import { defaultPathForUser } from "@/lib/app-navigation";
 import { paidForIssued, paidForReceived, readDataForRequest as readData } from "@/lib/store";
 
 export default async function PaymentsPage({
@@ -28,7 +29,7 @@ export default async function PaymentsPage({
   const company = companyFromParam(params.company);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!can(user, "view:payments")) redirect(defaultPathForRole(user.role));
+  if (!can(user, "view:payments")) redirect(defaultPathForUser(user));
   const data = await readData();
   const projects = data.projects
     .filter((project) => !project.deletedAt && matchesCompany(project, company))

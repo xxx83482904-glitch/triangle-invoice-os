@@ -23,7 +23,7 @@ export function accountKind(account: BankAccount): BankOverviewSettings["kind"] 
   return saved || "UNKNOWN";
 }
 
-export function saveBankOverview(data: AppData, actor: Pick<User, "id" | "role">, company: CompanyScope, id: string, updatedAt: string, input: BankOverviewInput, today: string) {
+export function saveBankOverview(data: AppData, actor: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, id: string, updatedAt: string, input: BankOverviewInput, today: string) {
   assertBankAccess(actor, company);
   const settings = settingsSchema.parse(input);
   if (!isBankDate(today) || settings.balance && settings.balance.asOf > today) throw new Error("残高確認日に未来の日付は指定できません");

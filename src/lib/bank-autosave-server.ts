@@ -12,7 +12,7 @@ const patchSchema = z.object({
   classificationReason: z.string().max(1000).optional(), acknowledgeGuess: z.boolean().optional(),
 });
 
-export function saveBankAutosaveEdits(data: AppData, user: Pick<User, "id" | "role">, company: CompanyScope, input: BankAutosaveEdit[], auditLogId: string): BankAutosaveResult {
+export function saveBankAutosaveEdits(data: AppData, user: Pick<User, "id" | "role" | "featureAccess">, company: CompanyScope, input: BankAutosaveEdit[], auditLogId: string): BankAutosaveResult {
   assertBankAccess(user, company);
   const edits = z.array(z.object({ id: z.string().min(1), updatedAt: z.string(), patch: z.unknown() })).min(1).max(100).parse(input);
   if (new Set(edits.map((edit) => edit.id)).size !== edits.length) throw new Error("明細が重複しています");
