@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowUpRight, ChevronLeft, ChevronRight, List, X } from "lucide-react";
 import type { ExpenseClaimStatus } from "@/lib/types";
 
@@ -179,3 +179,44 @@ export function DetailRow({ label: name, children, last = false }: { label: stri
   return <div className={`flex min-h-[54px] items-center gap-3 px-5 py-2 ${last ? "" : "cap-hairline border-b"}`}><span className="w-[5.5rem] shrink-0 text-[13px] tracking-[0.1em] text-muted-foreground">{name}</span><span className="min-w-0 break-words text-[15px]">{children}</span></div>;
 }
 
+
+const monthName = (month: string) => `${Number(month.slice(5, 7))}月`;
+
+// The month bars on the home summary: one series, the selected month in ink, the others recessive.
+// Tapping a bar shows its month and total in the caption above the bars.
+export function MonthBars({ months, current }: { months: Array<{ month: string; total: number }>; current: string }) {
+  const [selected, setSelected] = useState(current);
+  const max = Math.max(...months.map((row) => row.total), 1), shown = months.find((row) => row.month === selected) || months[months.length - 1];
+  return <div className="space-y-1.5">
+    <div className="flex items-baseline justify-between"><Eyebrow>毎月の利用金額</Eyebrow>
+      <p className="text-[12px] tracking-[0.06em] text-muted-foreground" aria-live="polite">{monthName(shown.month)}　<span className="text-foreground">{yen(shown.total)}</span></p></div>
+    <div className="flex h-11 items-end gap-2" role="group" aria-label="毎月の利用金額">
+      {months.map((row) => <button key={row.month} type="button" onClick={() => setSelected(row.month)} aria-pressed={selected === row.month} aria-label={`${monthName(row.month)} ${yen(row.total)}`}
+        className="flex h-full min-w-0 flex-1 items-end">
+        <span className={`w-full rounded-t-[4px] ${row.month === selected ? "bg-foreground" : "bg-foreground/15"}`} style={{ height: `${row.total ? Math.max(6, (row.total / max) * 100) : 4}%`, opacity: row.total ? 1 : 0.5 }} />
+      </button>)}
+    </div>
+    <div className="flex gap-2 text-center text-[10.5px] tracking-[0.04em] text-muted-foreground" aria-hidden="true">{months.map((row) => <span key={row.month} className={`flex-1 ${row.month === selected ? "text-foreground" : ""}`}>{monthName(row.month)}</span>)}</div>
+  </div>;
+}
+
+type Stats = { month: string; thisMonth: { total: number; expense: number; card: number }; unapproved: { count: number; amount: number; returned: number };
+  awaitingPayout: { count: number; amount: number }; monthly: Array<{ month: string; total: number }>; hasCard: boolean };
+
+export function SummaryPanel({ stats, onList }: { stats: Stats; onList: () => void }) {
+  const figure = (title: string, value: { count: number; amount: number }, note?: string) => <button type="button" onClick={onList} className="min-w-0 self-start text-left">
+    <Eyebrow>{title}</Eyebrow>
+    <span className="mt-1 flex items-baseline gap-2"><Amount value={value.amount} className="text-[20px]" /><span className="text-[12px] tracking-[0.06em] text-muted-foreground">{value.count}件</span></span>
+    {note ? <span className="cap-tone-ng mt-0.5 block text-[11.5px] tracking-[0.04em]"><span className="cap-tone-text">{note}</span></span> : null}
+  </button>;
+  return <section aria-label="自分の利用と申請" className="cap-surface px-6 pb-4 pt-5">
+    <Eyebrow>{monthName(stats.month)}の利用額</Eyebrow>
+    <Amount value={stats.thisMonth.total} className="mt-1 block text-[40px] leading-none" />
+    {stats.hasCard ? <p className="mt-2 text-[12px] tracking-[0.04em] text-muted-foreground">立替 {yen(stats.thisMonth.expense)}　・　会社カード {yen(stats.thisMonth.card)}</p> : null}
+    <div className="mt-4"><MonthBars months={stats.monthly} current={stats.month} /></div>
+    <div className="cap-hairline mt-4 grid grid-cols-2 gap-4 border-t pt-3.5">
+      {figure("未承認", stats.unapproved, stats.unapproved.returned ? `うち差し戻し ${stats.unapproved.returned}件` : undefined)}
+      {figure("承認済み・振込待ち", stats.awaitingPayout)}
+    </div>
+  </section>;
+}

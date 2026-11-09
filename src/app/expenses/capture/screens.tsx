@@ -7,23 +7,19 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ExpensePaidWith } from "@/lib/types";
 import { CardMatchBox, CardReceiptList } from "./card-screens";
 import { amountOf, missing, type CardReceiptView, type CardUseView, type Draft, type FieldKey, type MyClaim, type Option } from "./model";
-import { Amount, AttentionRow, AutoBadge, CaptureTile, Card, DetailRow, DoneMark, Eyebrow, HomeHeader, Notice, PrimaryButton, ReceiptThumb, Row, Screen, SecondaryButton, Segmented, Status, StatusSteps, TextButton, TopBar, dateTimeLabel, dayLabel, statusText, statusTone } from "./ui";
+import type { ExpenseStats } from "@/lib/expense-home-stats";
+import { Amount, AttentionRow, AutoBadge, CaptureTile, Card, DetailRow, DoneMark, Eyebrow, HomeHeader, Notice, PrimaryButton, ReceiptThumb, Row, Screen, SecondaryButton, Segmented, Status, StatusSteps, SummaryPanel, TextButton, TopBar, dateTimeLabel, dayLabel, statusText, statusTone } from "./ui";
 
 const label = (options: Option[], value: string) => options.find((row) => row.value === value)?.label || "";
 
-export function HomeScreen({ name, waiting, submitted, returned, drafts, install, onCamera, onLibrary, onList, onReturned, onDrafts }: {
-  name: string; waiting: { amount: number; count: number }; submitted: { amount: number; count: number }; returned: number; drafts: number; install: React.ReactNode;
+export function HomeScreen({ name, stats, returned, drafts, install, onCamera, onLibrary, onList, onReturned, onDrafts }: {
+  name: string; stats: ExpenseStats; returned: number; drafts: number; install: React.ReactNode;
   onCamera: () => void; onLibrary: () => void; onList: () => void; onReturned: () => void; onDrafts: () => void;
 }) {
   return <Screen>
     <div className="flex flex-1 flex-col gap-4 px-6 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)]">
       <HomeHeader name={name} onList={onList} />
-      <button type="button" onClick={onList} aria-label="自分の精算状況" className="cap-surface cap-press w-full px-6 pb-5 pt-5 text-left">
-        <Eyebrow>振込待ち・承認済み</Eyebrow>
-        <Amount value={waiting.amount} className="mt-1 block text-[44px] leading-none" />
-        <span className="cap-hairline mt-5 flex border-t pt-3.5 text-[13px] tracking-[0.06em] text-muted-foreground">
-          <span className="flex-1">申請中 <span className="text-foreground">{submitted.count}件</span></span><Amount value={submitted.amount} className="text-[15px] text-foreground" /></span>
-      </button>
+      <SummaryPanel stats={stats} onList={onList} />
       {returned ? <AttentionRow tone="ng" title={`差し戻された申請 ${returned}件`} detail="直して再提出してください" onClick={onReturned} /> : null}
       {drafts ? <AttentionRow tone="wait" title={`まだ送っていない領収書 ${drafts}枚`} detail="続きを確認する" onClick={onDrafts} /> : null}
       <div className="min-h-4 flex-1" />

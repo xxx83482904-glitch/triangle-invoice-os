@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { ReceiptField, ReceiptReading } from "@/lib/expense-receipt-reading";
+import type { ExpenseStats } from "@/lib/expense-home-stats";
 import { prepareReceiptFile } from "@/lib/receipt-image";
 import type { ExpensePaidWith } from "@/lib/types";
 import { cardReceiptAction, expenseAction } from "../actions";
@@ -24,9 +25,9 @@ const distinct = (values: string[], limit: number) => [...new Set(values.map((ro
 
 type SendResult = { id: string; status?: CardReceiptView["status"]; use?: CardUseView; candidates?: CardUseView[]; updatedAt?: string };
 
-export function CaptureApp({ name, company, today, categories, projects, recentProjectIds, claims, card, initial }: {
+export function CaptureApp({ name, company, today, categories, projects, recentProjectIds, claims, card, stats, initial }: {
   name: string; company: CompanyScope; today: string; categories: Option[]; projects: Option[]; recentProjectIds: string[]; claims: MyClaim[];
-  card: MyCardView | null; initial: { view?: "list"; claim?: string };
+  card: MyCardView | null; stats: ExpenseStats; initial: { view?: "list"; claim?: string };
 }) {
   const router = useRouter();
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -277,11 +278,7 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
     backTo((row) => row.name === "list");
   };
 
-  const mine = useMemo(() => {
-    const sum = (status: MyClaim["status"]) => claims.filter((row) => row.status === status).reduce((total, row) => total + row.amount, 0);
-    const count = (status: MyClaim["status"]) => claims.filter((row) => row.status === status).length;
-    return { waiting: { amount: sum("APPROVED"), count: count("APPROVED") }, submitted: { amount: sum("SUBMITTED"), count: count("SUBMITTED") }, returned: claims.filter((row) => row.status === "RETURNED") };
-  }, [claims]);
+  const mine = useMemo(() => ({ returned: claims.filter((row) => row.status === "RETURNED") }), [claims]);
   const recentProjects = useMemo(() => recentProjectIds.map((id) => projects.find((row) => row.value === id)).filter(Boolean) as Option[], [projects, recentProjectIds]);
   const recentCategories = useMemo(() => distinct(claims.map((row) => row.categoryId), 5).map((id) => categories.find((row) => row.value === id)).filter(Boolean) as Option[], [claims, categories]);
 
@@ -297,13 +294,13 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
 
   let view: React.ReactNode = null;
   if (screen.name === "home" && card) {
-    view = <CardHomeScreen name={name} card={card} waiting={mine.waiting.amount} returned={mine.returned.length} drafts={unsent.length} install={<InstallHint />}
+    view = <CardHomeScreen name={name} card={card} stats={stats} returned={mine.returned.length} drafts={unsent.length} install={<InstallHint />}
       onCard={() => openCamera("auto", "card")} onExpense={() => openCamera("auto", "expense")} onLibrary={() => setSheet({ kind: "payKind" })}
       onList={() => push({ name: "list" })} onMissing={() => push({ name: "missing" })}
       onReturned={() => mine.returned.length === 1 ? push({ name: "detail", id: mine.returned[0].id }) : push({ name: "list" })}
       onDrafts={() => unsent.length === 1 ? push({ name: "confirm", key: unsent[0].key, mode: "single" }) : push({ name: "batch" })} />;
   } else if (screen.name === "home") {
-    view = <HomeScreen name={name} waiting={mine.waiting} submitted={mine.submitted} returned={mine.returned.length} drafts={unsent.length} install={<InstallHint />}
+    view = <HomeScreen name={name} stats={stats} returned={mine.returned.length} drafts={unsent.length} install={<InstallHint />}
       onCamera={() => openCamera("auto")} onLibrary={() => openLibrary()} onList={() => push({ name: "list" })}
       onReturned={() => mine.returned.length === 1 ? push({ name: "detail", id: mine.returned[0].id }) : push({ name: "list" })}
       onDrafts={() => unsent.length === 1 ? push({ name: "confirm", key: unsent[0].key, mode: "single" }) : push({ name: "batch" })} />;

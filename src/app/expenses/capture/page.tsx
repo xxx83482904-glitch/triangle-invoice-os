@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { bankToday } from "@/lib/banking";
 import { myCardView } from "@/lib/card-receipts";
+import { myExpenseStats } from "@/lib/expense-home-stats";
 import { matchesCompany } from "@/lib/company";
 import { expenseCategoryOptions, expenseClaimViews } from "@/lib/expense-claim-edits";
 import { can, canAccessCompany, defaultPathForRole } from "@/lib/rbac";
@@ -43,5 +44,5 @@ export default async function ExpenseCapturePage({ searchParams }: { searchParam
     tax10: row.taxBreakdown?.rate10 || 0, tax8: row.taxBreakdown?.rate8 || 0, fileUrl: row.fileUrl || "", mimeType: row.mimeType || "", editable: row.editable,
   }));
   return <CaptureApp name={user.name} company={company} today={today} categories={expenseCategoryOptions(data, company)} projects={projects}
-    recentProjectIds={recentProjectIds} claims={claims} card={myCardView(data, user, company, today)} initial={{ view: param("view") === "list" ? "list" : undefined, claim: param("claim") || undefined }} />;
+    recentProjectIds={recentProjectIds} claims={claims} card={myCardView(data, user, company, today)} stats={myExpenseStats(data, user, company, today)} initial={{ view: param("view") === "list" ? "list" : undefined, claim: param("claim") || undefined }} />;
 }
