@@ -1,0 +1,254 @@
+import asyncio
+import hmac
+from contextlib import asynccontextmanager
+from typing import Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+from .adapters.mock import MockWeChatAdapter
+from .body_limit import BodyLimitMiddleware
+from .config import Settings
+from .database import Database
+from .engine import Engine
+from .security import COOKIE, SESSION_SECONDS, Security
+
+
+class Login(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
+
+class Send(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    expected_external_id: str = Field(min_length=1, max_length=500)
+    expected_name: str = Field(min_length=1, max_length=500)
+    client_request_id: UUID
+
+
+class Read(BaseModel):
+    through_id: int = Field(ge=0)
+
+
+class MockAction(BaseModel):
+    action: Literal["receive", "disconnect", "reconnect", "next_unknown", "next_failed", "next_confirmed"]
+    chat_id: str | None = None
+
+
+def create_app(settings=None, adapter=None):
+    settings = settings or Settings.from_env()
+    security = Security(settings)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        db = Database(settings.db_path, settings.adapter)
+        selected = adapter
+        if selected is None:
+            if settings.adapter == "mock":
+                selected = MockWeChatAdapter()
+            else:
+                from .adapters.windows_uia import WindowsUIAAdapter
+                selected = WindowsUIAAdapter(settings.poll_seconds)
+        engine = Engine(db, selected, settings)
+        app.state.db, app.state.engine, app.state.security = db, engine, security
+        await engine.start()
+        yield
+        await engine.stop()
+        db.close()
+
+    app = FastAPI(title="こもれび · WeChat local bridge", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(BodyLimitMiddleware)
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.hosts))
+
+    @app.middleware("http")
+    async def protect(request, call_next):
+        # Reject large bodies before Pydantic can include input in a validation response.
+        try:
+            size = int(request.headers.get("content-length", "0"))
+        except ValueError:
+            return JSONResponse({"detail": "invalid_request"}, status_code=400)
+        if size < 0:
+            return JSONResponse({"detail": "invalid_request"}, status_code=400)
+        if size > 32768:
+            return JSONResponse({"detail": "request_too_large"}, status_code=413)
+        if request.method == "POST" and request.url.path.startswith("/api/"):
+            if not request.headers.get("content-type", "").startswith("application/json"):
+                return JSONResponse({"detail": "json_required"}, status_code=415)
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") or request.url.path in ("/", "/sw.js") else "no-cache"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+        return response
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        return JSONResponse({"detail": "invalid_request"}, status_code=422)
+
+    @app.get("/api/health")
+    async def health():
+        return {"ok": True, "service": "komorebi"}
+
+    @app.post("/api/auth/login")
+    async def login(body: Login, request: Request, response: Response):
+        security.origin(request.headers.get("origin"))
+        if not hmac.compare_digest(body.token.encode(), settings.token.encode()):
+            # Funnel requests share a loopback peer. Invalid attempts must not
+            # exhaust the owner's valid-login budget; never trust forwarded IPs.
+            security.rate_limit("login-failure", 10)
+            raise HTTPException(401, "invalid_access_token")
+        security.rate_limit("login-success", 20)
+        # Origin has already been checked against an exact allowlist. Tailscale
+        # terminates TLS locally; do not trust arbitrary X-Forwarded-* headers.
+        secure = settings.secure_cookie or request.headers.get("origin", "").startswith("https://")
+        response.set_cookie(COOKIE, security.issue(), httponly=True, secure=secure, samesite="strict", max_age=SESSION_SECONDS, path="/")
+        return {"ok": True}
+
+    api = APIRouter(prefix="/api", dependencies=[Depends(security.check)])
+
+    @api.post("/auth/logout")
+    async def logout(request: Request, response: Response):
+        security.revoke(request.cookies.get(COOKIE))
+        response.delete_cookie(COOKIE, path="/")
+        return {"ok": True}
+
+    @api.get("/status")
+    async def status():
+        return await app.state.engine.status()
+
+    @api.get("/device")
+    async def device():
+        return {"mobile_url": settings.mobile_url, "mobile_access": settings.mobile_access, "ai_enabled": False, "push_enabled": False}
+
+    @api.get("/chats")
+    async def chats():
+        return app.state.db.chats()
+
+    def require_chat(ident):
+        chat = app.state.db.chat(ident)
+        if not chat:
+            raise HTTPException(404, "chat_not_found")
+        return chat
+
+    @api.get("/chats/{ident}/messages")
+    async def messages(ident: str, before: int | None = Query(None, ge=1), limit: int = Query(100, ge=1, le=200)):
+        require_chat(ident)
+        rows = app.state.db.messages(ident, before, limit)
+        has_more = bool(rows and app.state.db.one("SELECT id FROM messages WHERE chat_id=? AND id<? LIMIT 1", (ident, rows[0]["id"])))
+        return {"messages": rows, "has_more": has_more, "history_scope": "stored_only"}
+
+    @api.post("/chats/{ident}/read")
+    async def read(ident: str, body: Read):
+        require_chat(ident)
+        app.state.db.mark_read(ident, body.through_id)
+        app.state.engine.hub.publish("read", ident)
+        return {"ok": True}
+
+    @api.post("/chats/{ident}/send", status_code=202)
+    async def send(ident: str, body: Send):
+        chat = require_chat(ident)
+        if not body.content.strip():
+            raise HTTPException(422, "empty_message")
+        existing = app.state.db.one("SELECT * FROM send_queue WHERE client_request_id=?", (str(body.client_request_id),))
+        if not existing:
+            connection = await app.state.engine.adapter.get_connection_status()
+            if not connection.can_send or connection.state != "connected":
+                raise HTTPException(409, "sending_unavailable")
+            security.rate_limit("send", 10)
+        try:
+            result = app.state.db.enqueue(chat, body.content, str(body.client_request_id), body.expected_external_id, body.expected_name)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        app.state.engine.hub.publish("queue", ident)
+        return result
+
+    @api.get("/queue")
+    async def queue():
+        return app.state.db.queue()
+
+    @api.get("/requests/{request_id}")
+    async def request_status(request_id: UUID):
+        row = app.state.db.one("SELECT * FROM send_queue WHERE client_request_id=?", (str(request_id),))
+        if not row:
+            raise HTTPException(404, "request_not_observed")
+        return row
+
+    @api.get("/search")
+    async def search(q: str = Query(min_length=1, max_length=200)):
+        return {"results": app.state.db.search(q), "limit": 100, "scope": "stored_only"}
+
+    @api.post("/sync")
+    async def sync():
+        security.rate_limit("sync", 6)
+        await app.state.engine.sync()
+        return await app.state.engine.status()
+
+    @api.post("/mock")
+    async def mock(body: MockAction):
+        engine = app.state.engine
+        if not isinstance(engine.adapter, MockWeChatAdapter):
+            raise HTTPException(404, "mock_only")
+        if body.action == "receive":
+            if not engine.adapter.online:
+                raise HTTPException(409, "mock_offline")
+            chat = require_chat(body.chat_id)
+            await engine.adapter.inject(chat["external_id"])
+        elif body.action == "disconnect":
+            await engine.adapter.disconnect()
+            app.state.db.connection("disconnected")
+        elif body.action == "reconnect":
+            await engine.adapter.connect()
+            await engine.sync()
+        else:
+            engine.adapter.next_result = body.action.removeprefix("next_")
+        engine.hub.publish("status")
+        return await engine.status()
+
+    app.include_router(api)
+
+    @app.websocket("/ws")
+    async def websocket(ws: WebSocket):
+        if ws.headers.get("origin") not in settings.origins or not security.valid_session(ws.cookies.get(COOKIE)):
+            await ws.close(code=1008)
+            return
+        if len(app.state.engine.hub.listeners) >= 20:
+            await ws.close(code=1013)
+            return
+        await ws.accept()
+        events = asyncio.Queue(maxsize=32)
+        app.state.engine.hub.listeners.add(events)
+        async def stream():
+            while security.valid_session(ws.cookies.get(COOKIE)):
+                try:
+                    event = await asyncio.wait_for(events.get(), timeout=5)
+                except asyncio.TimeoutError:
+                    event = {"type": "heartbeat"}
+                await ws.send_json(event)
+            await ws.close(code=1008)
+        async def receive():
+            while True:
+                await ws.receive_text()
+        tasks = []
+        try:
+            await ws.send_json({"type": "ready"})
+            tasks = [asyncio.create_task(stream()), asyncio.create_task(receive())]
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                task.result()
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            app.state.engine.hub.listeners.discard(events)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    if settings.frontend.is_dir():
+        app.mount("/", StaticFiles(directory=settings.frontend, html=True), name="frontend")
+    return app

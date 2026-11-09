@@ -1,0 +1,1 @@
+ALTER TABLE chats ADD COLUMN read_through_id INTEGER NOT NULL DEFAULT 0;

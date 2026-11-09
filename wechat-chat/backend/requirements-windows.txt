@@ -1,0 +1,3 @@
+# Optional, read-only Windows UI Automation adapter. Not needed for Mock.
+uiautomation==2.0.29; sys_platform == 'win32'
+comtypes==1.4.17; sys_platform == 'win32'
