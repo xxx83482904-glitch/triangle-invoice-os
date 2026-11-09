@@ -1,5 +1,7 @@
 # こもれび — 次のAIへの引き継ぎ
 
+> 以前作成した引き継ぎ資料です。現在は同じ開発者が作業を継続しています。最新の実機状況・OCR補助・制約は `WECHAT_INTEGRATION_STATUS.md` と `TEST_RESULTS.md` を優先してください。
+
 更新日: 2026-11-09。保存対象: `wechat-chat/` と、親のTypeScriptからこの独立アプリを除外する設定。
 
 GitHub: https://github.com/xxx83482904-glitch/triangle-invoice-os ／ ブランチ: `codex/komorebi-wechat-mvp` ／ 開発対象: `wechat-chat/`。既存のmainにはまだこのアプリをマージしていません。

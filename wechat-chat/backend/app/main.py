@@ -1,10 +1,12 @@
 import asyncio
 import hmac
 from datetime import date
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from dataclasses import asdict
 from typing import Literal
 from uuid import UUID
 
+from anyio import CancelScope
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -13,6 +15,11 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .adapters.mock import MockWeChatAdapter
+from .adapters.base import now
+from .adapters.windows_uia import WindowsUIAAdapter
+from .adapters.windows_ocr import WindowsOCRAdapter
+from .ocr_inbox import OcrInbox
+from .ocr_routes import register_ocr_routes
 from .assistance import LocalRulesProvider, attention_snapshot
 from .body_limit import BodyLimitMiddleware
 from .config import Settings
@@ -69,15 +76,25 @@ def create_app(settings=None, adapter=None):
         if selected is None:
             if settings.adapter == "mock":
                 selected = MockWeChatAdapter()
+            elif settings.adapter == "windows-ocr":
+                selected = WindowsOCRAdapter()
             else:
-                from .adapters.windows_uia import WindowsUIAAdapter
                 selected = WindowsUIAAdapter(settings.poll_seconds)
         engine = Engine(db, selected, settings)
         app.state.db, app.state.engine, app.state.security = db, engine, security
+        app.state.wechat_diagnostic_lock = asyncio.Lock()
+        app.state.ocr = OcrInbox()
+        cleaner = asyncio.create_task(app.state.ocr.clean())
         await engine.start()
-        yield
-        await engine.stop()
-        db.close()
+        try:
+            yield
+        finally:
+            cleaner.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleaner
+            app.state.ocr.previews.clear()
+            await engine.stop()
+            db.close()
 
     app = FastAPI(title="こもれび · WeChat local bridge", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(BodyLimitMiddleware)
@@ -144,6 +161,18 @@ def create_app(settings=None, adapter=None):
     @api.get("/device")
     async def device():
         return {"mobile_url": settings.mobile_url, "mobile_access": settings.mobile_access, "ai_enabled": False, "push_enabled": False}
+
+    @api.post("/wechat/diagnostics")
+    async def wechat_diagnostics():
+        # A bounded read-only process; never switches the running adapter or DB,
+        # activates windows, types, clicks, starts WeChat or logs message content.
+        lock = app.state.wechat_diagnostic_lock
+        if lock.locked():
+            raise HTTPException(409, "diagnostic_busy")
+        security.rate_limit("wechat-diagnostics", 6)
+        async with lock:
+            diagnostic = await asyncio.to_thread(WindowsUIAAdapter._probe)
+        return {"connection": asdict(WindowsUIAAdapter.describe(diagnostic)), "diagnostic": diagnostic, "checked_at": now(), "active_adapter": settings.adapter}
 
     @api.get("/chats")
     async def chats():
@@ -264,6 +293,7 @@ def create_app(settings=None, adapter=None):
         engine.hub.publish("status")
         return await engine.status()
 
+    register_ocr_routes(api, app, settings, security)
     app.include_router(api)
 
     @app.websocket("/ws")
@@ -301,7 +331,11 @@ def create_app(settings=None, adapter=None):
             app.state.engine.hub.listeners.discard(events)
             for task in tasks:
                 task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            # A disconnect may coincide with an outer ASGI cancellation. Let the
+            # already-cancelled child tasks finish without replacing that outer
+            # cancellation with a second, unrelated CancelledError.
+            with CancelScope(shield=True):
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     if settings.frontend.is_dir():
         app.mount("/", StaticFiles(directory=settings.frontend, html=True), name="frontend")

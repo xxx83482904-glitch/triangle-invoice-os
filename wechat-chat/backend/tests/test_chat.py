@@ -248,6 +248,14 @@ def test_read_cursor_does_not_regress(client):
     assert next(c for c in client.get("/api/chats").json() if c["id"] == chat["id"])["unread_count"] == 0
 
 
+def test_websocket_rapid_disconnect_releases_listeners(client):
+    assert client.post("/api/auth/login", json={"token": TOKEN}).status_code == 200
+    for _ in range(40):
+        with client.websocket_connect("ws://127.0.0.1:8765/ws", headers={"Origin": ORIGIN}) as websocket:
+            assert websocket.receive_json()["type"] == "ready"
+        assert not client.app.state.engine.hub.listeners
+
+
 def test_adapter_database_separation(tmp_path):
     path = config(tmp_path).db_path
     Database(path, "mock").close()

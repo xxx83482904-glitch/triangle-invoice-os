@@ -17,7 +17,7 @@ class LocalRulesProvider:
         incoming = [m for m in messages if m["direction"] == "incoming"]
         source = incoming[-1] if incoming else None
         last = messages[-1] if messages else None
-        unresolved = any(m["direction"] == "outgoing" and m["delivery_status"] in ("pending", "sending", "unknown", "failed") for m in messages)
+        unresolved = any(m["direction"] == "outgoing" and m.get("message_type") != "ocr_text" and m["delivery_status"] in ("pending", "sending", "unknown", "failed") for m in messages)
         confirmed = max((m["id"] for m in messages if m["direction"] == "outgoing" and m["delivery_status"] == "confirmed"), default=0)
         text = source["content"] if source else ""
         question = bool(re.search(r"[?？]|どう|お願い|ください|確認して|教えて|できます|能否|请|麻烦", text))
@@ -27,7 +27,7 @@ class LocalRulesProvider:
         age_hours = 0
         if source:
             try:
-                stamp = datetime.fromisoformat(source["timestamp"] or source["observed_at"])
+                stamp = datetime.fromisoformat(source["timestamp"] or "")
                 if stamp.tzinfo is not None:
                     age_hours = max(0, (datetime.now(timezone.utc) - stamp).total_seconds() / 3600)
             except (ValueError, TypeError):
@@ -57,7 +57,9 @@ class LocalRulesProvider:
         if chat["sync_status"] != "complete":
             reasons.append("取得済みの一部履歴だけを参照しています。")
         if source and source["timestamp_quality"] != "exact":
-            reasons.append("メッセージの日時は推定または取得時刻です。")
+            reasons.append("メッセージの正確な日時は取得できていません。")
+        if source and source.get("message_type") == "ocr_text":
+            reasons.append("画面OCRの手動取り込みです。誤認識・不足・取り込み順による影響があります。")
         if priority:
             reasons.insert(0, "あなたが指定した優先度を使用しています。")
         suggestions = []
@@ -72,7 +74,7 @@ class LocalRulesProvider:
         return {
             "chat_id": chat["id"], "chat_name": chat["name"], "chat_type": chat["type"],
             "source_message_id": source["id"] if source else None,
-            "source_content": text[:2000], "source_at": (source["timestamp"] or source["observed_at"]) if source else None,
+            "source_content": text[:2000], "source_at": source["timestamp"] if source else None,
             "latest_message_id": last["id"] if last else None,
             "priority": priority or inferred, "priority_origin": "manual" if priority else "rule",
             "state": state, "reasons": reasons, "suggestions": suggestions,

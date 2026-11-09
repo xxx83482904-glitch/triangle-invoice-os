@@ -178,3 +178,46 @@ class Database:
         with self.lock, self.conn:
             self.conn.execute("UPDATE tasks SET status=?,updated_at=? WHERE id=?", (state, now(), ident))
             return self.one("SELECT * FROM tasks WHERE id=?", (ident,))
+
+    def ocr_receipt(self, request_id, payload_hash):
+        row = self.one("SELECT * FROM ocr_requests WHERE request_id=?", (request_id,))
+        if row:
+            if row["payload_hash"] != payload_hash:
+                raise ValueError("idempotency_conflict")
+            return {"chat_id": row["chat_id"], "message_id": row["message_id"], "duplicate": True}
+
+    def import_ocr(self, body, payload_hash, source_key, observed_at):
+        """Commit reviewed content, provenance and retry receipt atomically."""
+        with self.lock, self.conn:
+            previous = self.ocr_receipt(body["client_request_id"], payload_hash)
+            if previous:
+                return previous
+            existing = body.get("chat_id")
+            if existing:
+                chat = self.chat(existing)
+                if not chat or not chat["external_id"].startswith("ocr:") or (chat["external_id"], chat["name"], chat["type"]) != (body["expected_external_id"], body["chat_name"], body["chat_type"]):
+                    raise ValueError("destination_mismatch")
+                ident = existing
+            else:
+                external = "ocr:" + body["client_request_id"]
+                ident = str(uuid5(NAMESPACE_URL, external))
+                self.conn.execute("""INSERT INTO chats(id,external_id,name,type,sync_status,history_note)
+                  VALUES(?,?,?,?,'partial',?)""", (ident, external, body["chat_name"], body["chat_type"], "画面OCRを確認して手動保存した範囲のみ。自動同期ではありません。会話・送信者・方向は手動指定で、WeChat ID・日時・配信結果は未取得です。"))
+                self.conn.execute("INSERT INTO sync_state(chat_id,connection_status) VALUES(?,'limited')", (ident,))
+            source = self.one("SELECT message_id FROM ocr_sources WHERE chat_id=? AND source_key=?", (ident, source_key))
+            duplicate = source is not None
+            if source:
+                message_id = source["message_id"]
+                saved = self.one("SELECT content,direction,sender_name FROM messages WHERE id=?", (message_id,))
+                if (saved["content"], saved["direction"], saved["sender_name"]) != (body["content"], body["direction"], body["sender_name"]):
+                    raise ValueError("ocr_source_already_imported")
+            else:
+                incoming = body["direction"] == "incoming"
+                message = self.conn.execute("""INSERT INTO messages(chat_id,dedupe_key,sender_id,sender_name,direction,content,message_type,timestamp,observed_at,timestamp_quality,delivery_status,identity_quality)
+                  VALUES(?,?,'unverified',?,?,?,'ocr_text',NULL,?,'unavailable',?,'ocr_reviewed')""", (ident, "ocr:" + source_key, body["sender_name"], body["direction"], body["content"], observed_at, "received" if incoming else "unknown"))
+                message_id = message.lastrowid
+                self.conn.execute("INSERT INTO ocr_sources VALUES(?,?,?)", (ident, source_key, message_id))
+                self.conn.execute("UPDATE chats SET last_message_at=MAX(COALESCE(last_message_at,''),?),unread_count=unread_count+? WHERE id=?", (observed_at, int(incoming), ident))
+                self.conn.execute("UPDATE sync_state SET last_sync_at=?,connection_status='limited' WHERE chat_id=?", (observed_at, ident))
+            self.conn.execute("INSERT INTO ocr_requests VALUES(?,?,?,?,?)", (body["client_request_id"], payload_hash, ident, message_id, now()))
+            return {"chat_id": ident, "message_id": message_id, "duplicate": duplicate}

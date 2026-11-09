@@ -29,8 +29,8 @@ class Settings:
     def from_env(cls):
         load_dotenv(ROOT / ".env")
         mode = os.getenv("WECHAT_ADAPTER", "mock")
-        if mode not in ("mock", "windows-uia"):
-            raise ValueError("WECHAT_ADAPTER must be mock or windows-uia")
+        if mode not in ("mock", "windows-uia", "windows-ocr"):
+            raise ValueError("WECHAT_ADAPTER must be mock, windows-uia or windows-ocr")
         token = os.getenv("WECHAT_ACCESS_TOKEN", "").strip()
         if not token:
             path = ROOT / ".runtime" / "access-token.txt"

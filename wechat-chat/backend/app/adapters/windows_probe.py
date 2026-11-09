@@ -10,6 +10,22 @@ import json
 import sys
 
 
+def classify_observation(observation):
+    """Classify structure, never infer authentication from a running process."""
+    if not observation.get("process_count"):
+        return "not_running"
+    if not observation.get("window_count"):
+        return "window_unavailable"
+    if observation.get("all_windows_minimized"):
+        return "window_minimized"
+    if observation.get("login_layout_detected"):
+        return "login_required"
+    if not observation.get("interactive_node_count"):
+        return "ui_tree_unavailable"
+    # Exposed controls do not prove that messages or stable chat IDs are readable.
+    return "unsupported_ui"
+
+
 def process_inventory():
     class ProcessEntry(ctypes.Structure):
         _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("pid", wintypes.DWORD), ("heap", ctypes.c_void_p), ("module", wintypes.DWORD), ("threads", wintypes.DWORD), ("parent", wintypes.DWORD), ("priority", wintypes.LONG), ("flags", wintypes.DWORD), ("name", wintypes.WCHAR * 260)]
@@ -75,7 +91,7 @@ def probe():
     if sys.platform != "win32":
         return {"state": "unsupported_os"}
     processes = process_inventory()
-    result = {"state": "not_running" if not processes else "window_unavailable", "process_count": len(processes), "window_count": 0, "node_count": 0, "version": file_version(processes[0][1]) if processes else None}
+    result = {"state": "not_running" if not processes else "window_unavailable", "process_count": len(processes), "window_count": 0, "node_count": 0, "interactive_node_count": 0, "window_classes": [], "login_layout_detected": False, "version": file_version(processes[0][1]) if processes else None}
     if not processes:
         return result
     try:
@@ -89,17 +105,28 @@ def probe():
     result["window_count"] = len(windows)
     if not windows:
         return result
-    login_visible = False
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    user.IsIconic.argtypes = [wintypes.HWND]
+    user.IsIconic.restype = wintypes.BOOL
+    result["all_windows_minimized"] = all(bool(user.IsIconic(control.NativeWindowHandle)) for control in windows)
+    # Class names are restricted to known framework names; titles, Name, Value,
+    # account IDs, chat labels and message text never enter this report.
+    allowed_classes = {"mmui::MainWindow", "mmui::LoginWindow", "Qt51514QWindowIcon", "MMUIRenderSubWindowHW"}
+    result["window_classes"] = sorted({control.ClassName for control in windows if control.ClassName in allowed_classes})
+    interactive_types = {"ButtonControl", "EditControl", "ListControl", "ListItemControl", "TextControl", "TabControl", "TabItemControl", "MenuItemControl"}
     stack = [(control, 0) for control in windows]
     while stack and result["node_count"] < 500:
         control, depth = stack.pop()
         result["node_count"] += 1
+        if control.ControlTypeName in interactive_types:
+            result["interactive_node_count"] += 1
         # Only the observed login-layout selector is recognized. No name guessing.
         if control.AutomationId.startswith("login_layout_"):
-            login_visible = True
+            result["login_layout_detected"] = True
         if depth < 10:
             stack.extend((child, depth + 1) for child in control.GetChildren())
-    result["state"] = "login_required" if login_visible else "unsupported_ui"
+    result["tree_truncated"] = bool(stack)
+    result["state"] = classify_observation(result)
     return result
 
 

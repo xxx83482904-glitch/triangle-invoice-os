@@ -7,7 +7,7 @@ export type Chat = {
 export type Message = {
   id: number; chat_id: string; content: string; sender_name: string; sender_id: string;
   direction: "incoming" | "outgoing"; timestamp: string | null; observed_at: string;
-  timestamp_quality: string; delivery_status: string; identity_quality: string;
+  timestamp_quality: string; delivery_status: string; identity_quality: string; message_type: string;
   chat_name?: string; chat_type?: string;
 };
 export type Status = {
@@ -43,6 +43,22 @@ const errors: Record<string, string> = {
   empty_task: "タスク名を入力してください。", source_mismatch: "元のメッセージと会話が一致しません。",
   task_already_exists: "このメッセージはタスクに追加済みです。タスク画面で確認してください。",
   task_not_found: "タスクが見つかりません。画面を更新してください。",
+  diagnostic_busy: "WeChatの診断を実行中です。少し待ってからお試しください。",
+  ocr_mode_required: "画面OCRモードに切り替えてください。Mockの保存先には取り込めません。",
+  ocr_window_ambiguous: "WeChatの画面が複数あり、対象を特定できません。読み取りたい会話のウィンドウだけ表示してください。",
+  ocr_desktop_unavailable: "PCの画面ロックを解除してから、もう一度読み取ってください。",
+  ocr_window_unsupported: "WeChatの会話画面を大きく表示してください。最小化中・ログイン画面・小さなウィンドウは読み取りません。",
+  ocr_window_changed: "読み取り中に画面が変わりました。WeChatを表示したまま、もう一度お試しください。",
+  ocr_language_unavailable: "この言語のWindows OCRがありません。別の言語を選ぶか、WindowsのOCR言語機能を追加してください。",
+  ocr_dependency_missing: "Windows OCRの依存パッケージをインストールしてください。セットアップ手順に記載しています。",
+  ocr_capture_failed: "画面を読み取れませんでした。WeChatの会話画面を表示してからお試しください。",
+  ocr_timeout: "文字認識が時間内に完了しませんでした。もう一度読み取ってください。",
+  ocr_busy: "文字認識を実行中です。少し待ってください。",
+  ocr_no_text: "画面から文字を取得できませんでした。会話を表示して、言語を確認してください。",
+  ocr_too_many_lines: "画面内の文字が多すぎます。WeChatのウィンドウを小さくして再度読み取ってください。",
+  ocr_preview_expired: "読み取り結果の保存期限が過ぎました。もう一度読み取ってください。",
+  ocr_selection_invalid: "保存する本文の行を選び直してください。",
+  ocr_source_already_imported: "この画面の本文は既に保存されています。既存の会話で内容を確認してください。",
 };
 export class ApiError extends Error { constructor(public status: number, public code: string) { super(errors[code] || "処理できませんでした。接続状態を確認してください。"); } }
 export async function api<T>(path: string, body?: unknown): Promise<T> {

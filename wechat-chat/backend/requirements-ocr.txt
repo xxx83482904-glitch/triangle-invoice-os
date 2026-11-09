@@ -1,0 +1,10 @@
+# Optional local Windows OCR. PyWinRT 3.2.1 supports the app's Python 3.10.
+# PyWinRT 4 requires Python >=3.11; do not upgrade independently.
+Pillow==12.3.0; sys_platform == 'win32'
+winrt-runtime==3.2.1; sys_platform == 'win32'
+winrt-Windows.Foundation==3.2.1; sys_platform == 'win32'
+winrt-Windows.Foundation.Collections==3.2.1; sys_platform == 'win32'
+winrt-Windows.Globalization==3.2.1; sys_platform == 'win32'
+winrt-Windows.Graphics.Imaging==3.2.1; sys_platform == 'win32'
+winrt-Windows.Media.Ocr==3.2.1; sys_platform == 'win32'
+winrt-Windows.Storage.Streams==3.2.1; sys_platform == 'win32'

@@ -4,7 +4,7 @@
 
 **Mockモードは起動・送受信・履歴保存・ブラウザテスト済みです。Windows版WeChatとの実送受信はまだ完成していません。** 実機の検証状況は [WECHAT_INTEGRATION_STATUS.md](WECHAT_INTEGRATION_STATUS.md) を確認してください。
 
-別のAIが続きを開発する場合は、まず [AI_HANDOFF.md](AI_HANDOFF.md) を読んでください。[NEXT_AI_PROMPT.md](NEXT_AI_PROMPT.md) に、そのまま渡せる依頼文を用意しています。
+このPCではWeixin 4.1.15.56と、本人がダウングレードした4.1.8.107の両方で、ログイン後のUIA本文取得ができませんでした。wxauto4 41.1.7も隔離環境で読み取りを確認しましたが、画面部品は公開されません。補助として、Windows内のOCRで表示中の文字を読み、確認して保存する機能を追加しました。**自動同期・実送信は無効です。OCRを恒久的な同期方式にはしません。** [画面OCRのセットアップ・使い方](docs/SCREEN_OCR.md)
 
 ## AIを前提にした操作のプレビュー
 

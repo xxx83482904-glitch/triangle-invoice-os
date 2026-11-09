@@ -1,3 +1,4 @@
+param([switch]$WithOcr)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $projectRoot
@@ -9,6 +10,10 @@ try {
     }
     & ./.venv/Scripts/python.exe -m pip install -r backend/requirements-lock.txt
     if ($LASTEXITCODE -ne 0) { throw 'Python dependency installation failed.' }
+    if ($WithOcr) {
+        & ./.venv/Scripts/python.exe -m pip install -r backend/requirements-ocr.txt -r backend/requirements-windows.txt
+        if ($LASTEXITCODE -ne 0) { throw 'Windows OCR dependency installation failed.' }
+    }
     if (-not (Test-Path -LiteralPath '.env')) { Copy-Item -LiteralPath '.env.example' -Destination '.env' }
     Push-Location frontend
     try {

@@ -2,6 +2,67 @@ import { test, expect, Page } from "@playwright/test";
 
 const TOKEN = "e2e-mock-only-" + "x".repeat(40);
 const ORIGIN = "http://127.0.0.1:8877";
+
+async function screenOcr(page: Page, expires = 300) {
+  await login(page);
+  await page.route("**/api/status", async route => {
+    const response = await route.fetch();
+    await route.fulfill({json:{...await response.json(), mode:"windows-ocr", state:"limited", can_send:false, can_read:false}});
+  });
+  await page.route("**/api/wechat/ocr/preview", route => route.fulfill({json:{id:"12345678-1234-4234-8234-123456789abc", width:1000, height:800, expires_in:expires, image:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==", lines:[{id:0,text:"今日の資料を確認してください",box:[400,400,700,420]},{id:1,text:"これは別の発言",box:[400,450,700,470]}]}}));
+  await page.reload();
+  await page.getByRole("button", {name:"接続状態・設定",exact:true}).click();
+}
+
+test("OCR review on mobile requires explicit direction and review; uncertain saves retry the same receipt", async ({page}) => {
+  await page.setViewportSize({width:390,height:844});
+  await screenOcr(page);
+  const submitted: Record<string, unknown>[] = [];
+  await page.route("**/api/wechat/ocr/import", async route => {
+    submitted.push(route.request().postDataJSON());
+    if (submitted.length === 1) await route.abort("failed");
+    else await route.fulfill({json:{chat_id:"ocr-browser-only",message_id:1,duplicate:true}});
+  });
+  const card = page.locator(".ocr-import");
+  await card.getByRole("button", {name:"表示中のWeChatを読み取る",exact:true}).click();
+  await card.getByLabel("今日の資料を確認してください",{exact:true}).check();
+  await card.getByLabel("取り込む会話名",{exact:true}).fill("OCR検証グループ");
+  await card.getByLabel("取り込む会話の種類").selectOption("group");
+  const save = card.getByRole("button",{name:"確認した1件を保存"});
+  await expect(save).toBeDisabled();
+  await card.getByLabel("取り込むメッセージの方向").selectOption("incoming");
+  await expect(save).toBeDisabled();
+  await card.getByLabel("画面と照合し、会話・本文・方向・送信者を確認しました").check();
+  await save.click();
+  await expect(card.getByRole("status")).toContainText("保存結果を確認できません");
+  await expect(card.getByLabel("取り込む本文")).toBeDisabled();
+  await card.getByRole("button",{name:"保存結果を確認・再試行"}).click();
+  await expect(card.getByRole("status")).toContainText("重複登録していません");
+  expect(submitted).toHaveLength(2);
+  expect(submitted[1]).toEqual(submitted[0]);
+  expect(submitted[0].direction).toBe("incoming");
+  expect(submitted[0].line_ids).toEqual([0]);
+  expect(submitted[0].reviewed).toBe(true);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({path:"../test-results/ocr-review-mobile.png"});
+});
+
+test("OCR preview expiry removes the private image and text", async ({page}) => {
+  await screenOcr(page, 1);
+  const card=page.locator(".ocr-import");
+  await card.getByRole("button", {name:"表示中のWeChatを読み取る",exact:true}).click();
+  await expect(card.getByLabel("今日の資料を確認してください",{exact:true})).toBeVisible();
+  await expect(card.getByRole("status")).toContainText("保存期限",{timeout:5000});
+  await expect(card.locator(".ocr-snapshot")).toHaveCount(0);
+  await expect(card.getByLabel("今日の資料を確認してください",{exact:true})).toHaveCount(0);
+});
+
+test("Mock settings never offer real OCR capture or mix imported messages", async ({page}) => {
+  await login(page);
+  await page.getByRole("button", {name:"接続状態・設定",exact:true}).click();
+  await expect(page.locator(".ocr-import")).toContainText("実データを分けて保存");
+  await expect(page.getByRole("button",{name:"表示中のWeChatを読み取る",exact:true})).toHaveCount(0);
+});
 async function login(page: Page) {
   await page.goto("/");
   await page.getByLabel("このアプリの接続キー").fill(TOKEN);
@@ -177,4 +238,20 @@ test("mobile list does not mark a hidden conversation as read", async ({page}) =
   await page.request.post("/api/mock",{headers:{Origin:ORIGIN},data:{action:"receive",chat_id:target.id}});
   await expect(page.getByTestId("chat-mock:lin").locator(".unread-badge")).toBeVisible();
   await expect(page.locator(".conversation")).toBeHidden();
+});
+
+test("WeChat diagnostic UI distinguishes logged-in but inaccessible UI from sync success", async ({page}) => {
+  await page.setViewportSize({width:390,height:844}); await login(page);
+  await page.route("**/api/wechat/diagnostics", route => route.fulfill({json:{active_adapter:"mock",checked_at:new Date().toISOString(),connection:{state:"limited",mode:"windows-uia",can_read:false,can_send:false,version:"4.1.15.56",detail:"WeChatは起動していますが、会話の読み取り用UI情報が公開されていません。ログイン済みでも、この状態では本文や宛先を取得できません。"},diagnostic:{state:"ui_tree_unavailable",node_count:3,interactive_node_count:0}}}));
+  await page.getByRole("button",{name:"接続状態・設定",exact:true}).click();
+  const card = page.locator(".wechat-diagnostics");
+  await card.getByRole("button",{name:"WeChatの読み取りを診断",exact:true}).click();
+  await expect(card.getByRole("status")).toContainText("ログイン済みでも");
+  await expect(card).toContainText("読み取り制限");
+  await expect(card).toContainText("Mockシミュレーター");
+  await expect(card).toContainText("未対応");
+  await expect(card).toContainText("無効");
+  await card.scrollIntoViewIfNeeded();
+  await page.screenshot({path:"../test-results/wechat-diagnostic-mobile.png"});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
