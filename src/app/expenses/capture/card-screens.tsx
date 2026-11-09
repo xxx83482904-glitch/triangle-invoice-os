@@ -2,23 +2,21 @@
 
 import { useState } from "react";
 import { Camera, Check, CreditCard, Hourglass, Loader2, Wallet } from "lucide-react";
+import type { ExpenseStats } from "@/lib/expense-home-stats";
 import type { CardReceiptView, CardUseView, MyCardView } from "./model";
-import { Amount, AttentionRow, CaptureTile, Card, DetailRow, DoneMark, HomeHeader, Eyebrow, PrimaryButton, ReceiptThumb, Screen, SecondaryButton, Status, TextButton, TopBar, dayLabel, type Tone } from "./ui";
+import { Amount, AttentionRow, CaptureTile, Card, DetailRow, DoneMark, HomeHeader, SummaryPanel, Eyebrow, PrimaryButton, ReceiptThumb, Screen, SecondaryButton, Status, TextButton, TopBar, dayLabel, type Tone } from "./ui";
 
 // Company card screens: the person pays with their own company card, so a receipt is attached to a use on that
 // card's statement instead of being reimbursed.
 
-export function CardHomeScreen({ name, card, waiting, returned, drafts, install, onCard, onExpense, onLibrary, onList, onReturned, onDrafts, onMissing }: {
-  name: string; card: MyCardView; waiting: number; returned: number; drafts: number; install: React.ReactNode;
+export function CardHomeScreen({ name, card, stats, returned, drafts, install, onCard, onExpense, onLibrary, onList, onReturned, onDrafts, onMissing }: {
+  name: string; card: MyCardView; stats: ExpenseStats; returned: number; drafts: number; install: React.ReactNode;
   onCard: () => void; onExpense: () => void; onLibrary: () => void; onList: () => void; onReturned: () => void; onDrafts: () => void; onMissing: () => void;
 }) {
   return <Screen>
     <div className="flex flex-1 flex-col gap-3.5 px-6 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)]">
       <HomeHeader name={name} onList={onList} />
-      <button type="button" onClick={onList} aria-label="自分の状況" className="cap-surface cap-press grid w-full grid-cols-2 px-6 py-5 text-left">
-        <span><Eyebrow>立替の振込待ち</Eyebrow><Amount value={waiting} className="mt-1 block text-[28px] leading-none" /></span>
-        <span className="cap-hairline border-l pl-5"><Eyebrow>今月のカード利用</Eyebrow><Amount value={card.monthTotal} className="mt-1 block text-[28px] leading-none" /></span>
-      </button>
+      <SummaryPanel stats={stats} onList={onList} />
       {card.missing.length ? <AttentionRow tone="wait" title={`領収書がないカード利用 ${card.missing.length}件`} detail="タップして撮影" onClick={onMissing} /> : null}
       {returned ? <AttentionRow tone="ng" title={`差し戻された立替 ${returned}件`} detail="直して再提出してください" onClick={onReturned} /> : null}
       {drafts ? <AttentionRow tone="wait" title={`まだ送っていない領収書 ${drafts}枚`} detail="続きを確認する" onClick={onDrafts} /> : null}

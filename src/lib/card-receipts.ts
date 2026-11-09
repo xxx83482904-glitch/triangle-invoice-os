@@ -60,13 +60,13 @@ function documented(data: AppData, transactionId: string) {
     || data.bankReconciliations.some((row) => !row.deletedAt && row.transactionId === transactionId);
 }
 
-function cardUse(data: AppData, accountId: string, row: BankTransaction) {
+export function isCardUse(data: AppData, accountId: string, row: BankTransaction) {
   return row.bankAccountId === accountId && row.side === "EXPENSE" && !row.sourceMissing && row.sourceStatus !== "excluded" && row.treatment === "NORMAL"
     && Number.isFinite(row.amount) && row.amount > 0 && !knownBankCardSettlement(data, row);
 }
 
 export function cardCandidates(data: AppData, receipt: Pick<CardReceipt, "accountId" | "amount" | "spentOn"> & { excludedTransactionIds?: string[] }) {
-  return data.bankTransactions.filter((row) => cardUse(data, receipt.accountId, row) && cents(row.amount) === cents(receipt.amount)
+  return data.bankTransactions.filter((row) => isCardUse(data, receipt.accountId, row) && cents(row.amount) === cents(receipt.amount)
       && Math.abs(days(row.transactionDate, receipt.spentOn)) <= CARD_MATCH_DAYS && !documented(data, row.id) && !receipt.excludedTransactionIds?.includes(row.id))
     .sort((a, b) => Math.abs(days(a.transactionDate, receipt.spentOn)) - Math.abs(days(b.transactionDate, receipt.spentOn)) || a.id.localeCompare(b.id));
 }
@@ -110,7 +110,7 @@ function ownAccount(data: AppData, actor: Actor, company: CompanyScope) {
 // A use the person picked themselves: any unreceipted use on their own card, whatever the amount.
 function ownUse(data: AppData, accountId: string, transactionId: string, receipt?: CardReceipt) {
   const row = data.bankTransactions.find((item) => item.id === transactionId);
-  if (!row || !cardUse(data, accountId, row)) throw new Error("あなたのカードの利用が見つかりません。画面を更新してください");
+  if (!row || !isCardUse(data, accountId, row)) throw new Error("あなたのカードの利用が見つかりません。画面を更新してください");
   if (documented(data, row.id) || receipt?.excludedTransactionIds?.includes(row.id)) throw new Error("この利用にはすでに領収書が付いています");
   return row;
 }
@@ -204,7 +204,7 @@ export function myCardView(data: AppData, actor: Actor, company: CompanyScope, t
         projectName: row.projectId ? projects.get(row.projectId) || "" : "", fileUrl: row.fileUrl, mimeType: row.mimeType,
         status: linked ? "LINKED" : candidates.length > 1 ? "CHOOSE" : "WAITING", linkedBy: linked ? row.linkedBy : undefined, use: use ? toUseView(use) : undefined, candidates };
     });
-  const uses = data.bankTransactions.filter((row) => cardUse(data, account.id, row) && row.transactionDate >= since && row.transactionDate <= today)
+  const uses = data.bankTransactions.filter((row) => isCardUse(data, account.id, row) && row.transactionDate >= since && row.transactionDate <= today)
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.id.localeCompare(a.id));
   const missing = uses.filter((row) => !documented(data, row.id) && row.bookkeeping?.invoiceRequirement !== "NOT_REQUIRED").map(toUseView);
   const month = today.slice(0, 7), monthTotal = uses.filter((row) => row.transactionDate.startsWith(month)).reduce((sum, row) => sum + cents(row.amount), 0) / 100;
