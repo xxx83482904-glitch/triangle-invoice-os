@@ -44,6 +44,7 @@ class Connection:
     can_read: bool = False
     version: str | None = None
     limitations: list[str] = field(default_factory=list)
+    monitoring: dict | None = None
 
 
 @dataclass
@@ -79,6 +80,10 @@ class WeChatAdapter(ABC):
 
     @abstractmethod
     async def send_message(self, chat_id: str, text: str) -> Receipt: ...
+
+    async def send_queued_message(self, chat_id: str, text: str, request_id: str) -> Receipt:
+        """Persistent queue identity is available to adapters with an IPC sender."""
+        return await self.send_message(chat_id, text)
 
     @abstractmethod
     async def get_connection_status(self) -> Connection: ...

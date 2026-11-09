@@ -15,6 +15,8 @@ export type Status = {
   state: string; mode: string; detail: string; can_send: boolean; can_read: boolean;
   version: string | null; limitations: string[]; queue_pending: number; unknown_count: number;
   sync_error: string | null;
+  monitoring?: { registered: number; discovered: number; ambiguous: number; registration_failures: number;
+    limit: number; reconnections: number; scope: "visible_sessions"; complete: false; active_chat_ids: string[] } | null;
 };
 export type QueueItem = { id: string; client_request_id: string; chat_id: string; chat_name: string; status: string; content: string; error_message: string | null; created_at: string };
 export type Priority = "high" | "normal" | "low";

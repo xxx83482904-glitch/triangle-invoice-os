@@ -1,5 +1,7 @@
 # Windowsセットアップ
 
+wxautox4 Plusへの移行は [Plus専用のセットアップ・本人による認証・実機検証手順](WXAUTOX4_PLUS.md) を参照してください。購入・認証前の常駐版は無料Readerのままです。
+
 ## Mockモード
 
 ```powershell

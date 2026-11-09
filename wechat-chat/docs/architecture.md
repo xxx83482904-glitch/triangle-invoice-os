@@ -2,7 +2,7 @@
 
 調査日: 2026-11-09。参照: [SiverWXbot_plus](https://github.com/SiverKing/SiverWXbot_plus/tree/a861923f6b4f792a6efb9b51f494f59bbea0d6af)、commit `a861923f6b4f792a6efb9b51f494f59bbea0d6af`。README表記はv4.8.3。
 
-本人が無料版を先に試す方針を選んだため、現時点では **wxauto4 41.1.7の読み取り検証を優先**します。Siver本体はwxautox4 Plusを前提とするため、単にimport名を置き換えて稼働させません。既存のこもれびのUI・SQLite・認証・送信キューを再利用します。
+2026-11-10に本人が **wxautox4 Plusで進める方針**を選びました。既存のUI・SQLite・認証・送信キューを再利用し、Plus 41.2.3用Adapter/隔離workerを追加しています。SiverのBot本体やFlask画面は起動しません。[Plusの構成・実装範囲・実機で未検証の箇所](WXAUTOX4_PLUS.md) を参照してください。以下の上流調査表は無料版を優先していた時点の判断を含みます。
 
 ## 上流コードの調査結果
 

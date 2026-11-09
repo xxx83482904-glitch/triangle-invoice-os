@@ -2,6 +2,8 @@
 
 個人用WeChatのための、日本語・レスポンシブPWAです。既存の請求書アプリから独立した `wechat-chat/` に実装しています。
 
+**2026-11-10: wxautox4 Plusで進める方針へ変更しました。** Plus Adapter・会話監視・再接続・誤送信防止・実送信前の確認画面を追加しています。合成SDKでの検証までで、ライセンス購入・本人の認証・Plusの実機受送信はまだです。現在の常駐版は無料Readerを維持します。[Plusのセットアップと実機検証](docs/WXAUTOX4_PLUS.md) を参照してください。
+
 **Mockモードは起動・送受信・履歴保存・ブラウザテスト済みです。Windows版WeChatとの実送受信はまだ完成していません。** 実機の検証状況は [WECHAT_INTEGRATION_STATUS.md](WECHAT_INTEGRATION_STATUS.md) を確認してください。
 
 **実WeChatの読み取りに成功しました。** Weixin 4.1.8.107の英語UIと無料wxauto4 41.1.7を使い、個人・グループの実本文をSQLiteへ保存し、携帯幅の画面で表示しました。OCRは使っていません。現在はPCで開いた会話のテキストだけを取り込みます。全会話の同期・実送信・WeChat再起動後の再バインドは未対応です。[無料Readerのセットアップ・使い方](docs/WXAUTO4_READER.md)

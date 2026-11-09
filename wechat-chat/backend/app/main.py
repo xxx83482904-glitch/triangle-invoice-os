@@ -19,6 +19,7 @@ from .adapters.base import now
 from .adapters.windows_uia import WindowsUIAAdapter
 from .adapters.windows_ocr import WindowsOCRAdapter
 from .adapters.windows_wxauto4 import WindowsWxauto4Adapter
+from .adapters.windows_plus import WindowsPlusAdapter
 from .ocr_inbox import OcrInbox
 from .ocr_routes import register_ocr_routes
 from .assistance import LocalRulesProvider, attention_snapshot
@@ -85,6 +86,10 @@ def create_app(settings=None, adapter=None, ai_provider=None):
                 selected = WindowsOCRAdapter()
             elif settings.adapter == "wxauto4":
                 selected = WindowsWxauto4Adapter(settings.poll_seconds)
+            elif settings.adapter == "wxautox4":
+                selected = WindowsPlusAdapter(settings.db_path.with_name(settings.db_path.stem + "-worker.sqlite3"),
+                    send_enabled=settings.plus_send_enabled, max_listeners=settings.plus_max_listeners,
+                    language=settings.plus_language)
             else:
                 selected = WindowsUIAAdapter(settings.poll_seconds)
         engine = Engine(db, selected, settings)

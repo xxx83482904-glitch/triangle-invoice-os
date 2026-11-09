@@ -28,13 +28,19 @@ class Settings:
     ai_enabled: bool = False
     openai_api_key: str = field(default="", repr=False)
     openai_model: str = ""
+    plus_send_enabled: bool = False
+    plus_max_listeners: int = 8
+    plus_language: str = "en"
 
     @classmethod
     def from_env(cls):
         load_dotenv(ROOT / ".env")
         mode = os.getenv("WECHAT_ADAPTER", "mock")
-        if mode not in ("mock", "windows-uia", "windows-ocr", "wxauto4"):
-            raise ValueError("WECHAT_ADAPTER must be mock, windows-uia, windows-ocr or wxauto4")
+        if mode not in ("mock", "windows-uia", "windows-ocr", "wxauto4", "wxautox4"):
+            raise ValueError("Unsupported WECHAT_ADAPTER")
+        plus_language = os.getenv("WECHAT_PLUS_LANGUAGE", "en")
+        if plus_language not in ("cn", "cn_t", "en"):
+            raise ValueError("Unsupported WECHAT_PLUS_LANGUAGE")
         token = os.getenv("WECHAT_ACCESS_TOKEN", "").strip()
         if not token:
             path = ROOT / ".runtime" / "access-token.txt"
@@ -76,4 +82,7 @@ class Settings:
             ai_enabled=os.getenv("WECHAT_AI_ENABLED", "false").lower() == "true",
             openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
             openai_model=os.getenv("OPENAI_MODEL", "").strip(),
+            plus_send_enabled=os.getenv("WECHAT_PLUS_SEND_ENABLED", "false").lower() == "true",
+            plus_max_listeners=min(32, max(1, int(os.getenv("WECHAT_PLUS_MAX_LISTENERS", "8")))),
+            plus_language=plus_language,
         )

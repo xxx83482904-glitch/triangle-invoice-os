@@ -85,6 +85,8 @@ class Engine:
                         # just opened after startup. Persist its verified metadata
                         # before ingesting the first event for that conversation.
                         await self.sync()
+                        if not self.db.one("SELECT id FROM chats WHERE external_id=?", (message.chat_id,)):
+                            raise RuntimeError("chat_metadata_unavailable")
                     if self.db.ingest(message):
                         chat = self.db.one("SELECT id FROM chats WHERE external_id=?", (message.chat_id,))
                         if chat:
@@ -132,7 +134,7 @@ class Engine:
             matches = [c for c in await self.adapter.get_chats() if c.external_id == item["expected_external_id"] and c.name == item["expected_name"]]
             if len(matches) != 1:
                 raise DestinationMismatch("destination_mismatch")
-            receipt = await self.adapter.send_message(chat["external_id"], item["content"])
+            receipt = await self.adapter.send_queued_message(chat["external_id"], item["content"], item["id"])
             if receipt.status == "confirmed" and (not receipt.message or receipt.message.chat_id != chat["external_id"] or receipt.message.content != item["content"] or receipt.message.direction != "outgoing"):
                 self.db.finish(item, "unknown", "invalid_receipt")
             else:
@@ -150,7 +152,7 @@ class Engine:
         while True:
             try:
                 connection = await self.adapter.get_connection_status()
-                key = connection.state + connection.detail
+                key = connection.state + connection.detail + str(connection.monitoring)
                 if key != self.last_connection:
                     self.last_connection = key
                     self.db.connection(connection.state)

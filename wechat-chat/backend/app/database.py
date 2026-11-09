@@ -140,12 +140,24 @@ class Database:
 
     def finish(self, item, status, error=None, message=None):
         with self.lock, self.conn:
+            if message:
+                echoes = self.all("""SELECT id,content,direction FROM messages WHERE chat_id=? AND id<>?
+                  AND ((? IS NOT NULL AND external_message_id=?) OR (? IS NOT NULL AND source_key=?))""",
+                  (item["chat_id"], item["message_id"], message.external_message_id, message.external_message_id, message.source_key, message.source_key))
+                if any(e["content"] != message.content or e["direction"] != "outgoing" for e in echoes):
+                    status, error, message = "unknown", "receipt_identity_conflict", None
             self.conn.execute("UPDATE send_queue SET status=?,processed_at=?,error_message=? WHERE id=?", (status, now(), error, item["id"]))
             self.conn.execute("UPDATE messages SET delivery_status=? WHERE id=?", (status, item["message_id"]))
             if message:
                 # Reconcile a watcher echo that arrived before the send receipt.
-                self.conn.execute("DELETE FROM messages WHERE chat_id=? AND external_message_id=? AND id<>?", (item["chat_id"], message.external_message_id, item["message_id"]))
-                self.conn.execute("UPDATE messages SET external_message_id=?,dedupe_key=?,timestamp=?,timestamp_quality=?,identity_quality=? WHERE id=?", (message.external_message_id, self.fingerprint(message), message.timestamp, message.timestamp_quality, "external" if message.external_message_id else "fingerprint", item["message_id"]))
+                for echo in echoes:
+                    # Preserve references (tasks cannot refer to outgoing messages).
+                    self.conn.execute("DELETE FROM messages WHERE id=?", (echo["id"],))
+                self.conn.execute("""UPDATE messages SET external_message_id=?,dedupe_key=?,timestamp=?,timestamp_quality=?,
+                  identity_quality=?,source_key=?,sender_id=?,sender_name=? WHERE id=?""", (message.external_message_id,
+                  self.fingerprint(message), message.timestamp, message.timestamp_quality,
+                  message.identity_quality or ("external" if message.external_message_id else "fingerprint"),
+                  message.source_key, message.sender_id, message.sender_name, item["message_id"]))
 
     def queue(self):
         return self.all("SELECT q.*,c.name AS chat_name FROM send_queue q JOIN chats c ON c.id=q.chat_id ORDER BY q.created_at DESC LIMIT 100")

@@ -1,5 +1,7 @@
 # こもれび開発ルール
 
+- 2026-11-10、本人が「Plusで進める」を選択。`docs/WXAUTOX4_PLUS.md` を参照。wxautox4 41.2.3 Adapter/worker/確認UIは合成テスト段階。購入・認証は本人が実施し、Plusでの実受送信は未検証。無料Readerの実績をPlusへ転用しない。常駐版の送信無効・旧DB保持を守り、認証前に実接続へ切り替えない。
+
 - 最初に `WECHAT_INTEGRATION_STATUS.md`、`TEST_RESULTS.md` を読む。旧 `AI_HANDOFF.md` より最新の実機記録を優先する。
 - このサブプロジェクトは親の請求書アプリから独立している。親アプリの構成・他の作業者の変更を巻き込まない。
 - Next.jsを編集する前に `frontend/node_modules/next/dist/docs/` の該当するガイドを読む。現在の固定版は16.4.5。通常の本番起動は静的exportをFastAPIから配信する。
