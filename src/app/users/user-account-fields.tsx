@@ -98,8 +98,12 @@ export function UserAccountFields({ user, roles, pending, isSelf = false }: {
         </div>
         {customized ? <Button type="button" variant="link" disabled={pending || isSelf} className="h-11 max-w-full whitespace-normal px-0 text-xs font-normal lg:h-9"
           onClick={() => { setFeatures(defaults); setRoleReset(false); }}>この権限の標準に戻す</Button> : null}
-        <p id={`${fieldId}-features-help`} className="text-xs leading-relaxed text-muted-foreground">権限の標準から、この人だけ機能を増やしたり減らしたりできます。見られる範囲（全件か担当分だけか）と利用者管理は権限で決まります。</p>
-        <div aria-live="polite">{!Object.values(features).some(Boolean) ? <p className="text-xs leading-relaxed text-muted-foreground">すべてオフにすると、この人はログインしても使える画面がありません。</p> : null}</div>
+        <p id={`${fieldId}-features-help`} className="text-xs leading-relaxed text-muted-foreground">権限の標準から、この人だけ機能を増やしたり減らしたりできます。見られる範囲（全件か担当分だけか）と利用者管理は権限で決まります。請求書の金額がオフの人は、自分で作った請求書・見積書のほかは金額とPDFを見られません。</p>
+        <div aria-live="polite">
+          {/* 請求書の金額 is not a screen of its own. */}
+          {!Object.entries(features).some(([key, on]) => on && key !== "issuedInvoiceAmounts") ? <p className="text-xs leading-relaxed text-muted-foreground">すべてオフにすると、この人はログインしても使える画面がありません。</p> : null}
+          {!features.issuedInvoiceAmounts && (features.dashboard || features.payments || features.reports || features.banking) ? <p className="text-xs leading-relaxed text-muted-foreground">ダッシュボード（案件の集計欄を含む）、入金・支払い、集計、口座・カードの画面では、請求書の金額も表示されます。</p> : null}
+        </div>
       </>}
     </fieldset>
     {user ? <div className="min-w-0 space-y-2">

@@ -30,6 +30,8 @@ export type ExportDocument = DocumentRow & { exportDate: string; dateLabel: stri
 export type ExportBankRow = { id: string; date: string; accountId: string; account: string; side: string; amount: number; content: string; category: string; subCategory: string; treatment: string; reviewed: string; classification: string; sourceMissing: boolean; memo: string; documents: string; transfer: string; splits?: string; hold?: string; invoiceRequirement?: string };
 export type SectionExport = { query: ExportQuery; documents: ExportDocument[]; bank: ExportBankRow[]; generatedAt: string; excludedUndated: number };
 function exportedFileType(r: DocumentRow): ExportDocument["fileType"] {
+  // Someone else's invoice or estimate: no PDF is generated or copied into the archive.
+  if (r.amountsHidden) return "原本なし";
   const generated = r.kind === "estimate" || r.kind === "issued" && !r.imported && (!r.fileUrl || r.fileUrl.startsWith("/api/issued-invoices/"));
   return generated ? "生成PDF" : r.fileUrl ? "原本" : "原本なし";
 }
@@ -62,7 +64,7 @@ export function sectionExport(data: AppData, user: Pick<User, "id" | "role" | "f
     try { dated = validExportDate(exportDate); } catch { /* Invalid saved dates remain visible as undated. */ }
     if (!dated) { exportDate = ""; if (q.undated === "0") { excludedUndated++; continue; } }
     else if (q.basis === "folder" ? exportDate.slice(0, 7) < q.start.slice(0, 7) || exportDate.slice(0, 7) > q.end.slice(0, 7) : exportDate < q.start || exportDate > q.end) continue;
-    const warnings = [!dated ? "期間未判定" : "", r.needsReview ? "OCR要確認" : "", r.status === "DRAFT" ? "下書き" : "", r.status === "CANCELED" ? "取消" : ""].filter(Boolean);
+    const warnings = [r.amountsHidden ? "金額・PDFは非表示" : "", !dated ? "期間未判定" : "", r.needsReview ? "OCR要確認" : "", r.status === "DRAFT" ? "下書き" : "", r.status === "CANCELED" ? "取消" : ""].filter(Boolean);
     documents.push({ ...r, exportDate, dateLabel, fileType: exportedFileType(r), warning: warnings.join(" / ") });
   }
   documents.sort((a, b) => b.exportDate.localeCompare(a.exportDate) || a.id.localeCompare(b.id));

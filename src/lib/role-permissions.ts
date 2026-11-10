@@ -4,6 +4,7 @@ import type { UserRole } from "@/lib/types";
 export const rolePermissions = {
   ADMIN: [
     "submit:expenses",
+    "view:issuedInvoiceAmounts",
     "manage:expenses",
     "view:documents",
     "view:dashboard",

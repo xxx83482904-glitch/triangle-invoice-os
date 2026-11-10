@@ -2,6 +2,7 @@ import { z } from "zod";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
+import { assertCanChangeIssuedRecord } from "@/lib/issued-amount-access";
 import type { AppData, User } from "@/lib/types";
 
 export type IssuedDelete = { id: string; updatedAt: string };
@@ -18,6 +19,7 @@ export function applyIssuedInvoiceDeletion(data: AppData, user: Pick<User, "id" 
   const invoices = requested.map((target) => {
     const invoice = data.issuedInvoices.find((i) => i.id === target.id && !i.deletedAt && projects.has(i.projectId));
     if (!invoice) throw new Error("削除できない請求書が含まれています");
+    assertCanChangeIssuedRecord(user, invoice, "invoice");
     if (invoice.updatedAt !== target.updatedAt) throw new Error("他の操作で更新されています。再読み込みして確認してください");
     if (["PAID", "PARTIALLY_PAID"].includes(invoice.status) || invoice.paidAt || data.payments.some((p) => !p.deletedAt && p.issuedInvoiceId === invoice.id)) {
       throw new Error("入金記録のある請求書は削除できません。管理者に確認してください");

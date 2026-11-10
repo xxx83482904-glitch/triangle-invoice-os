@@ -34,7 +34,8 @@ export default async function ProjectsPage({
   const rows: ProjectWorkspaceRow[] = projects
     .filter((project) => matchesCompany(project, company))
     .map((project, index) => {
-      const money = projectMoney(data, project.id);
+      // Invoice totals are only drawn for financial viewers; nobody else receives them.
+      const money = showFinancials ? projectMoney(data, project.id) : { ...projectMoney(data, project.id), invoicedAmount: 0, paidIncomeAmount: 0, unpaidIncomeAmount: 0, grossProfit: 0, grossProfitRate: 0 };
       return {
         id: project.id,
         index: project.sortOrder ?? index + 1,

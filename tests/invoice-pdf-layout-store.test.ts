@@ -10,7 +10,8 @@ import { saveEstimate } from "../src/lib/estimates";
 import { projectMoney } from "../src/lib/store";
 import type { AppData } from "../src/lib/types";
 
-const billing = { id: "billing", role: "BILLING_EDITOR" as const };
+// Edits invoices made by others, so the amount switch is on (see issued-amount-access.test.ts for the refusal).
+const billing = { id: "billing", role: "BILLING_EDITOR" as const, featureAccess: { issuedInvoiceAmounts: true } };
 const mail = { id: "mail", role: "MAIL_EDITOR" as const };
 
 function generated() {

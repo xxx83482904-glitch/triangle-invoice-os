@@ -8,7 +8,8 @@ import { projectMoney } from "../src/lib/store";
 import { saveEstimate, updateEstimateStatus, convertEstimate } from "../src/lib/estimates";
 import type { AppData } from "../src/lib/types";
 
-const billing = { id: "billing", role: "BILLING_EDITOR" as const };
+// Edits invoices made by others, so the amount switch is on (see issued-amount-access.test.ts for the refusal).
+const billing = { id: "billing", role: "BILLING_EDITOR" as const, featureAccess: { issuedInvoiceAmounts: true } };
 function edit(data: AppData, status: IssuedEdit["status"], id = "issued-1"): IssuedEdit {
   const i = data.issuedInvoices.find((i) => i.id === id)!;
   return { id, updatedAt: i.updatedAt, invoiceNumber: i.invoiceNumber, projectId: i.projectId, issueDate: i.issueDate, dueDate: i.dueDate, total: i.total, status, needsReview: false };

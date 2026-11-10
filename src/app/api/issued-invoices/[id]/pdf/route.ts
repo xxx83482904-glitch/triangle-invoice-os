@@ -8,6 +8,7 @@ import { pdfLayoutFromQuery } from "@/lib/invoice-pdf-layout";
 import { issuedInvoicePdfDraft, PdfDraftError, readPdfDraft } from "@/lib/pdf-document-draft";
 import { pdfResponseHeaders } from "@/lib/pdf-response";
 import { can } from "@/lib/rbac";
+import { canSeeIssuedAmounts } from "@/lib/issued-amount-access";
 import { readData } from "@/lib/store";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,6 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (user.role === "GUEST" ? invoice.createdById !== user.id : !documentRows(data, user, company).some((r) => r.id === `issued:${id}`)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if (!canSeeIssuedAmounts(user, invoice)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   if (invoice.fileUrl) {
     const file = await readUploadedFile(invoice.fileUrl);
@@ -50,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const invoice = data.issuedInvoices.find((item) => item.id === id && !item.deletedAt);
   if (!invoice) return NextResponse.json({ error: "請求書が見つかりません" }, { status: 404 });
   const company = companyFromParam(data.projects.find((p) => p.id === invoice.projectId)?.company);
-  if (!documentRows(data, user, company).some((r) => r.id === `issued:${id}`)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
+  if (!documentRows(data, user, company).some((r) => r.id === `issued:${id}`) || !canSeeIssuedAmounts(user, invoice)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   if (invoice.fileUrl) return NextResponse.json({ error: "取り込んだ原本の内容は変更できません" }, { status: 409 });
   try {
     const draft = await readPdfDraft(request);

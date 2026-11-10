@@ -8,6 +8,7 @@ import { documentRows, visibleProjects } from "@/lib/documents";
 import { can, companyForUser } from "@/lib/rbac";
 import { defaultPathForUser } from "@/lib/app-navigation";
 import { readDataForRequest } from "@/lib/store";
+import { estimateForViewer } from "@/lib/issued-amount-access";
 
 export default async function EstimatesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
@@ -18,7 +19,8 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
   const data = await readDataForRequest();
   const projects = visibleProjects(data, user).filter((p) => matchesCompany(p, company));
   const ids = new Set(projects.map((p) => p.id));
-  const estimates = data.estimates.filter((e) => !e.deletedAt && ids.has(e.projectId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const estimates = data.estimates.filter((e) => !e.deletedAt && ids.has(e.projectId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .map((e) => estimateForViewer(user, e));
   return <AppShell><PageHeader title="発行見積書"><SectionExportDialog scope="estimate" access={{ role: user.role, featureAccess: user.featureAccess }} /></PageHeader><EstimatesWorkspace key={company} company={company} estimates={estimates}
     rows={documentRows(data, user, company).filter((row) => row.kind === "estimate")}
     initialId={params.document} canEdit={can(user, "manage:estimates")}

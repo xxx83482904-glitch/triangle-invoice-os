@@ -13,6 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const row = documentRows(data, user, company).find((r) => r.id === id);
   if (!row) return NextResponse.json({ error: "書類が見つかりません" }, { status: 404 });
   const invoice = row.kind === "issued" ? data.issuedInvoices.find((i) => i.id === row.sourceId) : undefined;
-  return NextResponse.json({ ocrText: documentOcrText(data, row), warnings: invoice?.ocrWarnings ?? [], clientName: invoice?.ocrClientName ?? "", memo: invoice?.internalMemo ?? "" },
+  // OCR text and warnings quote the amounts, so they follow the same rule as the amounts.
+  return NextResponse.json({ ocrText: documentOcrText(data, row), warnings: row.amountsHidden ? [] : invoice?.ocrWarnings ?? [], clientName: invoice?.ocrClientName ?? "", memo: invoice?.internalMemo ?? "" },
     { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -21,9 +21,10 @@ import type { DocumentRow } from "@/lib/documents";
 import { estimateStatusLabels, type EstimateInput } from "@/lib/estimate-values";
 import { todayIso } from "@/lib/format";
 import type { Estimate } from "@/lib/types";
+import type { EstimateView } from "@/lib/issued-amount-access";
 
 type Option = { id: string; name: string };
-type Props = { company: CompanyScope; estimates: Estimate[]; rows: DocumentRow[]; projects: ProjectBasicOption[]; clients: Option[]; canEdit: boolean; initialId?: string };
+type Props = { company: CompanyScope; estimates: EstimateView[]; rows: DocumentRow[]; projects: ProjectBasicOption[]; clients: Option[]; canEdit: boolean; initialId?: string };
 const selectClass = "h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm";
 function nextMonth() {
   const date = new Date(`${todayIso()}T12:00:00`); date.setDate(date.getDate() + 30);

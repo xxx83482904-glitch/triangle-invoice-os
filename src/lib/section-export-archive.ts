@@ -17,6 +17,7 @@ export function exportUploadName(url: string) {
 }
 
 export async function loadExportDocument(row: ExportDocument, data: AppData) {
+  if (row.amountsHidden) return null;
   if (row.fileType === "生成PDF") {
     if (row.kind === "issued") {
       const invoice = data.issuedInvoices.find((i) => i.id === row.sourceId && !i.deletedAt);

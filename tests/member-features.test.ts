@@ -16,6 +16,7 @@ import { admin, fixture, timestamp } from "./document-fixture";
 const originalPermissions = {
   ADMIN: [
     "submit:expenses",
+    "view:issuedInvoiceAmounts",
     "manage:expenses",
     "view:documents",
     "view:dashboard",
@@ -161,7 +162,7 @@ for (const role of roles) {
 }
 
 test("catalog order and coverage are complete, disjoint and exclude all role-bound rights", () => {
-  assert.deepEqual(memberFeatures.map(({ key }) => key), ["dashboard", "banking", "documents", "projects", "issuedInvoices", "mailSorter", "receivedInvoices", "imports", "payments", "expenses", "expenseApproval", "reports", "csvExport", "partners"]);
+  assert.deepEqual(memberFeatures.map(({ key }) => key), ["dashboard", "banking", "documents", "projects", "issuedInvoices", "issuedInvoiceAmounts", "mailSorter", "receivedInvoices", "imports", "payments", "expenses", "expenseApproval", "reports", "csvExport", "partners"]);
   const covered = memberFeatures.flatMap((feature) => [...feature.grant, ...feature.revokeAlso]);
   assert.equal(new Set(covered).size, covered.length);
   for (const permission of roleBound) assert.ok(!covered.some((entry) => entry === permission));

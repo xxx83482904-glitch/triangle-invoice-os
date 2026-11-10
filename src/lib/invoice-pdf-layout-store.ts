@@ -7,6 +7,7 @@ import { estimatePdfContent, issuedInvoiceValues, issuedPdfContent, PdfDraftErro
 import { pdfTextDefaults } from "@/lib/pdf-document-text";
 import { normalizePdfText, pdfEditsSchema, samePdfContent, type PdfEditsInput } from "@/lib/pdf-document-values";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
+import { assertCanChangeIssuedRecord } from "@/lib/issued-amount-access";
 import { saveEstimate } from "@/lib/estimates";
 import type { AppData, Estimate, InvoicePdfLayout, InvoicePdfText, IssuedInvoice, User } from "@/lib/types";
 
@@ -39,6 +40,7 @@ export function applyIssuedInvoicePdfEdits(data: AppData, user: Actor, company: 
   const find = () => data.issuedInvoices.find((i) => i.id === parsed.id && !i.deletedAt && scope.has(i.projectId));
   const invoice = find();
   if (!invoice) throw new Error("請求書が見つかりません");
+  assertCanChangeIssuedRecord(user, invoice, "invoice");
   if (invoice.fileUrl) throw new Error("取り込んだ原本の内容は変更できません");
   const saved = data.issuedInvoiceItems.filter((item) => item.invoiceId === invoice.id);
   const contentChanged = Boolean(parsed.content && !samePdfContent(issuedPdfContent(invoice, saved), parsed.content));
@@ -70,6 +72,7 @@ export function applyEstimatePdfEdits(data: AppData, user: Actor, company: Compa
   const scope = companyProjects(data, user, company);
   const estimate: Estimate | undefined = data.estimates.find((e) => e.id === parsed.id && !e.deletedAt && scope.has(e.projectId));
   if (!estimate) throw new Error("見積書が見つかりません");
+  assertCanChangeIssuedRecord(user, estimate, "estimate");
   const contentChanged = Boolean(parsed.content && !samePdfContent(estimatePdfContent(estimate), parsed.content));
   if (contentChanged && parsed.content) {
     if (estimate.invoiceId || estimate.status === "CONVERTED") throw new Error("請求書に変換済みの見積書は編集できません");

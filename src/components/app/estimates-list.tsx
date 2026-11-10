@@ -25,8 +25,10 @@ import type { DocumentRow } from "@/lib/documents";
 import { documentCounterpartKey, documentProjectOptions, groupDocuments, orderDocuments } from "@/lib/document-order";
 import { estimateListEditFrom, estimateStatusLabels, type EstimateListEdit } from "@/lib/estimate-values";
 import type { Estimate } from "@/lib/types";
+import { hiddenAmountNote, type EstimateView } from "@/lib/issued-amount-access";
+import { HiddenAmount } from "@/components/app/hidden-amount";
 
-type Props = { company: CompanyScope; estimates: Estimate[]; rows: DocumentRow[]; projects: ProjectBasicOption[]; clients: { id: string; name: string }[];
+type Props = { company: CompanyScope; estimates: EstimateView[]; rows: DocumentRow[]; projects: ProjectBasicOption[]; clients: { id: string; name: string }[];
   canEdit: boolean; pending: boolean; activeId: string; onOpen: (id: string) => void; onEdit: (estimate: Estimate | "new") => void; onConvert: (estimate: Estimate) => void };
 type RowAction = { label: string; icon: typeof Pencil; action: () => void; destructive?: boolean };
 const selectClass = "h-11 min-w-0 max-w-full rounded-md border bg-background px-2 text-sm";
@@ -74,7 +76,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
   const groups = useMemo(() => groupDocuments(filtered, sort, limit), [filtered, sort, limit]);
   const visibleIds = groups.flatMap(([key, list]) => collapsed.has(key) ? [] : list.map((row) => row.sourceId));
   const selection = useListSelection(visibleIds, { availableIds: estimates.map((e) => e.id), disabled: busy });
-  const editable = (e: Estimate) => canEdit && !e.invoiceId && e.status !== "CONVERTED";
+  const editable = (e: EstimateView) => canEdit && !e.amountsHidden && !e.invoiceId && e.status !== "CONVERTED";
   const selected = estimates.filter((e) => selection.selected.has(e.id));
   const editableSelected = selected.filter(editable);
   const active = estimateMap.get(activeId);
@@ -202,7 +204,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
                   <span className="hidden break-words md:block md:pt-3">{counterpart(e)}</span>
                   <span className="col-span-2 col-start-2 text-xs tabular-nums text-muted-foreground md:col-span-1 md:col-start-auto md:pt-3 md:text-foreground">{edit?.issueDate || e.issueDate}<span className="md:block md:text-muted-foreground"><span className="md:hidden"> 〜 </span>{edit?.validUntil || e.validUntil}</span></span>
                   <div className="col-start-2 row-start-3 min-w-0 md:col-start-auto md:row-start-auto md:order-1">{statusControl(e)}</div>
-                  <span className="col-start-3 row-start-3 self-center break-words text-right font-medium tabular-nums md:col-start-auto md:row-start-auto md:pt-3 md:font-normal"><Money value={e.total} /></span>
+                  <span className="col-start-3 row-start-3 self-center break-words text-right font-medium tabular-nums md:col-start-auto md:row-start-auto md:pt-3 md:font-normal">{e.amountsHidden ? <HiddenAmount className="font-normal text-muted-foreground" /> : <Money value={e.total} />}</span>
                   <div className="col-start-4 row-start-1 md:col-start-auto md:row-start-auto md:order-2"><EstimateActions label={e.estimateNumber} actions={actions(e)} disabled={busy} /></div>
                 </div>
               </EstimateActions>;
@@ -214,16 +216,16 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
       </div>
       {active && activeEdit ? <aside ref={preview} aria-label="見積書プレビュー" className="min-w-0 scroll-mt-28 space-y-3 border-t pt-3 xl:sticky xl:top-3 xl:max-h-[80vh] xl:overflow-auto xl:border-l xl:border-t-0 xl:pl-4">
         <div className="flex items-start justify-between gap-2"><h2 className="break-all font-semibold">{active.estimateNumber}</h2><Button variant="ghost" size="icon" className="size-11 shrink-0" title="プレビューを閉じる" aria-label="プレビューを閉じる" onClick={() => onOpen("")}><X className="size-4" /></Button></div>
-        <div className="flex flex-wrap gap-2"><Button asChild variant="outline" className="min-h-11"><a href={`/api/estimates/${active.id}/pdf?v=${encodeURIComponent(active.updatedAt)}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />PDFを開く</a></Button>
-          <PdfLayoutDialog kind="estimate" id={active.id} title={active.estimateNumber} company={company} canSave={editable(active)} updatedAt={active.updatedAt} size="default" listEditPending={Boolean(edits[active.id])} />
+        <div className="flex flex-wrap gap-2">{active.amountsHidden ? null : <><Button asChild variant="outline" className="min-h-11"><a href={`/api/estimates/${active.id}/pdf?v=${encodeURIComponent(active.updatedAt)}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />PDFを開く</a></Button>
+          <PdfLayoutDialog kind="estimate" id={active.id} title={active.estimateNumber} company={company} canSave={editable(active)} updatedAt={active.updatedAt} size="default" listEditPending={Boolean(edits[active.id])} /></>}
           {actions(active).filter((action) => !["プレビュー", "削除"].includes(action.label)).map((action) => <Button key={action.label} variant="outline" className="min-h-11" disabled={busy} onClick={action.action}><action.icon className="size-4" />{action.label}</Button>)}
         </div>
         {edits[active.id] ? <p className="text-xs text-amber-700 dark:text-amber-300">未保存の変更あり・PDFは保存済みの内容</p> : null}
-        <iframe title={`見積書PDF: ${active.estimateNumber}`} src={`/api/estimates/${active.id}/pdf?v=${encodeURIComponent(active.updatedAt)}`} className="h-80 w-full rounded border bg-white sm:h-[440px]" />
+        {active.amountsHidden ? <p className="flex min-h-32 items-center justify-center rounded border bg-muted/30 px-4 text-center text-sm text-muted-foreground">{hiddenAmountNote("estimate")}</p> : <iframe title={`見積書PDF: ${active.estimateNumber}`} src={`/api/estimates/${active.id}/pdf?v=${encodeURIComponent(active.updatedAt)}`} className="h-80 w-full rounded border bg-white sm:h-[440px]" />}
         <fieldset disabled={busy || !editable(active)} className="grid min-w-0 gap-3 text-xs">
           <label className="grid min-w-0 gap-1">案件{projectControl(active)}</label><div className="break-words text-muted-foreground">取引先: {counterpart(active)}</div>
           <div className="grid min-w-0 grid-cols-2 gap-3"><label className="min-w-0 space-y-1">見積日<Input aria-label="見積日" type="date" value={activeEdit.issueDate} onChange={(event) => stage(active, { issueDate: event.target.value })} /></label><label className="min-w-0 space-y-1">有効期限<Input aria-label="有効期限" type="date" min={activeEdit.issueDate} value={activeEdit.validUntil} onChange={(event) => stage(active, { validUntil: event.target.value })} /></label></div>
-          <label className="grid gap-1">状態{statusControl(active)}</label><div className="flex justify-between gap-2 text-sm"><span>見積金額</span><span className="tabular-nums"><Money value={active.total} /></span></div>
+          <label className="grid gap-1">状態{statusControl(active)}</label>{active.amountsHidden ? null : <div className="flex justify-between gap-2 text-sm"><span>見積金額</span><span className="tabular-nums"><Money value={active.total} /></span></div>}
         </fieldset>
         {active.notes ? <div className="border-t pt-3 text-sm"><h3 className="font-medium">備考</h3><p className="whitespace-pre-wrap break-words text-muted-foreground">{active.notes}</p></div> : null}
         {active.internalMemo ? <div className="border-t pt-3 text-sm"><h3 className="font-medium">社内メモ</h3><p className="whitespace-pre-wrap break-words text-muted-foreground">{active.internalMemo}</p></div> : null}

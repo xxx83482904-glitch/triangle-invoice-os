@@ -19,7 +19,7 @@ test("invoice deletion is soft, scoped, and hides original documents and attachm
   const data = fixture();
   data.attachments.push({ ...data.attachments[0], id: "issued-attachment", relatedType: "IssuedInvoice", relatedId: "issued-1", fileUrl: "/api/files/invoice-extra.pdf" });
   const target = { id: "issued-1", updatedAt: data.issuedInvoices[0].updatedAt };
-  applyIssuedInvoiceDeletion(data, { id: "billing", role: "BILLING_EDITOR" }, "JAPAN", [target]);
+  applyIssuedInvoiceDeletion(data, { id: "billing", role: "BILLING_EDITOR", featureAccess: { issuedInvoiceAmounts: true } }, "JAPAN", [target]);
   assert.ok(data.issuedInvoices[0].deletedAt);
   assert.equal(data.issuedInvoices[0].fileUrl, "/api/files/issued.pdf");
   assert.ok(!documentRows(data, admin, "JAPAN").some((r) => r.sourceId === target.id || r.sourceId === "issued-attachment"));
@@ -27,7 +27,7 @@ test("invoice deletion is soft, scoped, and hides original documents and attachm
 });
 
 test("invoice deletion refuses China, unrelated roles, stale versions and payments atomically", () => {
-  const billing = { id: "billing", role: "BILLING_EDITOR" as const };
+  const billing = { id: "billing", role: "BILLING_EDITOR" as const, featureAccess: { issuedInvoiceAmounts: true } };
   const data = fixture();
   const targets = data.issuedInvoices.map((i) => ({ id: i.id, updatedAt: i.updatedAt }));
   assert.throws(() => applyIssuedInvoiceDeletion(data, billing, "CHINA", [targets[2]]));
@@ -68,18 +68,22 @@ test("additional files on linked mail remain listed under the canonical receipt"
   assert.ok(documentRows(data, admin, "JAPAN").some((r) => r.id === "attachment:extra"));
 });
 test("OCR drafts and canceled invoices are excluded from financial totals", () => {
+  // Edits an invoice made by someone else, so the amount switch is on.
+  const managerWithAmounts = { ...manager, featureAccess: { issuedInvoiceAmounts: true } };
   const data = fixture();
   assert.equal(projectMoney(data, "japan").invoicedAmount, 0);
-  applyIssuedInvoiceEdits(data, manager, "JAPAN", [edit(data)]);
+  applyIssuedInvoiceEdits(data, managerWithAmounts, "JAPAN", [edit(data)]);
   assert.equal(projectMoney(data, "japan").invoicedAmount, 12000);
   data.issuedInvoices[0].status = "CANCELED";
   assert.equal(isBillableIssuedInvoice(data.issuedInvoices[0]), false);
 });
 test("edits reject stale versions, inaccessible projects and bad dates", () => {
-  assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), updatedAt: "stale" }]));
-  assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), projectId: "other" }]));
-  assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), issueDate: "2026-02-30" }]));
-  assert.throws(() => applyIssuedInvoiceEdits(fixture(), manager, "JAPAN", [{ ...edit(), dueDate: "2026-01-01" }]));
+  // With the amount switch on, so each case fails for its own reason and not the amount rule.
+  const managerWithAmounts = { ...manager, featureAccess: { issuedInvoiceAmounts: true } };
+  assert.throws(() => applyIssuedInvoiceEdits(fixture(), managerWithAmounts, "JAPAN", [{ ...edit(), updatedAt: "stale" }]));
+  assert.throws(() => applyIssuedInvoiceEdits(fixture(), managerWithAmounts, "JAPAN", [{ ...edit(), projectId: "other" }]));
+  assert.throws(() => applyIssuedInvoiceEdits(fixture(), managerWithAmounts, "JAPAN", [{ ...edit(), issueDate: "2026-02-30" }]));
+  assert.throws(() => applyIssuedInvoiceEdits(fixture(), managerWithAmounts, "JAPAN", [{ ...edit(), dueDate: "2026-01-01" }]));
 });
 test("paid status requires payment records and invoice numbers remain unique", () => {
   assert.throws(() => applyIssuedInvoiceEdits(fixture(), admin, "JAPAN", [{ ...edit(), status: "PAID" }]));
@@ -210,7 +214,7 @@ test("unreadable documents stay provisional and unrelated files are not merged",
   assert.equal(one.project.clientId, two.project.clientId);
 });
 
-const billing = { id: "billing", role: "BILLING_EDITOR" as const };
+const billing = { id: "billing", role: "BILLING_EDITOR" as const, featureAccess: { issuedInvoiceAmounts: true } };
 test("Japan billing staff see all Japan issued invoices, not receipts, contracts, or China", () => {
   assert.deepEqual(documentRows(fixture(), billing, "JAPAN").map((r) => r.id).sort(), ["issued:issued-1", "issued:issued-2"]);
   assert.deepEqual(documentRows(fixture(), billing, "CHINA"), []);

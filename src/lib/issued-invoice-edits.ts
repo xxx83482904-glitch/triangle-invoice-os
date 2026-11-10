@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
 import { assertCan, assertCompanyAccess } from "@/lib/rbac";
+import { assertCanChangeIssuedRecord } from "@/lib/issued-amount-access";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
 import type { AppData, User } from "@/lib/types";
 
@@ -32,6 +33,7 @@ export function applyIssuedInvoiceEdits(data: AppData, user: Pick<User, "id" | "
     const invoice = draft.issuedInvoices.find((i) => i.id === edit.id && !i.deletedAt && projects.has(i.projectId));
     const project = projects.get(edit.projectId);
     if (!invoice || !project) throw new Error("編集できない案件が含まれています");
+    assertCanChangeIssuedRecord(user, invoice, "invoice");
     if (invoice.updatedAt !== edit.updatedAt) throw new Error("他の操作で更新されています。画面を再読込して確認してください");
     if (edit.status === "PAID" && edit.total <= 0) throw new Error("入金完了にする場合は金額を入力してください");
     if (edit.issueDate && edit.dueDate && edit.dueDate < edit.issueDate) throw new Error("入金期限は発行日以降にしてください");
