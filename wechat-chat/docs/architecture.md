@@ -1,5 +1,9 @@
 # SiverWXBot Plus調査とこもれびの構成
 
+最新の追加: 通常のチャットと新着順を起動画面にし、Plusの手動返信を自分宛て1件で実機検証しました。SDKを1回だけ呼び、最大5回の読み取りで送信後の表示を照合します。確認不能の再送はありません。
+
+通知はAdapterが新規callbackに付ける `live_event` を基に、受信本文と同じSQLiteトランザクションで `notification_events` に保存します。履歴・送信・重複・添付取得では通知を作りません。認証済みイベントフィードをWebSocketで更新し、前景の音と会話遷移を実装。端末が明示登録した `push_subscriptions` へ汎用Pushだけを送り、本文・名前・添付を外部へ渡しません。Service Workerから該当会話を開き、本人が返信します。[運用・制限](NOTIFICATIONS_AND_REPLY.md)。
+
 2026-11-10の追加: Plusの画像・ファイル取得とボイス文字起こしを既存のAdapterに追加しました。SDKオブジェクトはworker内に閉じ、共通Engineの明示取得キュー、SQLiteの添付メタデータ、私有ファイル領域、認証付き配信とPWA表示を使います。Botの自動返信処理は使いません。過去履歴は本人のバックアップ受領後に形式を確認して取り込みます。[実装・検証範囲](MEDIA_AND_HISTORY.md)。
 
 調査日: 2026-11-09。参照: [SiverWXbot_plus](https://github.com/SiverKing/SiverWXbot_plus/tree/a861923f6b4f792a6efb9b51f494f59bbea0d6af)、commit `a861923f6b4f792a6efb9b51f494f59bbea0d6af`。README表記はv4.8.3。

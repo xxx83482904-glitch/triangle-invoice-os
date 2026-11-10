@@ -34,6 +34,7 @@ class Message:
     identity_quality: str | None = None
     delivery_status: str | None = None
     attachment: dict | None = None  # Private local media metadata, never an SDK object.
+    live_event: bool = False  # Only an actual new-message callback/injection, never a history scan.
 
 
 @dataclass

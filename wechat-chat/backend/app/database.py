@@ -156,6 +156,8 @@ class Database:
             if cur.rowcount:
                 self._save_attachment(cur.lastrowid, message.attachment)
                 self.conn.execute("UPDATE chats SET last_message_at=MAX(COALESCE(last_message_at,''),?),unread_count=unread_count+? WHERE id=?", (message.timestamp or stamp, int(message.direction == "incoming"), chat["id"]))
+                if message.live_event and message.direction == "incoming":
+                    self.conn.execute("INSERT OR IGNORE INTO notification_events(message_id,chat_id,created_at) VALUES(?,?,?)", (cur.lastrowid, chat["id"], stamp))
         return bool(cur.rowcount)
 
     def sync_complete(self, ident, cursor=None):

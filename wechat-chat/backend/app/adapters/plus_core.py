@@ -35,6 +35,7 @@ DETAILS = {
     "account_mismatch": "登録したアカウントと一致しません。別アカウントの履歴は取り込みません。",
     "binding_unavailable": "会話の宛先・画面情報を照合できないため監視を停止しました。実機での互換性確認が必要です。",
     "sdk_unavailable": "Plusに接続できません。ライセンスとWeChatの対応版を確認してください。",
+    "unsupported_chat": "この会話の種類には対応していません。個人・グループの会話を選んでください。",
     "worker_timeout": "Plusの応答が時間内に完了しませんでした。間隔を空けて再接続します。",
     "buffer_full": "未保存の受信が上限に達しました。完全同期とは扱わず再接続します。",
     "paused": "Plusの監視を停止しています。",
@@ -92,6 +93,10 @@ class PlusStore:
             if previous:
                 old, new = json.loads(previous[0]), asdict(message)
                 old_attachment, new_attachment = old.pop("attachment", None), new.pop("attachment", None)
+                # A callback may rediscover an already persisted history row.
+                # Its transport origin is not part of the message identity.
+                old.pop("live_event", None)
+                new.pop("live_event", None)
                 if old != new:
                     raise PlusFailure("sdk_unavailable")
                 if old_attachment == new_attachment:
@@ -135,11 +140,12 @@ class PlusStore:
 
 
 class PlusSupervisor:
-    def __init__(self, factory, store, *, send_enabled=False, max_listeners=8, clock=time.monotonic, preferred_chats=()):
+    def __init__(self, factory, store, *, send_enabled=False, max_listeners=8, clock=time.monotonic, preferred_chats=(), receipt_pause=time.sleep):
         self.factory, self.store, self.clock = factory, store, clock
         self.send_enabled = send_enabled
         self.max_listeners = min(32, max(1, max_listeners))
         self.preferred_chats = tuple(preferred_chats)
+        self.receipt_pause = receipt_pause
         self.sdk = None
         self.state, self.scope, self.account, self.version = "connecting", None, None, None
         self.targets = {}
@@ -148,6 +154,7 @@ class PlusSupervisor:
         self.backoff, self.reconnects = 5, 0
         self.candidates = []
         self.attempted = set()
+        self.unsupported = set()
 
     def close(self):
         if self.sdk is not None:
@@ -157,6 +164,7 @@ class PlusSupervisor:
                 pass
         self.sdk, self.targets, self.candidates = None, {}, []
         self.attempted.clear()
+        self.unsupported.clear()
 
     def _failed(self, code):
         self.close()
@@ -188,7 +196,7 @@ class PlusSupervisor:
             # At most one new window every ten seconds. Resource limits are
             # reported as missing coverage, never silently called "all chats".
             if len(self.targets) < self.max_listeners and self.clock() >= self.next_register:
-                names = [n for n in self.candidates if n not in self.attempted and n not in {t['name'] for t in self.targets.values()}]
+                names = [n for n in self.candidates if n not in self.attempted and n not in self.unsupported and n not in {t['name'] for t in self.targets.values()}]
                 if names:
                     name = names[0]
                     self.attempted.add(name)
@@ -204,8 +212,11 @@ class PlusSupervisor:
                         for message in history:
                             self.store.ingest(message)
                         self.targets[ident] = target
-                    except PlusFailure:
-                        raise
+                    except PlusFailure as exc:
+                        if str(exc) != "unsupported_chat":
+                            raise
+                        self.failed += 1
+                        self.unsupported.add(name)
                     except Exception:
                         self.failed += 1
                         raise PlusFailure("binding_unavailable") from None
@@ -274,13 +285,24 @@ class PlusSupervisor:
         self.store.record(request_id, fingerprint, receipt)
         try:
             result = self.sdk.send_once(target, text)
-            after = self.sdk.history(target)
             old_keys = {m.source_key for m in before}
-            echoes = [m for m in after if m.source_key and m.source_key not in old_keys and m.chat_id == chat_id
-                      and m.content == text and m.direction == "outgoing"]
-            if result is True and len(echoes) == 1 and self.sdk.check_scope() == self.scope:
+            # The UI can expose its outgoing bubble after SendMsg returns.
+            # Bounded READS only: never repeat the sending call, even on timeout.
+            for attempt in range(5 if result is True else 0):
+                if attempt:
+                    self.receipt_pause(1)
+                if self.sdk.check_scope() != self.scope:
+                    break
                 self.sdk.verify(target)
-                receipt = Receipt("confirmed", echoes[0])
+                after = self.sdk.history(target)
+                echoes = [m for m in after if m.source_key and m.source_key not in old_keys and m.chat_id == chat_id
+                          and m.content == text and m.direction == "outgoing"]
+                if len(echoes) > 1:
+                    break
+                if len(echoes) == 1 and self.sdk.check_scope() == self.scope:
+                    self.sdk.verify(target)
+                    receipt = Receipt("confirmed", echoes[0])
+                    break
         except Exception:
             pass
         self.store.record(request_id, fingerprint, receipt)

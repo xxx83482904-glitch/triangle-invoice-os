@@ -10,6 +10,9 @@ import OcrImport from "@/components/ocr-import";
 import { PlusMonitoring, RealSendReview, SendReview } from "@/components/plus-monitoring";
 import AISupport, { AISettings } from "@/components/ai-support";
 import { AttentionCenter, PriorityBadge, ReplySupport, TaskComposer, TaskList, TaskSeed } from "@/components/attention-center";
+import NotificationSettings from "@/components/notification-settings";
+import { useChatNotifications } from "@/lib/notifications";
+import { Bell } from "lucide-react";
 
 type View = "attention" | "chats" | "tasks" | "search" | "settings";
 type PageData = { messages: Message[]; has_more: boolean };
@@ -23,7 +26,8 @@ function Avatar({ chat, small = false }: { chat: Pick<Chat, "name" | "type" | "e
 export default function Home() {
   const [auth, setAuth] = useState<"loading" | "locked" | "ready">("loading");
   const [token, setToken] = useState("");
-  const [view, setView] = useState<View>("attention");
+  const [view, setView] = useState<View>("chats");
+  const [pendingChat, setPendingChat] = useState<string | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -49,12 +53,12 @@ export default function Home() {
   const [attention, setAttention] = useState<Attention | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskCandidate, setTaskCandidate] = useState<TaskSeed | null>(null);
-  const [chatSort, setChatSort] = useState("priority");
+  const [chatSort, setChatSort] = useState("recent");
   const [theme, setTheme] = useState("system");
   const [busy, setBusy] = useState(false);
   const selectedRef = useRef<string | null>(null);
   const mobileOpenRef = useRef(false);
-  const viewRef = useRef<View>("attention");
+  const viewRef = useRef<View>("chats");
   const olderRef = useRef(false);
   const loadingGeneration = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -68,6 +72,32 @@ export default function Home() {
     && (status.mode !== "wxautox4" || (chat && status.monitoring?.active_chat_ids.includes(chat.external_id))));
   const unread = chats.reduce((sum, c) => sum + c.unread_count, 0);
   const draft = selected ? drafts[selected] || "" : "";
+  const notifications = useChatNotifications(auth === "ready", setPendingChat, id => selectedRef.current === id
+    && viewRef.current === "chats" && !olderRef.current && (window.innerWidth > 760 || mobileOpenRef.current)
+    && document.visibilityState === "visible" && document.hasFocus());
+  const receiveNotice = notifications.receive;
+
+  useEffect(() => {
+    const id = new URL(location.href).searchParams.get("chat");
+    if (id && /^[a-f0-9-]{36}$/.test(id)) setPendingChat(id);
+  }, []);
+
+  useEffect(() => {
+    if (auth !== "ready" || !pendingChat || !chats.length) return;
+    if (chats.some(item => item.id === pendingChat)) selectChat(pendingChat);
+    else setError("通知の会話が見つかりません。接続先と保存済みの会話を確認してください。");
+    setPendingChat(null);
+    history.replaceState(null, "", "/");
+    // selectChat uses current refs; waiting for chats also preserves the target through login.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth, pendingChat, chats]);
+
+  useEffect(() => {
+    document.title = unread ? `(${unread}) こもれび` : "こもれび";
+    const badge = navigator as Navigator & {setAppBadge?: (count:number) => Promise<void>; clearAppBadge?: () => Promise<void>};
+    if (unread) void badge.setAppBadge?.(unread).catch(() => {});
+    else void badge.clearAppBadge?.().catch(() => {});
+  }, [unread]);
 
   useEffect(() => {
     // iOS's keyboard resizes the visual viewport, not always the layout viewport.
@@ -142,7 +172,7 @@ export default function Home() {
       setWsState("connecting");
       socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
       socket.onopen = () => { if (!disposed) { lastHeartbeat = Date.now(); setWsState("live"); schedule(); } };
-      socket.onmessage = event => { lastHeartbeat = Date.now(); const data = JSON.parse(event.data); if (data.type !== "heartbeat" && data.type !== "read") schedule(); if (data.type === "read") api<Chat[]>("/chats").then(setChats).catch(() => {}); };
+      socket.onmessage = event => { lastHeartbeat = Date.now(); const data = JSON.parse(event.data); if (data.type === "message") void receiveNotice(); if (data.type !== "heartbeat" && data.type !== "read") schedule(); if (data.type === "read") api<Chat[]>("/chats").then(setChats).catch(() => {}); };
       socket.onclose = () => { if (!disposed) { setWsState("offline"); schedule(); reconnect = setTimeout(connect, 2500); } };
       socket.onerror = () => socket?.close();
     };
@@ -152,7 +182,7 @@ export default function Home() {
     const offline = () => { setReachable(false); setWsState("offline"); };
     document.addEventListener("visibilitychange", onVisibility); window.addEventListener("offline", offline); window.addEventListener("online", onVisibility);
     return () => { disposed = true; clearTimeout(reconnect); clearTimeout(refreshTimer); clearInterval(interval); socket?.close(); document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("offline", offline); window.removeEventListener("online", onVisibility); };
-  }, [auth, refresh]);
+  }, [auth, refresh, receiveNotice]);
 
   useEffect(() => {
     if (nearBottom.current && !olderView && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -242,8 +272,9 @@ export default function Home() {
   const chatAssistance = chat ? assistanceByChat.get(chat.id) : undefined;
   const visibleChats = chats.filter(c => (!listQuery || c.name.toLowerCase().includes(listQuery.toLowerCase())) && (filter === "all" || filter === "unread" && c.unread_count > 0 || filter === "group" && c.type === "group")).sort((a, b) => chatSort === "priority" ? priorityOrder[assistanceByChat.get(a.id)?.priority || "low"] - priorityOrder[assistanceByChat.get(b.id)?.priority || "low"] : 0);
   return <main className={`app-shell ${mobileOpen ? "conversation-open" : ""}`}>
+    {notifications.notice && <aside className="incoming-toast" aria-label="新着メッセージ" role="status"><button onClick={notifications.open}><Bell size={21}/><span><strong>{chats.find(c => c.id === notifications.notice?.chat_id)?.name || "新着メッセージ"}</strong><small>タップして会話を開く</small></span></button><button className="icon-button" aria-label="新着通知を閉じる" onClick={notifications.dismiss}><X size={16}/></button></aside>}
     <nav className="rail" aria-label="メインメニュー"><a className="brand-icon" href="/" aria-label="こもれび ホーム"><Leaf size={25}/></a><div className="rail-links"><button className={view === "attention" ? "active" : ""} onClick={() => changeView("attention")} aria-label="対応すること" title="対応すること"><Sparkles size={23}/><span>対応すること</span></button><button className={view === "chats" ? "active" : ""} onClick={() => { mobileOpenRef.current = false; changeView("chats"); setMobileOpen(false); }} aria-label="チャット一覧" title="チャット"><MessageCircle size={23}/>{unread > 0 && <span className="nav-dot"/>}<span>チャット</span></button><button className={view === "tasks" ? "active" : ""} onClick={() => changeView("tasks")} aria-label="タスク一覧" title="タスク"><ListTodo size={23}/><span>タスク</span></button><button className={view === "search" ? "active" : ""} onClick={() => changeView("search")} aria-label="メッセージ検索" title="検索"><Search size={23}/><span>検索</span></button></div><div className="rail-bottom"><button className={view === "settings" ? "active" : ""} onClick={() => changeView("settings")} aria-label="接続状態・設定" title="設定"><Settings size={23}/><span>設定</span></button><div className="self-avatar" title="自分専用">私</div></div></nav>
-    <div className="workspace"><header className="topbar"><div className="wordmark">こもれび <span>会話を、次の行動へ。</span></div><div className="topbar-status"><span className={`connection-pill ${connected ? "" : "disconnected"}`}><span className="status-dot"/>{!reachable ? "PCに接続できません" : connected ? wsState === "live" ? "リアルタイム接続" : "再接続中" : status?.state === "limited" ? "読み取り制限あり" : "接続停止中"}</span><button className="mode-badge" onClick={() => changeView("settings")}><FlaskConical size={13}/>{status?.mode === "mock" ? "Mockモード" : status?.mode === "windows-ocr" ? "画面OCR・手動" : status?.mode === "wxautox4" ? "Plus連携" : status?.mode === "wxauto4" ? "無料wxauto4・読取" : "Windows UIA"}</button></div></header>
+    <div className="workspace"><header className="topbar"><div className="wordmark">こもれび <span>会話を、次の行動へ。</span></div><div className="topbar-status"><button className="notification-shortcut" aria-label="通知設定を開く" onClick={() => changeView("settings")}><Bell size={17}/><span>通知</span></button><span className={`connection-pill ${connected ? "" : "disconnected"}`}><span className="status-dot"/>{!reachable ? "PCに接続できません" : connected ? wsState === "live" ? "リアルタイム接続" : "再接続中" : status?.state === "limited" ? "読み取り制限あり" : "接続停止中"}</span><button className="mode-badge" onClick={() => changeView("settings")}><FlaskConical size={13}/>{status?.mode === "mock" ? "Mockモード" : status?.mode === "windows-ocr" ? "画面OCR・手動" : status?.mode === "wxautox4" ? "Plus連携" : status?.mode === "wxauto4" ? "無料wxauto4・読取" : "Windows UIA"}</button></div></header>
       {error && <div className="global-banner danger" role="alert"><CircleAlert size={17}/><span>{error}</span>{uncertain && <button onClick={checkUncertain}>受付状態を確認</button>}<button className="icon-button" aria-label="エラーを閉じる" onClick={() => setError("")}><X size={16}/></button></div>}
       {notice && <div className="global-banner" role="status"><Check size={16}/><span>{notice}</span><button className="icon-button" aria-label="通知を閉じる" onClick={() => setNotice("")}><X size={16}/></button></div>}
       {view === "attention" && <AttentionCenter items={attention?.items || []} tasks={tasks} loading={!attention && reachable} available={reachable} onPriority={changePriority} onDraft={putDraft} onTask={setTaskCandidate} onSource={openSource}/>}
@@ -258,11 +289,12 @@ export default function Home() {
       {view === "search" && <section className="content-page search-page"><div className="page-heading"><span className="eyebrow">FIND A MOMENT</span><h1>メッセージ検索</h1><p>このPCに保存された会話から探します。</p></div><label className="search-field large"><Search size={22}/><input autoFocus aria-label="メッセージ検索キーワード" placeholder="キーワードを入力…" value={searchQuery} maxLength={200} onChange={e => setSearchQuery(e.target.value)}/>{searchQuery && <button className="icon-button" aria-label="検索をクリア" onClick={() => setSearchQuery("")}><X size={18}/></button>}</label><div className="search-meta">{searching ? "検索中…" : searchQuery.trim() ? `${results.length}件${results.length === 100 ? "（最大100件）" : ""}` : "すべてのチャットを検索"}<span>未取得の履歴は検索対象に含まれません</span></div><div className="search-results">{results.map(message => <button className="search-result" key={message.id} onClick={() => void openResult(message)}><span className="result-icon"><MessageCircle size={20}/></span><span><strong>{message.chat_name}<small>{message.sender_name} · {day(message.timestamp)} {time(message.timestamp)}</small></strong><span className="result-content">{message.content}</span></span><ChevronRight size={17}/></button>)}{!searching && results.length === 0 && <div className="search-empty"><Search size={36} strokeWidth={1}/><h2>{searchQuery.trim() ? "見つかりませんでした" : "あの言葉を、もう一度。"}</h2><p>{searchQuery.trim() ? "別のキーワードで試してください。" : "日本語・中国語のメッセージを検索できます。"}</p></div>}</div></section>}
       {view === "settings" && <section className="content-page settings-page"><div className="page-heading"><span className="eyebrow">YOUR PRIVATE SPACE</span><h1>接続状態・設定</h1><p>つながり方を、ひと目で。</p></div><div className="settings-grid"><article className="settings-card connection-card"><div className="card-heading"><Wifi size={21}/><h2>接続状態</h2><span className={`sync-label ${connected ? "complete" : "partial"}`}>{connected ? "接続中" : "停止 / 制限あり"}</span></div><p>{status?.detail}</p><dl><div><dt>接続先</dt><dd>{status?.mode === "mock" ? "Mockシミュレーター" : "Windows版WeChat"}</dd></div><div><dt>リアルタイム更新</dt><dd>{wsState === "live" && reachable ? "WebSocket 接続中" : "再接続を待機中"}</dd></div><div><dt>送信待ち</dt><dd>{status?.queue_pending || 0}件</dd></div>{status?.version && <div><dt>WeChatバージョン</dt><dd>{status.version}</dd></div>}</dl><button className="secondary" onClick={sync} disabled={busy || !status?.can_read}><RefreshCw size={15} className={busy ? "spin" : ""}/>取得可能な履歴を読み込む</button></article><article className="settings-card"><div className="card-heading"><Sun size={20}/><h2>表示</h2></div><p>この端末での見た目を選べます。</p><div className="theme-options">{[["light", "ライト"], ["dark", "ダーク"], ["system", "自動"]].map(([key, label]) => <button key={key} className={theme === key ? "selected" : ""} onClick={() => setTheme(key)}>{key === "dark" ? <Moon size={20}/> : key === "light" ? <Sun size={20}/> : <Settings size={20}/>}<span>{label}</span></button>)}</div><p className="help">iPhoneではSafariの共有メニューから「ホーム画面に追加」でアプリとして使えます。接続方法は「携帯でアプリとして使う」で確認できます。</p></article>
       <MobileInstall/>
+      <NotificationSettings notifications={notifications}/>
       <PlusMonitoring status={status}/>
       <WechatDiagnostics onError={report}/><AISettings/><OcrImport mode={status?.mode} chats={chats} onSaved={refresh} onOpen={selectChat} onError={report}/>
       {status?.mode === "mock" && <article className="settings-card mock-card"><div className="card-heading"><FlaskConical size={21}/><h2>Mockテスト</h2><span className="soft-tag">実送信なし</span></div><p>受信・切断・送信結果をローカルで確認できます。</p><div className="test-controls"><button className="secondary" disabled={busy || !connected} onClick={() => mock("receive", selected || chats[0]?.id)}><MessageCircle size={16}/>新着メッセージを受信</button><button className="secondary" disabled={busy} onClick={() => mock(connected ? "disconnect" : "reconnect")}>{connected ? <WifiOff size={16}/> : <Wifi size={16}/>} {connected ? "接続を切断" : "再接続"}</button></div><label className="select-label">次の送信の結果<select disabled={busy} aria-label="次のMock送信結果" defaultValue="confirmed" onChange={e => mock(`next_${e.target.value}`)}><option value="confirmed">送信確認済み</option><option value="unknown">確認不能（自動再送しない）</option><option value="failed">失敗</option></select></label><small>一度の送信後、通常の結果に戻ります。</small></article>}
-      <article className="settings-card"><div className="card-heading"><ShieldCheck size={21}/><h2>プライバシーと制限</h2></div><ul className="privacy-list"><li>WeChatのパスワードは取得・保存しません。</li><li>データはPC内のSQLiteに保存。OSのディスク暗号化を利用してください。</li><li>「送信確認済み」は送信側での確認です。相手の既読を意味しません。</li><li>完全な履歴同期、画像・音声・ファイルは未対応です。</li>{status?.limitations.map(item => <li key={item}>{item}</li>)}</ul></article></div>
-      <article className="settings-card queue-card"><div className="card-heading"><ArrowUp size={20}/><h2>送信キュー</h2><span className="muted">直近100件</span></div><p>確認不能のメッセージは、WeChat側を確認してください。自動再送は行いません。</p>{queue.length === 0 ? <div className="queue-empty">送信履歴はまだありません。</div> : <div className="queue-list">{queue.map(item => <div className="queue-row" key={item.id}><div><strong>{item.chat_name}</strong><p>{item.content}</p><small>{day(item.created_at)} {time(item.created_at)}</small></div><span className={`delivery ${item.status}`}>{delivery[item.status]}</span></div>)}</div>}</article><div className="settings-footer"><span><Leaf size={16}/> こもれび · Personal WeChat Bridge</span><button className="text-button" onClick={async () => { try { await api("/auth/logout", {}); setAuth("locked"); setAttention(null); setTasks([]); setTaskCandidate(null); setMessages([]); setChats([]); setDrafts({}); setQueue([]); setResults([]); setSelected(null); selectedRef.current = null; } catch (e) { report(e); } }}><LogOut size={15}/>この端末からログアウト</button></div></section>}
+      <article className="settings-card"><div className="card-heading"><ShieldCheck size={21}/><h2>プライバシーと制限</h2></div><ul className="privacy-list"><li>WeChatのパスワードは取得・保存しません。</li><li>データはPC内のSQLiteに保存。OSのディスク暗号化を利用してください。</li><li>「送信確認済み」は送信側での確認です。相手の既読を意味しません。</li><li>画像・ファイルは会話内から保存できます。ボイスは文字起こしに対応し、原音再生は未対応です。</li><li>全会話・全履歴の完全な同期には対応していません。</li>{status?.limitations.map(item => <li key={item}>{item}</li>)}</ul></article></div>
+      <article className="settings-card queue-card"><div className="card-heading"><ArrowUp size={20}/><h2>送信キュー</h2><span className="muted">直近100件</span></div><p>確認不能のメッセージは、WeChat側を確認してください。自動再送は行いません。</p>{queue.length === 0 ? <div className="queue-empty">送信履歴はまだありません。</div> : <div className="queue-list">{queue.map(item => <div className="queue-row" key={item.id}><div><strong>{item.chat_name}</strong><p>{item.content}</p><small>{day(item.created_at)} {time(item.created_at)}</small></div><span className={`delivery ${item.status}`}>{delivery[item.status]}</span></div>)}</div>}</article><div className="settings-footer"><span><Leaf size={16}/> こもれび · Personal WeChat Bridge</span><button className="text-button" onClick={async () => { try { await api("/auth/logout", {}); await notifications.logout(); setAuth("locked"); setAttention(null); setTasks([]); setTaskCandidate(null); setMessages([]); setChats([]); setDrafts({}); setQueue([]); setResults([]); setSelected(null); selectedRef.current = null; } catch (e) { report(e); } }}><LogOut size={15}/>この端末からログアウト</button></div></section>}
       {taskCandidate && <TaskComposer key={taskCandidate.source_message_id} item={taskCandidate} onClose={() => setTaskCandidate(null)} onSaved={() => { setTaskCandidate(null); setNotice("タスクを保存しました。タスク画面から元の会話に戻れます。"); void refresh(); }} onError={report}/>}
       {sendReview && <RealSendReview review={sendReview} enabled={sendEnabled && sendReview.chatId === chat?.id && sendReview.name === chat?.name && sendReview.text === draft} onCancel={() => setSendReview(null)} onConfirm={() => void send(sendReview)}/>}
     </div>

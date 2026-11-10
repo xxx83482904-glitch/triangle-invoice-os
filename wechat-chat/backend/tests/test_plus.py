@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.adapters.base import Chat, Message
-from app.adapters.plus_core import PlusFailure, PlusStore, PlusSupervisor
+from app.adapters.plus_core import PlusFailure, PlusStore, PlusSupervisor, digest
 from app.adapters.windows_plus import WindowsPlusAdapter, validate_snapshot
 from app.config import Settings
 from app.database import Database
@@ -136,6 +136,19 @@ def test_listener_limit_reports_missing_coverage(bridge):
     assert m["registered"] == 1 and m["discovered"] == 2 and not m["complete"]
 
 
+def test_known_unsupported_kind_does_not_disconnect_verified_chats(bridge):
+    core, sdk, _, clock = bridge
+    def unsupported(name): raise PlusFailure('unsupported_chat')
+    sdk.listen = unsupported
+    clock[0] = 10
+    core.tick()
+    assert len(core.targets) == 1 and core.state == 'ready'
+    assert core.snapshot()['monitoring']['registration_failures'] == 1
+    clock[0] = 90
+    core.tick()
+    assert core.snapshot()['monitoring']['registration_failures'] == 1
+
+
 def test_failed_history_never_enables_target_or_repeats_window_opening(tmp_path):
     sdk = FakeSDK()
     def broken_history(target):
@@ -252,6 +265,33 @@ def test_default_sender_gate(bridge):
     core.send_enabled = False
     assert core.send(str(uuid4()), next(iter(core.targets)), "no").status == "failed"
     assert sdk.send_count == 0
+
+
+@pytest.mark.parametrize('outcome', ['delayed', 'missing', 'duplicate', 'scope_changed'])
+def test_receipt_wait_only_reads_and_never_resends(bridge, outcome):
+    core, sdk, store, _ = bridge
+    ident = next(iter(core.targets))
+    original = sdk.send_once
+    pending = []
+    pauses = []
+    def send_once(target, text):
+        original(target, text)
+        pending.extend(sdk.rows.pop(ident))
+        return True
+    def pause(seconds):
+        pauses.append(seconds)
+        if outcome == 'delayed': sdk.rows[ident] = pending
+        if outcome == 'duplicate': sdk.rows[ident] = pending + [replace(pending[0], source_key='another-echo')]
+        if outcome == 'scope_changed': sdk.scope = 'different-process'
+    sdk.send_once, core.receipt_pause = send_once, pause
+    request = str(uuid4())
+    receipt = core.send(request, ident, 'once')
+    assert receipt.status == ('confirmed' if outcome == 'delayed' else 'unknown')
+    assert len(pauses) == (4 if outcome == 'missing' else 1)
+    assert sdk.send_count == 1
+    assert store.previous(request, digest([ident, 'once'])).status == receipt.status
+    assert core.send(request, ident, 'once').status == receipt.status
+    assert sdk.send_count == 1
 
 
 @pytest.mark.parametrize("echo_before", [False, True])

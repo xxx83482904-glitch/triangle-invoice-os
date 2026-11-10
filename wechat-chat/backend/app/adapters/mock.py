@@ -59,7 +59,7 @@ class MockWeChatAdapter(WeChatAdapter):
         chat = next((c for c in self.chats if c.external_id == chat_id), None)
         if chat is None:
             raise DestinationMismatch("destination_mismatch")
-        message = Message(chat_id, content, "mock:friend", "林 佳怡" if chat.type == "group" else chat.name, "incoming", now(), external_id or f"mock:{uuid4()}")
+        message = Message(chat_id, content, "mock:friend", "林 佳怡" if chat.type == "group" else chat.name, "incoming", now(), external_id or f"mock:{uuid4()}", live_event=True)
         self.history[chat_id].append(message)
         await self.events.put(message)
         return message

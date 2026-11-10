@@ -15,6 +15,9 @@ from .plus_core import PlusFailure, digest
 from ..media_store import KINDS, validate_attachment
 
 MEDIA_LABELS = {"image": "[画像]", "file": "[ファイル]", "voice": "[ボイスメッセージ]", "video": "[動画]"}
+# These Chinese-UI entries were observed to be navigation/feed containers,
+# not a single friend/group destination. Conservatively skip same-named entries.
+SYSTEM_SESSIONS = frozenset({"公众号", "服务通知", "折叠的聊天"})
 
 
 class PlusSDK:
@@ -84,7 +87,7 @@ class PlusSDK:
 
     def sessions(self):
         names = [s.info.get("name") for s in self.wx.GetSession()]
-        return [s for s in names if isinstance(s, str) and 0 < len(s) <= 500][:500]
+        return [s for s in names if isinstance(s, str) and 0 < len(s) <= 500 and s not in SYSTEM_SESSIONS][:500]
 
     def _window(self, name):
         # Require one independent conversation window owned by this WeChat
@@ -113,8 +116,13 @@ class PlusSDK:
         chat = result if callable(getattr(result, "ChatInfo", None)) else self.wx.GetSubWindow(nickname=name)
         info = chat.ChatInfo()
         kind = {"friend": "individual", "group": "group"}.get(info.get("chat_type"))
-        if info.get("chat_name") != name or not kind:
-            raise ValueError("unsupported_chat")
+        if info.get("chat_name") != name:
+            raise ValueError("destination_mismatch")
+        if not kind:
+            result = self.wx.RemoveListenChat(nickname=name, close_window=False)
+            if not isinstance(result, dict) or result.get("status") != "成功":
+                raise PlusFailure("binding_unavailable")
+            raise PlusFailure("unsupported_chat")
         control, _ = self._window(name)
         binding = digest([self.scope, control.NativeWindowHandle, control.GetRuntimeId()])
         target = {"name": name, "type": kind, "binding": binding, "chat": chat,
@@ -218,7 +226,7 @@ class PlusSDK:
             target = bindings.get(record["binding"])
             if target is None:
                 raise PlusFailure("sdk_unavailable")
-            rows.append(self._message(record, target))
+            rows.append(replace(self._message(record, target), live_event=True))
         return rows
 
     def verify(self, target):

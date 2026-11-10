@@ -3,13 +3,13 @@ import { test, expect, Page } from "@playwright/test";
 const TOKEN = "e2e-mock-only-" + "x".repeat(40);
 async function openChat(page: Page, externalId: string) {
   await page.goto("/");
-  await expect(page.locator("#access-token, .attention-intro")).toBeVisible();
+  await expect(page.locator("#access-token, .chat-sidebar")).toBeVisible();
   const login = page.getByLabel("このアプリの接続キー");
   if (await login.isVisible()) {
     await login.fill(TOKEN);
     await page.getByRole("button",{name:"このPCに接続",exact:true}).click();
   }
-  await expect(page.getByRole("heading",{name:"会話を、次の一歩へ。"})).toBeVisible();
+  await expect(page.getByLabel("チャットの並び順")).toHaveValue("recent");
   await page.getByRole("button",{name:"チャット一覧",exact:true}).click();
   await page.getByTestId(`chat-${externalId}`).click();
   await expect(page.locator(".bubble").first()).toBeVisible();

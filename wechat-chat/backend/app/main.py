@@ -33,6 +33,7 @@ from .ai_provider import OpenAIProvider
 from .ai_service import AIService
 from .ai_routes import register_ai_routes
 from .media_store import ATTACHMENT_ID, INLINE_IMAGES, MediaVault, public_attachment, sniff_type
+from .notifications import NotificationService, register_notification_routes
 
 
 class Login(BaseModel):
@@ -71,7 +72,7 @@ class MockAction(BaseModel):
     chat_id: str | None = None
 
 
-def create_app(settings=None, adapter=None, ai_provider=None):
+def create_app(settings=None, adapter=None, ai_provider=None, push_transport=None):
     settings = settings or Settings.from_env()
     security = Security(settings)
     assistance = LocalRulesProvider()
@@ -96,12 +97,14 @@ def create_app(settings=None, adapter=None, ai_provider=None):
                 selected = WindowsUIAAdapter(settings.poll_seconds)
         engine = Engine(db, selected, settings)
         app.state.db, app.state.engine, app.state.security = db, engine, security
+        app.state.notifications = NotificationService(db, settings, push_transport)
         provider = ai_provider or OpenAIProvider(settings.openai_api_key, settings.openai_model)
         app.state.ai = AIService(db, provider, settings.ai_enabled)
         app.state.wechat_diagnostic_lock = asyncio.Lock()
         app.state.ocr = OcrInbox()
         cleaner = asyncio.create_task(app.state.ocr.clean())
         await engine.start()
+        app.state.notifications.start()
         try:
             yield
         finally:
@@ -110,6 +113,7 @@ def create_app(settings=None, adapter=None, ai_provider=None):
                 await cleaner
             app.state.ocr.previews.clear()
             await app.state.ai.close()
+            await app.state.notifications.close()
             await engine.stop()
             db.close()
 
@@ -167,6 +171,7 @@ def create_app(settings=None, adapter=None, ai_provider=None):
 
     @api.post("/auth/logout")
     async def logout(request: Request, response: Response):
+        app.state.notifications.unsubscribe(session_hash=security.digest(request.cookies.get(COOKIE) or 'bearer'))
         security.revoke(request.cookies.get(COOKIE))
         response.delete_cookie(COOKIE, path="/")
         return {"ok": True}
@@ -177,7 +182,9 @@ def create_app(settings=None, adapter=None, ai_provider=None):
 
     @api.get("/device")
     async def device():
-        return {"mobile_url": settings.mobile_url, "mobile_access": settings.mobile_access, "ai_enabled": app.state.ai.status()["ready"], "push_enabled": False}
+        return {"mobile_url": settings.mobile_url, "mobile_access": settings.mobile_access, "ai_enabled": app.state.ai.status()["ready"], "push_enabled": app.state.notifications.enabled}
+
+    register_notification_routes(api, app, security)
 
     @api.post("/wechat/diagnostics")
     async def wechat_diagnostics():

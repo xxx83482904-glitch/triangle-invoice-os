@@ -6,6 +6,7 @@ async function login(page: Page) {
   await page.goto("/");
   await page.getByLabel("このアプリの接続キー").fill(TOKEN);
   await page.getByRole("button", {name:"このPCに接続",exact:true}).click();
+  await page.getByRole("button",{name:"対応すること",exact:true}).click();
   await expect(page.getByRole("heading", {name:"会話を、次の一歩へ。"})).toBeVisible();
   await expect(page.locator(".attention-card").first()).toBeVisible();
 }
@@ -21,6 +22,7 @@ test("priority reasons, manual override, ordering and no automatic sends", async
   await page.getByLabel("林 佳怡の優先度").selectOption("high");
   await expect(page.locator(".attention-card").first()).toContainText("林 佳怡");
   await page.reload();
+  await page.getByRole("button",{name:"対応すること",exact:true}).click();
   await expect(page.getByLabel("林 佳怡の優先度")).toHaveValue("high");
   await page.getByLabel("林 佳怡の優先度").selectOption("auto");
   const queue = await (await page.request.get("/api/queue")).json();
@@ -60,7 +62,8 @@ test("mobile: review a task, save it once, complete it and reopen the source", a
   await expect(page.getByRole("heading",{name:"打ち合わせ前に素材を確認",exact:true})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.screenshot({path:"../test-results/tasks-mobile.png"});
-  await page.reload(); await page.getByRole("button",{name:"タスク一覧",exact:true}).click();
+  await page.reload();
+  await page.getByRole("button",{name:"対応すること",exact:true}).click(); await page.getByRole("button",{name:"タスク一覧",exact:true}).click();
   await page.getByRole("button",{name:"完了にする：打ち合わせ前に素材を確認",exact:true}).click();
   await page.getByRole("button",{name:"完了 1",exact:true}).click();
   await page.getByRole("button",{name:"元のメッセージへ",exact:true}).click();

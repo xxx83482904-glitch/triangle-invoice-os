@@ -95,6 +95,7 @@ def validate_snapshot(data):
             or not message.source_key or not 0 < len(message.content) <= 20000
             or message.external_message_id is not None or message.timestamp is not None
             or message.timestamp_quality != "unavailable" or message.identity_quality != "uia_runtime"
+            or type(message.live_event) is not bool
             or message.delivery_status != ("received" if message.direction == "incoming" else "unknown")):
             raise ValueError("invalid_plus_snapshot")
         if message.attachment is not None:

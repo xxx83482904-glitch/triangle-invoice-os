@@ -66,6 +66,6 @@ export default function MobileInstall() {
       </ol>
     </>}
     {feedback && <p className="help" role="status">{feedback}</p>}
-    <p className="help">画面を閉じている間の通知は未対応です。Windowsのスリープ・電源オフ中は接続できません。Mock表示中の送信はサンプル会話だけに反映されます。</p>
+    <p className="help">追加したアプリの「新着通知」で、この端末の通知をオンにしてください。Windowsのスリープ・電源オフ中は受信・返信できません。Mock表示中の送信はサンプル会話だけに反映されます。</p>
   </article>;
 }

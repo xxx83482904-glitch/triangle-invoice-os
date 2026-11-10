@@ -69,6 +69,13 @@ def test_account_uses_observed_id_field_not_nickname(sdk):
     assert instance.account_id() == "synthetic-id"
 
 
+def test_system_feeds_are_never_registered_as_a_reply_destination(sdk):
+    instance, _ = sdk
+    instance.wx = SimpleNamespace(GetSession=lambda: [SimpleNamespace(info={'name':name}) for name in
+        ['個人テスト','公众号','服务通知','折叠的聊天','グループテスト']])
+    assert instance.sessions() == ['個人テスト','グループテスト']
+
+
 @pytest.mark.parametrize("info", [{"wxid": "legacy-field"}, {"display_name": "nickname"}, {"id": " "}, {"id": None}, []])
 def test_account_missing_id_fails_closed(sdk, info):
     instance, _ = sdk
