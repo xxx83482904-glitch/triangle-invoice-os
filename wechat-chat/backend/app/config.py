@@ -32,6 +32,7 @@ class Settings:
     plus_max_listeners: int = 8
     plus_language: str = "cn"
     plus_client_kind: str = "微信"
+    plus_preferred_chats: tuple[str, ...] = field(default=(), repr=False)
 
     @classmethod
     def from_env(cls):
@@ -45,6 +46,12 @@ class Settings:
         plus_client_kind = os.getenv("WECHAT_PLUS_CLIENT_KIND", "微信")
         if plus_client_kind not in ("微信", "WeChat"):
             raise ValueError("Unsupported WECHAT_PLUS_CLIENT_KIND")
+        try:
+            preferred = json.loads(os.getenv("WECHAT_PLUS_PREFERRED_CHATS", "[]"))
+        except (TypeError, ValueError):
+            raise ValueError("Invalid WECHAT_PLUS_PREFERRED_CHATS") from None
+        if not isinstance(preferred, list) or len(preferred) > 32 or any(not isinstance(n, str) or not 0 < len(n) <= 500 for n in preferred):
+            raise ValueError("Invalid WECHAT_PLUS_PREFERRED_CHATS")
         token = os.getenv("WECHAT_ACCESS_TOKEN", "").strip()
         if not token:
             path = ROOT / ".runtime" / "access-token.txt"
@@ -90,4 +97,5 @@ class Settings:
             plus_max_listeners=min(32, max(1, int(os.getenv("WECHAT_PLUS_MAX_LISTENERS", "8")))),
             plus_language=plus_language,
             plus_client_kind=plus_client_kind,
+            plus_preferred_chats=tuple(dict.fromkeys(preferred)),
         )

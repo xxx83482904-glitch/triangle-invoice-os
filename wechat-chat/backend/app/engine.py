@@ -37,7 +37,7 @@ class Engine:
         except Exception:
             self.sync_error = "adapter_connection_failed"
             self.db.connection("error", self.sync_error)
-        self.tasks = [asyncio.create_task(self.worker()), asyncio.create_task(self.watch()), asyncio.create_task(self.monitor())]
+        self.tasks = [asyncio.create_task(self.worker()), asyncio.create_task(self.watch()), asyncio.create_task(self.monitor()), asyncio.create_task(self.media_worker())]
         if isinstance(self.adapter, MockWeChatAdapter) and self.settings.mock_interval > 0:
             self.tasks.append(asyncio.create_task(self.simulate()))
 
@@ -163,6 +163,36 @@ class Engine:
                 self.db.connection("error", "monitor_unavailable")
                 self.hub.publish("status")
             await asyncio.sleep(2)
+
+    async def media_worker(self):
+        """Only explicit authenticated read requests enter this bounded queue."""
+        while True:
+            item = None
+            try:
+                async with self.adapter_lock:
+                    item = self.db.claim_attachment()
+                    if item:
+                        self.hub.publish("message", item["chat_id"])
+                        status = await self.adapter.get_connection_status()
+                        if not status.can_read:
+                            raise ValueError("source_unavailable")
+                        message = await self.adapter.fetch_attachment(item["external_id"], item["source_key"])
+                        if (message.chat_id != item["external_id"] or message.source_key != item["source_key"]
+                                or not message.attachment or message.attachment.get("id") != item["id"]
+                                or message.attachment.get("status") not in ("ready", "failed", "unavailable", "too_large")):
+                            raise ValueError("source_unavailable")
+                        self.db.ingest(message)
+            except asyncio.CancelledError:
+                if item:
+                    self.db.fail_attachment(item["id"], "interrupted")
+                raise
+            except Exception:
+                if item:
+                    self.db.fail_attachment(item["id"])
+            finally:
+                if item:
+                    self.hub.publish("message", item["chat_id"])
+            await asyncio.sleep(0.2 if self.settings.adapter == "mock" else 5 if item else 0.5)
 
     async def simulate(self):
         while True:

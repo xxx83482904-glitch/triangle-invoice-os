@@ -33,6 +33,7 @@ class Message:
     source_key: str | None = None  # Local observation identity, never a WeChat message ID.
     identity_quality: str | None = None
     delivery_status: str | None = None
+    attachment: dict | None = None  # Private local media metadata, never an SDK object.
 
 
 @dataclass
@@ -84,6 +85,9 @@ class WeChatAdapter(ABC):
     async def send_queued_message(self, chat_id: str, text: str, request_id: str) -> Receipt:
         """Persistent queue identity is available to adapters with an IPC sender."""
         return await self.send_message(chat_id, text)
+
+    async def fetch_attachment(self, chat_id: str, source_key: str) -> Message:
+        raise AdapterError("source_unavailable")
 
     @abstractmethod
     async def get_connection_status(self) -> Connection: ...

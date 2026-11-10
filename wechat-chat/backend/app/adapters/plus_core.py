@@ -4,7 +4,7 @@ Only an explicit queue command can reach the sender. The SDK runs in a separate
 process; this module is also exercised with a synthetic SDK on every platform.
 """
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path
@@ -12,6 +12,7 @@ import sqlite3
 import time
 
 from .base import Chat, Message, Receipt
+from ..media_store import merge_attachment
 
 
 def digest(value):
@@ -55,6 +56,7 @@ class PlusStore:
             CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, source_key TEXT UNIQUE NOT NULL, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS bindings(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS media(source_key TEXT PRIMARY KEY, payload TEXT NOT NULL);
         """)
 
     def pin(self, account):
@@ -78,16 +80,32 @@ class PlusStore:
     def ingest(self, message):
         if not message.source_key:
             raise PlusFailure("sdk_unavailable")
-        payload = json.dumps(asdict(message), ensure_ascii=False)
         with self.db:
+            if message.attachment is not None:
+                row = self.db.execute("SELECT payload FROM media WHERE source_key=?", (message.source_key,)).fetchone()
+                attachment = merge_attachment(json.loads(row[0]) if row else None, message.attachment)
+                message = replace(message, attachment=attachment)
+                self.db.execute("INSERT INTO media VALUES(?,?) ON CONFLICT(source_key) DO UPDATE SET payload=excluded.payload",
+                                (message.source_key, json.dumps(attachment, ensure_ascii=False)))
+            payload = json.dumps(asdict(message), ensure_ascii=False)
             previous = self.db.execute("SELECT payload FROM inbox WHERE source_key=?", (message.source_key,)).fetchone()
             if previous:
-                if previous[0] != payload:
+                old, new = json.loads(previous[0]), asdict(message)
+                old_attachment, new_attachment = old.pop("attachment", None), new.pop("attachment", None)
+                if old != new:
                     raise PlusFailure("sdk_unavailable")
-                return
+                if old_attachment == new_attachment:
+                    return
+                # Give an update a NEW sequence: a delayed acknowledgement of
+                # the original placeholder must never delete the ready result.
+                self.db.execute("DELETE FROM inbox WHERE source_key=?", (message.source_key,))
             if self.db.execute("SELECT COUNT(*) FROM inbox").fetchone()[0] >= 2000:
                 raise PlusFailure("buffer_full")
             self.db.execute("INSERT INTO inbox(source_key,payload) VALUES(?,?)", (message.source_key, payload))
+
+    def media(self, source_key):
+        row = self.db.execute("SELECT payload FROM media WHERE source_key=?", (source_key,)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def inbox(self):
         return [{"sequence": r[0], "message": json.loads(r[1])} for r in self.db.execute("SELECT id,payload FROM inbox ORDER BY id LIMIT 100")]
@@ -117,10 +135,11 @@ class PlusStore:
 
 
 class PlusSupervisor:
-    def __init__(self, factory, store, *, send_enabled=False, max_listeners=8, clock=time.monotonic):
+    def __init__(self, factory, store, *, send_enabled=False, max_listeners=8, clock=time.monotonic, preferred_chats=()):
         self.factory, self.store, self.clock = factory, store, clock
         self.send_enabled = send_enabled
         self.max_listeners = min(32, max(1, max_listeners))
+        self.preferred_chats = tuple(preferred_chats)
         self.sdk = None
         self.state, self.scope, self.account, self.version = "connecting", None, None, None
         self.targets = {}
@@ -163,6 +182,7 @@ class PlusSupervisor:
                 self.discovered = len(sessions)
                 self.ambiguous = sum(n for n in counts.values() if n > 1)
                 self.candidates = [name for name, n in counts.items() if n == 1]
+                self.candidates.sort(key=lambda name: self.preferred_chats.index(name) if name in self.preferred_chats else len(self.preferred_chats))
                 self.attempted.clear()
                 self.next_discover = self.clock() + 60
             # At most one new window every ten seconds. Resource limits are
@@ -207,6 +227,21 @@ class PlusSupervisor:
                                "limit": self.max_listeners, "reconnections": max(0, self.reconnects - 1),
                                "scope": "visible_sessions", "complete": False,
                                "active_chat_ids": list(self.targets)}}
+
+    def fetch_attachment(self, chat_id, source_key, vault):
+        if self.state != "ready" or self.sdk is None or chat_id not in self.targets:
+            raise ValueError("source_unavailable")
+        if self.sdk.check_scope() != self.scope or self.store.pin(self.sdk.account_id()) != self.account:
+            raise ValueError("source_unavailable")
+        target = self.targets[chat_id]
+        saved = self.store.media(source_key)
+        if saved and saved["status"] == "ready":
+            matches = [m for m in self.sdk.history(target) if m.source_key == source_key]
+            if len(matches) == 1:
+                return replace(matches[0], attachment=saved)
+        message = self.sdk.fetch_attachment(target, source_key, vault)
+        self.store.ingest(message)
+        return message
 
     def send(self, request_id, chat_id, text):
         fingerprint = digest([chat_id, text])

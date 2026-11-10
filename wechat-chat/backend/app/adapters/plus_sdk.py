@@ -1,14 +1,20 @@
 """Narrow wxautox4 41.2.3 bridge. Loaded only by the optional licensed worker.
 
-No credentials, activation, OCR, downloads, automatic replies, contact mutations
+No credentials, activation, OCR, automatic replies, contact mutations
 or forced name searches. UI details here require licensed real-device validation.
 """
+from dataclasses import replace
 from importlib.metadata import version
 import logging
+from pathlib import Path
 from queue import Empty, Queue
+from tempfile import TemporaryDirectory
 
 from .base import Message
 from .plus_core import PlusFailure, digest
+from ..media_store import KINDS, validate_attachment
+
+MEDIA_LABELS = {"image": "[画像]", "file": "[ファイル]", "voice": "[ボイスメッセージ]", "video": "[動画]"}
 
 
 class PlusSDK:
@@ -117,14 +123,17 @@ class PlusSDK:
         return target
 
     def _record(self, msg):
-        if msg.type != "text" or msg.attr not in ("friend", "self"):
+        if msg.type not in {"text", *KINDS} or msg.attr not in ("friend", "self"):
             return None
-        if not isinstance(msg.content, str) or not 0 < len(msg.content) <= 20000:
+        # Media has a type label, not invented message text. In particular,
+        # WeChat's voice transcription can change msg.content after reading.
+        content = msg.content if msg.type == "text" else MEDIA_LABELS[msg.type]
+        if not isinstance(content, str) or not 0 < len(content) <= 20000:
             raise PlusFailure("sdk_unavailable")
         control = msg.control
         root = control.GetTopLevelControl()
         return {"binding": digest([self.scope, root.NativeWindowHandle, root.GetRuntimeId()]),
-                "runtime": control.GetRuntimeId(), "content": msg.content,
+                "runtime": control.GetRuntimeId(), "content": content, "message_type": msg.type,
                 "sender": msg.sender if isinstance(msg.sender, str) else "",
                 "direction": "outgoing" if msg.attr == "self" else "incoming"}
 
@@ -142,10 +151,53 @@ class PlusSDK:
     def _message(record, target):
         if record["binding"] != target["binding"]:
             raise PlusFailure("sdk_unavailable")
+        kind = record.get("message_type", "text")
+        # Preserve the exact identity calculation used by existing text rows.
         source = "plus:" + digest([target["id"], record["runtime"], record["content"], record["direction"], record["sender"]])
+        attachment = {"id": digest(["media", source])[:32], "kind": kind, "status": "pending"} if kind in KINDS else None
         return Message(target["id"], record["content"], "unavailable", record["sender"], record["direction"], None,
                        occurrence=source, timestamp_quality="unavailable", source_key=source,
-                       identity_quality="uia_runtime", delivery_status="unknown" if record["direction"] == "outgoing" else "received")
+                       identity_quality="uia_runtime", delivery_status="unknown" if record["direction"] == "outgoing" else "received",
+                       message_type=kind, attachment=attachment)
+
+    def fetch_attachment(self, target, source_key, vault):
+        self.verify(target)
+        matches = []
+        for raw in target["chat"].GetAllMessage():
+            record = self._record(raw)
+            if record is not None:
+                message = self._message(record, target)
+                if message.source_key == source_key and message.attachment:
+                    matches.append((raw, message))
+        if len(matches) != 1:
+            raise ValueError("source_unavailable")
+        raw, message = matches[0]
+        attachment = dict(message.attachment)
+        try:
+            self.verify(target)
+            if message.message_type == "voice":
+                transcript = raw.to_text()
+                if not isinstance(transcript, str) or not 0 < len(transcript.strip()) <= 20000:
+                    raise ValueError("transcription_unavailable")
+                attachment.update(status="ready", transcript=transcript.strip(), error_code="voice_audio_unavailable")
+            else:
+                with TemporaryDirectory(prefix=".download-", dir=vault.root) as directory:
+                    if message.message_type == "file":
+                        result = raw.download(dir_path=directory, force_click=False, timeout=20)
+                    elif message.message_type == "video":
+                        result = raw.download(dir_path=directory, original=True, timeout=20)
+                    else:
+                        result = raw.download(dir_path=directory, original=True)
+                    if not isinstance(result, (str, Path)):
+                        raise ValueError("download_failed")
+                    attachment.update(vault.import_file(Path(result), Path(directory)), status="ready")
+        except Exception as exc:
+            too_large = isinstance(exc, ValueError) and str(exc) == "too_large"
+            attachment = dict(message.attachment, status="too_large" if too_large else "failed",
+                              error_code="too_large" if too_large else "transcription_unavailable" if message.message_type == "voice" else "download_failed")
+        # A window/account change must not attach bytes to a different target.
+        self.verify(target)
+        return replace(message, attachment=validate_attachment(attachment))
 
     def history(self, target):
         rows = target["chat"].GetAllMessage()

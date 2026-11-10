@@ -21,11 +21,14 @@ def main():
             return 2
         from .plus_sdk import PlusSDK
         from .wxauto4_worker import reader_mutex
+        from ..media_store import MediaVault
         store = PlusStore(Path(os.environ["KOMOREBI_PLUS_STORE"]))
+        vault = MediaVault(Path(os.environ["KOMOREBI_PLUS_MEDIA"]))
         supervisor = PlusSupervisor(lambda: PlusSDK(os.environ.get("KOMOREBI_PLUS_LANGUAGE", "cn"),
                                     os.environ.get("KOMOREBI_PLUS_CLIENT_KIND", "微信")), store,
                                     send_enabled=os.environ.get("KOMOREBI_PLUS_SEND") == "true",
-                                    max_listeners=int(os.environ.get("KOMOREBI_PLUS_LIMIT", "8")))
+                                    max_listeners=int(os.environ.get("KOMOREBI_PLUS_LIMIT", "8")),
+                                    preferred_chats=json.loads(os.environ.get("KOMOREBI_PLUS_PREFERRED", "[]")))
         try:
             # Shared with the free reader: two adapters must not drive the same
             # WeChat desktop concurrently, even from different app instances.
@@ -47,6 +50,14 @@ def main():
                             store.ack(ack)
                             supervisor.tick()
                             result = supervisor.snapshot()
+                        elif action == "media":
+                            chat, source = request["chat_id"], request["source_key"]
+                            if not isinstance(chat, str) or len(chat) > 200 or not isinstance(source, str) or len(source) > 200:
+                                raise ValueError()
+                            try:
+                                result = {"message": asdict(supervisor.fetch_attachment(chat, source, vault))}
+                            except Exception:
+                                result = {"error": "source_unavailable"}
                         elif action == "send":
                             qid = str(UUID(request["request_id"]))
                             content, chat = request["text"], request["chat_id"]

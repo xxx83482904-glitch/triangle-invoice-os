@@ -9,7 +9,7 @@ from uuid import UUID
 from anyio import CancelScope
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -32,6 +32,7 @@ from .wxauto_trial import read_report
 from .ai_provider import OpenAIProvider
 from .ai_service import AIService
 from .ai_routes import register_ai_routes
+from .media_store import ATTACHMENT_ID, INLINE_IMAGES, MediaVault, public_attachment, sniff_type
 
 
 class Login(BaseModel):
@@ -78,6 +79,7 @@ def create_app(settings=None, adapter=None, ai_provider=None):
     @asynccontextmanager
     async def lifespan(app):
         db = Database(settings.db_path, settings.adapter)
+        app.state.media = MediaVault(settings.db_path.parent / (settings.db_path.stem + "-attachments"))
         selected = adapter
         if selected is None:
             if settings.adapter == "mock":
@@ -89,7 +91,7 @@ def create_app(settings=None, adapter=None, ai_provider=None):
             elif settings.adapter == "wxautox4":
                 selected = WindowsPlusAdapter(settings.db_path.with_name(settings.db_path.stem + "-worker.sqlite3"),
                     send_enabled=settings.plus_send_enabled, max_listeners=settings.plus_max_listeners,
-                    language=settings.plus_language, client_kind=settings.plus_client_kind)
+                    language=settings.plus_language, client_kind=settings.plus_client_kind, preferred_chats=settings.plus_preferred_chats)
             else:
                 selected = WindowsUIAAdapter(settings.poll_seconds)
         engine = Engine(db, selected, settings)
@@ -135,7 +137,7 @@ def create_app(settings=None, adapter=None, ai_provider=None):
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+        response.headers.setdefault("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'")
         return response
 
     @app.exception_handler(RequestValidationError)
@@ -200,6 +202,53 @@ def create_app(settings=None, adapter=None, ai_provider=None):
     @api.get("/chats")
     async def chats():
         return app.state.db.chats()
+
+    def require_attachment(ident):
+        if not ATTACHMENT_ID.fullmatch(ident):
+            raise HTTPException(404, "attachment_not_found")
+        row = app.state.db.attachment(ident)
+        if row is None:
+            raise HTTPException(404, "attachment_not_found")
+        return row
+
+    @api.post("/attachments/{ident}/fetch", status_code=202)
+    async def fetch_attachment(ident: str):
+        row = require_attachment(ident)
+        status = await app.state.engine.status()
+        if not status["can_read"]:
+            raise HTTPException(409, "source_unavailable")
+        if status["mode"] == "wxautox4" and row["external_id"] not in (status.get("monitoring") or {}).get("active_chat_ids", []):
+            raise HTTPException(409, "source_unavailable")
+        security.rate_limit("attachment-fetch", 12)
+        try:
+            result = app.state.db.queue_attachment(ident)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        app.state.engine.hub.publish("message", row["chat_id"])
+        return result
+
+    @api.get("/attachments/{ident}")
+    async def attachment_status(ident: str):
+        return public_attachment(require_attachment(ident))
+
+    @api.get("/attachments/{ident}/content")
+    async def attachment_content(ident: str, download: bool = False):
+        row = require_attachment(ident)
+        if row["status"] != "ready" or not row["storage_key"]:
+            raise HTTPException(404, "attachment_not_ready")
+        try:
+            path = app.state.media.locate(row["storage_key"])
+            # Never trust a filename extension or serve HTML/SVG as executable
+            # same-origin content. Only sniffed raster images may be inline.
+            with path.open("rb") as stream:
+                mime = sniff_type(stream.read(32))
+        except (ValueError, OSError):
+            raise HTTPException(404, "attachment_missing") from None
+        inline = not download and row["kind"] == "image" and mime in INLINE_IMAGES
+        return FileResponse(path, media_type=mime, filename=row["filename"] or "attachment",
+            content_disposition_type="inline" if inline else "attachment",
+            headers={"Content-Security-Policy": "sandbox; default-src 'none'; frame-ancestors 'none'",
+                     "Cross-Origin-Resource-Policy": "same-origin"})
 
     def require_chat(ident):
         chat = app.state.db.chat(ident)

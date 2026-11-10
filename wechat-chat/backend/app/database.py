@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from .adapters.base import Chat, Message, now
+from .media_store import FIELDS, merge_attachment, public_attachment, validate_attachment
 
 
 class Database:
@@ -32,6 +33,7 @@ class Database:
             self.conn.execute("INSERT OR IGNORE INTO metadata VALUES ('adapter', ?)", (mode,))
             self.conn.execute("UPDATE messages SET delivery_status='unknown' WHERE id IN (SELECT message_id FROM send_queue WHERE status='sending')")
             self.conn.execute("UPDATE send_queue SET status='unknown', error_message='interrupted_during_send', processed_at=? WHERE status='sending'", (now(),))
+            self.conn.execute("UPDATE attachments SET status='failed',error_code='interrupted',updated_at=? WHERE status IN ('loading','queued')", (now(),))
 
     def close(self):
         self.conn.close()
@@ -68,7 +70,64 @@ class Database:
         return self.one("SELECT * FROM chats WHERE id=?", (ident,))
 
     def messages(self, ident, before=None, limit=100):
-        return list(reversed(self.all("SELECT * FROM messages WHERE chat_id=? AND id<? ORDER BY id DESC LIMIT ?", (ident, before or 9223372036854775807, limit))))
+        rows = list(reversed(self.all("SELECT * FROM messages WHERE chat_id=? AND id<? ORDER BY id DESC LIMIT ?", (ident, before or 9223372036854775807, limit))))
+        return self.with_attachments(rows)
+
+    def with_attachments(self, rows):
+        if not rows:
+            return rows
+        placeholders = ",".join("?" for _ in rows)
+        attachments = {a["message_id"]: public_attachment(a) for a in self.all(
+            f"SELECT * FROM attachments WHERE message_id IN ({placeholders})", tuple(r["id"] for r in rows))}
+        for row in rows:
+            row["attachment"] = attachments.get(row["id"])
+        return rows
+
+    def _save_attachment(self, message_id, incoming):
+        if incoming is None:
+            return False
+        previous = self.one("SELECT * FROM attachments WHERE message_id=?", (message_id,))
+        old = {k: previous[k] for k in FIELDS} if previous else None
+        merged = merge_attachment(old, incoming)
+        if merged == old:
+            return False
+        self.conn.execute("""INSERT INTO attachments
+            (id,message_id,kind,status,filename,mime_type,size_bytes,storage_key,transcript,error_code,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(message_id) DO UPDATE SET
+            status=excluded.status,filename=excluded.filename,mime_type=excluded.mime_type,
+            size_bytes=excluded.size_bytes,storage_key=excluded.storage_key,transcript=excluded.transcript,
+            error_code=excluded.error_code,updated_at=excluded.updated_at""",
+            (merged["id"], message_id, *(merged[k] for k in FIELDS[1:]), now()))
+        return True
+
+    def attachment(self, ident):
+        return self.one("""SELECT a.*,m.chat_id,m.source_key,c.external_id FROM attachments a
+            JOIN messages m ON m.id=a.message_id JOIN chats c ON c.id=m.chat_id WHERE a.id=?""", (ident,))
+
+    def queue_attachment(self, ident):
+        with self.lock, self.conn:
+            row = self.attachment(ident)
+            if not row:
+                raise ValueError("attachment_not_found")
+            if row["status"] in ("ready", "queued", "loading"):
+                return public_attachment(row)
+            if self.one("SELECT COUNT(*) AS n FROM attachments WHERE status IN ('queued','loading')")["n"] >= 10:
+                raise ValueError("queue_full")
+            self.conn.execute("UPDATE attachments SET status='queued',error_code=NULL,updated_at=? WHERE id=?", (now(), ident))
+            return public_attachment(self.attachment(ident))
+
+    def claim_attachment(self):
+        with self.lock, self.conn:
+            row = self.one("SELECT id FROM attachments WHERE status='queued' ORDER BY updated_at,id LIMIT 1")
+            if row:
+                self.conn.execute("UPDATE attachments SET status='loading',updated_at=? WHERE id=?", (now(), row["id"]))
+                return self.attachment(row["id"])
+
+    def fail_attachment(self, ident, error="source_unavailable"):
+        if error not in ("source_unavailable", "download_failed", "interrupted"):
+            error = "download_failed"
+        with self.lock, self.conn:
+            self.conn.execute("UPDATE attachments SET status='failed',error_code=?,updated_at=? WHERE id=? AND status IN ('loading','queued')", (error, now(), ident))
 
     @staticmethod
     def fingerprint(message: Message):
@@ -78,21 +137,24 @@ class Database:
         return "fingerprint:" + hashlib.sha256(json.dumps(raw, ensure_ascii=False).encode()).hexdigest()
 
     def ingest(self, message: Message):
+        if message.attachment is not None and validate_attachment(message.attachment)["kind"] != message.message_type:
+            raise ValueError("attachment_type_mismatch")
         chat = self.one("SELECT id FROM chats WHERE external_id=?", (message.chat_id,))
         if not chat:
             return False
         stamp = now()
         with self.lock, self.conn:
             if message.source_key:
-                previous = self.one("SELECT content,direction,sender_name,message_type FROM messages WHERE chat_id=? AND source_key=?", (chat["id"], message.source_key))
+                previous = self.one("SELECT id,content,direction,sender_name,message_type FROM messages WHERE chat_id=? AND source_key=?", (chat["id"], message.source_key))
                 if previous:
                     if tuple(previous[k] for k in ("content", "direction", "sender_name", "message_type")) != (message.content, message.direction, message.sender_name, message.message_type):
                         raise ValueError("source_observation_conflict")
-                    return False
+                    return self._save_attachment(previous["id"], message.attachment)
             cur = self.conn.execute("""INSERT OR IGNORE INTO messages
              (chat_id,external_message_id,dedupe_key,sender_id,sender_name,direction,content,message_type,timestamp,observed_at,timestamp_quality,delivery_status,identity_quality,source_key)
              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (chat["id"], message.external_message_id, self.fingerprint(message), message.sender_id, message.sender_name, message.direction, message.content, message.message_type, message.timestamp, stamp, message.timestamp_quality, message.delivery_status or ("received" if message.direction == "incoming" else "confirmed"), message.identity_quality or ("external" if message.external_message_id else "fingerprint"), message.source_key))
             if cur.rowcount:
+                self._save_attachment(cur.lastrowid, message.attachment)
                 self.conn.execute("UPDATE chats SET last_message_at=MAX(COALESCE(last_message_at,''),?),unread_count=unread_count+? WHERE id=?", (message.timestamp or stamp, int(message.direction == "incoming"), chat["id"]))
         return bool(cur.rowcount)
 
@@ -164,7 +226,11 @@ class Database:
 
     def search(self, query, limit=100):
         escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        return self.all("SELECT m.*,c.name AS chat_name,c.type AS chat_type FROM messages m JOIN chats c ON c.id=m.chat_id WHERE m.content LIKE ? ESCAPE '\\' ORDER BY m.id DESC LIMIT ?", ("%" + escaped + "%", limit))
+        pattern = "%" + escaped + "%"
+        return self.with_attachments(self.all("""SELECT m.*,c.name AS chat_name,c.type AS chat_type
+            FROM messages m JOIN chats c ON c.id=m.chat_id LEFT JOIN attachments a ON a.message_id=m.id
+            WHERE m.content LIKE ? ESCAPE '\\' OR a.transcript LIKE ? ESCAPE '\\' OR a.filename LIKE ? ESCAPE '\\'
+            ORDER BY m.id DESC LIMIT ?""", (pattern, pattern, pattern, limit)))
 
     def set_priority(self, chat_id, priority):
         with self.lock, self.conn:

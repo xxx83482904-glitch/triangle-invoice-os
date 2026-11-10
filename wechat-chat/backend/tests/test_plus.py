@@ -115,6 +115,18 @@ def test_duplicate_names_never_opened(tmp_path):
     store.close()
 
 
+def test_preferred_chats_only_prioritize_uniquely_observed_sessions(tmp_path):
+    sdk = FakeSDK()
+    sdk.names = ["通常", "同名", "確認先", "同名"]
+    store = PlusStore(tmp_path / "worker.sqlite3")
+    core = PlusSupervisor(lambda: sdk, store, preferred_chats=["存在しない宛先", "同名", "確認先"], max_listeners=1)
+    core.tick()
+    assert sdk.registered == ["確認先"]
+    assert core.snapshot()["monitoring"]["ambiguous"] == 2
+    core.close()
+    store.close()
+
+
 def test_listener_limit_reports_missing_coverage(bridge):
     core, sdk, _, clock = bridge
     core.max_listeners = 1

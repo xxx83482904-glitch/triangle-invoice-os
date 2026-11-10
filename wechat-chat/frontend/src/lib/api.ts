@@ -10,6 +10,13 @@ export type Message = {
   direction: "incoming" | "outgoing"; timestamp: string | null; observed_at: string;
   timestamp_quality: string; delivery_status: string; identity_quality: string; message_type: string;
   chat_name?: string; chat_type?: string;
+  attachment?: Attachment | null;
+};
+export type Attachment = {
+  id: string; kind: "image" | "file" | "voice" | "video";
+  status: "pending" | "queued" | "loading" | "ready" | "unavailable" | "too_large" | "failed";
+  filename: string | null; mime_type: string | null; size_bytes: number | null;
+  transcript: string | null; error_code: string | null; has_content: boolean;
 };
 export type Status = {
   state: string; mode: string; detail: string; can_send: boolean; can_read: boolean;
@@ -37,6 +44,10 @@ export const priorityOrder: Record<Priority, number> = { high: 0, normal: 1, low
 
 export const delivery: Record<string, string> = { received: "受信", pending: "未送信", sending: "送信処理中", confirmed: "送信確認済み", unknown: "確認不能", failed: "失敗" };
 const errors: Record<string, string> = {
+  source_unavailable: "元のメッセージをWeChatで確認できません。接続状態と監視対象を確認してください。",
+  attachment_not_found: "添付ファイルが見つかりません。",
+  attachment_missing: "保存したファイルが見つかりません。",
+  attachment_not_ready: "ファイルはまだ保存されていません。",
   ai_disabled: "外部AIは無効です。PC側の設定で有効化してください。",
   ai_not_configured: "PC側のOpenAI APIキーとモデルが未設定です。",
   ai_preview_expired: "確認内容の期限が切れました。送る内容を確認し直してください。",

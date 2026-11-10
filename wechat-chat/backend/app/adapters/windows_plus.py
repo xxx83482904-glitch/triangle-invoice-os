@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from .base import Chat, Connection, Message, Receipt, WeChatAdapter
 from .plus_core import DETAILS, HISTORY
+from ..media_store import KINDS, validate_attachment
 
 ROOT = Path(__file__).resolve().parents[3]
 MAX_BYTES = 4 * 1024 * 1024
@@ -17,11 +18,12 @@ MAX_BYTES = 4 * 1024 * 1024
 
 class PlusRPC:
     """One serialized process for UI/COM affinity and listener lifetime."""
-    def __init__(self, store, send_enabled=False, max_listeners=8, language="cn", client_kind="微信"):
+    def __init__(self, store, send_enabled=False, max_listeners=8, language="cn", client_kind="微信", preferred_chats=()):
         self.process = None
         self.lock = asyncio.Lock()
         self.store, self.send_enabled, self.limit, self.language = store, send_enabled, max_listeners, language
         self.client_kind = client_kind
+        self.preferred_chats = tuple(preferred_chats)
 
     async def close(self):
         if self.process is not None:
@@ -45,7 +47,9 @@ class PlusRPC:
                             env.pop(key)
                     env.update(KOMOREBI_PLUS_STORE=str(self.store), KOMOREBI_PLUS_SEND=str(self.send_enabled).lower(),
                                KOMOREBI_PLUS_LIMIT=str(self.limit), KOMOREBI_PLUS_LANGUAGE=self.language,
-                               KOMOREBI_PLUS_CLIENT_KIND=self.client_kind)
+                               KOMOREBI_PLUS_CLIENT_KIND=self.client_kind,
+                               KOMOREBI_PLUS_PREFERRED=json.dumps(self.preferred_chats, ensure_ascii=False),
+                               KOMOREBI_PLUS_MEDIA=str(self.store.parent / (self.store.stem.removesuffix("-worker") + "-attachments")))
                     python = ROOT / ".runtime/wxautox4-venv/Scripts/python.exe"
                     self.process = await asyncio.create_subprocess_exec(str(python), "-X", "utf8", "-m", "app.adapters.plus_worker",
                         cwd=ROOT / "backend", env=env, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
@@ -87,11 +91,16 @@ def validate_snapshot(data):
     for event in events:
         message = Message(**event["message"])
         if (type(event["sequence"]) is not int or event["sequence"] < 1 or message.chat_id not in chat_ids
-            or message.direction not in ("incoming", "outgoing") or message.message_type != "text"
+            or message.direction not in ("incoming", "outgoing") or message.message_type not in {"text", *KINDS}
             or not message.source_key or not 0 < len(message.content) <= 20000
             or message.external_message_id is not None or message.timestamp is not None
             or message.timestamp_quality != "unavailable" or message.identity_quality != "uia_runtime"
             or message.delivery_status != ("received" if message.direction == "incoming" else "unknown")):
+            raise ValueError("invalid_plus_snapshot")
+        if message.attachment is not None:
+            if validate_attachment(message.attachment)["kind"] != message.message_type:
+                raise ValueError("invalid_plus_snapshot")
+        elif message.message_type != "text":
             raise ValueError("invalid_plus_snapshot")
     monitoring = data.get("monitoring")
     if monitoring is not None:
@@ -106,8 +115,8 @@ def validate_snapshot(data):
 
 
 class WindowsPlusAdapter(WeChatAdapter):
-    def __init__(self, store_path=None, *, send_enabled=False, max_listeners=8, language="cn", client_kind="微信", transport=None, poll_seconds=5):
-        self.rpc = transport or PlusRPC(store_path or ROOT / "data/wxautox4-worker.sqlite3", send_enabled, max_listeners, language, client_kind)
+    def __init__(self, store_path=None, *, send_enabled=False, max_listeners=8, language="cn", client_kind="微信", preferred_chats=(), transport=None, poll_seconds=5):
+        self.rpc = transport or PlusRPC(store_path or ROOT / "data/wxautox4-worker.sqlite3", send_enabled, max_listeners, language, client_kind, preferred_chats)
         self.test_transport = transport is not None
         self.send_enabled = send_enabled
         self.poll_seconds = max(5, poll_seconds)
@@ -195,6 +204,19 @@ class WindowsPlusAdapter(WeChatAdapter):
     async def send_message(self, chat_id, text):
         # Direct calls without durable queue identity cannot send.
         return Receipt("failed", error="queue_required")
+
+    async def fetch_attachment(self, chat_id, source_key):
+        async with self.lock:
+            if not (await self.get_connection_status()).can_read:
+                raise ValueError("source_unavailable")
+            data = await self.rpc.call("media", chat_id=chat_id, source_key=source_key)
+            if data.get("error") or not data.get("message"):
+                raise ValueError("source_unavailable")
+            message = Message(**data["message"])
+            if message.chat_id != chat_id or message.source_key != source_key or not message.attachment:
+                raise ValueError("source_unavailable")
+            validate_attachment(message.attachment)
+            return message
 
     async def send_queued_message(self, chat_id, text, request_id):
         async with self.lock:
