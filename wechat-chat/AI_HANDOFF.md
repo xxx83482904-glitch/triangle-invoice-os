@@ -1,138 +1,128 @@
-# こもれび — 次のAIへの引き継ぎ
+# こもれび — 開発引き継ぎ
 
-> 以前作成した引き継ぎ資料です。現在は同じ開発者が作業を継続しています。最新の実機状況・OCR補助・制約は `WECHAT_INTEGRATION_STATUS.md` と `TEST_RESULTS.md` を優先してください。
+更新日: 2026-11-10。最新の実装基準は `4119918d63dad2377be46764f788c7b9b2980295`。この文書を保存する後続コミットは引き継ぎ資料の更新であり、直接同期の新実装ではありません。
 
-更新日: 2026-11-09。保存対象: `wechat-chat/` と、親のTypeScriptからこの独立アプリを除外する設定。
+## 現在地
 
-GitHub: https://github.com/xxx83482904-glitch/triangle-invoice-os ／ ブランチ: `codex/komorebi-wechat-mvp` ／ 開発対象: `wechat-chat/`。既存のmainにはまだこのアプリをマージしていません。
+**次の目標は、WeChatのローカル履歴から、画面を使わずにこもれびへ直接同期することです。直接同期は未実装で、ファイルから取り込めた本文は0件です。** 保存先と形式を調査済みですが、現行DB・旧DB・バックアップをそのまま読める経路は確認できていません。
+
+本人の最新指示は「WeChatの画面経由で取得しない」。常駐版は `WECHAT_UI_ACCESS_ENABLED=false` で、保存済み会話の閲覧・検索・取得済み添付の配信だけを行います。新着取得、履歴巡回、画面診断、OCR、実送信は停止中です。再起動しても画面取得を再開しない実装を検証済みです。
+
+以前はwxautox4 Plusによる個人・グループの読み取り、画像・ファイル取得、ボイス文字起こし、本人が許可した自分宛てのテキスト1件の送信に成功しました。これは**過去のUI方式の実績**です。現在の直接同期成功や、UI方式を再開する許可ではありません。
+
+## リポジトリと作業範囲
+
+- [GitHub](https://github.com/xxx83482904-glitch/triangle-invoice-os)
+- ブランチ: `codex/komorebi-wechat-mvp`
+- 開発対象: `wechat-chat/`。親は別の請求書アプリです。
+- mainには別アプリのSynologyデプロイworkflowがあります。mainへのマージ・workflow実行は依頼されていません。
+- 同じPCでは既存の専用worktreeを使い、稼働フォルダーをcheckoutし直さないでください。
 
 ```powershell
 git clone --branch codex/komorebi-wechat-mvp --single-branch https://github.com/xxx83482904-glitch/triangle-invoice-os.git
 cd triangle-invoice-os/wechat-chat
 ```
 
-## まず把握すること
+読む順序: `AGENTS.md` → 本文書 → `docs/LOCAL_HISTORY_STORAGE.md` → `WECHAT_INTEGRATION_STATUS.md` → `TEST_RESULTS.md` → `docs/architecture.md`。最新の停止条件は古い実機記録より優先します。
 
-**Mockの双方向チャットPWAは実装・起動・テスト済み。実際の個人WeChatの送受信は未完成です。**
+元のPCの絶対パス、実DB、バックアップ保存先、接続設定の所在は **Git対象外の `.runtime/HANDOFF_LOCAL.md`** に記載しています。実パスを含む調査報告は `.runtime/HISTORY_STORAGE_REPORT.md`。別PCやクラウドAIにはこれらが自動で渡るわけではありません。
 
-ユーザーの最終目的は、今の個人WeChatアカウント・友達・グループを変えずに、自作の日本語アプリから会話を確認して返信することです。現在の成果は共通基盤とMock動作、Windows常駐、携帯からの接続までです。実WeChatへの橋渡しが次の主要課題です。
+## 保存場所の実測
 
-開発指示は設計だけで終わらず実装・起動・テストすること、実機未検証を成功としないことです。画像・ファイル・音声・日中翻訳・AI返信案は将来の拡張対象です。
+| 対象 | 確認した内容 | まだできないこと |
+|---|---|---|
+| `%USERPROFILE%/xwechat_files/<account>/db_storage/message/message_0.db`〜`message_5.db` | 本文DB候補6ファイル。PC移行完了付近に更新 | 通常SQLiteでは開けない |
+| 現行 `db_storage` 全体 | contact・session等を含む29DBすべてで通常SQLiteヘッダーなし、スキーマ読取失敗 | 本文・会話ID・件数の読取 |
+| 旧 `Documents/WeChat Files/<account>/Msg` | 選択した本文・基本情報DB9個も同様 | 旧DBの本文取込 |
+| 本人指定の `xwechat_files/Backup/...` | 20,824ファイル、148,043,691,223論理バイト。20,818ヘッダーがRMFH | 専用バックアップ本文の取込 |
+| `temp/phone/migration.db` | 通常SQLite。移行タスク用の2テーブル | 会話本文のエクスポートとして利用できない |
+| `msg/attach`・`file`・`video`・`migrate` | 媒体の保存領域が存在 | 全メッセージへの対応付け・ボイス原音取得 |
 
-## 最新の追加要望とUI
+バックアップの1,734はChatPackageを持つフォルダー数です。読めた会話数や、完全な会話数ではありません。本人はスマートフォンの全履歴をPCへ移行済みと報告し、PC側の移行完了も以前に確認しました。**PCへの移行完了と、こもれびへの取り込み完了は別です。**
 
-ユーザーは「AIを前提に、返信の急ぎ順で並べ替え、返信案を出し、次にやることをタスクへ入れたい」と指定した。初期画面を **対応すること** に変更し、理由付きの優先度・手動調整、定型返信案→編集用下書き、タスク候補→本人確定→SQLite保存、未完了／完了と元メッセージへの移動を実装した。チャット一覧も優先度順にできる。
+調査はファイル配置・サイズ・更新時刻・16バイトのヘッダーと読み取り専用のスキーマ照会まで。`mode=ro&immutable=1` の形式検査はWALを反映しないため、最新履歴の一貫したスナップショットではありません。暗号化形式と整合する観測ですが、具体的な鍵・暗号設定を実証したわけではありません。鍵抽出・復号は行っていません。
 
-**実AIは未接続。** `backend/app/assistance.py` の `LocalRulesProvider` が保存済み直近50件を簡易判定し、返信案・タスク名は定型文を返す。画面には「AI未接続」と表示し、外部への本文転送はしない。AIを追加する次の作業者は `docs/AI_EXTENSION.md` のUI仕様とデータ制約を必ず読む。
+根拠と一次資料へのリンクは `docs/LOCAL_HISTORY_STORAGE.md` にあります。SiverWXBot Plus / wxautoは画面操作を中心とする参考実装で、ネイティブ履歴DBの直接読取を解決するものとは確認していません。
 
-新しいコードは `frontend/src/components/attention-center.tsx`、`frontend/src/app/attention.css`、`backend/app/assistance.py`、`003_assistance_tasks.sql`。`/api/attention`、`/api/tasks`、`/api/chats/{id}/priority` を追加。タスクは1受信メッセージにつき1件。登録時のタイトル・期限編集と完了切替は可能、登録後の編集・削除・通知・外部タスク連携は未実装。
+## 次の開発
 
-既存下書きの上書き、自動送信、タスク候補の自動登録をしない。送信が未確定／失敗の場合は状態確認を優先。タスク作成と返信済みは別状態。手動優先度は新着で勝手に書き換えない。
+1. **直接読取の条件を確立する。** 対応版・ライセンス・鍵の取得方法・外部通信の有無まで調査する。本文付きの正規エクスポート、利用権のある読み取り可能なDB、非侵襲的な読取方法が候補。暗号化DBを通常SQLiteとして開く試行を繰り返すだけで終えない。
+2. 条件を満たす方法があれば、UI Adapterと独立したReader／Importerを追加する。まず一時DBへ少量取り込み、会話ID・送信者・時刻・方向・本文・添付対応を実データと照合する。取得できない値は推測で確定しない。
+3. 元DBを変更せず、一貫した読み取りコピーを用いる。WAL、複数DB、アカウント切替、途中停止、再起動、再実行、同文の別発言を扱う。元のメッセージIDと出典・取得範囲を保存して重複を防ぐ。原本への書き戻しをしない。
+4. 一括インポート後の増分取得・永続カーソル・切断からの回復を実装する。初回履歴には通知や未読を発生させず、新着だけ通知する。ファイルが読めたことだけで「全会話・全期間・リアルタイム同期済み」と表示しない。
+5. 既存UI由来の会話・メッセージとの安全な対応付けを検証する。名称一致だけで統合・送信先変換しない。既存の部分履歴、キュー、添付、通知を保持する。
+6. 読み取りの直接同期と送信は別問題として扱う。DBへの直接書き込みで送信を実装しない。現在の実送信停止を勝手に解除しない。追加実テスト送信には宛先・本文を含む本人の明示許可が必要。
 
-## ユーザーが決めた運用
+この条件で読める方法を見つけられなければ、何が不足するかを具体的に報告してください。実装可能な部分は一時DB・合成データで進められますが、ダミーのImporterを実データの直接同期成功として報告しないでください。
 
-- **Windows常駐**。WindowsがAPI・DB・画面配信を兼ねる。Synologyへのデプロイ案は取りやめた。
-- 携帯にはホーム画面から開くPWAを追加する。ネイティブのApp Store / Google Play配布物は作っていない。
-- 携帯で毎回VPNを接続する運用はユーザーが却下。現在は **Windows側のTailscale Funnel + アプリ認証** で通常のHTTPSアクセスに変更済み。
-- 本人はこのアプリの外部公開を明示的に許可済み。ログイン画面・静的ファイル・固定のヘルス応答が公開され、会話・管理・送信・WebSocketは認証必須。
-- Windowsが起動・ログイン・ネット接続している必要がある。スリープやサインアウト中は利用できない。電源設定や無人ログインは変更していない。
-- WeChatログインは本人が後日行う方針。最後の実機観測はQRコード認証待ち。実送信の許可はまだない。
-- 将来AIと接続したい意向はあるが、AIへの会話転送・APIキー設定・自動返信は未実装。導入サービスも未定。
+前回の終了直前に検索結果で見つけた未評価の候補は [ExportWeChat CLI](https://exportwechat.com/cli-usage)、[GreenBubblesの形式説明](https://github.com/bojieli/greenbubbles/blob/main/docs/WECHAT_DATABASE_FORMAT.md) です。**ソース・鍵取得経路・Windows互換性・ライセンスは未監査で、導入も実行もしていません。** 名前や検索結果だけで安全・対応済みとは扱わないでください。
 
-## 再開時の読む順序
+## 維持する制約
 
-1. このファイルと `AGENTS.md`
-2. `README.md` — 起動・API・送信状態・セキュリティ
-3. `WECHAT_INTEGRATION_STATUS.md` — 実装済み／実機確認／未対応／ライブラリ調査
-4. `TEST_RESULTS.md` — 成功／失敗／未検証の区別
-5. `docs/WINDOWS_SETUP.md`、`docs/MOBILE_SETUP.md`、`docs/AI_EXTENSION.md`
+- UIA、wxauto、wxautox4、OCR、SDKによる会話の画面巡回を再開しない。以前の私有診断スクリプトを実行しない。
+- プロセス／DLL注入、認証回避、不正な復号、通信偽装は採用しない。これまでの非侵襲方針では、プロセスメモリからの鍵抽出も採用していない。「直接同期」という目標だけを制約解除と解釈しない。
+- WeChat認証・購入・ライセンス操作は本人が行う。認証コードやキーを再掲しない。
+- 実送信は過去の自分宛て1件のみ。永続送信試行記録も1件。前回のテストを再送しない。
+- 未送信／処理中／確認済み／確認不能／失敗を維持。確認不能・失敗を自動再送しない。送信時の宛先ID・名称の照合を省略しない。
+- 外部AIは無効のまま。会話・添付を外部AIや解析サービスへ勝手に送信しない。AI生成結果は下書き／候補とし、送信・タスク登録は本人が確定する。
+- `.env`、`.runtime/`、`data/`、DB、ログ、接続キー、会話本文、認証情報はGitや公開の引き継ぎ文に含めない。
+- 現在のWindows常駐と認証付きTailscale Funnel公開は許可済み。通常の修正・テスト・同じアプリの再起動に再承認は不要。別の公開先を勝手に追加しない。
 
-別AIへ依頼するときの短い文面は `NEXT_AI_PROMPT.md` にあります。
+## 実装の構成
 
-## 新しいチェックアウトで起動する
+Next.js 16.4.5 / React 19.2.4 / TypeScript / Tailwind / PWA、Python 3.10 / FastAPI / SQLite / WebSocket。フロントは静的exportをFastAPIから配信し、通常運用でNext.jsサーバーは不要。127.0.0.1:8765、workers=1。Windowsログイン中に常駐し、携帯は認証付きFunnel HTTPSから接続する構成です。
 
-Windows、Node.js 20.9以上、Python 3.10以上、PowerShellを使用。実際に検証した環境はWindows 11 / Node 24.18.1 / Python 3.10.6です。
+最後に検証したWeixinは4.1.8.107、中国語UI。wxautox4 Plus 41.2.3は別venvへ導入・本人許可の認証済みですが、現在は起動しません。無料版・UIA・OCRのコードも残っています。
+
+| ファイル | 役割／再利用する箇所 |
+|---|---|
+| `backend/app/adapters/base.py` | Adapter契約・会話／メッセージ型 |
+| `backend/app/adapters/stored_history.py` | 現在の閲覧専用Adapter。SDKを構築せず読取／送信不可を返す |
+| `backend/app/config.py`・`main.py` | UI無効設定、Adapter選択、取得API拒否。環境変数省略時はtrueのため、falseの明示設定を落とさない |
+| `backend/app/database.py`・`migrations/001`〜`009` | 保存、出典／重複、キュー、添付、通知、履歴フラグ・時系列ページング |
+| `backend/app/engine.py` | 非同期同期・送信キュー・更新イベント |
+| `backend/app/adapters/plus_core.py`・`plus_history.py` | 過去方式の永続処理・履歴ジョブの参考。UI取得部分は停止したまま |
+| `backend/app/media_store.py` | 添付本体のローカル保存と整合性 |
+| `frontend/src/components/history-sync.tsx` | 画面取得停止の表示。巡回ボタンを表示しない |
+| `frontend/src/app/page.tsx`・`frontend/src/lib/api.ts` | チャット、検索、設定、送信状態、認証付きAPI |
+| `scripts/resident.py` | Windows常駐・単一起動・アプリ障害復旧 |
+| `scripts/inspect-backup.py` | ネイティブバックアップの形式・件数調査。本文Importerではない |
+| `scripts/import-reader-archive.py` | 旧Readerの保存済み履歴の移行用。ネイティブWeChat DBのImporterではない |
+
+UI・API・認証・Mock・DBを作り直す必要はありません。SiverWXBot Plusの再利用調査は `docs/architecture.md`。AI優先度・翻訳・返信案・要約・タスクは `docs/AI_EXTENSION.md`。OpenAI Providerは実装されていますが、稼働環境では外部AI無効・実API未検証です。
+
+Next.js変更前に `frontend/node_modules/next/dist/docs/` の該当ガイドを読んでください。
+
+## 検証済み範囲と未検証
+
+| 対象 | 結果 | 範囲 |
+|---|---|---|
+| 最終実装のPython回帰 | 成功 | 247件。Starletteの非推奨警告1件 |
+| TypeScript・Next.js | 成功 | 型検査・静的export |
+| 最後のUI停止変更のChrome検証 | 成功 | 関連2シナリオ。全ブラウザテストを最後に一括再実行したという意味ではない |
+| 常駐版のデータ保持 | 成功 | 313メッセージ、85添付レコード、送信キュー1件、通知イベント10件を更新前と同一に保持。保存済み添付本体のハッシュ一致 |
+| 画面停止の実運用 | 成功 | UI worker 0、取得関連API 409、携帯幅Chromeで保存履歴閲覧・返信不可。送信POST・外部AI POSTとも0 |
+| DB／バックアップの直接本文読取 | 失敗・未対応 | 取得0件。通常SQLiteによる対象スキーマ照会は全件失敗 |
+| 全会話・全履歴の直接同期 | 未検証 | 実装・読み出し条件が未確立 |
+| 携帯のPush到達・通知音 | 未検証 | 本人が「あとで試す」と回答。Chrome幅の検証は携帯実機の代わりにならない |
+| グループ実送信、WeChat再起動復旧、実AI品質、音声原音、メディア送信 | 未検証または未対応 | 過去のMock／合成SDK試験と混同しない |
+
+保存済み43チャット行はUI観測の世代等を含み、43個の一意なWeChat会話や全会話数を証明しません。313行も全履歴取込件数ではありません。詳細と過去の試験は `TEST_RESULTS.md` を参照してください。
+
+## 新しい環境での起動・テスト
+
+Windows、Python 3.10以上、Node.js 20.9以上。既存の稼働PCでは先に私有の `.runtime/HANDOFF_LOCAL.md` を確認してください。新しいチェックアウトはMockの別DB・別キーになります。
 
 ```powershell
-# リポジトリのルートから
-cd wechat-chat
+# wechat-chat/ で実行。新しい環境のMock用。
 .\scripts\setup.ps1
 .\scripts\start.ps1
+# http://127.0.0.1:8765
 ```
 
-`http://127.0.0.1:8765` を開く。初回にランダム生成される `.runtime/access-token.txt` の接続キーでログインする。`.env` に独自キーを設定している場合はそちらが優先される。新しいチェックアウトでは新しいキーとMock DBを生成する。稼働PCのキー・DB・Tailscale設定はGitから復元されない。
-
-セットアップはvenv、固定Python依存、npm ci、Next.js静的ビルドを行う。既存 `.env` は上書きしない。Windows UIA診断は追加依存が必要:
+`.env.example` は `WECHAT_ADAPTER=mock`、`WECHAT_UI_ACCESS_ENABLED=false`。セットアップは既存 `.env` を上書きしません。稼働版の `.env`、DB、メディアをMockで置換しないでください。稼働PCで8765ポートへ二重起動しないでください。
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r backend/requirements-windows.txt
-.\.venv\Scripts\python.exe scripts/diagnose-wechat.py
-```
-
-同じPCで既存アプリが動いている場合、新しいチェックアウトを同じ8765ポートで二重起動しない。テスト専用サーバーは8877と一時DBを使う。既存DBを複数のサーバーから開かない。
-
-## 技術構成と主要ファイル
-
-| 場所 | 役割 |
-|---|---|
-| `frontend/src/app/page.tsx` | 日本語の会話一覧、個人/グループ会話、検索、設定、ログイン、送信状態 |
-| `frontend/src/components/mobile-install.tsx` | PWA追加案内、private/publicに応じた接続方法 |
-| `frontend/src/lib/api.ts` | 型、認証付きfetch、表示用のエラー文言 |
-| `frontend/next.config.ts` | Next.js 16.4.5。開発はrewrite、本番は静的export |
-| `frontend/public/sw.js` | オフライン案内・アイコンのみキャッシュ。本文・API・キーは保存しない |
-| `backend/app/main.py` | FastAPI、REST、WebSocket、静的ファイル配信 |
-| `backend/app/security.py` | 接続キー照合、メモリ上のセッション、Origin照合、試行回数制限 |
-| `backend/app/body_limit.py` | chunkedを含む32KiBの本文上限と読み取り期限 |
-| `backend/app/database.py` / `migrations/` | SQLite、重複排除、永続キュー、既読カーソル |
-| `backend/app/engine.py` | 同期、FIFO送信処理、受信監視、変更イベント |
-| `backend/app/adapters/base.py` | WeChatAdapterの抽象契約とメッセージ等の型 |
-| `backend/app/adapters/mock.py` | 架空の個人3・グループ2、受信、切断、送信結果の再現 |
-| `backend/app/adapters/windows_uia.py` | Windows診断のラッパー。実送受信は明示的に拒否 |
-| `backend/app/adapters/windows_probe.py` | exe版・ウィンドウ・UIA状態の読み取り専用診断 |
-| `scripts/resident.py` | 常駐監視、単一インスタンス、障害再起動、Windows Job Object |
-| `scripts/mobile-access.py` | Serve/Funnel設定、公開前の認証チェック、別ルートの上書き防止 |
-| `scripts/verify-mobile.py` | HTTPS/WSS確認。公開DNSのIP経由でFunnelを検証可能 |
-
-React 19.2.4 / TypeScript 5.9.3 / Tailwind 4、Python FastAPI / SQLite / Uvicorn / asyncioを使用。依存の正はそれぞれのlockファイル。通常運用ではNext.jsのサーバーは不要で、FastAPIが `frontend/out/` を配信する。バックエンドはworkers=1、待受は127.0.0.1:8765。
-
-## 維持する挙動
-
-- 送信状態は `pending / sending / confirmed / unknown / failed`。画面表示は未送信／送信処理中／送信確認済み／確認不能／失敗。
-- 受付時とAdapter呼び出し前に宛先ID・名称を照合する。名前だけで実WeChatへ送らない。
-- `sending` のまま停止したキューは再起動時に `unknown` とする。確認不能・失敗を自動再送しない。まだ処理を開始していないpendingは復帰後に処理する。
-- UUID受付IDで二重受付を防ぐ。HTTP応答が失われた場合、画面は同じIDのGET照会だけを行い、勝手に再POSTしない。
-- 外部IDがあるメッセージはチャット単位で一意。外部IDがない場合は指紋で判定するが、完全精度を保証しない。`identity_quality` / `timestamp_quality`を保持する。
-- 取得済み範囲だけ表示・検索する。「完全同期」と誤表示しない。
-- WebSocketは変更通知で、本文は認証付きRESTから取得する。切断時は送信ボタンを無効化し、下書きを保持する。
-- 本文・キーをログへ出さない。セッションはHttpOnly、HTTPSはSecure、SameSite=Strict。12時間とプロセス再起動で失効。失敗ログインと成功ログインは別枠。
-- 本文上限32KiB、読み取り10秒、Uvicorn同時接続64、WS受信4KiB、認証済みWS接続20まで。
-
-## 実WeChatの現在地
-
-実機のWindows版Weixinは **4.1.15.56**。UIA診断でプロセスと版、ログイン待機、応答の有無を確認した。最後の観測はQRコード認証待ちで、本人はログインを後日に延期した。
-
-**チャット一覧・本文・送信者・時刻・方向・安全な宛先IDの取得は未実装。送信も未実装。** 現在のWindowsUIAAdapterは `can_read=false` / `can_send=false` を維持する。
-
-wxauto / wxauto4 / wxautox4の資料を調査したが導入していない。調査時のwxauto4無料版の公称対応は4.1.8.107までで、この実機は範囲外。Plus版は購入・アクティベーションと条件確認が必要で、契約を行っていない。導入判断の一次資料は連携状況ファイルに記載。依存候補の版・ライセンスは次回作業時に再確認する。
-
-プロセス注入・DLL注入・認証回避・DB復号・通信偽装は不採用。プロセスはQUERY_LIMITED_INFORMATIONだけで照会し、メモリを読まない。UIが必要な情報を公開していない場合は未対応として止める。
-
-## 次に進める作業
-
-1. **実WeChatの読み取り可否を確立する。** 本人が正規クライアントで手動ログインし、検証可能なテスト会話を表示してから、4.1.15.56のUIAで取得可能項目を調べる。本文や個人情報を診断ログ・Gitへ保存しない。
-2. 取得可能なら版別のChat Discovery / Message ReaderをAdapter内へ実装する。個人・グループ・過去履歴の範囲・時刻・方向・同一文面の別発言・再接続の重複を検証する。
-3. **実送信は最後。** 安定した宛先IDと画面の再照合を確立し、本人が指定したテスト相手・本文への送信許可を得てから個人→グループの順に確認する。結果が証明できなければunknownとする。
-4. iPhoneでVPNをオフにした携帯回線から、ログイン・ホーム画面追加・キーボード・Mock返信を本人と確認する。Chromeのモバイル幅の成功をiPhone実機成功と呼ばない。
-5. AI中心のUIは先に実装済み。`docs/AI_EXTENSION.md` に沿って、簡易Providerを実AIへ拡張する。文脈による優先順位・返信案・タスク候補を本人に提示し、手動確認を残す。対象会話・履歴範囲・転送先を確認するまで外部AI転送は有効にしない。自動返信はしない。
-
-## テスト・検証結果
-
-最終の回帰テストは **Python 54件、Chrome E2E 15件、合計69件成功**。本番ビルドとTypeScript検査も成功。Funnelの公開DNSで得た2つの中継IPを使い、TLS証明書検証、未認証拒否、ログイン、WSS、Mockグループの受信・送信、ログアウトを確認した。Chromeでも公開IP経由で携帯表示とVPN不要の案内を確認した。
-
-```powershell
-# wechat-chatから
-.\scripts\test.ps1
-# 個別に実行する場合
 .\.venv\Scripts\python.exe -m pytest backend/tests -q
 cd frontend
 npm.cmd run typecheck
@@ -140,19 +130,8 @@ npm.cmd run build
 npm.cmd run test:e2e
 ```
 
-PythonにはStarlette TestClient/httpxに関する非推奨警告が1件ある。最終テストに残っている失敗はない。公開切替直後の片系統のTLS失敗は反映後に解消した。詳細な途中の修正と各検証範囲はTEST_RESULTSを参照。
+テストはMock・一時DB・8877ポートを使います。変更に応じてテストを選び、UI禁止条件、原本非変更、重複防止、停止再開、既存データ保持を確認してください。成功・失敗・未検証を区別して報告します。
 
-未検証: 実WeChat送受信、iPhone/Mac実機、携帯回線、実際の再ログインによる自動起動、PCスリープ・画面ロック後のWeChat操作。未対応: バックグラウンドPush、画像/音声/ファイル、実AI推論、SQLite自体の暗号化。
+## 今回の引き継ぎ保存
 
-## 稼働環境とGitの違い
-
-- Gitにないもの: `.env`、`.runtime/`、`data/`、DB、キー、ログ、venv、node_modules、ビルド結果、テスト画像。接続キーを公開リポジトリや引き継ぎ文へ貼らない。
-- 稼働URL・公開モードは元のPCの `.runtime/mobile.json`。生成キーは `.runtime/access-token.txt`、監視状態は `.runtime/resident/state.json`。同PCの詳細はGit対象外の `.runtime/HANDOFF_LOCAL.md`。
-- `.runtime`のコピーで別PCへそのまま公開設定を移植しない。新しいPCではTailscaleの本人認証・端末固有URLを設定する。
-- インストール済み自動起動は本人のスタートアップの `Komorebi Chat.lnk`。pythonwで対話ユーザーセッションに起動し、Windowsサービスは作っていない。
-- 常駐停止は `scripts/stop.ps1`。解除は `scripts/uninstall-resident.ps1`。公開を私設接続へ戻すのは `mobile-access.py enable`、中継解除は `disable`。別アプリの設定を消すresetは使わない。
-- 任意のアイコン再生成スクリプトは `@napi-rs/canvas` を必要とする。通常セットアップは既存PNGを使うため不要。再生成時は依存を明示的に追加・確認する。
-- 親のmainには別アプリのSynology自動デプロイがある。この引き継ぎ用ブランチをmainへ無断でマージしない。
-- GitHubへの保存は最新origin/mainを基にした別worktreeで行った。元の稼働中フォルダーのブランチ・未追跡ファイル・運用設定は切り替えていない。再開は上のclone手順か専用ブランチのworktreeで行い、稼働中フォルダーを無理にcheckoutしない。
-
-この文書は会話全体の代わりに渡せるよう、実装・運用・許可の範囲をまとめたものです。現状を実WeChat連携の完成版として紹介しないでください。
+この更新は引き継ぎ文書の整理です。稼働アプリを再起動せず、実送信・UI取得・外部AI呼び出しを行いません。コードは専用GitHubブランチへ保存し、既存のDB・添付・運用設定は元のPCの私有バックアップへ保存します。バックアップの実パスと確認結果は `.runtime/HANDOFF_LOCAL.md` に記載します。GitHubやソースZIPだけでは個人データ・認証設定は復元されません。
