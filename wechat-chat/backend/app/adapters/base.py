@@ -35,6 +35,7 @@ class Message:
     delivery_status: str | None = None
     attachment: dict | None = None  # Private local media metadata, never an SDK object.
     live_event: bool = False  # Only an actual new-message callback/injection, never a history scan.
+    historical: bool = False  # Backfill never increments unread or emits notifications.
 
 
 @dataclass

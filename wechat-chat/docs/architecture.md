@@ -1,5 +1,7 @@
 # SiverWXBot Plus調査とこもれびの構成
 
+最新: `plus_history.py`で読み取り専用の履歴キューと会話一覧の巡回を追加。SDK観測IDのチェックポイントと受信箱を原子的に保存し、ライブ送信のbindingと分離します。詳細は [HISTORY_SYNC.md](HISTORY_SYNC.md)。
+
 最新の追加: 通常のチャットと新着順を起動画面にし、Plusの手動返信を自分宛て1件で実機検証しました。SDKを1回だけ呼び、最大5回の読み取りで送信後の表示を照合します。確認不能の再送はありません。
 
 通知はAdapterが新規callbackに付ける `live_event` を基に、受信本文と同じSQLiteトランザクションで `notification_events` に保存します。履歴・送信・重複・添付取得では通知を作りません。認証済みイベントフィードをWebSocketで更新し、前景の音と会話遷移を実装。端末が明示登録した `push_subscriptions` へ汎用Pushだけを送り、本文・名前・添付を外部へ渡しません。Service Workerから該当会話を開き、本人が返信します。[運用・制限](NOTIFICATIONS_AND_REPLY.md)。

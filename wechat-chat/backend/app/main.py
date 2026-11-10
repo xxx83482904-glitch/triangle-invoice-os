@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import json
 from datetime import date
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
@@ -70,6 +71,10 @@ class TaskState(BaseModel):
 class MockAction(BaseModel):
     action: Literal["receive", "disconnect", "reconnect", "next_unknown", "next_failed", "next_confirmed"]
     chat_id: str | None = None
+
+
+class HistoryAction(BaseModel):
+    action: Literal['start','pause','resume']
 
 
 def create_app(settings=None, adapter=None, ai_provider=None, push_transport=None):
@@ -179,6 +184,28 @@ def create_app(settings=None, adapter=None, ai_provider=None, push_transport=Non
     @api.get("/status")
     async def status():
         return await app.state.engine.status()
+
+    @api.get('/history')
+    async def history_status():
+        adapter=app.state.engine.adapter
+        report=app.state.db.one('SELECT report FROM backup_inspections ORDER BY id DESC LIMIT 1')
+        return {'supported':isinstance(adapter,WindowsPlusAdapter),
+                'sync':adapter.history_status() if isinstance(adapter,WindowsPlusAdapter) else None,
+                'backup':json.loads(report['report']) if report else None}
+
+    @api.post('/history',status_code=202)
+    async def history_control(body: HistoryAction):
+        security.rate_limit('history',12)
+        adapter=app.state.engine.adapter
+        if not isinstance(adapter,WindowsPlusAdapter):
+            raise HTTPException(409,'history_unavailable')
+        try:
+            result=await adapter.history_command(body.action)
+        except ValueError as exc:
+            code=str(exc) if str(exc) in ('history_scope_changed','history_connection_required') else 'history_unavailable'
+            raise HTTPException(409,code) from None
+        app.state.engine.hub.publish('status')
+        return result
 
     @api.get("/device")
     async def device():
@@ -299,10 +326,12 @@ def create_app(settings=None, adapter=None, ai_provider=None, push_transport=Non
         return result
 
     @api.get("/chats/{ident}/messages")
-    async def messages(ident: str, before: int | None = Query(None, ge=1), limit: int = Query(100, ge=1, le=200)):
+    async def messages(ident: str, before: int | None = Query(None, ge=1), limit: int = Query(100, ge=1, le=200), through: int | None = Query(None, ge=1)):
         require_chat(ident)
-        rows = app.state.db.messages(ident, before, limit)
-        has_more = bool(rows and app.state.db.one("SELECT id FROM messages WHERE chat_id=? AND id<? LIMIT 1", (ident, rows[0]["id"])))
+        if before and through:
+            raise HTTPException(422,'invalid_request')
+        rows = app.state.db.messages(ident, before, limit, through=through)
+        has_more = bool(rows and app.state.db.messages(ident, rows[0]['id'], 1))
         return {"messages": rows, "has_more": has_more, "history_scope": "stored_only"}
 
     @api.post("/chats/{ident}/read")

@@ -44,6 +44,9 @@ export const priorityOrder: Record<Priority, number> = { high: 0, normal: 1, low
 
 export const delivery: Record<string, string> = { received: "受信", pending: "未送信", sending: "送信処理中", confirmed: "送信確認済み", unknown: "確認不能", failed: "失敗" };
 const errors: Record<string, string> = {
+  history_unavailable: "この接続では履歴の巡回を開始できません。",
+  history_connection_required: "WeChatとの接続を確認してから開始してください。",
+  history_scope_changed: "WeChatの起動状態が変わりました。会話一覧から再確認してください。保存済み履歴は保持されています。",
   source_unavailable: "元のメッセージをWeChatで確認できません。接続状態と監視対象を確認してください。",
   attachment_not_found: "添付ファイルが見つかりません。",
   attachment_missing: "保存したファイルが見つかりません。",

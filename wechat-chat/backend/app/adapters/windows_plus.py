@@ -90,11 +90,15 @@ def validate_snapshot(data):
         chat_ids.add(chat.external_id)
     for event in events:
         message = Message(**event["message"])
+        history = message.historical
         if (type(event["sequence"]) is not int or event["sequence"] < 1 or message.chat_id not in chat_ids
             or message.direction not in ("incoming", "outgoing") or message.message_type not in {"text", *KINDS}
             or not message.source_key or not 0 < len(message.content) <= 20000
-            or message.external_message_id is not None or message.timestamp is not None
-            or message.timestamp_quality != "unavailable" or message.identity_quality != "uia_runtime"
+            or message.external_message_id is not None
+            or type(history) is not bool
+            or (not history and (message.timestamp is not None or message.timestamp_quality != 'unavailable' or message.identity_quality != 'uia_runtime'))
+            or (history and (message.identity_quality != 'sdk_observation' or message.timestamp_quality not in ('unavailable','sdk_display')
+                              or not message.chat_id.startswith('wxautox4:local:history:') or message.live_event))
             or type(message.live_event) is not bool
             or message.delivery_status != ("received" if message.direction == "incoming" else "unknown")):
             raise ValueError("invalid_plus_snapshot")
@@ -187,6 +191,19 @@ class WindowsPlusAdapter(WeChatAdapter):
 
     async def get_chats(self):
         return [Chat(**row) for row in self.snapshot.get("chats", [])]
+
+    def history_status(self):
+        return self.snapshot.get('history', {'state':'idle','complete':False,'discovered':0,'processed':0,'saved':0,'pages':0})
+
+    async def history_command(self, command):
+        async with self.lock:
+            data = await self.rpc.call('history', command=command)
+            if data.get('error') and 'state' not in data:
+                raise ValueError(data['error'] if data['error'] in ('history_scope_changed','history_connection_required') else 'history_unavailable')
+            if data.get('state') not in ('idle','running','paused','partial') or data.get('complete') is not False:
+                raise ValueError('history_unavailable')
+            self.snapshot['history'] = data
+            return data
 
     async def get_messages(self, chat_id):
         return [Message(**e["message"]) for e in self.snapshot.get("events", []) if e["message"]["chat_id"] == chat_id]

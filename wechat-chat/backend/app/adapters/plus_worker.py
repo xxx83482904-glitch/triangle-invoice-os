@@ -58,6 +58,17 @@ def main():
                                 result = {"message": asdict(supervisor.fetch_attachment(chat, source, vault))}
                             except Exception:
                                 result = {"error": "source_unavailable"}
+                        elif action == 'history':
+                            command = request.get('command')
+                            if command not in ('start','resume','pause'):
+                                raise ValueError()
+                            if supervisor.state != 'ready' and command != 'pause':
+                                result = {'error':'history_connection_required'}
+                            else:
+                                try:
+                                    result = supervisor.history_sync.command(command, supervisor.scope, supervisor.account)
+                                except ValueError:
+                                    result = {'error':'history_scope_changed'}
                         elif action == "send":
                             qid = str(UUID(request["request_id"]))
                             content, chat = request["text"], request["chat_id"]

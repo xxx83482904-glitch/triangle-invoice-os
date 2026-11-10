@@ -60,17 +60,28 @@ class Database:
 
     def chats(self):
         return self.all("""SELECT c.*, s.last_sync_at,s.connection_status,s.error_message,
-           (SELECT content FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_message,
-           (SELECT delivery_status FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_delivery_status,
-           (SELECT identity_quality FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_identity_quality,
-           (SELECT timestamp_quality FROM messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) AS last_timestamp_quality
+           (SELECT content FROM messages WHERE chat_id=c.id ORDER BY COALESCE(timestamp,observed_at) DESC,id DESC LIMIT 1) AS last_message,
+           (SELECT delivery_status FROM messages WHERE chat_id=c.id ORDER BY COALESCE(timestamp,observed_at) DESC,id DESC LIMIT 1) AS last_delivery_status,
+           (SELECT identity_quality FROM messages WHERE chat_id=c.id ORDER BY COALESCE(timestamp,observed_at) DESC,id DESC LIMIT 1) AS last_identity_quality,
+           (SELECT timestamp_quality FROM messages WHERE chat_id=c.id ORDER BY COALESCE(timestamp,observed_at) DESC,id DESC LIMIT 1) AS last_timestamp_quality
            FROM chats c LEFT JOIN sync_state s ON s.chat_id=c.id ORDER BY c.last_message_at DESC, c.name""")
 
     def chat(self, ident):
         return self.one("SELECT * FROM chats WHERE id=?", (ident,))
 
-    def messages(self, ident, before=None, limit=100):
-        rows = list(reversed(self.all("SELECT * FROM messages WHERE chat_id=? AND id<? ORDER BY id DESC LIMIT ?", (ident, before or 9223372036854775807, limit))))
+    def messages(self, ident, before=None, limit=100, *, through=None):
+        cursor = through or before
+        anchor = self.one('SELECT COALESCE(timestamp,observed_at) AS stamp,id FROM messages WHERE chat_id=? AND id=?',(ident,cursor)) if cursor else None
+        if cursor and not anchor:
+            return []
+        query = 'SELECT * FROM messages WHERE chat_id=?'
+        params = [ident]
+        if anchor:
+            query += ' AND (COALESCE(timestamp,observed_at),id)' + ('<=' if through else '<') + '(?,?)'
+            params.extend((anchor['stamp'],anchor['id']))
+        query += ' ORDER BY COALESCE(timestamp,observed_at) DESC,id DESC LIMIT ?'
+        params.append(limit)
+        rows = list(reversed(self.all(query,params)))
         return self.with_attachments(rows)
 
     def with_attachments(self, rows):
@@ -151,12 +162,12 @@ class Database:
                         raise ValueError("source_observation_conflict")
                     return self._save_attachment(previous["id"], message.attachment)
             cur = self.conn.execute("""INSERT OR IGNORE INTO messages
-             (chat_id,external_message_id,dedupe_key,sender_id,sender_name,direction,content,message_type,timestamp,observed_at,timestamp_quality,delivery_status,identity_quality,source_key)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (chat["id"], message.external_message_id, self.fingerprint(message), message.sender_id, message.sender_name, message.direction, message.content, message.message_type, message.timestamp, stamp, message.timestamp_quality, message.delivery_status or ("received" if message.direction == "incoming" else "confirmed"), message.identity_quality or ("external" if message.external_message_id else "fingerprint"), message.source_key))
+             (chat_id,external_message_id,dedupe_key,sender_id,sender_name,direction,content,message_type,timestamp,observed_at,timestamp_quality,delivery_status,identity_quality,source_key,historical)
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (chat["id"], message.external_message_id, self.fingerprint(message), message.sender_id, message.sender_name, message.direction, message.content, message.message_type, message.timestamp, stamp, message.timestamp_quality, message.delivery_status or ("received" if message.direction == "incoming" else "confirmed"), message.identity_quality or ("external" if message.external_message_id else "fingerprint"), message.source_key, int(message.historical)))
             if cur.rowcount:
                 self._save_attachment(cur.lastrowid, message.attachment)
-                self.conn.execute("UPDATE chats SET last_message_at=MAX(COALESCE(last_message_at,''),?),unread_count=unread_count+? WHERE id=?", (message.timestamp or stamp, int(message.direction == "incoming"), chat["id"]))
-                if message.live_event and message.direction == "incoming":
+                self.conn.execute("UPDATE chats SET last_message_at=MAX(COALESCE(last_message_at,''),?),unread_count=unread_count+? WHERE id=?", (message.timestamp or stamp, int(message.direction == "incoming" and not message.historical), chat["id"]))
+                if message.live_event and not message.historical and message.direction == "incoming":
                     self.conn.execute("INSERT OR IGNORE INTO notification_events(message_id,chat_id,created_at) VALUES(?,?,?)", (cur.lastrowid, chat["id"], stamp))
         return bool(cur.rowcount)
 
@@ -173,7 +184,7 @@ class Database:
             # Do not mark arrivals newer than the client's rendered snapshot as read.
             latest = self.one("SELECT MAX(id) AS n FROM messages WHERE chat_id=?", (ident,))["n"] or 0
             self.conn.execute("UPDATE chats SET read_through_id=MAX(read_through_id,?) WHERE id=?", (min(through_id, latest), ident))
-            self.conn.execute("UPDATE chats SET unread_count=(SELECT COUNT(*) FROM messages WHERE chat_id=? AND direction='incoming' AND id>chats.read_through_id) WHERE id=?", (ident, ident))
+            self.conn.execute("UPDATE chats SET unread_count=(SELECT COUNT(*) FROM messages WHERE chat_id=? AND direction='incoming' AND historical=0 AND id>chats.read_through_id) WHERE id=?", (ident, ident))
 
     def enqueue(self, chat, content, request_id, expected_id, expected_name):
         with self.lock, self.conn:

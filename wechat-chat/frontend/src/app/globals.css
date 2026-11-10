@@ -19,3 +19,6 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition:none!important}}
 .mobile-address{display:flex;align-items:flex-start;flex-direction:column;gap:10px;margin:18px 0;padding:15px;background:var(--subtle);border-radius:12px;font-size:12px}.mobile-address>a{color:var(--green);overflow-wrap:anywhere;line-height:1.7}.mobile-address>span{color:var(--muted);font-size:11px}.install-steps{padding-left:20px;font-size:12px;line-height:1.9}.install-steps li{padding:4px 0}.mobile-install .soft-tag{display:inline-flex;gap:4px;align-items:center}.mobile-install .card-heading{flex-wrap:wrap}
 @media(max-width:760px){.app-shell{height:var(--app-height,100dvh)}.topbar{height:calc(63px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}.conversation-header{height:calc(78px + env(safe-area-inset-top))}}
+
+/* Long history jobs retain the existing mobile settings layout. */
+.history-actions { display: flex; flex-wrap: wrap; gap: 8px; }

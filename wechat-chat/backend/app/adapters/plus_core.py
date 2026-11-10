@@ -97,6 +97,8 @@ class PlusStore:
                 # Its transport origin is not part of the message identity.
                 old.pop("live_event", None)
                 new.pop("live_event", None)
+                old.pop("historical", None)
+                new.pop("historical", None)
                 if old != new:
                     raise PlusFailure("sdk_unavailable")
                 if old_attachment == new_attachment:
@@ -155,6 +157,9 @@ class PlusSupervisor:
         self.candidates = []
         self.attempted = set()
         self.unsupported = set()
+        from .plus_history import PlusHistory
+        self.history_sync = PlusHistory(store)
+        self.next_history = 0
 
     def close(self):
         if self.sdk is not None:
@@ -165,6 +170,7 @@ class PlusSupervisor:
         self.sdk, self.targets, self.candidates = None, {}, []
         self.attempted.clear()
         self.unsupported.clear()
+        self.history_sync.detach()
 
     def _failed(self, code):
         self.close()
@@ -184,7 +190,8 @@ class PlusSupervisor:
                 self.next_discover = 0
             if self.sdk.check_scope() != self.scope:
                 raise PlusFailure("not_running")
-            if self.clock() >= self.next_discover:
+            bulk = (self.history_sync.job() or {}).get('state') == 'running'
+            if not bulk and self.clock() >= self.next_discover:
                 sessions = self.sdk.sessions()
                 counts = Counter(sessions)
                 self.discovered = len(sessions)
@@ -195,7 +202,7 @@ class PlusSupervisor:
                 self.next_discover = self.clock() + 60
             # At most one new window every ten seconds. Resource limits are
             # reported as missing coverage, never silently called "all chats".
-            if len(self.targets) < self.max_listeners and self.clock() >= self.next_register:
+            if not bulk and len(self.targets) < self.max_listeners and self.clock() >= self.next_register:
                 names = [n for n in self.candidates if n not in self.attempted and n not in self.unsupported and n not in {t['name'] for t in self.targets.values()}]
                 if names:
                     name = names[0]
@@ -224,13 +231,16 @@ class PlusSupervisor:
                 self.store.ingest(message)
             self.state = "ready"
             self.backoff = 5
+            if bulk and self.clock() >= self.next_history:
+                self.history_sync.step(self.sdk, self.scope, self.account)
+                self.next_history = self.clock() + 5
         except PlusFailure as exc:
             self._failed(str(exc))
         except Exception:
             self._failed("sdk_unavailable")
 
     def snapshot(self):
-        return {"state": self.state, "version": self.version,
+        return {"state": self.state, "version": self.version, "history": self.history_sync.status(),
                 "can_send": self.state == "ready" and self.send_enabled and bool(self.targets),
                 "chats": self.store.chats(), "events": self.store.inbox(),
                 "monitoring": {"registered": len(self.targets), "discovered": self.discovered,

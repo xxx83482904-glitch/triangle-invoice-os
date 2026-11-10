@@ -4,6 +4,7 @@ No credentials, activation, OCR, automatic replies, contact mutations
 or forced name searches. UI details here require licensed real-device validation.
 """
 from dataclasses import replace
+from datetime import datetime, timezone
 from importlib.metadata import version
 import logging
 from pathlib import Path
@@ -17,7 +18,7 @@ from ..media_store import KINDS, validate_attachment
 MEDIA_LABELS = {"image": "[画像]", "file": "[ファイル]", "voice": "[ボイスメッセージ]", "video": "[動画]"}
 # These Chinese-UI entries were observed to be navigation/feed containers,
 # not a single friend/group destination. Conservatively skip same-named entries.
-SYSTEM_SESSIONS = frozenset({"公众号", "服务通知", "折叠的聊天"})
+SYSTEM_SESSIONS = frozenset({"公众号", "服务号", "服务通知", "折叠的聊天"})
 
 
 class PlusSDK:
@@ -88,6 +89,91 @@ class PlusSDK:
     def sessions(self):
         names = [s.info.get("name") for s in self.wx.GetSession()]
         return [s for s in names if isinstance(s, str) and 0 < len(s) <= 500 and s not in SYSTEM_SESSIONS][:500]
+
+    def history_sessions(self, reset=False):
+        if self.check_scope() != self.scope:
+            raise PlusFailure('not_running')
+        if reset:
+            self.wx.SwitchToChat()
+        listing = self.wx.SessionBox.session_list
+        if not listing.Exists(0):
+            raise PlusFailure('binding_unavailable')
+        if reset:
+            # Navigation keys go to the observed list, never the message editor.
+            listing.SendKeys('{Ctrl}{Home}', waitTime=0.5)
+        else:
+            listing.WheelDown(wheelTimes=3, interval=0.2, waitTime=0.5)
+        sessions = []
+        for session in self.wx.GetSession():
+            name = session.info.get('name')
+            if isinstance(name,str) and 0 < len(name) <= 500 and name not in SYSTEM_SESSIONS:
+                sessions.append({'name':name,'identity':digest([self.scope,session.control.GetRuntimeId()])})
+        if not sessions:
+            raise PlusFailure('binding_unavailable')
+        return sessions
+
+    def history_page(self, name, reopen=False):
+        if self.check_scope() != self.scope:
+            raise PlusFailure('not_running')
+        if reopen:
+            # Read-only exact lookup of a name discovered in the session list.
+            # Archive records NEVER become a send binding.
+            self.wx.ChatWith(name, exact=True, force=False)
+        info = self.wx.ChatInfo()
+        kind = {'friend':'individual','group':'group'}.get(info.get('chat_type'))
+        if info.get('chat_name') != name:
+            raise ValueError('history_destination_changed')
+        if kind is None:
+            raise PlusFailure('unsupported_chat')
+        rows = {}
+        def capture(raw):
+            if raw.type not in {'text', *KINDS} or raw.attr not in ('friend','self'):
+                return
+            key = getattr(raw, 'id', None)
+            if not isinstance(key, str) or not 0 < len(key) <= 200:
+                raise ValueError('history_identity_unavailable')
+            content = raw.content if raw.type == 'text' else MEDIA_LABELS[raw.type]
+            if not isinstance(content, str) or not 0 < len(content) <= 20000:
+                raise ValueError('history_content_unavailable')
+            stamp = None
+            value = getattr(raw, 'time', None)
+            if isinstance(value, str):
+                try:
+                    stamp = datetime.strptime(value, '%Y-%m-%d %H:%M:%S').astimezone(timezone.utc).isoformat(timespec='milliseconds')
+                except ValueError:
+                    pass
+            row = dict(key=key, content=content, kind=raw.type, sender=raw.sender if isinstance(raw.sender,str) else '',
+                       direction='outgoing' if raw.attr=='self' else 'incoming',timestamp=stamp)
+            if key in rows and rows[key] != row:
+                raise ValueError('history_identity_conflict')
+            rows[key] = row
+            if len(rows) > 500:
+                raise ValueError('history_page_limit')
+        # The SDK raises TimeoutError even after delivering valid callbacks.
+        # Keep that bounded page; a timeout is never an end-of-history proof.
+        try:
+            result = self.wx.GetHistoryMessage(n=200, callback=capture, interval=0.5, speed=1, goback=False, timeout=10)
+            for raw in result or []:
+                capture(raw)
+        except TimeoutError:
+            pass
+        after = self.wx.ChatInfo()
+        if self.check_scope() != self.scope or (after.get('chat_name'),after.get('chat_type')) != (name,info.get('chat_type')):
+            raise ValueError('history_destination_changed')
+        return {'type':kind,'rows':list(rows.values())}
+
+    @staticmethod
+    def history_messages(page, ident):
+        result = []
+        for row in page['rows']:
+            source = 'plus-history:' + digest([ident,row['key']])
+            attachment = {'id':digest(['media',source])[:32], 'kind':row['kind'], 'status':'unavailable',
+                          'error_code':'source_unavailable'} if row['kind'] in KINDS else None
+            result.append(Message(ident,row['content'],'unavailable',row['sender'],row['direction'],row['timestamp'],
+                occurrence=source,source_key=source,timestamp_quality='sdk_display' if row['timestamp'] else 'unavailable',
+                identity_quality='sdk_observation',delivery_status='received' if row['direction']=='incoming' else 'unknown',
+                message_type=row['kind'],attachment=attachment,historical=True))
+        return result
 
     def _window(self, name):
         # Require one independent conversation window owned by this WeChat
