@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.base import Chat, Message
-from app.adapters.plus_core import PlusStore
+from app.adapters.plus_core import PlusStore, PlusFailure
 from app.adapters.plus_history import PlusHistory
 from app.adapters.plus_sdk import PlusSDK
 from app.backup_inspector import inspect_backup
@@ -149,6 +149,24 @@ def test_discovery_switches_tab_only_once_and_keeps_scrolling_current_list():
     first=sdk.history_sessions(reset=True)
     second=sdk.history_sessions()
     assert actions==['switch','top','down'] and first==second
+
+
+@pytest.mark.parametrize('overlap', [True, False])
+def test_discovery_requires_overlapping_rows_after_scroll_or_stops(overlap):
+    sdk=PlusSDK.__new__(PlusSDK);sdk.scope='scope';sdk.check_scope=lambda:'scope'
+    visible=['a','b'];actions=[]
+    def scroll_down(**kw):
+        actions.append(('down',kw['wheelTimes']));visible[:]=['c','d']
+    def scroll_up(**kw):
+        actions.append(('up',kw['wheelTimes']));visible[:]=['b','c'] if overlap else ['x','y']
+    listing=SimpleNamespace(Exists=lambda _:True,WheelDown=scroll_down,WheelUp=scroll_up)
+    sdk.wx=SimpleNamespace(SessionBox=SimpleNamespace(session_list=listing),
+        GetSession=lambda:[SimpleNamespace(info={'name':n},control=SimpleNamespace(GetRuntimeId=lambda:[1,2])) for n in visible])
+    if overlap:
+        assert [s['name'] for s in sdk.history_sessions()]==['b','c']
+    else:
+        with pytest.raises(PlusFailure,match='binding_unavailable'):sdk.history_sessions()
+    assert actions==[('down',12),('up',9)]
 
 
 def native_backup(root):

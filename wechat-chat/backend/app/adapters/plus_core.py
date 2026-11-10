@@ -31,6 +31,7 @@ DETAILS = {
     "connecting": "Plusの接続とログイン状態を確認しています。",
     "not_running": "WeChatの起動を待っています。起動・本人のログイン後に再接続します。",
     "login_required": "正規WeChatで本人のログインが必要です。認証は自動操作しません。",
+    "history_import_busy": "WeChatの履歴インポート画面が開いています。完了後に画面を閉じると再接続します。",
     "account_unavailable": "ログイン中のアカウントIDを確認できないため停止しています。",
     "account_mismatch": "登録したアカウントと一致しません。別アカウントの履歴は取り込みません。",
     "binding_unavailable": "会話の宛先・画面情報を照合できないため監視を停止しました。実機での互換性確認が必要です。",

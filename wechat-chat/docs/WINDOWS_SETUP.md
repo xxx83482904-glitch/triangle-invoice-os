@@ -1,5 +1,7 @@
 # Windowsセットアップ
 
+現在は本人の指示で画面経由の取得を無効にしています。常駐版は `WECHAT_UI_ACCESS_ENABLED=false` のまま、既存のadapter/DBパスを維持してください。保存済み会話を閲覧できますが、新規取得・送信は停止します。[直接取込の調査結果](LOCAL_HISTORY_STORAGE.md)。
+
 wxautox4 Plusへの移行は [Plus専用のセットアップ・認証・実機検証手順](WXAUTOX4_PLUS.md) を参照してください。このPCでは本人の明示許可で公式認証と読み取り検証を完了しています。別PCではそのPCの正規認証が必要です。
 
 ## Mockモード

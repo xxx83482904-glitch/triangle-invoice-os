@@ -51,6 +51,10 @@ class PlusSDK:
         if not processes:
             raise PlusFailure("not_running")
         windows = [w for w in self.uia.GetRootControl().GetChildren() if w.ProcessId in processes]
+        # This real 4.1.8.107 modal blocks ChatWith/ChatInfo while the phone's
+        # copied history is still being imported. Do not navigate behind it.
+        if any(getattr(w, 'AutomationId', '') == 'GlobalRemoteImportWindow' for w in windows):
+            raise PlusFailure('history_import_busy')
         if any(w.ClassName == "mmui::LoginWindow" for w in windows):
             raise PlusFailure("login_required")
         mains = [w for w in windows if w.ClassName == "mmui::MainWindow"]
@@ -102,7 +106,15 @@ class PlusSDK:
             # Navigation keys go to the observed list, never the message editor.
             listing.SendKeys('{Ctrl}{Home}', waitTime=0.5)
         else:
-            listing.WheelDown(wheelTimes=3, interval=0.2, waitTime=0.5)
+            previous = set(self.sessions())
+            # Verified on 4.1.8.107: one 12-notch event advances ~7 rows,
+            # retaining 4 rows of overlap. If a smaller window skips them,
+            # roll back to the conservative 3-notch advance and check again.
+            listing.WheelDown(wheelTimes=12, interval=0.2, waitTime=0.5)
+            if not previous.intersection(self.sessions()):
+                listing.WheelUp(wheelTimes=9, interval=0.2, waitTime=0.5)
+                if not previous.intersection(self.sessions()):
+                    raise PlusFailure('binding_unavailable')
         sessions = []
         for session in self.wx.GetSession():
             name = session.info.get('name')

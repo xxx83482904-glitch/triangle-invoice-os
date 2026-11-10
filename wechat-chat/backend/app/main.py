@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .adapters.mock import MockWeChatAdapter
+from .adapters.stored_history import StoredHistoryAdapter
 from .adapters.base import now
 from .adapters.windows_uia import WindowsUIAAdapter
 from .adapters.windows_ocr import WindowsOCRAdapter
@@ -87,6 +88,8 @@ def create_app(settings=None, adapter=None, ai_provider=None, push_transport=Non
         db = Database(settings.db_path, settings.adapter)
         app.state.media = MediaVault(settings.db_path.parent / (settings.db_path.stem + "-attachments"))
         selected = adapter
+        if not settings.ui_access_enabled and settings.adapter != "mock":
+            selected = StoredHistoryAdapter(settings.adapter)
         if selected is None:
             if settings.adapter == "mock":
                 selected = MockWeChatAdapter()
@@ -189,12 +192,17 @@ def create_app(settings=None, adapter=None, ai_provider=None, push_transport=Non
     async def history_status():
         adapter=app.state.engine.adapter
         report=app.state.db.one('SELECT report FROM backup_inspections ORDER BY id DESC LIMIT 1')
-        return {'supported':isinstance(adapter,WindowsPlusAdapter),
+        result = {'supported':isinstance(adapter,WindowsPlusAdapter),
                 'sync':adapter.history_status() if isinstance(adapter,WindowsPlusAdapter) else None,
                 'backup':json.loads(report['report']) if report else None}
+        if not settings.ui_access_enabled:
+            result['reason'] = 'ui_access_disabled'
+        return result
 
     @api.post('/history',status_code=202)
     async def history_control(body: HistoryAction):
+        if not settings.ui_access_enabled:
+            raise HTTPException(409, 'ui_access_disabled')
         security.rate_limit('history',12)
         adapter=app.state.engine.adapter
         if not isinstance(adapter,WindowsPlusAdapter):
@@ -215,6 +223,8 @@ def create_app(settings=None, adapter=None, ai_provider=None, push_transport=Non
 
     @api.post("/wechat/diagnostics")
     async def wechat_diagnostics():
+        if not settings.ui_access_enabled:
+            raise HTTPException(409, 'ui_access_disabled')
         # A bounded read-only process; never switches the running adapter or DB,
         # activates windows, types, clicks, starts WeChat or logs message content.
         lock = app.state.wechat_diagnostic_lock

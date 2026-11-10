@@ -1,6 +1,19 @@
 import { test,expect } from '@playwright/test';
 const TOKEN='e2e-mock-only-'+'x'.repeat(40);
 
+test('disabled UI acquisition explains stored-only state without scan controls',async({page})=>{
+  await page.route('**/api/history',route=>route.fulfill({json:{supported:false,sync:null,backup:null,reason:'ui_access_disabled'}}));
+  await page.setViewportSize({width:320,height:720});
+  await page.goto('/');
+  await page.getByLabel('このアプリの接続キー',{exact:true}).fill(TOKEN);
+  await page.getByRole('button',{name:'このPCに接続',exact:true}).click();
+  await page.getByRole('button',{name:'通知設定を開く',exact:true}).click();
+  const card=page.getByRole('article',{name:'過去履歴の取り込み',exact:true});
+  await expect(card.getByText('画面経由の履歴取得は無効です。',{exact:false})).toBeVisible();
+  await expect(card.getByRole('button')).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+});
+
 test('history controls show partial coverage, pause/resume, backup distinction and mobile layout',async({page})=>{
   let state='idle';const actions:string[]=[];
   await page.route('**/api/history',async route=>{

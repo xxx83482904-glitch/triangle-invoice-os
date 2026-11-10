@@ -29,6 +29,8 @@ class Import(BaseModel):
 
 def register_ocr_routes(api, app, settings, security):
     def require_mode():
+        if not settings.ui_access_enabled:
+            raise HTTPException(409, "ui_access_disabled")
         if settings.adapter != "windows-ocr":
             raise HTTPException(409, "ocr_mode_required")
 

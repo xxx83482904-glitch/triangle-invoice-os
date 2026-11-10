@@ -103,6 +103,26 @@ def test_discovery_is_partial_bounded_and_throttled(bridge):
     assert {t["type"] for t in core.targets.values()} == {"individual", "group"}
 
 
+def test_import_dialog_waits_without_navigation_or_send_and_reconnects(tmp_path):
+    sdk=FakeSDK();store=PlusStore(tmp_path/'worker.sqlite3');clock=[0]
+    busy=[True]
+    original=sdk.connect
+    def connect():
+        if busy[0]:raise PlusFailure('history_import_busy')
+        return original()
+    sdk.connect=connect
+    core=PlusSupervisor(lambda:sdk,store,send_enabled=True,clock=lambda:clock[0])
+    core.tick()
+    assert core.state=='history_import_busy' and not sdk.registered
+    assert not core.snapshot()['can_send']
+    assert core.send(str(uuid4()),'unavailable','synthetic').status=='failed'
+    assert sdk.send_count==0
+    busy[0]=False;clock[0]=10;core.tick()
+    assert core.state=='ready' and len(sdk.registered)==1
+    assert sdk.send_count==0
+    core.close();store.close()
+
+
 def test_duplicate_names_never_opened(tmp_path):
     sdk = FakeSDK()
     sdk.names = ["同名", "同名"]

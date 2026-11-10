@@ -69,6 +69,22 @@ def test_account_uses_observed_id_field_not_nickname(sdk):
     assert instance.account_id() == "synthetic-id"
 
 
+@pytest.mark.parametrize('import_owner,blocked', [(100, True), (999, False)])
+def test_native_history_import_blocks_ui_work_only_for_wechat_process(monkeypatch, import_owner, blocked):
+    from app.adapters import windows_probe
+    monkeypatch.setattr(windows_probe, 'process_inventory', lambda: [(100, 'synthetic.exe')])
+    monkeypatch.setattr(windows_probe, 'file_version', lambda _: 'synthetic-version')
+    main = SimpleNamespace(ProcessId=100, ClassName='mmui::MainWindow', AutomationId='main')
+    importer = SimpleNamespace(ProcessId=import_owner, AutomationId='GlobalRemoteImportWindow')
+    instance = PlusSDK.__new__(PlusSDK)
+    instance.uia = SimpleNamespace(GetRootControl=lambda: SimpleNamespace(GetChildren=lambda: [main, importer]))
+    if blocked:
+        with pytest.raises(PlusFailure, match='history_import_busy'):
+            instance._main()
+    else:
+        assert instance._main()[0] is main
+
+
 def test_system_feeds_are_never_registered_as_a_reply_destination(sdk):
     instance, _ = sdk
     instance.wx = SimpleNamespace(GetSession=lambda: [SimpleNamespace(info={'name':name}) for name in

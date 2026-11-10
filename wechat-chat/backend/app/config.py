@@ -33,6 +33,7 @@ class Settings:
     plus_language: str = "cn"
     plus_client_kind: str = "微信"
     plus_preferred_chats: tuple[str, ...] = field(default=(), repr=False)
+    ui_access_enabled: bool = True
     push_enabled: bool = False
     push_key_path: Path = field(default_factory=lambda: ROOT / ".runtime" / "webpush-private.pem", repr=False)
 
@@ -100,5 +101,6 @@ class Settings:
             plus_language=plus_language,
             plus_client_kind=plus_client_kind,
             plus_preferred_chats=tuple(dict.fromkeys(preferred)),
+            ui_access_enabled=os.getenv("WECHAT_UI_ACCESS_ENABLED", "true").lower() == "true",
             push_enabled=os.getenv("WECHAT_PUSH_ENABLED", "false").lower() == "true",
         )
