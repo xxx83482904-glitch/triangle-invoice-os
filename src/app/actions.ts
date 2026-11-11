@@ -19,6 +19,7 @@ import { applyReceivedInvoiceFields } from "@/lib/received-invoice-edits";
 import { receivedAmountsFromForm } from "@/lib/received-invoice-review";
 import { assertReceivedPaidAllowed, recordPayment } from "@/lib/payment-records";
 import { ZodError } from "zod";
+import { withDocumentSubject } from "@/lib/document-subject";
 import { reflectMailInvoice } from "@/lib/mail-invoice-reflection";
 import { applyMailSorterEdits } from "@/lib/mail-processing";
 import { unlinkMailDocumentsForInvoice } from "@/lib/mail-links";
@@ -669,6 +670,7 @@ export async function createIssuedInvoice(formData: FormData) {
   const invoice: IssuedInvoice = {
     id: invoiceId,
     invoiceNumber,
+    pdfText: withDocumentSubject(undefined, optional(formData, "subject")),
     projectId: value(formData, "projectId"),
     clientId: value(formData, "clientId"),
     issueDate: value(formData, "issueDate"),

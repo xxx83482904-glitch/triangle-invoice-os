@@ -11,6 +11,7 @@ import { AttachForm } from "../attach-form";
 import { ImportDropzone } from "../import-dropzone";
 
 export const documentTabs = [
+  { kind: "PURCHASE_ORDER", label: "発注書", formal: "Purchase Order", icon: FileText },
   { kind: "SUPPLIER_INVOICE", label: "商品の請求書", formal: "Invoice", icon: FileText },
   { kind: "PACKING_LIST", label: "梱包明細", formal: "Packing List", icon: Package },
   { kind: "WAYBILL", label: "輸送書類", formal: "B/L・AWB", icon: Ship },

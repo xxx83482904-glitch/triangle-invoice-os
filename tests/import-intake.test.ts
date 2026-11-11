@@ -40,6 +40,26 @@ after(async () => {
 });
 
 const permitText = "輸入許可通知書\n輸入申告番号 SYN-0001\n許可日 令和8年10月5日\n入港日 2026/10/01\n仕出人: 合成海外家具廠\n課税価格 500,000円\n関税額 15,000円\n消費税額 40,000円\n地方消費税額 11,000円";
+test("purchase order attaches its original without creating a payable or filling customs amounts", async () => {
+  const permit = await intakeImportDocument(input(permitText));
+  const before = (await readData()).importShipments!.find((row) => row.id === permit.shipmentId)!;
+  const request = input("請求書\n合成仕入先株式会社\n合計金額 100,000円\n課税価格 900,000円\n関税額 99,999円", {
+    fileName: "発注書.pdf", kind: "PURCHASE_ORDER", shipmentId: permit.shipmentId,
+  });
+  const result = await intakeImportDocument(request), data = await readData();
+  assert.equal(result.error, undefined);
+  assert.equal(result.kind, "PURCHASE_ORDER");
+  assert.equal(result.shipmentId, permit.shipmentId);
+  assert.equal(result.savedAs, "other-document");
+  assert.equal(data.receivedInvoices.length, 0);
+  const mail = data.mailDocuments.find((row) => row.id === result.mailDocumentId)!;
+  assert.equal(mail.importDocumentKind, "PURCHASE_ORDER");
+  assert.equal(mail.importShipmentId, permit.shipmentId);
+  assert.equal(mail.category, "CUSTOMS");
+  assert.deepEqual(result.filled, []);
+  assert.equal(data.importShipments!.find((row) => row.id === permit.shipmentId)!.dutyAmount, before.dutyAmount);
+  await assertSavedFile(data, mail.id, request.buffer);
+});
 function input(text: string, extra: Partial<ImportIntakeInput> = {}): ImportIntakeInput {
   return { user: admin, company: "JAPAN", fileName: "合成書類.pdf", mimeType: "application/pdf", buffer: Buffer.from(`synthetic file: ${text}`),
     extracted: { text, engine: "synthetic", confidence: 95, warnings: [] }, ...extra };

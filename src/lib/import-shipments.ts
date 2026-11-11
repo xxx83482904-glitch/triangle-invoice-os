@@ -3,15 +3,16 @@ export type { ImportFillKey } from "@/lib/types";
 export { todayInJapan as importToday } from "@/lib/dates";
 
 // Client-safe part of the import board: labels, keyword detection and arithmetic. Store access lives in import-shipment-views.ts.
-export const importDocumentKinds = ["SUPPLIER_INVOICE", "PACKING_LIST", "WAYBILL", "IMPORT_PERMIT", "BROKER_INVOICE", "TAX_PAYMENT", "OTHER"] as const satisfies readonly ImportDocumentKind[];
+export const importDocumentKinds = ["PURCHASE_ORDER", "SUPPLIER_INVOICE", "PACKING_LIST", "WAYBILL", "IMPORT_PERMIT", "BROKER_INVOICE", "TAX_PAYMENT", "OTHER"] as const satisfies readonly ImportDocumentKind[];
 export const importDocumentKindLabels: Record<ImportDocumentKind, string> = {
+  PURCHASE_ORDER: "発注書",
   SUPPLIER_INVOICE: "仕入先インボイス", PACKING_LIST: "パッキングリスト", WAYBILL: "AWB・B/L", IMPORT_PERMIT: "輸入許可通知書",
   BROKER_INVOICE: "通関業者の請求書", TAX_PAYMENT: "関税・消費税の納付", OTHER: "その他",
 };
 // The paper trail one shipment should hold before it is closed; the permit is also the evidence for the import consumption tax.
 export const importChecklistKinds: ImportDocumentKind[] = ["SUPPLIER_INVOICE", "PACKING_LIST", "WAYBILL", "IMPORT_PERMIT", "BROKER_INVOICE"];
 // Import paperwork that is not an invoice to pay, so the mail sorter files it under 輸入・通関 instead of 請求書.
-export const customsDocumentKinds: ImportDocumentKind[] = ["IMPORT_PERMIT", "PACKING_LIST", "WAYBILL", "TAX_PAYMENT"];
+export const customsDocumentKinds: ImportDocumentKind[] = ["PURCHASE_ORDER", "IMPORT_PERMIT", "PACKING_LIST", "WAYBILL", "TAX_PAYMENT"];
 export const importShipmentStatuses = ["OPEN", "CLEARED", "CLOSED"] as const satisfies readonly ImportShipmentStatus[];
 export const importShipmentStatusLabels: Record<ImportShipmentStatus, string> = { OPEN: "書類待ち", CLEARED: "通関済み", CLOSED: "完了" };
 
@@ -93,6 +94,7 @@ const brokerWords = /通関(料|手数料|業務|費用|代行)|輸入申告料|
 const brokerContext = /輸入申告|輸入者|B\/L|AWB|税関|通関/i;
 const importWords = /関税|輸入消費税|通関|税関/;
 const kindPatterns: Array<[ImportDocumentKind, RegExp]> = [
+  ["PURCHASE_ORDER", /(?:^|\n)\s*(?:発注書|注文書|purchase[ \t]+order)(?=$|[\s.:：_-])/i],
   ["IMPORT_PERMIT", /輸入許可通知書|輸入許可書|import permit/i],
   ["PACKING_LIST", /packing list|パッキングリスト|梱包明細/i],
   ["WAYBILL", /air waybill|\bAWB\b|bill of lading|\bB\/L\b|船荷証券|sea waybill/i],
@@ -125,6 +127,7 @@ export const importFillLabels: Record<ImportFillKey, string> = {
 };
 // What each paper is trusted to state: duty and tax come from the permit or the payment slip, never from a broker's own invoice lines.
 export const importFillKeysByKind: Record<ImportDocumentKind, ImportFillKey[]> = {
+  PURCHASE_ORDER: [],
   IMPORT_PERMIT: ["permitNumber", "permitDate", "arrivalDate", "supplierName", "goodsValue", "dutyAmount", "importTaxNational", "importTaxLocal", "blNumber", "invoiceNumber"],
   TAX_PAYMENT: ["permitNumber", "dutyAmount", "importTaxNational", "importTaxLocal"],
   BROKER_INVOICE: ["permitNumber", "blNumber", "brokerFee", "brokerVendorId"],

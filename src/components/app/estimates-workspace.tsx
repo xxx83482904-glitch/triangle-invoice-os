@@ -36,6 +36,7 @@ function EstimateEditor({ estimate, projects, clients, pending, onSave, company 
 }) {
   const [form, setForm] = useState<Omit<EstimateInput, "items">>(() => ({
     id: estimate?.id, updatedAt: estimate?.updatedAt, projectId: estimate?.projectId || "", clientId: estimate?.clientId || "",
+    subject: estimate?.pdfText?.subject || "",
     issueDate: estimate?.issueDate || todayIso(), validUntil: estimate?.validUntil || nextMonth(),
     status: estimate?.status === "CONVERTED" ? "DRAFT" : estimate?.status || "DRAFT", notes: estimate?.notes || "", internalMemo: estimate?.internalMemo || "",
   }));
@@ -52,6 +53,7 @@ function EstimateEditor({ estimate, projects, clients, pending, onSave, company 
         <label className="min-w-0 space-y-1">有効期限<Input aria-label="有効期限" type="date" required min={form.issueDate} value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} /></label>
         <div className="min-w-0 space-y-1">ステータス<OptionTabs label="ステータス" value={form.status} options={Object.entries(estimateStatusLabels).filter(([key]) => key !== "CONVERTED") as [EstimateInput["status"], string][]} onChange={(status) => setForm({ ...form, status })} /></div>
       </div>
+      <label className="block space-y-1">件名<Input aria-label="件名" maxLength={500} value={form.subject ?? ""} placeholder={projects.find((p) => p.id === form.projectId)?.name || "未入力の場合は案件名"} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></label>
       <DocumentItemsEditor initialItems={estimate?.items} disabled={pending} />
       <label className="block space-y-1">備考<Textarea aria-label="備考" maxLength={10000} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
       <label className="block space-y-1">社内メモ<Textarea aria-label="社内メモ" maxLength={10000} value={form.internalMemo} onChange={(e) => setForm({ ...form, internalMemo: e.target.value })} /></label>

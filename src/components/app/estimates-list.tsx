@@ -71,7 +71,7 @@ export function EstimatesList({ company, estimates, rows, projects, clients, can
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().normalize("NFKC").toLocaleLowerCase();
     return orderDocuments(rows.filter((row) => (status === "all" || row.status === status) && (month === "all" || row.month === month) &&
-      (client === "all" || documentCounterpartKey(row) === client) && [row.title, row.counterpart, row.projectName, row.billingLabel || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q)), sort);
+      (client === "all" || documentCounterpartKey(row) === client) && [row.title, row.subject || "", row.counterpart, row.projectName, row.billingLabel || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q)), sort);
   }, [rows, deferredQuery, status, month, client, sort]);
   const groups = useMemo(() => groupDocuments(filtered, sort, limit), [filtered, sort, limit]);
   const visibleIds = groups.flatMap(([key, list]) => collapsed.has(key) ? [] : list.map((row) => row.sourceId));

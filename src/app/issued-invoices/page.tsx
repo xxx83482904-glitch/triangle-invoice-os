@@ -81,6 +81,7 @@ export default async function IssuedInvoicesPage({
                   <div className="space-y-2"><Label htmlFor="new-payment-date">入金日（入金完了の場合）</Label><Input id="new-payment-date" name="paymentDate" type="date" defaultValue={todayIso()} /></div>
                 </div>
                 <InvoiceProjectFields company={company} projects={projects.map((p) => ({ id: p.id, name: p.name, clientId: p.clientId, updatedAt: p.updatedAt }))} clients={clients.map((c) => ({ id: c.id, name: c.companyName }))} />
+                <div className="space-y-2"><Label htmlFor="new-subject">件名</Label><Input id="new-subject" name="subject" maxLength={500} placeholder="未入力の場合は案件名" /></div>
                 <DocumentItemsEditor company={company} taxOptions={taxRateOptions.map((option) => ({ label: option.label, value: option.value }))} />
                 <div className="space-y-2"><Label htmlFor="new-notes">備考</Label><Textarea id="new-notes" name="notes" /></div>
                 <div className="space-y-2"><Label htmlFor="new-internal-memo">社内メモ</Label><Textarea id="new-internal-memo" name="internalMemo" /></div>

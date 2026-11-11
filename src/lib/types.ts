@@ -471,7 +471,7 @@ export type InvoiceNumberSetting = {
   updatedAt: string;
 };
 
-export type ImportDocumentKind = "SUPPLIER_INVOICE" | "PACKING_LIST" | "WAYBILL" | "IMPORT_PERMIT" | "BROKER_INVOICE" | "TAX_PAYMENT" | "OTHER";
+export type ImportDocumentKind = "PURCHASE_ORDER" | "SUPPLIER_INVOICE" | "PACKING_LIST" | "WAYBILL" | "IMPORT_PERMIT" | "BROKER_INVOICE" | "TAX_PAYMENT" | "OTHER";
 export type ImportShipmentStatus = "OPEN" | "CLEARED" | "CLOSED";
 export type ImportOrderItemKind = "BAG" | "PRINTED" | "BOX" | "TEXTILE" | "LIGHTING" | "FURNITURE" | "OTHER";
 export type ImportOrderItem = {

@@ -25,6 +25,7 @@ export function DocumentViewer(props: ViewerProps) {
   const [selected, setSelected] = useState("");
   const document = documents.find((row) => row.key === selected) ?? documents[0];
   return <Card variant="section" className="min-w-0 gap-3 p-3 lg:p-4">
+    {document && props.kind === "PURCHASE_ORDER" && props.canEdit ? <ImportDropzone company={props.company} shipmentId={props.shipmentId} kind="PURCHASE_ORDER" compact layout="list" /> : null}
     {documents.length > 1 ? <div role="group" aria-label="表示するファイル" className="flex min-w-0 gap-1 overflow-x-auto rounded-lg bg-[var(--track)] p-1">
       {documents.map((file) => <button key={file.key} type="button" title={file.fileName} aria-pressed={file.key === document.key}
         className={`min-w-24 max-w-56 shrink-0 truncate rounded-md px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-ring ${file.key === document.key ? "bg-[var(--selected)] shadow-[var(--shadow-soft)]" : "hover:bg-[var(--tile)]"}`}
@@ -33,7 +34,7 @@ export function DocumentViewer(props: ViewerProps) {
     {document ? <OriginalViewer key={`${document.key}:${document.fileUrl}:${document.updatedAt}`} document={document} canEdit={props.canEdit} pending={props.pending} onAdd={props.onAdd} onDetach={props.onDetach} />
       : <div className="flex min-h-72 flex-col justify-center gap-4 rounded-xl border border-dashed border-input p-4 lg:h-[min(72vh,760px)]">
         <p className="text-center text-sm font-medium">{documentTabs.find((tab) => tab.kind === props.kind)?.label}はまだ添付されていません</p>
-        {props.canEdit ? <><ImportDropzone company={props.company} shipmentId={props.shipmentId} compact />
+        {props.canEdit ? <><ImportDropzone company={props.company} shipmentId={props.shipmentId} kind={props.kind === "PURCHASE_ORDER" ? props.kind : undefined} compact layout="list" />
           <Button type="button" variant="ghost" size="sm" className="self-center" disabled={props.pending} onClick={props.onAdd}><FolderOpen />未割当の書類から選ぶ</Button></> : <p className="text-center text-xs text-muted-foreground">未添付</p>}
       </div>}
   </Card>;

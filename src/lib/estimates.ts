@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { withDocumentSubject } from "@/lib/document-subject";
 import { z } from "zod";
 import { companyFromParam, partnerMatchesCompany, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
@@ -63,6 +64,7 @@ export function saveEstimate(data: AppData, user: Actor, company: CompanyScope, 
     id: existing?.id || randomUUID(), estimateNumber: existing?.estimateNumber || `${prefix}${String(serial).padStart(4, "0")}`,
     projectId: parsed.projectId, clientId: parsed.clientId, issueDate: parsed.issueDate, validUntil: parsed.validUntil,
     status: parsed.status, notes: parsed.notes, internalMemo: parsed.internalMemo, ...totals,
+    pdfText: withDocumentSubject(existing?.pdfText, parsed.subject),
     taxRounding: "PER_RATE",
     items: parsed.items.map((item) => ({ ...item, id: randomUUID(), amount: Math.round(item.quantity * item.unitPrice) })),
     createdById: existing?.createdById || user.id, createdAt: existing?.createdAt || timestamp, updatedAt: timestamp,
@@ -96,6 +98,7 @@ export function convertEstimate(data: AppData, user: Actor, company: CompanyScop
     projectId: estimate.projectId, clientId: estimate.clientId, issueDate: parsed.issueDate, dueDate: parsed.dueDate,
     transactionDate: parsed.transactionDate, subtotal: estimate.subtotal, taxTotal: estimate.taxTotal, total: estimate.total,
     taxRounding: estimate.taxRounding,
+    pdfText: estimate.pdfText?.subject !== undefined ? { subject: estimate.pdfText.subject } : undefined,
     status: "DRAFT", needsReview: false, notes: estimate.notes, internalMemo: estimate.internalMemo, billingLabel: estimate.billingLabel,
     createdById: user.id, createdAt: timestamp, updatedAt: timestamp,
   };

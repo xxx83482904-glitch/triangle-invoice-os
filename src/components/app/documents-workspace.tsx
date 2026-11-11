@@ -41,6 +41,7 @@ const monthLabel = (month: string) => month === "undated" ? "日付未設定" : 
 
 function editFrom(row: DocumentRow): IssuedEdit {
   return { id: row.sourceId, updatedAt: row.updatedAt, invoiceNumber: row.title, projectId: row.projectId || "",
+    subject: row.subject,
     issueDate: row.date, dueDate: row.dueDate || "", total: row.total || 0, status: row.status as IssuedEdit["status"], needsReview: Boolean(row.needsReview) };
 }
 
@@ -67,7 +68,7 @@ function DocumentProjectControl({ row, edit, projects, disabled, onEdit }: {
 
 function editedRow(row: DocumentRow, edit?: IssuedEdit): DocumentRow {
   if (!edit) return row;
-  return { ...row, title: edit.invoiceNumber, date: edit.issueDate, total: edit.total, status: edit.status,
+  return { ...row, title: edit.invoiceNumber, subject: edit.subject, date: edit.issueDate, total: edit.total, status: edit.status,
     statusLabel: issuedStatusLabels[edit.status],
     state: ["PAID", "CANCELED"].includes(edit.status) ? "done" : edit.needsReview || edit.status === "DRAFT" ? "review" : "open" };
 }
@@ -140,6 +141,8 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
     {view !== "file" ? editable ? <fieldset disabled={disabled} className="grid min-w-0 gap-4"><legend className="sr-only">請求書の詳細</legend>
       <section className="workspace-detail-group space-y-3"><h3 className="text-sm font-semibold">基本情報</h3>
       <label className="space-y-1 text-xs">請求書番号<Input aria-label="請求書番号" value={current.invoiceNumber} onChange={(e) => update({ invoiceNumber: e.target.value })} /></label>
+      <label className="grid gap-1 text-xs">件名<Input aria-label="件名" maxLength={500} value={current.subject ?? ""} placeholder={[projects.find((p) => p.value === current.projectId)?.label || row.projectName, row.billingLabel].filter(Boolean).join(" ")} onChange={(e) => update({ subject: e.target.value })} /></label>
+      {row.imported ? <p className="text-xs text-muted-foreground">取り込んだ原本の内容は変更されません。</p> : null}
       <label className="grid gap-1 text-xs">案件<select aria-label="編集する案件" disabled={(row.paidAmount || 0) > 0} className={selectClass + " w-full"} value={current.projectId} onChange={(e) => update({ projectId: e.target.value })}>{documentProjectOptions(projects, current.projectId).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
       <div className="text-xs text-muted-foreground break-words">請求先: {current.projectId === row.projectId ? row.counterpart : projects.find((p) => p.value === current.projectId)?.clientName || row.counterpart}{detail?.clientName ? " / OCR請求先: " + detail.clientName : ""}</div>
       <div className="grid min-w-0 grid-cols-2 gap-3">
@@ -156,6 +159,7 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
     </fieldset> : <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2 text-sm">
       <dt className="text-muted-foreground">取引先</dt><dd className="break-words">{row.counterpart || "未設定"}</dd>
       <dt className="text-muted-foreground">案件</dt><dd className="break-words">{row.projectName || "未設定"}</dd>
+      {row.subject ? <><dt className="text-muted-foreground">件名</dt><dd className="break-words">{row.subject}</dd></> : null}
       <dt className="text-muted-foreground">書類日</dt><dd>{row.date || "未設定"}</dd>
       <dt className="text-muted-foreground">分類</dt><dd>{documentCategoryLabels[row.category] || row.category}</dd>
       {row.kind === "estimate" ? <><dt className="text-muted-foreground">状態</dt><dd><DocumentStatusControl row={row} onEdit={onEdit} company={company} disabled={disabled} /></dd></> : null}
@@ -233,7 +237,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
       (paymentFilter === "all" || (!issuedOnly && kind !== "issued") || (r.kind === "issued" && (paymentFilter === "paid" ? r.status === "PAID" : !["PAID", "DRAFT", "CANCELED"].includes(r.status)))) &&
       (!issuedOnly || invoiceStatus === "all" || (invoiceStatus === "review" ? r.needsReview : r.status === invoiceStatus)) &&
       (counterpart === "all" || documentCounterpartKey(r) === counterpart) &&
-      (month === "all" || r.month === month) && [r.title, r.counterpart, r.projectName, r.billingLabel || "", r.fileName || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q)), sort);
+      (month === "all" || r.month === month) && [r.title, r.subject || "", r.counterpart, r.projectName, r.billingLabel || "", r.fileName || ""].join(" ").normalize("NFKC").toLocaleLowerCase().includes(q)), sort);
   }, [rows, deferredQuery, kind, category, state, month, sort, paymentFilter, issuedOnly, counterpart, invoiceStatus]);
   const groups = useMemo(() => issuedOnly ? groupIssuedDocuments(filtered, grouping, limit) : groupDocuments(filtered, sort, limit), [filtered, sort, limit, issuedOnly, grouping]);
   const summary = useMemo(() => issuedListSummary(filtered), [filtered]);

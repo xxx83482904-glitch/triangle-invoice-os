@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { documentSubjectSchema } from "@/lib/document-subject";
 import type { Estimate } from "@/lib/types";
 import { documentItemsSchema } from "@/lib/document-items";
 export { documentItemTotals as estimateTotals } from "@/lib/document-items";
@@ -8,6 +9,7 @@ export const estimateStatusLabels: Record<Estimate["status"], string> = {
 };
 export const documentDateSchema = z.iso.date();
 export const estimateSchema = z.object({
+  subject: documentSubjectSchema,
   id: z.string().min(1).optional(), updatedAt: z.string().min(1).optional(),
   projectId: z.string().min(1, "案件を選択してください"), clientId: z.string().min(1, "取引先を選択してください"),
   issueDate: documentDateSchema, validUntil: documentDateSchema,

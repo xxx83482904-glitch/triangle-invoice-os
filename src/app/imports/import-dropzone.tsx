@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import type { CompanyScope } from "@/lib/company";
 import type { ImportIntakeResult } from "@/lib/import-intake";
+import type { ImportDocumentKind } from "@/lib/types";
 import { importDocumentKindLabels } from "@/lib/import-shipments";
 import { operationFailureToast, unconfirmedUploadFiles, uploadFeedback } from "@/lib/operation-feedback";
 
@@ -22,8 +23,8 @@ function intakeSummary(results: ImportIntakeResult[]) {
   return `${saved.length}件を取り込みました。${details.length ? `${details.join("、")}。` : ""}`;
 }
 
-export function ImportDropzone({ company, shipmentId, compact, layout, onCreated }: {
-  company: CompanyScope; shipmentId?: string; compact?: boolean; layout?: "list"; onCreated?: (id: string) => void;
+export function ImportDropzone({ company, shipmentId, kind, compact, layout, onCreated }: {
+  company: CompanyScope; shipmentId?: string; kind?: ImportDocumentKind; compact?: boolean; layout?: "list"; onCreated?: (id: string) => void;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null), inFlight = useRef(false);
@@ -50,6 +51,7 @@ export function ImportDropzone({ company, shipmentId, compact, layout, onCreated
           const form = new FormData();
           form.append("company", company); form.append("files", file);
           if (shipmentId) form.append("shipmentId", shipmentId);
+          if (kind) form.append("kind", kind);
           const response = await fetch("/api/uploads/imports", { method: "POST", body: form });
           const body = await response.json() as { error?: string; results?: ImportIntakeResult[] };
           if (!response.ok) throw new Error(body.error || "輸入書類の取り込みに失敗しました");
@@ -96,8 +98,8 @@ export function ImportDropzone({ company, shipmentId, compact, layout, onCreated
         <div className={`flex min-w-0 items-start gap-3 ${layout === "list" ? "sm:flex-1 sm:basis-64" : ""}`}>
           <span className={layout === "list" ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--tone-blue-bg)] text-[var(--tone-blue-fg)]" : "text-muted-foreground"}>{pending ? <Loader2 aria-hidden className="size-5 shrink-0 animate-spin" /> : <UploadCloud aria-hidden className="size-5 shrink-0" />}</span>
           <div className="min-w-0">
-            <h3 className="text-sm font-medium">{compact ? "この便に書類をドロップ" : "輸入書類をドロップ"}</h3>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{compact
+            <h3 className="text-sm font-medium">{kind === "PURCHASE_ORDER" ? "発注書を添付" : compact ? "この便に書類をドロップ" : "輸入書類をドロップ"}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{kind === "PURCHASE_ORDER" ? "PDF・JPEG・PNG / 1ファイル10MBまで" : compact
               ? "読み取った許可番号や税額は、空欄の項目にだけ書き込みます。"
               : layout === "list" ? "PDF・画像を読み取り（OCR）、種類と番号で便に振り分けます。"
                 : "PDF/JPEG/PNGを読み取り、輸入許可通知書・パッキングリスト・AWB/B/L・通関業者の請求書などの種類を判定します。輸入許可通知書は便を自動で作り、許可番号・関税・輸入消費税を書き込みます。申告番号・B/L/AWB番号・インボイス番号が一致する便があればその便に付き、未割当の書類は「便の候補」にまとめます。"}</p>
@@ -106,7 +108,7 @@ export function ImportDropzone({ company, shipmentId, compact, layout, onCreated
         </div>
         <Button type="button" variant="outline" size="sm" className="shrink-0" disabled={pending}>ファイルを選択</Button>
         <input ref={inputRef} className="sr-only" type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={pending}
-          aria-label={compact ? "この便に取り込む輸入書類" : "取り込む輸入書類"} onClick={(event) => event.stopPropagation()} onChange={(event) => { if (event.target.files) upload(event.target.files); }} />
+          aria-label={kind === "PURCHASE_ORDER" ? "添付する発注書" : compact ? "この便に取り込む輸入書類" : "取り込む輸入書類"} onClick={(event) => event.stopPropagation()} onChange={(event) => { if (event.target.files) upload(event.target.files); }} />
       </div>
       {error ? <Alert variant="destructive" className="mt-3"><AlertDescription>{error}</AlertDescription></Alert> : null}
       {retryFiles.length && !pending ? <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">

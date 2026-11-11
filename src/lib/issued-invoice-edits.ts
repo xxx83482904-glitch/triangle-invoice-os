@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { documentSubjectSchema, withDocumentSubject } from "@/lib/document-subject";
 import { randomUUID } from "node:crypto";
 import { companyFromParam, type CompanyScope } from "@/lib/company";
 import { visibleProjects } from "@/lib/documents";
@@ -13,6 +14,7 @@ const editSchema = z.object({
   projectId: z.string().min(1), issueDate: date, dueDate: date, total: z.number().finite().nonnegative().max(1e12),
   status: z.enum(["DRAFT", "ISSUED", "SENT", "WAITING_PAYMENT", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELED", "REISSUED"]),
   needsReview: z.boolean(),
+  subject: documentSubjectSchema,
   paymentDate: z.iso.date().optional(),
 });
 export type IssuedEdit = z.infer<typeof editSchema>;
@@ -58,6 +60,7 @@ export function applyIssuedInvoiceEdits(data: AppData, user: Pick<User, "id" | "
     if (paid > 0 && !["PARTIALLY_PAID", "PAID", "WAITING_PAYMENT"].includes(edit.status)) throw new Error("入金記録があるため入金状態は変更できません");
     if (edit.status === "PARTIALLY_PAID" && (paid <= 0 || paid >= edit.total)) throw new Error("一部入金への変更は入金記録を確認してください");
     invoice.invoiceNumber = edit.invoiceNumber;
+    invoice.pdfText = withDocumentSubject(invoice.pdfText, edit.subject);
     if (edit.projectId !== invoice.projectId || invoice.fileUrl) invoice.clientId = project.clientId;
     invoice.projectId = edit.projectId;
     invoice.issueDate = edit.issueDate;

@@ -235,6 +235,8 @@ export async function intakeMailDocument(input: MailIntakeInput): Promise<MailIn
   const fileHash = mailFileHash(buffer);
   const data = await readData();
   const { classification, invoice: inferred } = await analyzeMailDocument(data, extracted, company);
+  // A purchase order is evidence of an order, not a payable invoice, even if its text quotes an invoice.
+  if (importDocumentKind === "PURCHASE_ORDER") classification.category = "CUSTOMS";
   const senderName = isUsableSenderName(input.senderName)
     ? cleanSenderCandidate(input.senderName ?? "")
     : isUsableSenderName(classification.senderName)
