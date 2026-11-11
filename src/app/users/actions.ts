@@ -6,7 +6,7 @@ import { hash } from "bcryptjs";
 import { z } from "zod";
 import { issueSession, requireUser } from "@/lib/auth";
 import { assignCompanyCard } from "@/lib/card-receipts";
-import { memberFeatures } from "@/lib/member-features";
+import { effectiveFeatures, memberFeatures } from "@/lib/member-features";
 import { assertCan } from "@/lib/rbac";
 import { mutateData } from "@/lib/store";
 import { approvalRoles, reviewRegistration } from "@/lib/user-access";
@@ -16,8 +16,9 @@ import type { ApiTokenScope } from "@/lib/types";
 
 function featureStatesFromForm(formData: FormData) {
   // New forms send every catalog key, including disabled switches; old forms send none.
-  const entries = memberFeatures.map(({ key }) => [key, formData.get(`feature:${key}`)] as const);
-  if (entries.every(([, value]) => value === null)) return undefined;
+  // A form opened before a switch was added lacks that key (see updateUserAccountAction).
+  const entries = memberFeatures.map(({ key }) => [key, formData.get(`feature:${key}`)] as const).filter(([, value]) => value !== null);
+  if (!entries.length) return undefined;
   const stateSchema = z.enum(["on", "off"], "使える機能の設定を確認してください");
   return Object.fromEntries(entries.map(([key, value]) => [key, stateSchema.parse(value) === "on"]));
 }
@@ -55,12 +56,16 @@ export async function updateUserAccountAction(_previous: { error: string; succes
     const features = featureStatesFromForm(formData);
     const passwordHash = password ? await hash(password, 12) : undefined;
     await mutateData(actor.id, "UPDATE_USER_ACCOUNT", "User", id, (data) => {
+      // A form opened before a switch existed does not send it: same role keeps the member's current state.
+      const role = String(formData.get("role"));
+      const target = data.users.find((user) => user.id === id);
+      const completed = features && target && target.role === role ? { ...effectiveFeatures(target.role, target.featureAccess), ...features } : features;
       const result = updateUserAccount(data, actor.id, {
         id, updatedAt: String(formData.get("updatedAt") ?? ""),
         name: String(formData.get("name") ?? ""), email: String(formData.get("email") ?? ""),
         role: String(formData.get("role")) as (typeof editableRoles)[number],
         status: String(formData.get("status")) as UserAccountStatus,
-        passwordHash, features,
+        passwordHash, features: completed,
       });
       // Capture this mutation's version, without putting it or the hash in the audit result.
       if (id === actor.id && result.passwordChanged) currentDevice = data.users.find((user) => user.id === actor.id);

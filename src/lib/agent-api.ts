@@ -17,6 +17,7 @@ import { integrityReport } from "@/lib/integrity";
 import { can, canAccessCompany } from "@/lib/rbac";
 import { visibleProjects } from "@/lib/documents";
 import { agentCan, type AgentAuth } from "@/lib/agent-tokens";
+import { issuedInvoiceForViewer } from "@/lib/issued-amount-access";
 
 export class AgentError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -73,7 +74,8 @@ export function listAgentResource(data: AppData, auth: AgentAuth, resource: Agen
       rows = data.receivedInvoices.filter((row) => !row.deletedAt && projects.has(row.projectId) && inRange(row.issueDate) && since(row) && (!value.status || row.status === value.status) && matches(row.originalFileName, row.memo));
       break;
     case "issued-invoices":
-      rows = data.issuedInvoices.filter((row) => !row.deletedAt && projects.has(row.projectId) && inRange(row.issueDate) && since(row) && (!value.status || row.status === value.status) && matches(row.invoiceNumber, row.notes));
+      rows = data.issuedInvoices.filter((row) => !row.deletedAt && projects.has(row.projectId) && inRange(row.issueDate) && since(row) && (!value.status || row.status === value.status) && matches(row.invoiceNumber, row.notes))
+        .map((row) => issuedInvoiceForViewer(auth.user, row));
       break;
     case "payments":
       rows = data.payments.filter((row) => !row.deletedAt && inRange(row.paymentDate) && since(row) && (!value.side || (row.type === "INCOME" ? "INCOME" : "EXPENSE") === value.side) && paymentInScope(data, row, projects));

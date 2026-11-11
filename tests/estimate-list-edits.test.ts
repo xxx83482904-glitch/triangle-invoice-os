@@ -69,7 +69,8 @@ test("batch validation enforces dates, role, company, source and destination pro
   const mail = { id: "mail", role: "MAIL_EDITOR" as const };
   assert.throws(() => saveEstimateListEdits(data, mail, "JAPAN", [edit]));
   assert.throws(() => deleteEstimates(data, mail, "JAPAN", [a]));
-  assert.throws(() => saveEstimateListEdits(data, manager, "JAPAN", [{ ...edit, projectId: "other" }]));
+  // With the amount switch on, so the refusal comes from the inaccessible project.
+  assert.throws(() => saveEstimateListEdits(data, { ...manager, featureAccess: { issuedInvoiceAmounts: true } }, "JAPAN", [{ ...edit, projectId: "other" }]), /この案件には見積書を移動できません/);
   assert.throws(() => saveEstimateListEdits(data, admin, "CHINA", [edit]));
   assert.throws(() => deleteEstimates(data, admin, "CHINA", [a]));
   assert.deepEqual(data, before);

@@ -15,6 +15,8 @@ import { can } from "@/lib/rbac";
 import { defaultPathForUser } from "@/lib/app-navigation";
 import { paidForIssued, paidForReceived, projectMoney, readDataForRequest as readData, scopedProjectsForUser } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
+import { canSeeIssuedAmounts } from "@/lib/issued-amount-access";
+import { HiddenAmount } from "@/components/app/hidden-amount";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -71,7 +73,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <CardContent>
               <Table className="record-cards record-cards-stack record-cards-compact">
                 <TableHeader><TableRow><TableHead>番号</TableHead><TableHead>発行日</TableHead><TableHead>期限</TableHead><TableHead className="text-right">合計</TableHead><TableHead className="text-right">入金</TableHead><TableHead>状態</TableHead><TableHead>PDF</TableHead></TableRow></TableHeader>
-                <TableBody>{issued.map((invoice) => <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell data-label="発行日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell className="lg:text-right" data-label="合計"><Money value={invoice.total} /></TableCell><TableCell className="lg:text-right" data-label="入金"><Money value={paidForIssued(data, invoice.id)} /></TableCell><TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell><TableCell data-label="PDF"><Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button></TableCell></TableRow>)}</TableBody>
+                <TableBody>{issued.map((invoice) => { const shown = canSeeIssuedAmounts(user, invoice); return <TableRow key={invoice.id}><TableCell className="record-card-title">{invoice.invoiceNumber}</TableCell><TableCell data-label="発行日">{formatDate(invoice.issueDate)}</TableCell><TableCell data-label="期限">{formatDate(invoice.dueDate)}</TableCell><TableCell className="lg:text-right" data-label="合計">{shown ? <Money value={invoice.total} /> : <HiddenAmount className="text-muted-foreground" />}</TableCell><TableCell className="lg:text-right" data-label="入金">{shown ? <Money value={paidForIssued(data, invoice.id)} /> : <HiddenAmount className="text-muted-foreground" />}</TableCell><TableCell data-label="状態"><StatusBadge kind="issued" status={invoicePaymentSummary(data, invoice).status} /></TableCell><TableCell data-label="PDF">{shown ? <Button asChild size="sm" variant="outline"><a href={`/api/issued-invoices/${invoice.id}/pdf`} target="_blank">PDF</a></Button> : <span className="text-muted-foreground">—</span>}</TableCell></TableRow>; })}</TableBody>
               </Table>
             </CardContent>
           </Card>

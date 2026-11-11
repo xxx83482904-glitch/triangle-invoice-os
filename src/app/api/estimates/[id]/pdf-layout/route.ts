@@ -14,6 +14,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const estimate = data.estimates.find((e) => e.id === id && !e.deletedAt);
   if (!estimate) return NextResponse.json({ error: "見積書が見つかりません" }, { status: 404 });
   const company = companyFromParam(data.projects.find((p) => p.id === estimate.projectId)?.company);
-  if (!documentRows(data, user, company).some((r) => r.id === `estimate:${id}`)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
+  if (!documentRows(data, user, company).some((r) => r.id === `estimate:${id}` && !r.amountsHidden)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   return NextResponse.json(estimatePdfMeta(estimate, data, user), { headers: { "Cache-Control": "private, no-store" } });
 }

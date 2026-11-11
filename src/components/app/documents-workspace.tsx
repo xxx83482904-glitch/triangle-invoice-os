@@ -31,6 +31,8 @@ import { todayIso } from "@/lib/format";
 import { EstimateStatusSelect } from "@/components/app/estimate-status-select";
 import type { Estimate } from "@/lib/types";
 import { documentCounterpartKey, documentProjectOptions, groupDocuments, orderDocuments, type DocumentProjectOption } from "@/lib/document-order";
+import { hiddenAmountNote } from "@/lib/issued-amount-access";
+import { HiddenAmount } from "@/components/app/hidden-amount";
 
 const selectClass = "h-11 max-w-full rounded-md border bg-background px-3 text-sm";
 const pageSize = 50;
@@ -126,10 +128,12 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       {(edit?.needsReview ?? row.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
       <span className="text-xs text-muted-foreground">{documentKindLabels[row.kind]}</span>
       {fileUrl ? <Button asChild variant="outline" size="sm"><a href={fileUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />{generated ? "PDFを開く" : "原本を開く"}</a></Button> : null}
-      {generated ? <PdfLayoutDialog kind={row.kind === "estimate" ? "estimate" : "issued"} id={row.sourceId} title={row.title} company={company} canSave={Boolean(row.editable)} updatedAt={row.updatedAt} listEditPending={Boolean(edit)} /> : null}
+      {generated && !row.amountsHidden ? <PdfLayoutDialog kind={row.kind === "estimate" ? "estimate" : "issued"} id={row.sourceId} title={row.title} company={company} canSave={Boolean(row.editable)} updatedAt={row.updatedAt} listEditPending={Boolean(edit)} /> : null}
       {view === "all" ? <Button asChild variant="soft" size="sm"><Link prefetch={false} href={row.sourceHref}>管理画面</Link></Button> : null}
     </div>
-    {view !== "edit" ? <>{edit ? <p className="text-xs text-amber-700 dark:text-amber-300">未保存の変更あり・原本は保存済みの内容</p> : null}{fileUrl ? (
+    {view !== "edit" ? <>{edit ? <p className="text-xs text-amber-700 dark:text-amber-300">未保存の変更あり・原本は保存済みの内容</p> : null}{row.amountsHidden ? (
+      <p className="flex min-h-32 items-center justify-center rounded border bg-muted/30 px-4 text-center text-sm text-muted-foreground">{hiddenAmountNote(row.kind === "estimate" ? "estimate" : "invoice")}</p>
+    ) : fileUrl ? (
       row.mimeType?.startsWith("image/") ? <div className="relative h-72 bg-muted/30 sm:h-96"><Image unoptimized src={fileUrl} alt={row.fileName || row.title} fill sizes="(max-width: 1279px) 100vw, 420px" className="object-contain" /></div>
         : <iframe title={(generated ? `${documentKindLabels[row.kind]}PDF: ` : "原本: ") + row.title} src={fileUrl} loading="lazy" className="h-80 w-full rounded border bg-white sm:h-[440px]" />
     ) : <div className="flex h-32 items-center justify-center bg-muted/30 text-sm text-muted-foreground">原本ファイルなし</div>}</> : null}
@@ -155,11 +159,12 @@ function DocumentDetails({ row, company, edit, onEdit, projects, disabled, view 
       <dt className="text-muted-foreground">書類日</dt><dd>{row.date || "未設定"}</dd>
       <dt className="text-muted-foreground">分類</dt><dd>{documentCategoryLabels[row.category] || row.category}</dd>
       {row.kind === "estimate" ? <><dt className="text-muted-foreground">状態</dt><dd><DocumentStatusControl row={row} onEdit={onEdit} company={company} disabled={disabled} /></dd></> : null}
-      {row.total !== undefined ? <><dt className="text-muted-foreground">金額</dt><dd><Money value={row.total} maximumFractionDigits={2} /></dd></> : null}
+      {row.amountsHidden ? <><dt className="text-muted-foreground">金額</dt><dd className="text-muted-foreground">非表示（管理者と作成した人だけが見られます）</dd></>
+        : row.total !== undefined ? <><dt className="text-muted-foreground">金額</dt><dd><Money value={row.total} maximumFractionDigits={2} /></dd></> : null}
     </dl> : null}
     {detail?.warnings.length ? <ul className="space-y-1 border-l-2 border-amber-500 pl-3 text-xs text-amber-800 dark:text-amber-300">{detail.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul> : null}
-    {canReconcile && view !== "file" ? bankTarget(row) ? <DocumentBankSection key={`bank:${row.id}`} company={company} target={bankTarget(row)!} /> : null : null}
-    {view !== "edit" ? <div className="workspace-detail-group space-y-3"><h3 className="text-sm font-medium">OCR本文</h3>
+    {canReconcile && view !== "file" && !row.amountsHidden ? bankTarget(row) ? <DocumentBankSection key={`bank:${row.id}`} company={company} target={bankTarget(row)!} /> : null : null}
+    {view !== "edit" && !row.amountsHidden ? <div className="workspace-detail-group space-y-3"><h3 className="text-sm font-medium">OCR本文</h3>
       {error ? <div role="alert" className="text-sm text-destructive">{error}<Button variant="ghost" size="sm" onClick={() => setAttempt((v) => v + 1)}>再読込</Button></div> :
         <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-sans text-xs leading-5 text-muted-foreground">{detail ? detail.ocrText || "OCR本文なし" : "読込中..."}</pre>}
     </div> : null}
@@ -372,9 +377,9 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                   <DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} />
                   <button data-selection-open onClick={() => open(r)} className="record-card-open break-words text-xs text-muted-foreground">{edits[r.id]?.invoiceNumber || r.title} · {documentKindLabels[r.kind]}{(edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart) ? ` · ${edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart}` : ""}</button>
                   {r.billingLabel ? <span className="break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}
-                  <span className="flex min-w-0 items-center gap-x-0.5 text-xs sm:gap-x-2"><span className="min-w-0 max-w-[50%]"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} /></span><span className="min-w-0 truncate tabular-nums text-muted-foreground">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</span>{r.total === undefined ? null : <span className="ml-auto shrink-0 text-sm font-medium tabular-nums"><Money value={edits[r.id]?.total ?? r.total} maximumFractionDigits={2} /></span>}</span>
+                  <span className="flex min-w-0 items-center gap-x-0.5 text-xs sm:gap-x-2"><span className="min-w-0 max-w-[50%]"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} /></span><span className="min-w-0 truncate tabular-nums text-muted-foreground">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}</span>{r.amountsHidden ? <HiddenAmount className="ml-auto shrink-0 text-sm text-muted-foreground" /> : r.total === undefined ? null : <span className="ml-auto shrink-0 text-sm font-medium tabular-nums"><Money value={edits[r.id]?.total ?? r.total} maximumFractionDigits={2} /></span>}</span>
                   {issuedOnly || (edits[r.id]?.needsReview ?? r.needsReview) || edits[r.id] ? <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs">
-                    {issuedOnly ? <IssuedAmountsLine row={r} /> : null}
+                    {issuedOnly && !r.amountsHidden ? <IssuedAmountsLine row={r} /> : null}
                     {issuedOnly && r.imported ? <IssuedReviewStatus row={r} edit={edits[r.id]} /> : null}
                     {!issuedOnly && (edits[r.id]?.needsReview ?? r.needsReview) ? <span className="text-amber-700 dark:text-amber-300">OCR要確認</span> : null}
                     {edits[r.id] ? <span className="text-amber-700 dark:text-amber-300">未保存</span> : null}
@@ -395,7 +400,7 @@ export function DocumentsWorkspace({ rows, company, projects = [], canExport = f
                 <td className="p-0"><RowSelectionCheckbox selection={selection} id={r.id} label={r.title + "を選択"} /></td>
                 <td className="px-2 py-3"><DocumentProjectControl row={r} edit={edits[r.id]} projects={projects} disabled={saving || deleting} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} /><button data-selection-open className="min-h-11 w-full text-left text-xs text-muted-foreground hover:underline underline-offset-4 hover:text-primary" onClick={() => open(r)}><span className="block break-words">{edits[r.id]?.invoiceNumber || r.title}</span><span className="block text-xs font-normal text-muted-foreground">{documentKindLabels[r.kind]} · {documentCategoryLabels[r.category] || r.category}{edits[r.id] ? " · 未保存" : ""}</span></button>{r.billingLabel ? <span className="block break-words text-xs text-muted-foreground">請求回・内訳: {r.billingLabel}</span> : null}</td>
                 <td className="px-2 py-3"><span className="block break-words">{edits[r.id]?.projectId && edits[r.id].projectId !== r.projectId ? projects.find((p) => p.value === edits[r.id].projectId)?.clientName || r.counterpart : r.counterpart || "—"}</span></td>
-                <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}{issuedOnly ? <span className="mt-1 block text-muted-foreground">{(edits[r.id]?.dueDate ?? r.dueDate) || "期限未設定"}</span> : null}</td><td className="space-y-1 px-2 py-3 text-right tabular-nums">{r.total === undefined ? "—" : <Money value={edits[r.id]?.total ?? r.total} maximumFractionDigits={2} />}{issuedOnly ? <IssuedAmounts row={r} /> : null}</td>
+                <td className="px-2 py-3 text-xs tabular-nums">{(edits[r.id]?.issueDate ?? r.date) || "未設定"}{issuedOnly ? <span className="mt-1 block text-muted-foreground">{(edits[r.id]?.dueDate ?? r.dueDate) || "期限未設定"}</span> : null}</td><td className="space-y-1 px-2 py-3 text-right tabular-nums">{r.amountsHidden ? <HiddenAmount className="text-muted-foreground" /> : r.total === undefined ? "—" : <Money value={edits[r.id]?.total ?? r.total} maximumFractionDigits={2} />}{issuedOnly && !r.amountsHidden ? <IssuedAmounts row={r} /> : null}</td>
                 <td className="px-2 py-3"><DocumentStatusControl row={r} edit={edits[r.id]} onEdit={(v) => setEdits((old) => ({ ...old, [r.id]: v }))} company={company} disabled={saving || deleting} />{(edits[r.id]?.needsReview ?? r.needsReview) ? <span className="text-xs text-amber-700 dark:text-amber-300">OCR要確認</span> : null}</td>
                 {issuedOnly ? <td><IssuedReviewStatus row={r} edit={edits[r.id]} /></td> : null}
                 <td className="py-2"><DocumentMenuButton row={r} onEdit={() => open(r)} onDelete={() => askDelete([r])} disabled={saving || deleting} /></td>

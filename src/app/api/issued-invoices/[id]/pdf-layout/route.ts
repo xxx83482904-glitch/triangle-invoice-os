@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const invoice = data.issuedInvoices.find((item) => item.id === id && !item.deletedAt);
   if (!invoice) return NextResponse.json({ error: "請求書が見つかりません" }, { status: 404 });
   const company = companyFromParam(data.projects.find((p) => p.id === invoice.projectId)?.company);
-  if (user.role === "GUEST" ? invoice.createdById !== user.id : !documentRows(data, user, company).some((r) => r.id === `issued:${id}`)) {
+  if (user.role === "GUEST" ? invoice.createdById !== user.id : !documentRows(data, user, company).some((r) => r.id === `issued:${id}` && !r.amountsHidden)) {
     return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   }
   if (invoice.fileUrl) return NextResponse.json({ error: "取り込んだ原本にはレイアウト調整がありません" }, { status: 409 });

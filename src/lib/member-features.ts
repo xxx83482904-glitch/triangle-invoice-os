@@ -8,6 +8,7 @@ export const memberFeatures = [
   { key: "documents", label: "全書類", grant: ["view:documents"], revokeAlso: [] },
   { key: "projects", label: "案件", grant: ["view:projects", "manage:projects", "comment:project"], revokeAlso: [] },
   { key: "issuedInvoices", label: "見積書・発行請求書", grant: ["view:issuedInvoices", "manage:issuedInvoices", "export:issuedInvoices"], revokeAlso: ["create:invoiceProjects"] },
+  { key: "issuedInvoiceAmounts", label: "請求書の金額", grant: ["view:issuedInvoiceAmounts"], revokeAlso: [] },
   { key: "mailSorter", label: "郵便仕分け", grant: ["view:mailSorter", "manage:mailSorter"], revokeAlso: [] },
   { key: "receivedInvoices", label: "受領請求書", grant: ["view:receivedInvoices", "manage:receivedInvoices"], revokeAlso: ["approve:receivedInvoices", "upload:receivedInvoices"] },
   { key: "imports", label: "輸入", grant: ["view:imports", "manage:imports"], revokeAlso: [] },

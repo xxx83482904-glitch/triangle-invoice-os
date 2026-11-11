@@ -5,6 +5,7 @@ import { formatDate } from "@/lib/format";
 import { can, canAccessCompany } from "@/lib/rbac";
 import { projectMoney, readData } from "@/lib/store";
 import { invoicePaymentSummary } from "@/lib/invoice-status";
+import { canSeeIssuedAmounts } from "@/lib/issued-amount-access";
 
 function csvEscape(value: unknown) {
   const text = String(value ?? "");
@@ -51,9 +52,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
           formatDate(invoice.dueDate),
           data.clients.find((client) => client.id === invoice.clientId)?.companyName,
           data.projects.find((project) => project.id === invoice.projectId)?.name,
-          invoice.subtotal,
-          invoice.taxTotal,
-          invoice.total,
+          // Someone else's invoice keeps its row; its money columns stay empty.
+          ...(canSeeIssuedAmounts(user, invoice) ? [invoice.subtotal, invoice.taxTotal, invoice.total] : ["", "", ""]),
           invoicePaymentSummary(data, invoice).status,
         ]),
     ]);
@@ -156,18 +156,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
       ...projects
         .map((project) => {
           const money = projectMoney(data, project.id);
+          // Columns computed from issued invoices stay empty when any of the project's invoices is hidden from this person.
+          const shown = data.issuedInvoices.every((invoice) => invoice.deletedAt || invoice.projectId !== project.id || canSeeIssuedAmounts(user, invoice));
+          const fromInvoices = (value: number) => shown ? value : "";
           return [
             project.name,
             money.contractAmount,
-            money.invoicedAmount,
-            money.paidIncomeAmount,
-            money.unpaidIncomeAmount,
+            fromInvoices(money.invoicedAmount),
+            fromInvoices(money.paidIncomeAmount),
+            fromInvoices(money.unpaidIncomeAmount),
             money.receivedInvoiceTotal,
             money.paidExpenseAmount,
             money.unpaidExpenseAmount,
-            money.grossProfit,
-            money.grossProfitRate,
-            money.paidIncomeAmount - money.paidExpenseAmount,
+            fromInvoices(money.grossProfit),
+            fromInvoices(money.grossProfitRate),
+            fromInvoices(money.paidIncomeAmount - money.paidExpenseAmount),
           ];
         }),
     ]);

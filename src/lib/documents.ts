@@ -4,6 +4,7 @@ import { can, canAccessCompany } from "@/lib/rbac";
 import { estimateStatusLabels } from "@/lib/estimate-values";
 import { invoicePaymentSummary, issuedStatusLabels } from "@/lib/invoice-status";
 import { splitBillingProjectName } from "@/lib/billing-project-name";
+import { canSeeIssuedAmounts } from "@/lib/issued-amount-access";
 export { issuedStatusLabels } from "@/lib/invoice-status";
 import type { AppData, IssuedInvoice, User } from "@/lib/types";
 
@@ -35,8 +36,13 @@ export type DocumentRow = {
   needsReview?: boolean;
   editable?: boolean;
   imported?: boolean;
+  /** Issued invoice or estimate whose money, PDF and original this user may not see (no amount or file fields are sent). */
+  amountsHidden?: boolean;
   updatedAt: string;
 };
+
+// What a person without the amount permission still sees of someone else's invoice or estimate.
+const hiddenMoney = { total: undefined, paidAmount: undefined, statusPaymentAmount: undefined, fileUrl: undefined, fileName: undefined, mimeType: undefined, editable: false, amountsHidden: true } as const;
 
 export const documentKindLabels: Record<DocumentKind, string> = {
   issued: "発行請求書", estimate: "見積書", received: "受領請求書", mail: "郵便物", contract: "契約書", attachment: "添付書類",
@@ -75,7 +81,8 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role" | "fe
       month: month(e.issueDate), date: e.issueDate, dueDate: e.validUntil, total: e.total, status: e.status, statusLabel: estimateStatusLabels[e.status],
       state: e.status === "DRAFT" ? "review" : ["CONVERTED", "DECLINED"].includes(e.status) ? "done" : "open",
       fileUrl: `/api/estimates/${e.id}/pdf`, fileName: `${e.estimateNumber}.pdf`, mimeType: "application/pdf",
-      sourceHref: `/estimates?company=${company}&document=${e.id}`, editable: can(user, "manage:estimates") && !e.invoiceId && e.status !== "CONVERTED", updatedAt: e.updatedAt });
+      sourceHref: `/estimates?company=${company}&document=${e.id}`, editable: can(user, "manage:estimates") && !e.invoiceId && e.status !== "CONVERTED", updatedAt: e.updatedAt,
+      ...(canSeeIssuedAmounts(user, e) ? {} : hiddenMoney) });
   }
   if (can(user, "view:issuedInvoices")) for (const i of data.issuedInvoices) {
     if (i.deletedAt || !projectMap.has(i.projectId)) continue;
@@ -87,7 +94,8 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role" | "fe
       state: ["PAID", "CANCELED"].includes(payment.status) ? "done" : i.needsReview || payment.status === "DRAFT" ? "review" : "open",
       fileUrl: i.fileUrl || i.pdfUrl || `/api/issued-invoices/${i.id}/pdf`, fileName: i.originalFileName || `${i.invoiceNumber}.pdf`, mimeType: i.mimeType || "application/pdf",
       sourceHref: `/issued-invoices?company=${company}&document=${encodeURIComponent(`issued:${i.id}`)}`,
-      needsReview: i.needsReview, imported: Boolean(i.fileUrl), editable: can(user, "manage:issuedInvoices"), updatedAt: i.updatedAt });
+      needsReview: i.needsReview, imported: Boolean(i.fileUrl), editable: can(user, "manage:issuedInvoices"), updatedAt: i.updatedAt,
+      ...(canSeeIssuedAmounts(user, i) ? {} : hiddenMoney) });
   }
   if (can(user, "view:receivedInvoices")) for (const i of data.receivedInvoices) {
     if (i.deletedAt || !projectMap.has(i.projectId)) continue;
@@ -130,6 +138,8 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role" | "fe
   }
   // Attachments already represented by an invoice or the current contract stay in a single row.
   const files = new Set(rows.map((r) => r.fileUrl).filter(Boolean));
+  // Originals of invoices whose amounts are hidden must not come back as attachment rows.
+  for (const i of data.issuedInvoices) if (!canSeeIssuedAmounts(user, i)) for (const url of [i.fileUrl, i.pdfUrl]) if (url) files.add(url);
   for (const a of data.attachments) {
     if (a.deletedAt || files.has(a.fileUrl)) continue;
     const linkedInvoiceId = a.relatedType === "MailDocument" ? data.mailDocuments.find((m) => m.id === a.relatedId && !m.deletedAt)?.relatedReceivedInvoiceId : undefined;
@@ -138,7 +148,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role" | "fe
       (a.relatedType === "ReceivedInvoice" && r.kind === "received") ||
       (a.relatedType === "MailDocument" && r.kind === "mail") ||
       (a.relatedType === "ProjectContract" && r.kind === "contract"))));
-    if (!parent) continue;
+    if (!parent || parent.amountsHidden) continue;
     rows.push({ ...parent, id: `attachment:${a.id}`, sourceId: a.id, kind: "attachment", title: a.fileName, fileUrl: a.fileUrl,
       fileName: a.fileName, mimeType: a.mimeType, date: a.createdAt.slice(0, 10), month: month(a.createdAt), status: "STORED",
       statusLabel: "保管済み", state: "done", total: undefined, editable: false, needsReview: false, updatedAt: a.createdAt });
@@ -148,6 +158,7 @@ export function documentRows(data: AppData, user: Pick<User, "id" | "role" | "fe
 }
 
 export function documentOcrText(data: AppData, row: DocumentRow) {
+  if (row.amountsHidden) return "";
   if (row.kind === "issued") return data.issuedInvoices.find((i) => i.id === row.sourceId)?.ocrText || "";
   if (row.kind === "received") return data.receivedInvoices.find((i) => i.id === row.sourceId)?.ocrText || "";
   if (row.kind === "mail") return data.mailDocuments.find((i) => i.id === row.sourceId)?.ocrText || "";

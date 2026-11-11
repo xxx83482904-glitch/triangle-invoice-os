@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const estimate = data.estimates.find((e) => e.id === id && !e.deletedAt);
   if (!estimate) return NextResponse.json({ error: "見積書が見つかりません" }, { status: 404 });
   const company = companyFromParam(data.projects.find((p) => p.id === estimate.projectId)?.company);
-  if (!documentRows(data, user, company).some((r) => r.id === `estimate:${id}`)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
+  if (!documentRows(data, user, company).some((r) => r.id === `estimate:${id}` && !r.amountsHidden)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   try {
     // Layout keys in the query (from the preview dialog) win over the layout saved on the estimate.
     const result = await buildEstimatePdf(estimate, data, pdfLayoutFromQuery(new URL(request.url).searchParams));
@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const estimate = data.estimates.find((e) => e.id === id && !e.deletedAt);
   if (!estimate) return NextResponse.json({ error: "見積書が見つかりません" }, { status: 404 });
   const company = companyFromParam(data.projects.find((p) => p.id === estimate.projectId)?.company);
-  if (!documentRows(data, user, company).some((r) => r.id === `estimate:${id}`)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
+  if (!documentRows(data, user, company).some((r) => r.id === `estimate:${id}` && !r.amountsHidden)) return NextResponse.json({ error: "権限がありません" }, { status: 403 });
   try {
     const draft = await readPdfDraft(request);
     const next = estimatePdfDraft(estimate, data, draft);
