@@ -29,12 +29,14 @@ export function isCompanyPaymentAccount(account: Parameters<typeof accountKind>[
   return kind === "UNKNOWN" && walletName.test(`${account.serviceName} ${account.name}`.normalize("NFKC"));
 }
 
-// A bank account given as a company card stands for its debit card (e.g. PayPay銀行 Visaデビット): only the debit
-// card's purchase lines count as uses, never transfers, account transfers or withdrawals on the same account.
-const debitLine = /デビット|debit|ﾃﾞﾋﾞ|visa/i, notPurchase = /振込|振替|引落|ATM|手数料|利息|税/i;
+// A bank account given as a company card stands for its debit card (e.g. PayPay銀行 Visaデビット). Debit purchases
+// appear only as the shop name ("OPENAI *CHATGPT SUBSCR", "ローソン"), so every withdrawal counts except the ones
+// that are clearly not card purchases: transfers and their fees, account transfers and direct debits (RL) / PGBS),
+// Pay-easy (PE), overseas remittances, ATM, interest and taxes.
+const notPurchase = /振込|振替|引落|ATM|手数料|利息|税|給与|賞与|送金|ソウキン|ｿｳｷﾝ|入金/i, debitPrefix = /^\s*(PE\s|RL\)|PGBS)/i;
 export function isDebitPurchase(row: Pick<BankTransaction, "content" | "sourceMemo">) {
-  const text = `${row.content} ${row.sourceMemo || ""}`.normalize("NFKC");
-  return debitLine.test(text) && !notPurchase.test(text);
+  const content = row.content.normalize("NFKC"), text = `${content} ${row.sourceMemo || ""}`.normalize("NFKC");
+  return !notPurchase.test(text) && !debitPrefix.test(content);
 }
 const isBankAccount = (account: Parameters<typeof accountKind>[0]) => accountKind(account) === "BANK";
 
