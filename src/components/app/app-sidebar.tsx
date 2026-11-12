@@ -148,7 +148,7 @@ export function AppSidebar({ name, access, canUndo }: { name: string; access: Us
 
       <div className="app-sidebar-row flex shrink-0 items-center gap-2 border-t border-separator-border pt-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-background-tertiary-default text-caption-1-medium text-text-primary" title={person} aria-label={person}>{Array.from(name)[0] || "利"}</span>
-        <div data-sidebar-expanded className="min-w-0 flex-1" title={person}><p className="truncate text-body-medium text-text-primary">{name}</p><p className="truncate text-caption-1-regular text-text-tertiary">{roleLabel(access.role)}</p></div>
+        <Link href="/account" data-sidebar-expanded className="min-w-0 flex-1 rounded-md hover:bg-background-secondary-hover" title={`${person} / パスワードの変更`}><p className="truncate text-body-medium text-text-primary">{name}</p><p className="truncate text-caption-1-regular text-text-tertiary">{roleLabel(access.role)}・パスワード変更</p></Link>
         {can(access, "undo:changes") && <UndoButton compact disabled={!canUndo} />}
         <form action={logoutAction}><Button variant="ghost" size="icon" className="size-9 rounded-lg" title={`${person} / ログアウト`} aria-label="ログアウト"><LogOut className="size-4" aria-hidden /></Button></form>
       </div>

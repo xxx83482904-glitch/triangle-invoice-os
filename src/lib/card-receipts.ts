@@ -124,7 +124,7 @@ function link(data: AppData, receipt: CardReceipt, row: BankTransaction, by: "AU
   Object.assign(receipt, { accountId: row.bankAccountId, transactionId: row.id, attachmentId: attachment.id, linkedAt: now, linkedBy: by, updatedAt: now });
 }
 
-const toUseView = (row: BankTransaction): { id: string; date: string; content: string; amount: number; card?: string } => ({ id: row.id, date: row.transactionDate, content: row.content, amount: row.amount });
+const toUseView = (row: BankTransaction): { id: string; date: string; content: string; amount: number; card?: string; accountId?: string } => ({ id: row.id, date: row.transactionDate, content: row.content, amount: row.amount });
 export type CardUseView = ReturnType<typeof toUseView>;
 export type CardReceiptView = {
   id: string; updatedAt: string; createdAt: string; spentOn: string; amount: number; payee: string; purpose: string; projectName: string; fileUrl: string; mimeType: string;
@@ -239,7 +239,7 @@ export function myCardView(data: AppData, actor: Actor, company: CompanyScope, t
   const accounts = userCardAccounts(data, actor, company);
   if (!accounts.length) return null;
   const ids = accounts.map((row) => row.id), labels = new Map(accounts.map((row) => [row.id, cardAccountLabel(row)]));
-  const withCard = (row: BankTransaction) => ({ ...toUseView(row), card: labels.get(row.bankAccountId) || "" });
+  const withCard = (row: BankTransaction) => ({ ...toUseView(row), card: labels.get(row.bankAccountId) || "", accountId: row.bankAccountId });
   const since = new Date(Date.parse(today) - CARD_USE_LOOKBACK_DAYS * DAY).toISOString().slice(0, 10);
   const projects = new Map(data.projects.filter((row) => matchesCompany(row, company)).map((row) => [row.id, row.name]));
   const receipts: CardReceiptView[] = live(data).filter((row) => row.company === company && row.submittedById === actor.id)
@@ -252,13 +252,49 @@ export function myCardView(data: AppData, actor: Actor, company: CompanyScope, t
     });
   const uses = data.bankTransactions.filter((row) => ids.some((id) => isCardUse(data, id, row)) && row.transactionDate >= since && row.transactionDate <= today)
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.id.localeCompare(a.id));
-  const missing = uses.filter((row) => !documented(data, row.id) && row.bookkeeping?.invoiceRequirement !== "NOT_REQUIRED").map(withCard);
+  const holder = data.users.find((row) => row.id === actor.id), exemptions = (holder?.cardReceiptExemptions || []).filter((row) => ids.includes(row.accountId));
+  const exempt = (row: BankTransaction) => exemptions.some((item) => item.accountId === row.bankAccountId && item.key === payeeKey(row.content));
+  const missing = uses.filter((row) => !documented(data, row.id) && row.bookkeeping?.invoiceRequirement !== "NOT_REQUIRED" && !exempt(row)).map(withCard);
   const month = today.slice(0, 7), monthTotal = uses.filter((row) => row.transactionDate.startsWith(month)).reduce((sum, row) => sum + cents(row.amount), 0) / 100;
   // account.label names every card, so screens written for one card read naturally with several.
   return { account: { id: ids[0], label: accounts.map(cardAccountLabel).join("・") }, accounts: accounts.map((row) => ({ id: row.id, label: cardAccountLabel(row) })),
-    receipts, missing, uses: uses.map((row) => ({ ...withCard(row), documented: documented(data, row.id) })), monthTotal };
+    receipts, missing, uses: uses.map((row) => ({ ...withCard(row), documented: documented(data, row.id) })), monthTotal,
+    exemptions: exemptions.map((row) => ({ ...row, card: labels.get(row.accountId) || "", count: uses.filter((use) => use.bankAccountId === row.accountId && payeeKey(use.content) === row.key).length }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)) };
 }
 export type MyCardView = NonNullable<ReturnType<typeof myCardView>>;
+
+// The same shop on a statement: width, case and spacing differences do not matter.
+export function payeeKey(content: string) {
+  return content.normalize("NFKC").toUpperCase().replace(/\s+/g, " ").trim();
+}
+
+const exemptSchema = z.object({ accountId: reference, content: required("支払先", 1000) }).strict();
+const unexemptSchema = z.object({ accountId: reference, key: required("支払先", 1000) }).strict();
+
+// The card holder marks a payee on one of their cards as never needing a receipt; every use of it, past and future,
+// leaves the missing list. Nothing on the statement or in accounting changes.
+export function exemptCardPayee(data: AppData, actor: Actor, company: CompanyScope, input: z.input<typeof exemptSchema>, now = new Date().toISOString()) {
+  const accounts = ownAccounts(data, actor, company), value = exemptSchema.parse(input);
+  if (!accounts.some((row) => row.id === value.accountId)) throw new Error("あなたのカードではありません。画面を更新してください");
+  const user = data.users.find((row) => row.id === actor.id)!, key = payeeKey(value.content);
+  if (!key) throw new Error("支払先を確認してください");
+  const list = user.cardReceiptExemptions || [];
+  if (!list.some((row) => row.accountId === value.accountId && row.key === key)) user.cardReceiptExemptions = [...list, { accountId: value.accountId, key, label: value.content.normalize("NFKC").trim().slice(0, 200), createdAt: now }];
+  user.updatedAt = stamp(user.updatedAt);
+  return { accountId: value.accountId, key };
+}
+
+export function unexemptCardPayee(data: AppData, actor: Actor, company: CompanyScope, input: z.input<typeof unexemptSchema>) {
+  assertCompanyAccess(actor, company); assertCan(actor, "submit:expenses");
+  const value = unexemptSchema.parse(input), user = data.users.find((row) => row.id === actor.id);
+  if (!user) throw new Error("利用者が見つかりません");
+  const list = user.cardReceiptExemptions || [], next = list.filter((row) => !(row.accountId === value.accountId && row.key === value.key));
+  if (next.length === list.length) throw new Error("この支払先はすでに戻されています。画面を更新してください");
+  if (next.length) user.cardReceiptExemptions = next; else delete user.cardReceiptExemptions;
+  user.updatedAt = stamp(user.updatedAt);
+  return { accountId: value.accountId, key: value.key };
+}
 
 export function canViewCardReceiptFile(data: AppData, user: Actor, name: string) {
   return Boolean(name) && live(data).some((row) => row.submittedById === user.id && can(user, "submit:expenses") && uploadedFileNameFromUrl(row.fileUrl) === name);

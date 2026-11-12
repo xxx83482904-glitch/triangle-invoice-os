@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, CreditCard, ExternalLink, Files, Paperclip, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CreditCard, ExternalLink, Files, Plus, Trash2, X } from "lucide-react";
 import { cardPressProps } from "@/components/app/list-selection";
 import { Money } from "@/components/app/money";
 import { MonthTabs } from "@/components/app/month-tabs";
@@ -16,7 +16,8 @@ import type { CompanyScope } from "@/lib/company";
 import { formatDate } from "@/lib/format";
 import { countByMonth } from "@/lib/month-tabs";
 import { operationFailureToast } from "@/lib/operation-feedback";
-import { cardReceiptAction } from "./actions";
+import { cardPayeeAction, cardReceiptAction } from "./actions";
+import { MissingUses } from "./missing-uses";
 import { BatchForm } from "./batch-form";
 import { ExpenseForm, type Option } from "./expense-form";
 
@@ -61,6 +62,12 @@ export function CardPanel({ card, company, today, projects, categories, wide }: 
     toast({ title, variant: "success" }); after?.(); router.refresh();
   });
 
+  const payee = (input: Parameters<typeof cardPayeeAction>[1], title: string) => startTransition(async () => {
+    const result = await cardPayeeAction(company, input);
+    if (!result.success) { toast(operationFailureToast(new Error(result.error))); return; }
+    toast({ title, variant: "success" }); router.refresh();
+  });
+
   return <div className="min-w-0 space-y-4">
     <div className="flex flex-wrap justify-end gap-2">
       <Button type="button" variant="outline" disabled={pending} onClick={() => { setMode(null); setBatch(true); }}><Files className="size-4" />まとめて登録</Button>
@@ -71,14 +78,9 @@ export function CardPanel({ card, company, today, projects, categories, wide }: 
       <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>今月の利用</div><div className="mt-1 break-all text-sm font-medium text-foreground"><Money value={card.monthTotal} /></div></div>
       <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>領収書がない利用</div><div className="mt-1 text-sm font-medium text-foreground">{card.missing.length}件</div></div>
     </section>
-    {card.missing.length ? <Card variant="section" className="min-w-0"><CardContent className="space-y-2">
-      <h2 className="text-sm font-medium">領収書がないカード利用 {card.missing.length}件</h2>
-      <p className="text-xs text-muted-foreground">「領収書を付ける」から登録すると、その利用に直接付きます。領収書がもらえなかった利用は経理に伝えてください。</p>
-      <ul className="divide-y rounded-lg border" aria-label="領収書がないカード利用">{card.missing.map((use) => <li key={use.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
-        <span className="w-24 shrink-0 text-muted-foreground">{formatDate(use.date)}</span><span className="min-w-0 flex-1 break-words">{use.content}{many && use.card ? <span className="block text-xs text-muted-foreground">{use.card}</span> : null}</span><Money value={use.amount} />
-        <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => attach(use)}><Paperclip className="size-4" />領収書を付ける</Button>
-      </li>)}</ul>
-    </CardContent></Card> : null}
+    <MissingUses card={card} pending={pending} onAttach={attach}
+      onExempt={(use) => { if (use.accountId) payee({ action: "exempt", accountId: use.accountId, content: use.content }, `「${use.content}」の利用を一覧から外しました。`); }}
+      onUnexempt={(row) => payee({ action: "unexempt", accountId: row.accountId, key: row.key }, `「${row.label}」を一覧に戻しました。`)} />
     {batch ? <BatchForm kind="card" card={context} company={company} today={today} projects={projects} categories={categories}
       onClose={() => setBatch(false)} onFinished={() => { setBatch(false); router.refresh(); }} /> : null}
     <Card variant="section" className="min-w-0"><CardContent className="space-y-3">

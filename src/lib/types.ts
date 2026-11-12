@@ -80,6 +80,8 @@ export type User = {
   /** Legacy single company card; read together with companyCardAccountIds. */
   companyCardAccountId?: string;
   companyCardAccountIds?: string[];
+  /** Payees on one of the person's cards that never need a receipt (subscriptions etc.). Hidden from the missing list. */
+  cardReceiptExemptions?: Array<{ accountId: string; key: string; label: string; createdAt: string }>;
 };
 
 export type BankPartyAlias = { id: string; company: "JAPAN" | "CHINA"; accountId: string; content: string; confirmedById: string; createdAt: string };

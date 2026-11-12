@@ -97,17 +97,31 @@ export function CardDoneScreen({ status, payee, amount, purpose, use, cardLabel,
   </Screen>;
 }
 
-export function MissingScreen({ card, onBack, onShoot }: { card: MyCardView; onBack: () => void; onShoot: (use: CardUseView) => void }) {
+// Grouped by month, the latest two months first; older months open on request. A payee that never needs a receipt
+// (a subscription) is taken off the list with "不要".
+export function MissingScreen({ card, pending, onBack, onShoot, onExempt }: { card: MyCardView; pending: boolean; onBack: () => void; onShoot: (use: CardUseView) => void; onExempt: (use: CardUseView) => void }) {
+  const [more, setMore] = useState(false);
+  const months = [...new Set(card.missing.map((row) => row.date.slice(0, 7)))].sort().reverse(), visible = more ? months : months.slice(0, 2);
+  const hidden = card.missing.filter((row) => !visible.includes(row.date.slice(0, 7))).length;
   return <Screen>
     <TopBar title="領収書がないカード利用" onBack={onBack} />
     <div className="space-y-4 px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-1">
       <Eyebrow className="px-1">{card.account.label}・{card.missing.length}件</Eyebrow>
-      {card.missing.length ? <div className="cap-surface overflow-hidden">{card.missing.map((row, index) => <div key={row.id} className={`flex min-h-[76px] items-center gap-3 py-2.5 pl-5 pr-3 ${index ? "cap-hairline border-t" : ""}`}>
-        <span className="min-w-0 flex-1"><span className="block break-words text-[16px]">{row.content}</span><span className="block text-[12.5px] tracking-[0.06em] text-muted-foreground">{dayLabel(row.date)}{card.accounts.length > 1 && row.card ? `・${row.card}` : ""}</span></span>
-        <Amount value={row.amount} className="text-[18px]" />
-        <button type="button" aria-label={`${row.content}の領収書を撮る`} onClick={() => onShoot(row)} className="cap-press flex size-14 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><Camera className="size-5" strokeWidth={1.6} /></button>
-      </div>)}</div> : <p className="py-14 text-center text-[14px] tracking-[0.08em] text-muted-foreground">領収書がない利用はありません</p>}
-      <p className="px-1 text-[13px] leading-relaxed tracking-[0.04em] text-muted-foreground">カメラのボタンで撮ると、その利用に直接付きます。領収書がもらえなかった利用は、経理に伝えてください。</p>
+      {visible.map((month) => {
+        const rows = card.missing.filter((row) => row.date.startsWith(month));
+        return <section key={month} className="space-y-2" aria-label={`${Number(month.slice(5))}月の利用`}>
+          <Eyebrow className="px-1">{month.slice(0, 4)}年{Number(month.slice(5))}月・{rows.length}件</Eyebrow>
+          <div className="cap-surface overflow-hidden">{rows.map((row, index) => <div key={row.id} className={`flex min-h-[76px] items-center gap-3 py-2.5 pl-5 pr-3 ${index ? "cap-hairline border-t" : ""}`}>
+            <span className="min-w-0 flex-1"><span className="block break-words text-[16px]">{row.content}</span><span className="block text-[12.5px] tracking-[0.06em] text-muted-foreground">{dayLabel(row.date)}{card.accounts.length > 1 && row.card ? `・${row.card}` : ""}</span>
+              <button type="button" disabled={pending} onClick={() => onExempt(row)} className="mt-1 text-[12px] tracking-[0.04em] text-muted-foreground underline underline-offset-4">この支払先は不要</button></span>
+            <Amount value={row.amount} className="text-[18px]" />
+            <button type="button" aria-label={`${row.content}の領収書を撮る`} onClick={() => onShoot(row)} className="cap-press flex size-14 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><Camera className="size-5" strokeWidth={1.6} /></button>
+          </div>)}</div>
+        </section>;
+      })}
+      {hidden ? <TextButton onClick={() => setMore(true)}>それより前の利用も見る（{hidden}件）</TextButton> : null}
+      {!card.missing.length ? <p className="py-14 text-center text-[14px] tracking-[0.08em] text-muted-foreground">領収書がない利用はありません</p> : null}
+      <p className="px-1 text-[13px] leading-relaxed tracking-[0.04em] text-muted-foreground">カメラのボタンで撮ると、その利用に直接付きます。サブスクなど毎回領収書が要らない支払先は「この支払先は不要」で外せます（PCの経費精算で戻せます）。領収書がもらえなかった利用は、経理に伝えてください。</p>
     </div>
   </Screen>;
 }

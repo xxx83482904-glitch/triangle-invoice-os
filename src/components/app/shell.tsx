@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, LogOut } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { MobileAppNav, MobileCompanySwitch, ScopedBrandLink, WorkflowNav } from "@/components/app/company-switch";
 import { AppSidebar } from "@/components/app/app-sidebar";
@@ -33,6 +34,7 @@ export async function AppShell({ children, banking = false }: { children: React.
               <AppSearchButton compact />
               <ThemeToggle compact />
               {canUndoChanges ? <UndoButton compact disabled={!canUndo} /> : null}
+              <Button asChild variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="アカウント・パスワード変更"><Link href="/account" aria-label="アカウント・パスワード変更"><KeyRound className="h-4 w-4" /></Link></Button>
               <form action={logoutAction}>
                 <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" title="ログアウト">
                   <LogOut className="h-4 w-4" />

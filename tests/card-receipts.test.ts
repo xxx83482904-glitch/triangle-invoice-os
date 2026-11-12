@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { expenseAccountant, expenseAdmin, expenseDesigner, expenseManager, expensesFixture } from "./expense-claims-fixture";
 import { timestamp } from "./document-fixture";
-import { assignCompanyCard, autoLinkCardReceipts, cardAccountLabel, heldCardIds, canViewCardReceiptFile, companyCardAccounts, myCardView, pickCardUse, removeCardReceipt, submitCardReceipt, type CardReceiptSubmit } from "../src/lib/card-receipts";
+import { exemptCardPayee, unexemptCardPayee, assignCompanyCard, autoLinkCardReceipts, cardAccountLabel, heldCardIds, canViewCardReceiptFile, companyCardAccounts, myCardView, pickCardUse, removeCardReceipt, submitCardReceipt, type CardReceiptSubmit } from "../src/lib/card-receipts";
 import { bankReceiptViews, removeBankReceipt } from "../src/lib/bank-receipts";
 import type { BankTransaction } from "../src/lib/banking-types";
 
@@ -107,6 +107,25 @@ test("a person stored with the old single card field keeps that card", () => {
   assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountIds: ["aplus-des", "aplus-pm"] });
   assert.equal(des.companyCardAccountId, undefined);
   assert.deepEqual(des.companyCardAccountIds, ["aplus-des", "aplus-pm"]);
+});
+
+test("a payee marked as not needing receipts leaves the missing list on that card only, and can be put back", () => {
+  const data = setup();
+  data.bankTransactions.push(cardUse("apple-1", "aplus-des", 450, "2026-11-06", { content: "ＡＰＰＬＥ ＣＯＭ ＢＩＬＬ" }), cardUse("apple-2", "aplus-des", 60, "2026-10-06", { content: "APPLE  COM BILL" }),
+    cardUse("apple-pm", "aplus-pm", 450, "2026-11-06", { content: "APPLE COM BILL" }));
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["aplus-pm"] });
+  assert.throws(() => exemptCardPayee(data, expenseDesigner, "JAPAN", { accountId: "aplus-pm", content: "APPLE COM BILL" }), /あなたのカードではありません/);
+  const before = myCardView(data, expenseDesigner, "JAPAN", today)!.missing.length;
+  const { key } = exemptCardPayee(data, expenseDesigner, "JAPAN", { accountId: "aplus-des", content: "ＡＰＰＬＥ ＣＯＭ ＢＩＬＬ" });
+  const view = myCardView(data, expenseDesigner, "JAPAN", today)!;
+  assert.equal(view.missing.length, before - 2);
+  assert.ok(!view.missing.some((row) => row.id.startsWith("apple")));
+  assert.deepEqual(view.exemptions.map((row) => [row.label, row.count]), [["APPLE COM BILL", 2]]);
+  assert.ok(myCardView(data, expenseManager, "JAPAN", today)!.missing.some((row) => row.id === "apple-pm"), "another person's card is untouched");
+  assert.ok(data.bankTransactions.filter((row) => row.id.startsWith("apple")).every((row) => !row.bookkeeping), "the statement itself is not changed");
+  unexemptCardPayee(data, expenseDesigner, "JAPAN", { accountId: "aplus-des", key });
+  assert.equal(myCardView(data, expenseDesigner, "JAPAN", today)!.missing.length, before);
+  assert.throws(() => unexemptCardPayee(data, expenseDesigner, "JAPAN", { accountId: "aplus-des", key }), /すでに戻されています/);
 });
 
 test("disabled, pending, rejected and deleted users cannot receive a company card", () => {
