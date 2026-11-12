@@ -49,7 +49,7 @@ test("PayPay and other wallets can be given as a company card", () => {
   assert.equal(result.use?.id, "pp-lunch");
 });
 
-test("a bank account is given as its debit card: only debit purchases are uses, not transfers or withdrawals", () => {
+test("a bank account is given as its debit card: shop-name lines are uses, transfers, fees, direct debits, remittances and withdrawals are not", () => {
   const data = setup();
   const header = account("ppb", "PayPay銀行", "PayPay銀行"), branch = { ...account("ppb-branch", "PayPay銀行 / 本店 普通 0000000", "PayPay銀行"), sourceId: "ppb", sourceSubId: "branch" };
   data.bankAccounts.push(header, branch);
@@ -62,11 +62,17 @@ test("a bank account is given as its debit card: only debit purchases are uses, 
     cardUse("t1", "ppb-branch", 2200, "2026-11-06", { content: "振込 ゴウセイシヨウジ" }),
     cardUse("t2", "ppb-branch", 50000, "2026-11-04", { content: "口座振替 ゴウセイリース" }),
     cardUse("t3", "ppb-branch", 10000, "2026-11-03", { content: "ATM 引出" }),
+    cardUse("d3", "ppb-branch", 3000, "2026-11-02", { content: "OPENAI *CHATGPT SUBSCR" }),
+    cardUse("t4", "ppb-branch", 145, "2026-11-02", { content: "振込手数料" }),
+    cardUse("t5", "ppb-branch", 400000, "2026-11-02", { content: "PAYFOREXカイガイソウキン" }),
+    cardUse("t6", "ppb-branch", 500000, "2026-11-02", { content: "PE シヤカイホケンリヨウトウ(コツコキン)" }),
+    cardUse("t7", "ppb-branch", 29000, "2026-11-02", { content: "RL)ゴウセイジムシヨ" }),
+    cardUse("t8", "ppb-branch", 30000, "2026-11-02", { content: "PGBSゴウセイホケン" }),
   );
   assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["ppb-branch"] });
   const view = myCardView(data, expenseManager, "JAPAN", today)!;
-  assert.deepEqual(view.uses.map((row) => row.id).sort(), ["d1", "d2"]);
-  assert.deepEqual(view.missing.map((row) => row.id).sort(), ["d1", "d2"]);
+  assert.deepEqual(view.uses.map((row) => row.id).sort(), ["d1", "d2", "d3"]);
+  assert.deepEqual(view.missing.map((row) => row.id).sort(), ["d1", "d2", "d3"]);
   const result = submitCardReceipt(data, expenseManager, "JAPAN", receipt({ amount: 2200 }), "debit-receipt");
   assert.equal(result.status, "LINKED");
   assert.equal(result.use?.id, "d1");
