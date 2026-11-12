@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     submitCardReceipt(structuredClone(data), liveActor(data, user.id), company, input, id);
     await saveReceivedInvoiceFile(name, Buffer.from(await file.arrayBuffer()), file.type);
     const result = await mutateData(user.id, "SUBMIT_CARD_RECEIPT", "CardReceipt", id, (draft) => submitCardReceipt(draft, liveActor(draft, user.id), company, input, id));
-    revalidatePath("/expenses/capture"); revalidatePath("/banking");
+    revalidatePath("/expenses"); revalidatePath("/expenses/capture"); revalidatePath("/banking");
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof ZodError ? error.issues[0]?.message || "入力内容を確認してください" : error instanceof Error ? error.message : "保存できませんでした";

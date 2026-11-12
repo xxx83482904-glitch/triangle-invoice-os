@@ -4,7 +4,7 @@ import { Money } from "@/components/app/money";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Camera, ChevronLeft, ChevronRight, ExternalLink, Landmark, Plus, Search, Unlink, X } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, CreditCard, ExternalLink, Files, Landmark, Plus, Search, Unlink, Wallet, X } from "lucide-react";
 import { FilterPanel } from "@/components/app/filter-panel";
 import { cardPressProps } from "@/components/app/list-selection";
 import { MonthTabs } from "@/components/app/month-tabs";
@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { MyCardView } from "@/lib/card-receipts";
+import type { ExpenseStats } from "@/lib/expense-home-stats";
 import { Textarea } from "@/components/ui/textarea";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { toast } from "@/hooks/use-toast";
@@ -23,16 +25,15 @@ import { expenseActionLabels, expenseMonth, expensePaidWithLabels, expenseStatus
 import { formatDate } from "@/lib/format";
 import { countByMonth } from "@/lib/month-tabs";
 import { operationFailureToast } from "@/lib/operation-feedback";
-import type { ExpenseClaimStatus, ExpensePaidWith } from "@/lib/types";
+import type { ExpenseClaimStatus } from "@/lib/types";
 import type { ExpensePayoutDetail } from "@/lib/expense-payouts";
-import type { ReceiptReading } from "@/lib/expense-receipt-reading";
-import { prepareReceiptFile } from "@/lib/receipt-image";
 import { expenseAction, expensePayoutAction, expensePayoutDetailAction } from "./actions";
+import { BatchForm } from "./batch-form";
+import { CardPanel } from "./card-panel";
+import { ExpenseForm, type Option } from "./expense-form";
 
-type Option = { value: string; label: string };
 type Summary = ReturnType<typeof expenseSettlementSummary>;
 type RunAction = (input: ExpenseWorkflowMutation, title: string, onSuccess?: () => void) => void;
-const selectClass = "h-9 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 const statusOptions = [["all", "すべて"], ["SUBMITTED", "申請中"], ["RETURNED", "差戻し"], ["APPROVED", "承認済み"], ["PAID", "精算済み"]] as const;
 const statusClasses: Record<ExpenseClaimStatus, string> = {
   SUBMITTED: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
@@ -46,10 +47,11 @@ function ExpenseBadge({ status }: { status: ExpenseClaimStatus }) {
   return <Badge variant="outline" className={`font-normal ${statusClasses[status]}`}>{expenseStatusLabels[status]}</Badge>;
 }
 
-export function ExpensesWorkspace({ company, views, summary, projects, categories, canManage, canReconcile, today, currentUserId, actors, initialStatus, initialView, initialId }: {
+export function ExpensesWorkspace({ company, views, summary, projects, categories, canManage, canReconcile, today, currentUserId, actors, initialStatus, initialView, initialId, card, stats, initialTab }: {
   company: CompanyScope; views: ExpenseClaimView[]; summary: { all: Summary; mine: Summary }; projects: Option[]; categories: Option[];
   canManage: boolean; canReconcile: boolean; today: string; currentUserId: string; actors: Record<string, string>;
   initialStatus: ExpenseClaimStatus | "all"; initialView: "all" | "mine"; initialId?: string;
+  card: MyCardView | null; stats: ExpenseStats; initialTab: "expense" | "card";
 }) {
   const router = useRouter(), wide = useMediaQuery("(min-width: 1024px)");
   const [pending, startTransition] = useTransition(), busy = useRef(false);
@@ -57,7 +59,8 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
   const [status, setStatus] = useState<ExpenseClaimStatus | "all">(initialStatus);
   const [query, setQuery] = useState(""), [month, setMonth] = useState("");
   const [showWithdrawn, setShowWithdrawn] = useState(false);
-  const [activeId, setActiveId] = useState(initialId || ""), [creating, setCreating] = useState(false);
+  const [activeId, setActiveId] = useState(initialId || ""), [creating, setCreating] = useState(false), [batch, setBatch] = useState(false);
+  const [tab, setTab] = useState<"expense" | "card">(card ? initialTab : "expense");
   const scoped = useMemo(() => views.filter((row) => view === "all" || row.submittedById === currentUserId), [views, view, currentUserId]);
   const months = scoped.map(expenseMonth), counts = countByMonth(months);
   const filtered = useMemo(() => {
@@ -69,7 +72,7 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
   const totals = summary[view].totals;
   const open = (id: string) => { setCreating(false); setActiveId(id); };
   const close = () => { if (!busy.current) { setCreating(false); setActiveId(""); } };
-  const create = () => { setCreating(true); setActiveId(""); };
+  const create = () => { setBatch(false); setCreating(true); setActiveId(""); };
   const reset = () => { setQuery(""); setMonth(""); setStatus("all"); setShowWithdrawn(false); };
   const step = (offset: number) => !pending && activeIndex >= 0 && filtered[activeIndex + offset] ? () => open(filtered[activeIndex + offset].id) : undefined;
   const run: RunAction = (input, title, onSuccess) => {
@@ -101,15 +104,27 @@ export function ExpensesWorkspace({ company, views, summary, projects, categorie
     });
   };
 
+  const tabs = card ? <OptionTabs label="支払い方法" value={tab} onChange={(value) => { setTab(value); close(); setBatch(false); }} options={[["expense", <span key="e" className="inline-flex items-center gap-1"><Wallet className="size-4" />立替の申請</span>],
+    ["card", <span key="c" className="inline-flex items-center gap-1"><CreditCard className="size-4" />会社カード{card.missing.length ? `（領収書なし ${card.missing.length}件）` : ""}</span>]]} /> : null;
+  if (card && tab === "card") return <div className="min-w-0 space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">{tabs}<Button asChild variant="outline"><Link href="/expenses/capture"><Camera className="size-4" />スマホで撮って申請</Link></Button></div>
+    <MyStats stats={stats} />
+    <CardPanel card={card} company={company} today={today} projects={projects} categories={categories} wide={wide} />
+  </div>;
+
   return <div className="min-w-0 space-y-4">
-    <div className="flex flex-wrap justify-end gap-2"><Button asChild variant="outline"><Link href="/expenses/capture"><Camera className="size-4" />スマホで撮って申請</Link></Button><Button type="button" disabled={pending} onClick={create}><Plus className="size-4" />領収書を提出</Button></div>
-    <section aria-label="経費精算の集計" className="grid grid-cols-3 gap-2 text-xs text-muted-foreground sm:gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">{tabs || <span />}<div className="flex flex-wrap justify-end gap-2"><Button asChild variant="outline"><Link href="/expenses/capture"><Camera className="size-4" />スマホで撮って申請</Link></Button>
+      <Button type="button" variant="outline" disabled={pending} onClick={() => { close(); setBatch(true); }}><Files className="size-4" />まとめて提出</Button>
+      <Button type="button" disabled={pending} onClick={create}><Plus className="size-4" />領収書を提出</Button></div></div>
+    {view === "mine" ? <MyStats stats={stats} /> : null}
+    {view === "all" ? <section aria-label="経費精算の集計" className="grid grid-cols-3 gap-2 text-xs text-muted-foreground sm:gap-3">
       {[[`申請中 ${totals.submittedCount}件`, totals.submittedAmount], ["承認済み・未精算", totals.approvedAmount], ["今月の精算済み", totals.paidThisMonth]].map(([label, amount]) =>
         <div key={label} className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>{label}</div><div className="mt-1 break-all text-sm font-medium text-foreground"><Money value={Number(amount)} /></div></div>)}
-    </section>
+    </section> : null}
     {canManage ? <OptionTabs label="表示" caption="表示" value={view} options={[["all", "全員の申請"], ["mine", "自分の申請"]]} disabled={pending}
       onChange={(value) => { setView(value); close(); }} /> : null}
-    <p className="text-xs text-muted-foreground">集計は{view === "all" ? "全員" : "自分"}の全期間の申請です。今月の精算済みは振込日で集計しています。</p>
+    {view === "all" ? <p className="text-xs text-muted-foreground">集計は全員の全期間の申請です。今月の精算済みは振込日で集計しています。</p> : null}
+    {batch ? <BatchForm kind="expense" company={company} today={today} projects={projects} categories={categories} onClose={() => setBatch(false)} onFinished={() => { setBatch(false); reset(); router.refresh(); }} /> : null}
     {canManage && view === "all" ? <SettlementQueue people={summary.all.people} views={views} today={today} pending={pending} run={run} /> : null}
     <Card variant="section" className="min-w-0">
       <CardContent className="space-y-3">
@@ -170,76 +185,20 @@ function PaymentForm({ today, pending, onCancel, onSubmit }: { today: string; pe
   </form>;
 }
 
-function ExpenseForm({ row, company, today, projects, categories, pending, save }: {
-  row?: ExpenseClaimView; company: CompanyScope; today: string; projects: Option[]; categories: Option[]; pending: boolean; save: (data: FormData) => void;
-}) {
-  const [spentOn, setSpentOn] = useState(row?.spentOn || today), [amount, setAmount] = useState(row ? String(row.amount) : ""), [payee, setPayee] = useState(row?.payee || "");
-  const [paidWith, setPaidWith] = useState<ExpensePaidWith>(row?.paidWith || "CASH"), [ocrText, setOcrText] = useState(row?.ocrText || "");
-  const [purpose, setPurpose] = useState(row?.purpose || ""), [categoryId, setCategoryId] = useState(row?.categoryId || "");
-  const [registrationNumber, setRegistrationNumber] = useState(row?.registrationNumber || "");
-  const [tax10, setTax10] = useState(row?.taxBreakdown?.rate10 ? String(row.taxBreakdown.rate10) : ""), [tax8, setTax8] = useState(row?.taxBreakdown?.rate8 ? String(row.taxBreakdown.rate8) : "");
-  const [reading, setReading] = useState(false), [ocrRead, setOcrRead] = useState(false), [ocrError, setOcrError] = useState(""), [warnings, setWarnings] = useState<string[]>([]);
-  const request = useRef<AbortController | null>(null);
-  useEffect(() => () => request.current?.abort(), []);
-  const readReceipt = async (file?: File) => {
-    request.current?.abort(); request.current = null;
-    setOcrText(""); setOcrRead(false); setOcrError(""); setWarnings([]); setReading(false);
-    if (!file) return;
-    const controller = new AbortController(); request.current = controller; setReading(true);
-    try {
-      const data = new FormData(); data.set("company", company); data.set("file", await prepareReceiptFile(file));
-      const response = await fetch("/api/uploads/expenses/ocr", { method: "POST", body: data, signal: controller.signal });
-      const body = await response.json() as Partial<ReceiptReading> & { error?: string };
-      if (!response.ok) throw new Error(body.error || "領収書を読み取れませんでした");
-      if (controller.signal.aborted) return;
-      // Input entered while OCR runs always wins over the draft.
-      setSpentOn((current) => current || body.spentOn || "");
-      setAmount((current) => current || (typeof body.amount === "number" && body.amount > 0 ? String(body.amount) : ""));
-      setPayee((current) => current || body.payee || "");
-      setPurpose((current) => current || body.purpose || ""); setCategoryId((current) => current || body.categoryId || "");
-      if (body.paidWith && !row) setPaidWith(body.paidWith);
-      setRegistrationNumber((current) => current || body.registrationNumber || "");
-      setTax10((current) => current || (body.taxBreakdown?.rate10 ? String(body.taxBreakdown.rate10) : ""));
-      setTax8((current) => current || (body.taxBreakdown?.rate8 ? String(body.taxBreakdown.rate8) : ""));
-      setOcrText(body.ocrText || ""); setOcrRead(true); setWarnings(body.warnings || []);
-    } catch (error) {
-      if (!controller.signal.aborted) { setOcrError("読み取れませんでした。領収書を確認して手入力で続けられます。"); toast(operationFailureToast(error)); }
-    } finally { if (request.current === controller) setReading(false); }
-  };
-  return <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!pending && !reading) save(new FormData(event.currentTarget)); }}>
-    <input type="hidden" name="company" value={company} /><input type="hidden" name="ocrText" value={ocrText} />
-    {row ? <><input type="hidden" name="claimId" value={row.id} /><input type="hidden" name="version" value={row.updatedAt} /></> : null}
-    <label className="block space-y-1 text-sm"><span>{row ? "領収書を差し替え（任意）" : "領収書の写真・PDF"}</span>
-      <Input name="file" type="file" accept="image/*,application/pdf" capture="environment" required={!row} disabled={pending} className="h-auto py-2" onChange={(event) => { void readReceipt(event.target.files?.[0]); }} />
-      <span className="block text-xs text-muted-foreground">PDF・JPEG・PNG、10MB以内</span>
-    </label>
-    {reading ? <p role="status" className="text-xs text-muted-foreground">領収書を読み取り中…</p> : null}
-    {ocrRead ? <p role="status" className="text-xs text-muted-foreground">領収書から読み取った値です。領収書と見比べて直してください。</p> : null}
-    {warnings.map((warning) => <p key={warning} role="status" className="border-l-2 border-amber-500 pl-2 text-xs">{warning}</p>)}
-    {ocrError ? <p role="status" className="text-xs text-muted-foreground">{ocrError}</p> : null}
-    <div className="grid grid-cols-2 gap-3">
-      <label className="min-w-0 space-y-1 text-sm"><span>支払日</span><Input name="spentOn" type="date" value={spentOn} max={today} required disabled={pending} onChange={(event) => setSpentOn(event.target.value)} /></label>
-      <label className="min-w-0 space-y-1 text-sm"><span>金額（円）</span><Input name="amount" type="number" value={amount} min={1} step={1} required disabled={pending} onChange={(event) => setAmount(event.target.value)} /></label>
-    </div>
-    <label className="block space-y-1 text-sm"><span>支払先</span><Input name="payee" value={payee} maxLength={100} required disabled={pending} onChange={(event) => setPayee(event.target.value)} /></label>
-    <label className="block space-y-1 text-sm"><span>用途</span><Input name="purpose" value={purpose} maxLength={200} required disabled={pending} onChange={(event) => setPurpose(event.target.value)} /></label>
-    <label className="block space-y-1 text-sm"><span>勘定科目</span><select name="categoryId" value={categoryId} className={selectClass} disabled={pending} onChange={(event) => setCategoryId(event.target.value)}>
-      <option value="">未設定</option>{row?.categoryId && !categories.some((item) => item.value === row.categoryId) ? <option value={row.categoryId} disabled>{row.categoryName}（利用不可）</option> : null}
-      {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-    </select></label>
-    <label className="block space-y-1 text-sm"><span>案件</span><select name="projectId" defaultValue={row?.projectId || ""} className={selectClass} disabled={pending}>
-      <option value="">共通経費（案件なし）</option>{row?.projectId && !projects.some((item) => item.value === row.projectId) ? <option value={row.projectId} disabled>{row.projectName}（利用不可）</option> : null}
-      {projects.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-    </select></label>
-    <OptionTabs label="立替方法" caption="立替方法" name="paidWith" value={paidWith} options={[["CASH", "現金"], ["PERSONAL_CARD", "個人カード"], ["OTHER", "その他"]]} disabled={pending} onChange={setPaidWith} />
+function MyStats({ stats }: { stats: ExpenseStats }) {
+  const max = Math.max(1, ...stats.monthly.map((row) => row.total)), monthLabel = (month: string) => `${Number(month.slice(5))}月`;
+  return <section aria-label="自分の利用と申請" className="grid gap-3 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
     <div className="grid grid-cols-3 gap-3">
-      <label className="min-w-0 space-y-1 text-sm"><span>登録番号</span><Input name="registrationNumber" value={registrationNumber} placeholder="T1234…" maxLength={20} disabled={pending} onChange={(event) => setRegistrationNumber(event.target.value)} /></label>
-      <label className="min-w-0 space-y-1 text-sm"><span>消費税10%</span><Input name="tax10" type="number" min={0} step={1} value={tax10} disabled={pending} onChange={(event) => setTax10(event.target.value)} /></label>
-      <label className="min-w-0 space-y-1 text-sm"><span>消費税8%</span><Input name="tax8" type="number" min={0} step={1} value={tax8} disabled={pending} onChange={(event) => setTax8(event.target.value)} /></label>
+      <div className="min-w-0"><div>{monthLabel(stats.month)}の利用額</div><div className="mt-1 break-all text-base font-medium text-foreground"><Money value={stats.thisMonth.total} /></div>
+        {stats.hasCard ? <div className="mt-0.5">立替 <Money value={stats.thisMonth.expense} />・カード <Money value={stats.thisMonth.card} /></div> : null}</div>
+      <div className="min-w-0"><div>未承認 {stats.unapproved.count}件</div><div className="mt-1 break-all text-sm font-medium text-foreground"><Money value={stats.unapproved.amount} /></div>
+        {stats.unapproved.returned ? <div className="mt-0.5 text-rose-700 dark:text-rose-300">うち差戻し {stats.unapproved.returned}件</div> : null}</div>
+      <div className="min-w-0"><div>承認済み・振込待ち {stats.awaitingPayout.count}件</div><div className="mt-1 break-all text-sm font-medium text-foreground"><Money value={stats.awaitingPayout.amount} /></div></div>
     </div>
-    <label className="block space-y-1 text-sm"><span>メモ</span><Textarea name="memo" defaultValue={row?.memo || ""} maxLength={1000} disabled={pending} /></label>
-    <Button type="submit" disabled={pending || reading}>{pending ? "保存中…" : row?.status === "RETURNED" ? "修正して再提出" : row ? "変更を保存" : "領収書を提出"}</Button>
-  </form>;
+    <div aria-label="毎月の利用額" className="grid grid-cols-6 items-end gap-2">{stats.monthly.map((row) => <div key={row.month} className="flex min-w-0 flex-col items-center gap-1" title={`${monthLabel(row.month)} ${row.total.toLocaleString("ja-JP")}円`}>
+      <div className="flex h-12 w-full items-end"><div className={`w-full rounded-sm ${row.month === stats.month ? "bg-foreground/70" : "bg-foreground/20"}`} style={{ height: `${Math.max(row.total ? 6 : 2, Math.round(row.total / max * 100))}%` }} /></div>
+      <span>{monthLabel(row.month)}</span></div>)}</div>
+  </section>;
 }
 
 function ExpenseDetail({ row, company, today, projects, categories, actors, wide, canManage, canReconcile, pending, save, run }: {

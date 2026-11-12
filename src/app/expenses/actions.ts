@@ -61,7 +61,7 @@ export async function cardReceiptAction(company: CompanyScope, input: { action: 
     await mutateData(user.id, action === "pick" ? "PICK_CARD_USE" : "REMOVE_CARD_RECEIPT", "CardReceipt", String(rest.id), (data) => action === "pick"
       ? pickCardUse(data, liveActor(data, user.id), company, rest as { id: string; version: string; transactionId: string })
       : removeCardReceipt(data, liveActor(data, user.id), company, { id: rest.id, version: rest.version }));
-    revalidatePath("/expenses/capture"); revalidatePath("/banking");
+    revalidatePath("/expenses"); revalidatePath("/expenses/capture"); revalidatePath("/banking");
     return { success: true as const };
   } catch (error) { return { success: false as const, error: message(error) }; }
 }

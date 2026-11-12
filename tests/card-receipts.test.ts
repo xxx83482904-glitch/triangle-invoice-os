@@ -37,6 +37,19 @@ test("only administrators give out cards, only card accounts can be given, and e
   assert.equal(data.users.find((row) => row.id === "des")?.companyCardAccountId, undefined);
 });
 
+test("PayPay and other wallets can be given as a company card, PayPay銀行 cannot", () => {
+  const data = setup();
+  data.bankAccounts.push(account("paypay", "PayPay", "PayPay"), account("paypay-bank", "PayPay銀行 / 本店 普通 0000000", "PayPay銀行"), account("paypay-card", "PayPayカード", "PayPayカード"));
+  assert.deepEqual(companyCardAccounts(data, "JAPAN").map((row) => row.id).sort(), ["aplus-des", "aplus-pm", "paypay", "paypay-card"]);
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "paypay" });
+  assert.equal(data.users.find((row) => row.id === "pm")?.companyCardAccountId, "paypay");
+  assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "paypay-bank" }), /カード/);
+  data.bankTransactions.push(cardUse("pp-lunch", "paypay", 1200, "2026-11-06"));
+  const result = submitCardReceipt(data, expenseManager, "JAPAN", receipt({ amount: 1200 }), "pp-receipt");
+  assert.equal(result.status, "LINKED");
+  assert.equal(result.use?.id, "pp-lunch");
+});
+
 test("disabled, pending, rejected and deleted users cannot receive a company card", () => {
   for (const patch of [{ accessStatus: "DISABLED" as const }, { accessStatus: "PENDING" as const }, { accessStatus: "REJECTED" as const }, { deletedAt: timestamp }]) {
     const data = setup();

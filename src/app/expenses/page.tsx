@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { AppShell, PageHeader } from "@/components/app/shell";
 import { getCurrentUser } from "@/lib/auth";
 import { bankToday } from "@/lib/banking";
+import { myCardView } from "@/lib/card-receipts";
+import { myExpenseStats } from "@/lib/expense-home-stats";
 import { companyFromParam, matchesCompany } from "@/lib/company";
 import { expenseCategoryOptions, expenseClaimViews, expenseSettlementSummary } from "@/lib/expense-claim-edits";
 import { expenseStatuses } from "@/lib/expense-claims";
@@ -28,9 +30,10 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   const initialStatus = expenseStatuses.find((status) => status !== "WITHDRAWN" && status === param("status")) || "all";
   const initialView = canManage && param("view") !== "mine" ? "all" : "mine";
   return <AppShell>
-    <PageHeader title="経費精算" description="立て替えた経費の領収書を提出し、承認と精算をここでまとめます。" />
-    <ExpensesWorkspace key={`${company}:${initialStatus}:${initialView}:${param("claim") || ""}`} company={company} views={views} summary={summary}
+    <PageHeader title="経費精算" description="立て替えた経費や会社カード（クレジット・PayPayなど）の領収書を提出し、承認と精算をここでまとめます。" />
+    <ExpensesWorkspace key={`${company}:${initialStatus}:${initialView}:${param("claim") || ""}:${param("tab") || ""}`} company={company} views={views} summary={summary}
       projects={projects} categories={expenseCategoryOptions(data, company)} canManage={canManage} canReconcile={can(user, "manage:banking")} today={today} currentUserId={user.id}
-      actors={actors} initialStatus={initialStatus} initialView={initialView} initialId={param("claim")} />
+      actors={actors} initialStatus={initialStatus} initialView={initialView} initialId={param("claim")}
+      card={myCardView(data, user, company, today)} stats={myExpenseStats(data, user, company, today)} initialTab={param("tab") === "card" ? "card" : "expense"} />
   </AppShell>;
 }

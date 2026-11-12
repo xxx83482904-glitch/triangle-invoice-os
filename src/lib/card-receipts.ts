@@ -21,8 +21,18 @@ const cents = (value: number) => Math.round(value * 100);
 const days = (a: string, b: string) => Math.round((Date.parse(a) - Date.parse(b)) / DAY);
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
 
+// Payment accounts that are not bank accounts: PayPay, other e-money and prepaid wallets. PayPay銀行 is a bank and is
+// classified as BANK by name, so it never lands here.
+const walletName = /paypay|ペイペイ|電子マネー|プリペイド|デビット|楽天ペイ|d払い|au\s*pay|merpay|メルペイ|suica|pasmo|icoca/i;
+export function isCompanyPaymentAccount(account: Parameters<typeof accountKind>[0]) {
+  const kind = accountKind(account);
+  if (kind === "CARD" || kind === "OTHER") return true;
+  return kind === "UNKNOWN" && walletName.test(`${account.serviceName} ${account.name}`.normalize("NFKC"));
+}
+
+// Accounts an administrator can hand to a person as their company card: credit cards, and PayPay and similar wallets.
 export function companyCardAccounts(data: AppData, company: CompanyScope) {
-  return data.bankAccounts.filter((row) => row.company === company && accountKind(row) === "CARD")
+  return data.bankAccounts.filter((row) => row.company === company && isCompanyPaymentAccount(row))
     .sort((a, b) => `${a.serviceName} ${a.name}`.localeCompare(`${b.serviceName} ${b.name}`, "ja"));
 }
 
