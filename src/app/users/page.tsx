@@ -54,7 +54,7 @@ export default async function UsersPage() {
         <h2 id="registered-users" className="text-base font-medium">登録済み利用者</h2>
         <UserAccountCreator roles={accountRoles} />
       </div>
-      {cards.length ? <p className="mb-3 text-sm text-muted-foreground">会社カードには、クレジットカードのほかPayPayなどの決済口座も登録できます。登録した人は、経費精算（スマホ・PC）で「会社カードで払った」を選んで領収書を利用明細に付けられます。</p> : null}
+      {cards.length ? <p className="mb-3 text-sm text-muted-foreground">会社カードには、クレジットカードのほか、PayPayなどの決済口座や銀行口座（デビットカード払い。明細のデビット利用だけが対象）も登録できます。登録した人は、経費精算（スマホ・PC）で「会社カードで払った」を選んで領収書を利用明細に付けられます。</p> : null}
       <div className="space-y-2">
         {accounts.map((user) => <div key={user.id} className="record-card flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0 space-y-1">

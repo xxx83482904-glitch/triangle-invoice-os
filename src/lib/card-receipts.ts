@@ -21,8 +21,7 @@ const cents = (value: number) => Math.round(value * 100);
 const days = (a: string, b: string) => Math.round((Date.parse(a) - Date.parse(b)) / DAY);
 const stamp = (previous?: string) => new Date(Math.max(Date.now(), previous ? Date.parse(previous) + 1 : 0)).toISOString();
 
-// Payment accounts that are not bank accounts: PayPay, other e-money and prepaid wallets. PayPay銀行 is a bank and is
-// classified as BANK by name, so it never lands here.
+// Payment accounts that are not bank accounts: PayPay, other e-money and prepaid wallets.
 const walletName = /paypay|ペイペイ|電子マネー|プリペイド|デビット|楽天ペイ|d払い|au\s*pay|merpay|メルペイ|suica|pasmo|icoca/i;
 export function isCompanyPaymentAccount(account: Parameters<typeof accountKind>[0]) {
   const kind = accountKind(account);
@@ -30,14 +29,29 @@ export function isCompanyPaymentAccount(account: Parameters<typeof accountKind>[
   return kind === "UNKNOWN" && walletName.test(`${account.serviceName} ${account.name}`.normalize("NFKC"));
 }
 
-// Accounts an administrator can hand to a person as their company card: credit cards, and PayPay and similar wallets.
+// A bank account given as a company card stands for its debit card (e.g. PayPay銀行 Visaデビット): only the debit
+// card's purchase lines count as uses, never transfers, account transfers or withdrawals on the same account.
+const debitLine = /デビット|debit|ﾃﾞﾋﾞ|visa/i, notPurchase = /振込|振替|引落|ATM|手数料|利息|税/i;
+export function isDebitPurchase(row: Pick<BankTransaction, "content" | "sourceMemo">) {
+  const text = `${row.content} ${row.sourceMemo || ""}`.normalize("NFKC");
+  return debitLine.test(text) && !notPurchase.test(text);
+}
+const isBankAccount = (account: Parameters<typeof accountKind>[0]) => accountKind(account) === "BANK";
+
+// Accounts an administrator can hand to a person as their company card: credit cards, PayPay and similar wallets, and
+// bank accounts used through their debit card. A connection header with sub-accounts and no lines of its own is skipped.
 export function companyCardAccounts(data: AppData, company: CompanyScope) {
-  return data.bankAccounts.filter((row) => row.company === company && isCompanyPaymentAccount(row))
-    .sort((a, b) => `${a.serviceName} ${a.name}`.localeCompare(`${b.serviceName} ${b.name}`, "ja"));
+  const accounts = data.bankAccounts.filter((row) => row.company === company);
+  const family = (row: (typeof accounts)[number]) => `${row.officeCode}\u0000${row.sourceId}`;
+  const parents = new Set(accounts.filter((row) => row.sourceSubId).map(family));
+  const used = new Set(data.bankTransactions.filter((row) => row.company === company).map((row) => row.bankAccountId));
+  return accounts.filter((row) => isCompanyPaymentAccount(row) || isBankAccount(row) && !(!row.sourceSubId && parents.has(family(row)) && !used.has(row.id)))
+    .sort((a, b) => Number(isBankAccount(a)) - Number(isBankAccount(b)) || `${a.serviceName} ${a.name}`.localeCompare(`${b.serviceName} ${b.name}`, "ja"));
 }
 
-export function cardAccountLabel(account: { serviceName: string; name: string }) {
-  return account.name.includes(account.serviceName) || !account.serviceName ? account.name : `${account.serviceName} ${account.name}`;
+export function cardAccountLabel(account: Parameters<typeof accountKind>[0]) {
+  const label = account.name.includes(account.serviceName) || !account.serviceName ? account.name : `${account.serviceName} ${account.name}`;
+  return isBankAccount(account) ? `${label}（デビット）` : label;
 }
 
 export function userCardAccount(data: AppData, user: Pick<User, "id">, company: CompanyScope) {
@@ -72,8 +86,10 @@ function documented(data: AppData, transactionId: string) {
 }
 
 export function isCardUse(data: AppData, accountId: string, row: BankTransaction) {
-  return row.bankAccountId === accountId && row.side === "EXPENSE" && !row.sourceMissing && row.sourceStatus !== "excluded" && row.treatment === "NORMAL"
-    && Number.isFinite(row.amount) && row.amount > 0 && !knownBankCardSettlement(data, row);
+  if (row.bankAccountId !== accountId || row.side !== "EXPENSE" || row.sourceMissing || row.sourceStatus === "excluded" || row.treatment !== "NORMAL"
+    || !Number.isFinite(row.amount) || row.amount <= 0 || knownBankCardSettlement(data, row)) return false;
+  const account = data.bankAccounts.find((item) => item.id === accountId);
+  return !account || !isBankAccount(account) || isDebitPurchase(row);
 }
 
 export function cardCandidates(data: AppData, receipt: Pick<CardReceipt, "accountId" | "amount" | "spentOn"> & { excludedTransactionIds?: string[] }) {
