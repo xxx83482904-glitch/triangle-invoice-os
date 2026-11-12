@@ -77,7 +77,9 @@ export type User = {
   updatedAt: string;
   deletedAt?: string | null;
   // The company card (a CARD bank account) this person pays with; their card receipts are matched to its rows.
+  /** Legacy single company card; read together with companyCardAccountIds. */
   companyCardAccountId?: string;
+  companyCardAccountIds?: string[];
 };
 
 export type BankPartyAlias = { id: string; company: "JAPAN" | "CHINA"; accountId: string; content: string; confirmedById: string; createdAt: string };

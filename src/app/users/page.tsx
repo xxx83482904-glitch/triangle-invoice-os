@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ApprovalForm } from "./approval-form";
 import { AgentTokens } from "./agent-tokens";
 import { agentScopes, agentTokenViews } from "@/lib/agent-tokens";
-import { cardAccountLabel, companyCardAccounts } from "@/lib/card-receipts";
+import { cardAccountLabel, companyCardAccounts, heldCardIds } from "@/lib/card-receipts";
 import { CompanyCardForm } from "./company-card-form";
 import { UserAccountEditor } from "./user-account-editor";
 import { UserAccountCreator } from "./user-account-creator";
@@ -31,7 +31,7 @@ export default async function UsersPage() {
   const tokens = agentTokenViews(data);
   const tokenUsers = activeUsers.map((user) => ({ id: user.id, name: user.name, role: roleLabel(user.role) }));
   const cards = companyCardAccounts(data, "JAPAN").map((account) => ({ id: account.id, label: cardAccountLabel(account),
-    holder: users.find((user) => user.companyCardAccountId === account.id)?.name || "" }));
+    holder: users.find((user) => heldCardIds(user).includes(account.id))?.name || "" }));
   const scopes = Object.entries(agentScopes).map(([value, meta]) => ({ value, label: meta.label }));
 
   return <AppShell>
@@ -54,7 +54,7 @@ export default async function UsersPage() {
         <h2 id="registered-users" className="text-base font-medium">登録済み利用者</h2>
         <UserAccountCreator roles={accountRoles} />
       </div>
-      {cards.length ? <p className="mb-3 text-sm text-muted-foreground">会社カードには、クレジットカードのほかPayPayなどの決済口座も登録できます。登録した人は、経費精算（スマホ・PC）で「会社カードで払った」を選んで領収書を利用明細に付けられます。</p> : null}
+      {cards.length ? <p className="mb-3 text-sm text-muted-foreground">会社カードには、クレジットカードのほか、PayPayなどの決済口座や銀行口座（デビットカード払い。明細のデビット利用だけが対象）も登録できます。1人に複数枚登録でき（1枚のカードは1人だけ）、登録した人は、経費精算（スマホ・PC）で「会社カードで払った」を選んで領収書を利用明細に付けられます。</p> : null}
       <div className="space-y-2">
         {accounts.map((user) => <div key={user.id} className="record-card flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0 space-y-1">
@@ -70,7 +70,7 @@ export default async function UsersPage() {
             {user.passwordChangedAt ? <div className="text-xs text-muted-foreground">パスワード変更 {user.passwordChangedAt.slice(0, 10)}</div> : null}
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            {activeUserIds.has(user.id) && user.role !== "GUEST" && cards.length ? <CompanyCardForm key={`${user.id}:${user.companyCardAccountId || ""}`} userId={user.id} accountId={user.companyCardAccountId || ""} cards={cards} /> : null}
+            {activeUserIds.has(user.id) && user.role !== "GUEST" && cards.length ? <CompanyCardForm key={`${user.id}:${heldCardIds(users.find((row) => row.id === user.id)).join(",")}`} userId={user.id} accountIds={heldCardIds(users.find((row) => row.id === user.id))} cards={cards} /> : null}
             <UserAccountEditor user={user} actorId={actor.id} roles={accountRoles} />
           </div>
         </div>)}

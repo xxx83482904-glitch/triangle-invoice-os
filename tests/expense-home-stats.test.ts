@@ -30,7 +30,7 @@ test("home stats count only the person's own live claims and add their company c
   const use = (id: string, amount: number, date: string, patch: Partial<BankTransaction> = {}): BankTransaction => ({ id, company: "JAPAN", officeCode: "o", sourceId: id, bankAccountId: "aplus", side: "EXPENSE", amount, content: id,
     transactionDate: date, sourceMemo: "", sourceStatus: "none", sourceMissing: false, treatment: "NORMAL", classificationSource: "UNASSIGNED", reviewed: false, memo: "", createdAt: timestamp, updatedAt: timestamp, ...patch });
   data.bankTransactions = [use("a", 6820, "2026-10-06"), use("b", 1200, "2026-09-03"), use("refund", 500, "2026-10-07", { side: "INCOME" }), use("future", 999, "2026-10-30")];
-  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountId: "aplus" });
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountIds: ["aplus"] });
   const after = myExpenseStats(data, expenseDesigner, "JAPAN", today);
   assert.equal(after.thisMonth.card, 6820); assert.equal(after.thisMonth.total, october + 6820); assert.equal(after.hasCard, true);
   assert.equal(after.monthly.find((row) => row.month === "2026-09")!.total, before.monthly.find((row) => row.month === "2026-09")!.total + 1200);

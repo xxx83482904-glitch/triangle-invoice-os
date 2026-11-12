@@ -1,4 +1,4 @@
-import { isCardUse, userCardAccount } from "@/lib/card-receipts";
+import { isCardUse, userCardAccounts } from "@/lib/card-receipts";
 import type { CompanyScope } from "@/lib/company";
 import type { AppData, User } from "@/lib/types";
 
@@ -18,8 +18,8 @@ export function monthKeys(today: string, count: number) {
 export function myExpenseStats(data: AppData, user: Pick<User, "id">, company: CompanyScope, today: string, months = 6) {
   const keys = monthKeys(today, months), current = today.slice(0, 7);
   const claims = (data.expenseClaims || []).filter((row) => !row.deletedAt && row.company === company && row.submittedById === user.id && row.status !== "WITHDRAWN");
-  const card = userCardAccount(data, user, company);
-  const uses = card ? data.bankTransactions.filter((row) => isCardUse(data, card.id, row) && row.transactionDate <= today) : [];
+  const cards = userCardAccounts(data, user, company);
+  const uses = data.bankTransactions.filter((row) => row.transactionDate <= today && cards.some((card) => isCardUse(data, card.id, row)));
   const expenseBy = new Map<string, number>(), cardBy = new Map<string, number>();
   for (const row of claims) expenseBy.set(row.spentOn.slice(0, 7), (expenseBy.get(row.spentOn.slice(0, 7)) || 0) + cents(row.amount));
   for (const row of uses) cardBy.set(row.transactionDate.slice(0, 7), (cardBy.get(row.transactionDate.slice(0, 7)) || 0) + cents(row.amount));
@@ -31,7 +31,7 @@ export function myExpenseStats(data: AppData, user: Pick<User, "id">, company: C
     unapproved: { ...sum(claims.filter((row) => row.status === "SUBMITTED" || row.status === "RETURNED")), returned: claims.filter((row) => row.status === "RETURNED").length },
     awaitingPayout: sum(claims.filter((row) => row.status === "APPROVED")),
     monthly: keys.map((month) => ({ month, total: ((expenseBy.get(month) || 0) + (cardBy.get(month) || 0)) / 100 })),
-    hasCard: Boolean(card),
+    hasCard: cards.length > 0,
   };
 }
 export type ExpenseStats = ReturnType<typeof myExpenseStats>;

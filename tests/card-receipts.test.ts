@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { expenseAccountant, expenseAdmin, expenseDesigner, expenseManager, expensesFixture } from "./expense-claims-fixture";
 import { timestamp } from "./document-fixture";
-import { assignCompanyCard, autoLinkCardReceipts, canViewCardReceiptFile, companyCardAccounts, myCardView, pickCardUse, removeCardReceipt, submitCardReceipt, type CardReceiptSubmit } from "../src/lib/card-receipts";
+import { assignCompanyCard, autoLinkCardReceipts, cardAccountLabel, heldCardIds, canViewCardReceiptFile, companyCardAccounts, myCardView, pickCardUse, removeCardReceipt, submitCardReceipt, type CardReceiptSubmit } from "../src/lib/card-receipts";
 import { bankReceiptViews, removeBankReceipt } from "../src/lib/bank-receipts";
 import type { BankTransaction } from "../src/lib/banking-types";
 
@@ -22,32 +22,85 @@ function setup() {
     cardUse("old", "aplus-des", 6820, "2026-10-01"), cardUse("pm-hands", "aplus-pm", 6820, "2026-11-06"), cardUse("refund", "aplus-des", 500, "2026-11-04", { side: "INCOME" }),
     cardUse("amazon", "aplus-des", 12980, "2026-11-04"), cardUse("skip", "aplus-des", 300, "2026-11-02", { bookkeeping: { invoiceRequirement: "NOT_REQUIRED" } as BankTransaction["bookkeeping"] }),
   ];
-  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountId: "aplus-des" });
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountIds: ["aplus-des"] });
   return data;
 }
 
 test("only administrators give out cards, only card accounts can be given, and each card belongs to one person", () => {
   const data = setup();
-  assert.deepEqual(companyCardAccounts(data, "JAPAN").map((row) => row.id).sort(), ["aplus-des", "aplus-pm"]);
-  assert.equal(data.users.find((row) => row.id === "des")?.companyCardAccountId, "aplus-des");
-  assert.throws(() => assignCompanyCard(data, expenseAccountant, "JAPAN", { userId: "pm", accountId: "aplus-pm" }), /権限/);
-  assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "bank" }), /カード/);
-  assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "aplus-des" }), /合成補助さん/);
-  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountId: "" });
-  assert.equal(data.users.find((row) => row.id === "des")?.companyCardAccountId, undefined);
+  assert.deepEqual(companyCardAccounts(data, "JAPAN").map((row) => row.id), ["aplus-des", "aplus-pm", "bank"]);
+  assert.deepEqual(heldCardIds(data.users.find((row) => row.id === "des")), ["aplus-des"]);
+  assert.throws(() => assignCompanyCard(data, expenseAccountant, "JAPAN", { userId: "pm", accountIds: ["aplus-pm"] }), /権限/);
+  assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["missing"] }), /カード/);
+  assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["aplus-des"] }), /合成補助さん/);
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountIds: [] });
+  assert.deepEqual(heldCardIds(data.users.find((row) => row.id === "des")), []);
 });
 
-test("PayPay and other wallets can be given as a company card, PayPay銀行 cannot", () => {
+test("PayPay and other wallets can be given as a company card", () => {
   const data = setup();
-  data.bankAccounts.push(account("paypay", "PayPay", "PayPay"), account("paypay-bank", "PayPay銀行 / 本店 普通 0000000", "PayPay銀行"), account("paypay-card", "PayPayカード", "PayPayカード"));
-  assert.deepEqual(companyCardAccounts(data, "JAPAN").map((row) => row.id).sort(), ["aplus-des", "aplus-pm", "paypay", "paypay-card"]);
-  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "paypay" });
-  assert.equal(data.users.find((row) => row.id === "pm")?.companyCardAccountId, "paypay");
-  assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "paypay-bank" }), /カード/);
+  data.bankAccounts.push(account("paypay", "PayPay", "PayPay"), account("paypay-card", "PayPayカード", "PayPayカード"));
+  assert.ok(["paypay", "paypay-card"].every((id) => companyCardAccounts(data, "JAPAN").some((row) => row.id === id)));
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["paypay"] });
+  assert.deepEqual(heldCardIds(data.users.find((row) => row.id === "pm")), ["paypay"]);
   data.bankTransactions.push(cardUse("pp-lunch", "paypay", 1200, "2026-11-06"));
   const result = submitCardReceipt(data, expenseManager, "JAPAN", receipt({ amount: 1200 }), "pp-receipt");
   assert.equal(result.status, "LINKED");
   assert.equal(result.use?.id, "pp-lunch");
+});
+
+test("a bank account is given as its debit card: only debit purchases are uses, not transfers or withdrawals", () => {
+  const data = setup();
+  const header = account("ppb", "PayPay銀行", "PayPay銀行"), branch = { ...account("ppb-branch", "PayPay銀行 / 本店 普通 0000000", "PayPay銀行"), sourceId: "ppb", sourceSubId: "branch" };
+  data.bankAccounts.push(header, branch);
+  const ids = companyCardAccounts(data, "JAPAN").map((row) => row.id);
+  assert.ok(ids.includes("ppb-branch") && !ids.includes("ppb"), "the connection header without lines is not offered");
+  assert.match(cardAccountLabel(branch), /（デビット）$/);
+  data.bankTransactions.push(
+    cardUse("d1", "ppb-branch", 2200, "2026-11-06", { content: "Visaデビット ゴウセイカフェ" }),
+    cardUse("d2", "ppb-branch", 880, "2026-11-05", { content: "ﾃﾞﾋﾞｯﾄ ｺﾞｳｾｲｽﾄｱ" }),
+    cardUse("t1", "ppb-branch", 2200, "2026-11-06", { content: "振込 ゴウセイシヨウジ" }),
+    cardUse("t2", "ppb-branch", 50000, "2026-11-04", { content: "口座振替 ゴウセイリース" }),
+    cardUse("t3", "ppb-branch", 10000, "2026-11-03", { content: "ATM 引出" }),
+  );
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["ppb-branch"] });
+  const view = myCardView(data, expenseManager, "JAPAN", today)!;
+  assert.deepEqual(view.uses.map((row) => row.id).sort(), ["d1", "d2"]);
+  assert.deepEqual(view.missing.map((row) => row.id).sort(), ["d1", "d2"]);
+  const result = submitCardReceipt(data, expenseManager, "JAPAN", receipt({ amount: 2200 }), "debit-receipt");
+  assert.equal(result.status, "LINKED");
+  assert.equal(result.use?.id, "d1");
+});
+
+test("one person can hold several cards; a receipt is matched against all of them, each card still belongs to one person", () => {
+  const data = setup();
+  data.bankAccounts.push(account("paypay", "PayPay", "PayPay"));
+  data.bankTransactions.push(cardUse("pp-1", "paypay", 4400, "2026-11-06"), cardUse("pp-2", "paypay", 1480, "2026-11-04"));
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountIds: ["aplus-des", "paypay"] });
+  assert.deepEqual(heldCardIds(data.users.find((row) => row.id === "des")), ["aplus-des", "paypay"]);
+  assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["aplus-pm", "paypay"] }), /合成補助さん/);
+  const view = myCardView(data, expenseDesigner, "JAPAN", today)!;
+  assert.deepEqual(view.accounts.map((row) => row.id).sort(), ["aplus-des", "paypay"]);
+  assert.ok(view.missing.some((row) => row.id === "pp-1" && row.card === "PayPay"));
+  // A unique amount on the second card is attached automatically; 1480 now exists on both cards, so the person chooses.
+  assert.equal(submitCardReceipt(data, expenseDesigner, "JAPAN", receipt({ amount: 4400 }), "multi-1").use?.id, "pp-1");
+  const choose = submitCardReceipt(data, expenseDesigner, "JAPAN", receipt({ amount: 1480, spentOn: "2026-11-05" }), "multi-2");
+  assert.equal(choose.status, "CHOOSE");
+  assert.deepEqual(choose.candidates.map((row) => row.id).sort(), ["pp-2", "taxi-1", "taxi-2"]);
+  const waiting = data.cardReceipts!.find((row) => row.id === "multi-2")!;
+  pickCardUse(data, expenseDesigner, "JAPAN", { id: waiting.id, version: waiting.updatedAt, transactionId: "pp-2" });
+  assert.equal(waiting.accountId, "paypay");
+  assert.equal(waiting.transactionId, "pp-2");
+});
+
+test("a person stored with the old single card field keeps that card", () => {
+  const data = setup();
+  const des = data.users.find((row) => row.id === "des")!;
+  delete des.companyCardAccountIds; des.companyCardAccountId = "aplus-des";
+  assert.deepEqual(myCardView(data, expenseDesigner, "JAPAN", today)?.accounts.map((row) => row.id), ["aplus-des"]);
+  assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "des", accountIds: ["aplus-des", "aplus-pm"] });
+  assert.equal(des.companyCardAccountId, undefined);
+  assert.deepEqual(des.companyCardAccountIds, ["aplus-des", "aplus-pm"]);
 });
 
 test("disabled, pending, rejected and deleted users cannot receive a company card", () => {
@@ -55,7 +108,7 @@ test("disabled, pending, rejected and deleted users cannot receive a company car
     const data = setup();
     Object.assign(data.users.find((user) => user.id === "pm")!, patch);
     const before = structuredClone(data);
-    assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountId: "aplus-pm" }), /利用者が見つかりません/);
+    assert.throws(() => assignCompanyCard(data, expenseAdmin, "JAPAN", { userId: "pm", accountIds: ["aplus-pm"] }), /利用者が見つかりません/);
     assert.deepEqual(data, before);
   }
 });

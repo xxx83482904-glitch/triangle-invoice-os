@@ -40,7 +40,7 @@ export function CardPanel({ card, company, today, projects, categories, wide }: 
   const rows = useMemo(() => card.receipts.filter((row) => !month || row.spentOn.startsWith(month))
     .sort((a, b) => Number(b.status === "CHOOSE") - Number(a.status === "CHOOSE") || b.createdAt.localeCompare(a.createdAt)), [card.receipts, month]);
   const active = mode?.kind === "receipt" ? card.receipts.find((row) => row.id === mode.id) : undefined, index = rows.findIndex((row) => row.id === active?.id);
-  const context = { label: card.account.label, uses: card.uses };
+  const context = { label: card.account.label, uses: card.uses }, many = card.accounts.length > 1;
   const open = (id: string) => setMode({ kind: "receipt", id });
   const close = () => { if (!pending) setMode(null); };
   const attach = (target: CardUseView) => { setBatch(false); setMode({ kind: "new", target }); };
@@ -67,7 +67,7 @@ export function CardPanel({ card, company, today, projects, categories, wide }: 
       <Button type="button" disabled={pending} onClick={() => { setBatch(false); setMode({ kind: "new" }); }}><Plus className="size-4" />カードの領収書を登録</Button>
     </div>
     <section aria-label="会社カードの概要" className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-3 sm:gap-3">
-      <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div className="flex items-center gap-1"><CreditCard className="size-3.5" />会社カード</div><div className="mt-1 truncate text-sm font-medium text-foreground">{card.account.label}</div></div>
+      <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div className="flex items-center gap-1"><CreditCard className="size-3.5" />会社カード{many ? ` ${card.accounts.length}枚` : ""}</div><div className="mt-1 truncate text-sm font-medium text-foreground">{card.account.label}</div></div>
       <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>今月の利用</div><div className="mt-1 break-all text-sm font-medium text-foreground"><Money value={card.monthTotal} /></div></div>
       <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2"><div>領収書がない利用</div><div className="mt-1 text-sm font-medium text-foreground">{card.missing.length}件</div></div>
     </section>
@@ -75,7 +75,7 @@ export function CardPanel({ card, company, today, projects, categories, wide }: 
       <h2 className="text-sm font-medium">領収書がないカード利用 {card.missing.length}件</h2>
       <p className="text-xs text-muted-foreground">「領収書を付ける」から登録すると、その利用に直接付きます。領収書がもらえなかった利用は経理に伝えてください。</p>
       <ul className="divide-y rounded-lg border" aria-label="領収書がないカード利用">{card.missing.map((use) => <li key={use.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
-        <span className="w-24 shrink-0 text-muted-foreground">{formatDate(use.date)}</span><span className="min-w-0 flex-1 break-words">{use.content}</span><Money value={use.amount} />
+        <span className="w-24 shrink-0 text-muted-foreground">{formatDate(use.date)}</span><span className="min-w-0 flex-1 break-words">{use.content}{many && use.card ? <span className="block text-xs text-muted-foreground">{use.card}</span> : null}</span><Money value={use.amount} />
         <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => attach(use)}><Paperclip className="size-4" />領収書を付ける</Button>
       </li>)}</ul>
     </CardContent></Card> : null}
@@ -91,7 +91,7 @@ export function CardPanel({ card, company, today, projects, categories, wide }: 
             <tbody>{rows.map((row) => <tr key={`${row.id}:${row.updatedAt}`} {...cardPressProps(() => { if (!pending) open(row.id); })} data-active={row.id === active?.id ? "" : undefined}>
               <td className="record-card-title"><button type="button" data-selection-open className="record-card-open" title="開く" disabled={pending} onClick={() => open(row.id)}>{row.payee}</button><div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.purpose}</div></td>
               <td data-card-sub>{formatDate(row.spentOn)}</td>
-              <td data-card-hide className="text-muted-foreground">{row.use ? `${formatDate(row.use.date)} ${row.use.content}` : "—"}</td>
+              <td data-card-hide className="text-muted-foreground">{row.use ? `${formatDate(row.use.date)} ${row.use.content}${many && row.use.card ? `（${row.use.card}）` : ""}` : "—"}</td>
               <td data-card-end className="text-right"><Money value={row.amount} /></td>
               <td><Badge variant="outline" className={`font-normal ${statusClass[row.status]}`}>{statusText[row.status]}</Badge></td>
             </tr>)}</tbody>
@@ -143,7 +143,7 @@ function ReceiptDetail({ receipt, cardLabel, wide, pending, onPick, onRemove }: 
         const gap = Math.round((Date.parse(use.date) - Date.parse(receipt.spentOn)) / 86_400_000), selected = chosen === use.id;
         return <button key={use.id} type="button" role="radio" aria-checked={selected} disabled={pending} onClick={() => setChosen(use.id)} className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-muted/40">
           <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-foreground bg-foreground text-background" : ""}`}>{selected ? <Check className="size-3" /> : null}</span>
-          <span className="min-w-0 flex-1"><span className="block break-words">{use.content}</span><span className="block text-xs text-muted-foreground">{formatDate(use.date)}・{gap === 0 ? "日付が一致" : `${Math.abs(gap)}日${gap > 0 ? "後" : "前"}`}</span></span>
+          <span className="min-w-0 flex-1"><span className="block break-words">{use.content}</span><span className="block text-xs text-muted-foreground">{use.card ? `${use.card}・` : ""}{formatDate(use.date)}・{gap === 0 ? "日付が一致" : `${Math.abs(gap)}日${gap > 0 ? "後" : "前"}`}</span></span>
           <Money value={use.amount} />
         </button>;
       })}</div>

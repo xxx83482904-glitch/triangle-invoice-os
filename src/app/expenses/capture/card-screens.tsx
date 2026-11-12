@@ -103,7 +103,7 @@ export function MissingScreen({ card, onBack, onShoot }: { card: MyCardView; onB
     <div className="space-y-4 px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-1">
       <Eyebrow className="px-1">{card.account.label}・{card.missing.length}件</Eyebrow>
       {card.missing.length ? <div className="cap-surface overflow-hidden">{card.missing.map((row, index) => <div key={row.id} className={`flex min-h-[76px] items-center gap-3 py-2.5 pl-5 pr-3 ${index ? "cap-hairline border-t" : ""}`}>
-        <span className="min-w-0 flex-1"><span className="block break-words text-[16px]">{row.content}</span><span className="block text-[12.5px] tracking-[0.06em] text-muted-foreground">{dayLabel(row.date)}</span></span>
+        <span className="min-w-0 flex-1"><span className="block break-words text-[16px]">{row.content}</span><span className="block text-[12.5px] tracking-[0.06em] text-muted-foreground">{dayLabel(row.date)}{card.accounts.length > 1 && row.card ? `・${row.card}` : ""}</span></span>
         <Amount value={row.amount} className="text-[18px]" />
         <button type="button" aria-label={`${row.content}の領収書を撮る`} onClick={() => onShoot(row)} className="cap-press flex size-14 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><Camera className="size-5" strokeWidth={1.6} /></button>
       </div>)}</div> : <p className="py-14 text-center text-[14px] tracking-[0.08em] text-muted-foreground">領収書がない利用はありません</p>}
