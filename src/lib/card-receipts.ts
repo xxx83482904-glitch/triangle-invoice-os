@@ -54,24 +54,32 @@ export function cardAccountLabel(account: Parameters<typeof accountKind>[0]) {
   return isBankAccount(account) ? `${label}（デビット）` : label;
 }
 
-export function userCardAccount(data: AppData, user: Pick<User, "id">, company: CompanyScope) {
-  const id = data.users.find((row) => row.id === user.id)?.companyCardAccountId;
-  return id ? companyCardAccounts(data, company).find((row) => row.id === id) : undefined;
+// The cards a person holds. companyCardAccountId is the single card stored before people could hold several.
+export function heldCardIds(user: Pick<User, "companyCardAccountId" | "companyCardAccountIds"> | undefined) {
+  if (!user) return [];
+  return [...new Set([...(user.companyCardAccountIds || []), ...(user.companyCardAccountId ? [user.companyCardAccountId] : [])])];
 }
 
-// Administrators give each person one card; a card belongs to one person.
-export function assignCompanyCard(data: AppData, actor: Actor, company: CompanyScope, input: { userId: string; accountId: string }) {
+export function userCardAccounts(data: AppData, user: Pick<User, "id">, company: CompanyScope) {
+  const ids = heldCardIds(data.users.find((row) => row.id === user.id));
+  return ids.length ? companyCardAccounts(data, company).filter((row) => ids.includes(row.id)) : [];
+}
+
+// Administrators give each person any number of cards; a card belongs to one person.
+export function assignCompanyCard(data: AppData, actor: Actor, company: CompanyScope, input: { userId: string; accountIds: string[] }) {
   assertCan(actor, "manage:users"); assertCompanyAccess(actor, company);
   const user = data.users.find((row) => row.id === input.userId && isActiveUser(row));
   if (!user) throw new Error("利用者が見つかりません");
-  if (input.accountId) {
-    if (!companyCardAccounts(data, company).some((row) => row.id === input.accountId)) throw new Error("カードの口座を選んでください");
-    const holder = data.users.find((row) => row.id !== user.id && !row.deletedAt && row.companyCardAccountId === input.accountId);
+  const ids = [...new Set(input.accountIds.map((id) => String(id)).filter(Boolean))], offered = companyCardAccounts(data, company);
+  for (const id of ids) {
+    if (!offered.some((row) => row.id === id)) throw new Error("カードの口座を選んでください");
+    const holder = data.users.find((row) => row.id !== user.id && !row.deletedAt && heldCardIds(row).includes(id));
     if (holder) throw new Error(`このカードは${holder.name}さんに登録されています。先にそちらを外してください`);
-    user.companyCardAccountId = input.accountId;
-  } else delete user.companyCardAccountId;
+  }
+  delete user.companyCardAccountId;
+  if (ids.length) user.companyCardAccountIds = ids; else delete user.companyCardAccountIds;
   user.updatedAt = stamp(user.updatedAt);
-  return { userId: user.id, accountId: user.companyCardAccountId || "" };
+  return { userId: user.id, accountIds: ids };
 }
 
 const live = (data: AppData) => (data.cardReceipts || []).filter((row) => !row.deletedAt);
@@ -92,8 +100,16 @@ export function isCardUse(data: AppData, accountId: string, row: BankTransaction
   return !account || !isBankAccount(account) || isDebitPurchase(row);
 }
 
-export function cardCandidates(data: AppData, receipt: Pick<CardReceipt, "accountId" | "amount" | "spentOn"> & { excludedTransactionIds?: string[] }) {
-  return data.bankTransactions.filter((row) => isCardUse(data, receipt.accountId, row) && cents(row.amount) === cents(receipt.amount)
+// Which cards a receipt may belong to: the card it was registered on, or, when the person did not say which card,
+// every card they hold now.
+function receiptCardIds(data: AppData, receipt: Pick<CardReceipt, "accountId" | "submittedById">) {
+  const held = heldCardIds(data.users.find((row) => row.id === receipt.submittedById && !row.deletedAt));
+  return receipt.accountId ? held.includes(receipt.accountId) ? [receipt.accountId] : [] : held;
+}
+
+export function cardCandidates(data: AppData, receipt: Pick<CardReceipt, "accountId" | "submittedById" | "amount" | "spentOn"> & { excludedTransactionIds?: string[] }) {
+  const ids = receiptCardIds(data, receipt);
+  return data.bankTransactions.filter((row) => ids.some((id) => isCardUse(data, id, row)) && cents(row.amount) === cents(receipt.amount)
       && Math.abs(days(row.transactionDate, receipt.spentOn)) <= CARD_MATCH_DAYS && !documented(data, row.id) && !receipt.excludedTransactionIds?.includes(row.id))
     .sort((a, b) => Math.abs(days(a.transactionDate, receipt.spentOn)) - Math.abs(days(b.transactionDate, receipt.spentOn)) || a.id.localeCompare(b.id));
 }
@@ -103,10 +119,10 @@ function link(data: AppData, receipt: CardReceipt, row: BankTransaction, by: "AU
     fileName: `${receipt.payee}（${receipt.purpose}）`.slice(0, 200), mimeType: receipt.mimeType, uploadedById: receipt.submittedById, createdAt: now,
     sourceType: CARD_RECEIPT_SOURCE, sourceId: receipt.id };
   data.attachments.unshift(attachment);
-  Object.assign(receipt, { transactionId: row.id, attachmentId: attachment.id, linkedAt: now, linkedBy: by, updatedAt: now });
+  Object.assign(receipt, { accountId: row.bankAccountId, transactionId: row.id, attachmentId: attachment.id, linkedAt: now, linkedBy: by, updatedAt: now });
 }
 
-const toUseView = (row: BankTransaction) => ({ id: row.id, date: row.transactionDate, content: row.content, amount: row.amount });
+const toUseView = (row: BankTransaction): { id: string; date: string; content: string; amount: number; card?: string } => ({ id: row.id, date: row.transactionDate, content: row.content, amount: row.amount });
 export type CardUseView = ReturnType<typeof toUseView>;
 export type CardReceiptView = {
   id: string; updatedAt: string; createdAt: string; spentOn: string; amount: number; payee: string; purpose: string; projectName: string; fileUrl: string; mimeType: string;
@@ -127,29 +143,30 @@ const submitSchema = z.object({
 }).strict();
 export type CardReceiptSubmit = z.input<typeof submitSchema>;
 
-function ownAccount(data: AppData, actor: Actor, company: CompanyScope) {
+function ownAccounts(data: AppData, actor: Actor, company: CompanyScope) {
   assertCompanyAccess(actor, company); assertCan(actor, "submit:expenses");
-  const account = userCardAccount(data, actor, company);
-  if (!account) throw new Error("会社カードが登録されていません。管理者に登録を依頼してください");
-  return account;
+  const accounts = userCardAccounts(data, actor, company);
+  if (!accounts.length) throw new Error("会社カードが登録されていません。管理者に登録を依頼してください");
+  return accounts;
 }
 
-// A use the person picked themselves: any unreceipted use on their own card, whatever the amount.
-function ownUse(data: AppData, accountId: string, transactionId: string, receipt?: CardReceipt) {
+// A use the person picked themselves: any unreceipted use on one of their own cards, whatever the amount.
+function ownUse(data: AppData, accountIds: string[], transactionId: string, receipt?: CardReceipt) {
   const row = data.bankTransactions.find((item) => item.id === transactionId);
-  if (!row || !isCardUse(data, accountId, row)) throw new Error("あなたのカードの利用が見つかりません。画面を更新してください");
+  if (!row || !accountIds.some((id) => isCardUse(data, id, row))) throw new Error("あなたのカードの利用が見つかりません。画面を更新してください");
   if (documented(data, row.id) || receipt?.excludedTransactionIds?.includes(row.id)) throw new Error("この利用にはすでに領収書が付いています");
   return row;
 }
 
 export function submitCardReceipt(data: AppData, actor: Actor, company: CompanyScope, input: CardReceiptSubmit, id: string, now = new Date().toISOString()) {
-  const account = ownAccount(data, actor, company), value = submitSchema.parse(input);
+  const accounts = ownAccounts(data, actor, company), value = submitSchema.parse(input);
   if (value.projectId && !data.projects.some((row) => row.id === value.projectId && !row.deletedAt && matchesCompany(row, company))) throw new Error("この会社の案件を選択してください");
   if (value.categoryId && !expenseCategoryOptions(data, company).some((row) => row.value === value.categoryId)) throw new Error("利用できる経費の勘定科目を選択してください");
   const tax = value.taxBreakdown && Object.fromEntries(Object.entries(value.taxBreakdown).filter(([, amount]) => amount)) as NonNullable<typeof value.taxBreakdown>;
   if (tax && (tax.rate10 || 0) + (tax.rate8 || 0) >= value.amount) throw new Error("消費税額は金額より小さくしてください");
-  const picked = value.transactionId ? ownUse(data, account.id, value.transactionId) : undefined;
-  const receipt: CardReceipt = { id, company, submittedById: actor.id, accountId: account.id, spentOn: value.spentOn, amount: value.amount, payee: value.payee, purpose: value.purpose,
+  const picked = value.transactionId ? ownUse(data, accounts.map((row) => row.id), value.transactionId) : undefined;
+  // With one card the receipt belongs to it; with several it is matched against all of them until it is attached.
+  const receipt: CardReceipt = { id, company, submittedById: actor.id, accountId: picked?.bankAccountId || (accounts.length === 1 ? accounts[0].id : ""), spentOn: value.spentOn, amount: value.amount, payee: value.payee, purpose: value.purpose,
     projectId: value.projectId, categoryId: value.categoryId, memo: value.memo || undefined, registrationNumber: value.registrationNumber,
     taxBreakdown: tax && Object.keys(tax).length ? tax : undefined, ...value.file, createdAt: now, updatedAt: now };
   data.cardReceipts ??= [];
@@ -176,10 +193,10 @@ function ownReceipt(data: AppData, actor: Actor, company: CompanyScope, id: stri
 }
 
 export function pickCardUse(data: AppData, actor: Actor, company: CompanyScope, input: z.input<typeof pickSchema>, now = new Date().toISOString()) {
-  ownAccount(data, actor, company);
+  const accounts = ownAccounts(data, actor, company).map((row) => row.id);
   const value = pickSchema.parse(input), receipt = ownReceipt(data, actor, company, value.id, value.version);
   if (isLinked(data, receipt)) throw new Error("この領収書はすでにカードの利用に付いています");
-  link(data, receipt, ownUse(data, receipt.accountId, value.transactionId, receipt), "SELF", stamp(receipt.updatedAt) > now ? stamp(receipt.updatedAt) : now);
+  link(data, receipt, ownUse(data, receipt.accountId ? accounts.filter((id) => id === receipt.accountId) : accounts, value.transactionId, receipt), "SELF", stamp(receipt.updatedAt) > now ? stamp(receipt.updatedAt) : now);
   return { id: receipt.id, updatedAt: receipt.updatedAt };
 }
 
@@ -206,8 +223,6 @@ export function detachCardReceipt(data: AppData, attachment: Attachment, at: str
 export function autoLinkCardReceipts(data: AppData, company: CompanyScope, now = new Date().toISOString()) {
   let linked = 0;
   for (const receipt of live(data).filter((row) => row.company === company && !isLinked(data, row)).sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
-    const holder = data.users.find((row) => row.id === receipt.submittedById && !row.deletedAt);
-    if (!holder || holder.companyCardAccountId !== receipt.accountId) continue;
     const candidates = cardCandidates(data, receipt);
     if (candidates.length !== 1) continue;
     link(data, receipt, candidates[0], "AUTO", stamp(receipt.updatedAt) > now ? stamp(receipt.updatedAt) : now);
@@ -216,26 +231,30 @@ export function autoLinkCardReceipts(data: AppData, company: CompanyScope, now =
   return linked;
 }
 
-// Everything the phone app shows about the person's own card. Only that card's uses are ever returned.
+// Everything the expense screens show about the person's own cards. Only those cards' uses are ever returned.
 export function myCardView(data: AppData, actor: Actor, company: CompanyScope, today = bankToday()) {
   if (!can(actor, "submit:expenses")) return null;
-  const account = userCardAccount(data, actor, company);
-  if (!account) return null;
+  const accounts = userCardAccounts(data, actor, company);
+  if (!accounts.length) return null;
+  const ids = accounts.map((row) => row.id), labels = new Map(accounts.map((row) => [row.id, cardAccountLabel(row)]));
+  const withCard = (row: BankTransaction) => ({ ...toUseView(row), card: labels.get(row.bankAccountId) || "" });
   const since = new Date(Date.parse(today) - CARD_USE_LOOKBACK_DAYS * DAY).toISOString().slice(0, 10);
   const projects = new Map(data.projects.filter((row) => matchesCompany(row, company)).map((row) => [row.id, row.name]));
   const receipts: CardReceiptView[] = live(data).filter((row) => row.company === company && row.submittedById === actor.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100).map((row) => {
       const linked = isLinked(data, row), use = linked ? data.bankTransactions.find((item) => item.id === row.transactionId) : undefined;
-      const candidates = linked || row.accountId !== account.id ? [] : cardCandidates(data, row).map(toUseView);
+      const candidates = linked || (row.accountId && !ids.includes(row.accountId)) ? [] : cardCandidates(data, row).map(withCard);
       return { id: row.id, updatedAt: row.updatedAt, createdAt: row.createdAt, spentOn: row.spentOn, amount: row.amount, payee: row.payee, purpose: row.purpose,
         projectName: row.projectId ? projects.get(row.projectId) || "" : "", fileUrl: row.fileUrl, mimeType: row.mimeType,
-        status: linked ? "LINKED" : candidates.length > 1 ? "CHOOSE" : "WAITING", linkedBy: linked ? row.linkedBy : undefined, use: use ? toUseView(use) : undefined, candidates };
+        status: linked ? "LINKED" : candidates.length > 1 ? "CHOOSE" : "WAITING", linkedBy: linked ? row.linkedBy : undefined, use: use ? withCard(use) : undefined, candidates };
     });
-  const uses = data.bankTransactions.filter((row) => isCardUse(data, account.id, row) && row.transactionDate >= since && row.transactionDate <= today)
+  const uses = data.bankTransactions.filter((row) => ids.some((id) => isCardUse(data, id, row)) && row.transactionDate >= since && row.transactionDate <= today)
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.id.localeCompare(a.id));
-  const missing = uses.filter((row) => !documented(data, row.id) && row.bookkeeping?.invoiceRequirement !== "NOT_REQUIRED").map(toUseView);
+  const missing = uses.filter((row) => !documented(data, row.id) && row.bookkeeping?.invoiceRequirement !== "NOT_REQUIRED").map(withCard);
   const month = today.slice(0, 7), monthTotal = uses.filter((row) => row.transactionDate.startsWith(month)).reduce((sum, row) => sum + cents(row.amount), 0) / 100;
-  return { account: { id: account.id, label: cardAccountLabel(account) }, receipts, missing, uses: uses.map((row) => ({ ...toUseView(row), documented: documented(data, row.id) })), monthTotal };
+  // account.label names every card, so screens written for one card read naturally with several.
+  return { account: { id: ids[0], label: accounts.map(cardAccountLabel).join("・") }, accounts: accounts.map((row) => ({ id: row.id, label: cardAccountLabel(row) })),
+    receipts, missing, uses: uses.map((row) => ({ ...withCard(row), documented: documented(data, row.id) })), monthTotal };
 }
 export type MyCardView = NonNullable<ReturnType<typeof myCardView>>;
 

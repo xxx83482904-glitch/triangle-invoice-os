@@ -149,12 +149,12 @@ export async function revokeAgentTokenAction(_previous: { error: string }, formD
 export async function assignCompanyCardAction(_previous: { error: string; success?: boolean }, formData: FormData) {
   const actor = await requireUser();
   assertCan(actor, "manage:users");
-  const userId = String(formData.get("userId") ?? ""), accountId = String(formData.get("accountId") ?? "");
+  const userId = String(formData.get("userId") ?? ""), accountIds = formData.getAll("accountIds").map(String);
   try {
-    await mutateData(actor.id, "ASSIGN_COMPANY_CARD", "User", userId, (data) => assignCompanyCard(data, actor, "JAPAN", { userId, accountId }));
+    await mutateData(actor.id, "ASSIGN_COMPANY_CARD", "User", userId, (data) => assignCompanyCard(data, actor, "JAPAN", { userId, accountIds }));
   } catch (error) {
     return { error: error instanceof Error ? error.message : "会社カードを登録できませんでした。" };
   }
-  revalidatePath("/users"); revalidatePath("/expenses/capture");
+  revalidatePath("/users"); revalidatePath("/expenses"); revalidatePath("/expenses/capture");
   return { error: "", success: true };
 }
