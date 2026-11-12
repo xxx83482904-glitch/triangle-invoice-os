@@ -8,7 +8,7 @@ import type { ReceiptField, ReceiptReading } from "@/lib/expense-receipt-reading
 import type { ExpenseStats } from "@/lib/expense-home-stats";
 import { prepareReceiptFile } from "@/lib/receipt-image";
 import type { ExpensePaidWith } from "@/lib/types";
-import { cardReceiptAction, expenseAction } from "../actions";
+import { cardPayeeAction, cardReceiptAction, expenseAction } from "../actions";
 import { ShutterScreen, liveCameraAvailable } from "./camera";
 import { CardDetailScreen, CardDoneScreen, CardHomeScreen, CardPickScreen, MissingScreen } from "./card-screens";
 import { InstallHint } from "./install-hint";
@@ -248,6 +248,15 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
     router.refresh();
     replace({ name: "cardDone", status: "LINKED", payee: receipt.payee, amount: receipt.amount, purpose, use });
   };
+  const exemptPayee = async (use: CardUseView) => {
+    if (picking || !use.accountId) return;
+    setPicking(true);
+    const result = await cardPayeeAction(company, { action: "exempt", accountId: use.accountId, content: use.content });
+    setPicking(false);
+    if (!result.success) { toast({ title: result.error, variant: "destructive" }); return; }
+    router.refresh();
+    toast({ title: `「${use.content}」を一覧から外しました。`, variant: "success" });
+  };
   const removeCard = async (id: string) => {
     const receipt = card?.receipts.find((row) => row.id === id);
     if (!receipt || withdrawing) return;
@@ -345,7 +354,7 @@ export function CaptureApp({ name, company, today, categories, projects, recentP
       missing={card?.missing.filter((row) => row.id !== screen.use?.id).length || 0} onCamera={() => openCamera("auto", "card")}
       onMissing={() => replace({ name: "missing" })} onList={() => replace({ name: "list" })} onHome={() => backTo((row) => row.name === "home")} />;
   } else if (screen.name === "missing") {
-    view = card ? <MissingScreen card={card} onBack={back} onShoot={(use) => openCamera("auto", "card", use)} /> : <HomeFallback onHome={() => backTo((row) => row.name === "home")} text="会社カードが登録されていません" />;
+    view = card ? <MissingScreen card={card} pending={picking} onBack={back} onShoot={(use) => openCamera("auto", "card", use)} onExempt={(use) => void exemptPayee(use)} /> : <HomeFallback onHome={() => backTo((row) => row.name === "home")} text="会社カードが登録されていません" />;
   } else if (screen.name === "cardDetail") {
     const receipt = card?.receipts.find((row) => row.id === screen.id);
     view = receipt && card ? <CardDetailScreen receipt={receipt} cardLabel={card.account.label} onBack={back}

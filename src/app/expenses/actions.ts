@@ -5,7 +5,7 @@ import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth";
 import type { CompanyScope } from "@/lib/company";
 import { applyExpenseMutation, type ExpenseWorkflowMutation } from "@/lib/expense-claim-edits";
-import { pickCardUse, removeCardReceipt } from "@/lib/card-receipts";
+import { exemptCardPayee, pickCardUse, removeCardReceipt, unexemptCardPayee } from "@/lib/card-receipts";
 import { expensePayoutDetail, linkExpensePayout, unlinkExpensePayout, type ExpensePayoutLinkInput, type ExpensePayoutUnlinkInput } from "@/lib/expense-payouts";
 import { mutateData, readData } from "@/lib/store";
 import { isActiveUser } from "@/lib/user-access";
@@ -50,6 +50,19 @@ export async function expensePayoutAction(company: CompanyScope, input: ({ actio
       (data) => action === "link" ? linkExpensePayout(data, liveActor(data, user.id), company, rest as ExpensePayoutLinkInput) : unlinkExpensePayout(data, liveActor(data, user.id), company, rest as ExpensePayoutUnlinkInput));
     revalidatePath("/expenses"); revalidatePath("/banking/reconcile");
     return { success: true as const, ...result };
+  } catch (error) { return { success: false as const, error: message(error) }; }
+}
+
+export async function cardPayeeAction(company: CompanyScope, input: { action: "exempt"; accountId: string; content: string } | { action: "unexempt"; accountId: string; key: string }) {
+  const user = await requireUser();
+  try {
+    if (!input || (input.action !== "exempt" && input.action !== "unexempt")) throw new Error("操作を確認してください");
+    const { action, ...rest } = input;
+    await mutateData(user.id, action === "exempt" ? "EXEMPT_CARD_PAYEE" : "UNEXEMPT_CARD_PAYEE", "User", user.id, (data) => action === "exempt"
+      ? exemptCardPayee(data, liveActor(data, user.id), company, rest as { accountId: string; content: string })
+      : unexemptCardPayee(data, liveActor(data, user.id), company, rest as { accountId: string; key: string }));
+    revalidatePath("/expenses"); revalidatePath("/expenses/capture");
+    return { success: true as const };
   } catch (error) { return { success: false as const, error: message(error) }; }
 }
 
